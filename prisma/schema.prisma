@@ -9,126 +9,68 @@ datasource db {
   provider = "postgresql"
 }
 
+model Empresa {
+  id        String    @id @default(uuid())
+  nombre    String
+  direccion String
+  tableros  Tablero[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("empresas")
+}
+
 model Tablero {
-  id               String     @id @default(uuid())
-  nombre           String
-  codigo           String     @unique
-  placaMarca       String?
-  placaModelo      String?
-  tensionNominal   Float      // Tension nominal en Voltios (V)
-  corrienteNominal Float      // Corriente nominal en Amperios (A)
-  fases            Int        // Numero de fases (e.g., 1, 2, 3)
-  hilos            Int        // Numero de hilos (e.g., 2, 3, 4)
+  id                     String     @id @default(uuid())
+  nombre                 String     // Nombre o código del tablero (Ej: "Tablero No. 11")
+  ubicacion              String
+  alimentadoPor          String
+  tipo                   String     // "superficial" | "empotrado"
   
-  // Relacion de circuitos que pertenecen a este tablero (relacion uno a muchos)
-  circuitos        Circuito[] @relation("TableroCircuitos")
-  
-  // Relacion recursiva: Si este tablero es un sub-tablero, esta alimentado por un circuito especifico.
-  alimentadoPor    Circuito?  @relation("SubTableroAlimentacion")
+  // Mediciones de corriente/voltaje
+  ia                     String?
+  ib                     String?
+  ic                     String?
+  va                     String?
+  vb                     String?
+  vc                     String?
+  acometida              String?
 
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  // Datos de cierre (calibre de neutro, tierra, observaciones)
+  neutroCalibre          String?
+  neutroObservaciones    String?
+  tierraCalibre          String?
+  tierraObservaciones    String?
+  observacionesGenerales String?
 
+  // Relaciones
+  empresaId              String
+  empresa                Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  circuitos              Circuito[]
+
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  // Restricción única compuesta
+  @@unique([empresaId, nombre])
   @@map("tableros")
 }
 
 model Circuito {
-  id             String      @id @default(uuid())
-  numeroPolo     Int         // Numero de polo que ocupa en el tablero
-  descripcion    String?
-  
-  // Relacion con el Tablero al que pertenece (uno a muchos)
-  tableroId      String
-  tablero        Tablero     @relation("TableroCircuitos", fields: [tableroId], references: [id], onDelete: Cascade)
-  
-  // Indica el tipo de elemento alimentado
-  tipoDestino    TipoDestino
-  
-  // Relacion recursiva: Si alimenta a un sub-tablero (relacion 1-a-1)
-  subTableroId   String?     @unique
-  subTablero     Tablero?    @relation("SubTableroAlimentacion", fields: [subTableroId], references: [id], onDelete: Cascade)
-  
-  // Relacion con un artefacto final (relacion 1-a-1)
-  artefacto      Artefacto?
+  id               String   @id @default(uuid())
+  numeroPolo       Int      // Del 1 al 42
+  equipo           String?  // Equipo que alimenta
+  breakerMarca     String?
+  breakerTipo      String?
+  breakerAmperaje  String?
+  conductorCalibre String?
 
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  // Relaciones
+  tableroId        String
+  tablero          Tablero  @relation(fields: [tableroId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("circuitos")
-}
-
-enum TipoDestino {
-  ARTEFACTO
-  SUB_TABLERO
-}
-
-model Artefacto {
-  id              String             @id @default(uuid())
-  nombre          String
-  descripcion     String?
-  potenciaWatts   Float?             // Potencia consumida en Watts
-  
-  // Relacion uno a uno con el Circuito que lo alimenta
-  circuitoId      String             @unique
-  circuito        Circuito           @relation(fields: [circuitoId], references: [id], onDelete: Cascade)
-  
-  // Parametros tecnicos vinculados a catalogos (Llaves foraneas)
-  tipoElementoId  String
-  tipoElemento    TipoElemento       @relation(fields: [tipoElementoId], references: [id])
-  
-  breakerId       String
-  breaker         CatalogoBreaker    @relation(fields: [breakerId], references: [id])
-  
-  conductorId     String
-  conductor       CatalogoConductor  @relation(fields: [conductorId], references: [id])
-
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-
-  @@map("artefactos")
-}
-
-// CATALOGOS PARAMETRICOS (De solo lectura)
-
-model TipoElemento {
-  id          String      @id @default(uuid())
-  nombre      String      @unique // Ej. "Luminaria", "Tomacorriente", "Motor", "Aire Acondicionado"
-  descripcion String?
-  
-  artefactos  Artefacto[]
-
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  @@map("tipos_de_elementos")
-}
-
-model CatalogoBreaker {
-  id              String      @id @default(uuid())
-  modelo          String      // Ej. "QO115", "QO230"
-  amperaje        Float       // Ej. 15.0, 20.0, 30.0, 50.0
-  polos           Int         // Ej. 1, 2, 3
-  marca           String?     // Ej. "Schneider Electric"
-  
-  artefactos      Artefacto[]
-
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  @@map("catalogo_breakers")
-}
-
-model CatalogoConductor {
-  id               String      @id @default(uuid())
-  calibre          String      // Ej. "#14 AWG", "#12 AWG", "#10 AWG", "2/0 AWG"
-  tipoAislamiento  String      // Ej. "THHN", "THWN", "XHHW"
-  material         String      // Ej. "Cobre", "Aluminio"
-  capacidadAmp     Float?      // Capacidad nominal de corriente en Amperios (A)
-  
-  artefactos       Artefacto[]
-
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-
-  @@map("catalogo_conductores")
 }

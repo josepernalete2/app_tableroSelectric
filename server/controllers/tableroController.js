@@ -2,144 +2,166 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /**
- * Helper recursivo para construir la estructura de creación anidada para Prisma.
- * Esto permite crear tableros, sub-tableros y sus respectivos circuitos de forma recursiva.
- */
-function construirDatosCreacionTablero(data) {
-  const datos = {
-    nombre: data.nombre,
-    codigo: data.codigo,
-    placaMarca: data.placaMarca || null,
-    placaModelo: data.placaModelo || null,
-    tensionNominal: parseFloat(data.tensionNominal),
-    corrienteNominal: parseFloat(data.corrienteNominal),
-    fases: parseInt(data.fases, 10),
-    hilos: parseInt(data.hilos, 10),
-  };
-
-  if (data.circuitos && Array.isArray(data.circuitos)) {
-    datos.circuitos = {
-      create: data.circuitos.map((circuito) => {
-        const circuitoData = {
-          numeroPolo: parseInt(circuito.numeroPolo, 10),
-          descripcion: circuito.descripcion || null,
-          tipoDestino: circuito.tipoDestino,
-        };
-
-        if (circuito.tipoDestino === 'ARTEFACTO' && circuito.artefacto) {
-          circuitoData.artefacto = {
-            create: {
-              nombre: circuito.artefacto.nombre,
-              descripcion: circuito.artefacto.descripcion || null,
-              potenciaWatts: circuito.artefacto.potenciaWatts ? parseFloat(circuito.artefacto.potenciaWatts) : null,
-              tipoElemento: { connect: { id: circuito.artefacto.tipoElementoId } },
-              breaker: { connect: { id: circuito.artefacto.breakerId } },
-              conductor: { connect: { id: circuito.artefacto.conductorId } },
-            },
-          };
-        } else if (circuito.tipoDestino === 'SUB_TABLERO' && circuito.subTablero) {
-          // Llamada recursiva para soportar sub-tableros anidados con sus propios circuitos
-          circuitoData.subTablero = {
-            create: construirDatosCreacionTablero(circuito.subTablero),
-          };
-        }
-
-        return circuitoData;
-      }),
-    };
-  }
-
-  return datos;
-}
-
-/**
- * POST /api/tableros
- * Crea un tablero principal con todos sus circuitos, artefactos y sub-tableros de forma transaccional.
+ * POST /api/empresas/:empresaId/tableros
+ * Crea un tablero técnico asociado a una empresa junto con todos sus circuitos de forma anidada transaccional.
  */
 export const crearTableroCompleto = async (req, res) => {
   try {
-    const { body } = req;
+    const { empresaId } = req.params;
+    const {
+      nombre,
+      ubicacion,
+      alimentadoPor,
+      tipo,
+      ia,
+      ib,
+      ic,
+      va,
+      vb,
+      vc,
+      acometida,
+      neutroCalibre,
+      neutroObservaciones,
+      tierraCalibre,
+      tierraObservaciones,
+      observacionesGenerales,
+      circuitos = []
+    } = req.body;
 
-    // Validaciones de campos requeridos de nivel superior
-    if (!body.nombre || !body.codigo || body.tensionNominal === undefined || body.corrienteNominal === undefined) {
+    // Validación de campos requeridos
+    if (!nombre) {
       return res.status(400).json({
         ok: false,
-        error: 'Los campos nombre, codigo, tensionNominal y corrienteNominal son obligatorios a nivel de Tablero.',
+        error: 'El nombre o código del tablero es obligatorio.'
       });
     }
 
-    const datosCreacion = construirDatosCreacionTablero(body);
+    if (!ubicacion || !alimentadoPor || !tipo) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Los campos ubicación, alimentadoPor y tipo son requeridos para la creación.'
+      });
+    }
 
-    // Prisma ejecuta la creación anidada dentro de una transacción implícita de base de datos
+    // Inserción anidada (Nested Write) en Prisma: Todo ocurre dentro de una transacción.
     const nuevoTablero = await prisma.tablero.create({
-      data: datosCreacion,
-      include: {
-        circuitos: {
-          include: {
-            artefacto: {
-              include: {
-                tipoElemento: true,
-                breaker: true,
-                conductor: true,
-              },
-            },
-            subTablero: {
-              include: {
-                circuitos: true
-              }
-            }
-          },
+      data: {
+        nombre,
+        ubicacion,
+        alimentadoPor,
+        tipo,
+        ia,
+        ib,
+        ic,
+        va,
+        vb,
+        vc,
+        acometida,
+        neutroCalibre,
+        neutroObservaciones,
+        tierraCalibre,
+        tierraObservaciones,
+        observacionesGenerales,
+        empresa: {
+          connect: { id: empresaId }
         },
+        circuitos: {
+          create: circuitos.map((circ) => ({
+            numeroPolo: parseInt(circ.numeroPolo, 10),
+            equipo: circ.equipo || null,
+            breakerMarca: circ.breakerMarca || null,
+            breakerTipo: circ.breakerTipo || null,
+            breakerAmperaje: circ.breakerAmperaje ? String(circ.breakerAmperaje) : null,
+            conductorCalibre: circ.conductorCalibre || null
+          }))
+        }
       },
+      include: {
+        circuitos: true
+      }
     });
 
     return res.status(201).json({
       ok: true,
-      message: 'Tablero y todos sus componentes creados con éxito de forma transaccional.',
-      data: nuevoTablero,
+      message: 'Tablero y todos sus circuitos registrados con éxito.',
+      data: nuevoTablero
     });
+
   } catch (error) {
     console.error('Error en crearTableroCompleto:', error);
+
+    // Capturar violación de restricción única en Prisma (P2002)
+    // Específicamente cuando se intenta duplicar [empresaId, nombre]
+    if (error.code === 'P2002') {
+      const targetFields = error.meta?.target || [];
+      if (targetFields.includes('empresaId') && targetFields.includes('nombre')) {
+        return res.status(400).json({
+          ok: false,
+          error: 'El nombre/código del tablero ya está registrado para esta empresa. Elija un nombre diferente.'
+        });
+      }
+      return res.status(400).json({
+        ok: false,
+        error: 'Error de restricción única: Uno de los campos ingresados ya existe en la base de datos.'
+      });
+    }
+
     return res.status(500).json({
       ok: false,
-      error: 'Error interno al procesar la creación del tablero.',
-      details: error.message,
+      error: 'Error interno del servidor al registrar el tablero.',
+      details: error.message
     });
   }
 };
 
 /**
- * GET /api/tableros
- * Obtiene todos los tableros con sus circuitos y relaciones.
+ * GET /api/empresas/:empresaId/tableros
+ * Lista todos los tableros que pertenecen a una empresa específica con sus circuitos correspondientes.
  */
-export const obtenerTableros = async (req, res) => {
+export const obtenerTablerosPorEmpresa = async (req, res) => {
   try {
-    const tableros = await prisma.tablero.findMany({
-      include: {
-        circuitos: {
-          include: {
-            artefacto: {
-              include: {
-                tipoElemento: true,
-                breaker: true,
-                conductor: true,
-              },
-            },
-            subTablero: true,
-          },
-        },
-      },
+    const { empresaId } = req.params;
+
+    // Verificar si la empresa existe
+    const empresaExiste = await prisma.empresa.findUnique({
+      where: { id: empresaId }
     });
 
-    return res.json({
-      ok: true,
-      data: tableros,
+    if (!empresaExiste) {
+      return res.status(404).json({
+        ok: false,
+        error: 'La empresa especificada no existe.'
+      });
+    }
+
+    // Obtener tableros
+    const tableros = await prisma.tablero.findMany({
+      where: {
+        empresaId
+      },
+      include: {
+        circuitos: {
+          orderBy: {
+            numeroPolo: 'asc'
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
     });
+
+    return res.status(200).json({
+      ok: true,
+      data: tableros
+    });
+
   } catch (error) {
+    console.error('Error en obtenerTablerosPorEmpresa:', error);
     return res.status(500).json({
       ok: false,
-      error: 'Error al obtener los tableros.',
-      details: error.message,
+      error: 'Error al obtener la lista de tableros de la empresa.',
+      details: error.message
     });
   }
 };
