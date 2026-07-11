@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList } from 'lucide-react';
+import ModalEdicionCircuito from './ModalEdicionCircuito';
+import { exportTableroToExcel } from '../utils/excelExport';
 
 // Common options for dropdowns
 const AMP_OPTIONS = ['N/A', '10', '15', '20', '30', '40', '50', '60', '70', '80', '90', '100', '125', '150', '175', '200', '225', '250', '300', '350', '400', '500'];
@@ -9,6 +11,9 @@ const MARCA_OPTIONS = ['GE', 'EATON', 'ABB', 'INESLA', 'MG', 'SQUARE D', 'SIEMEN
 const TIPO_OPTIONS = ['TQ', 'TQD', 'M35', 'A2C', 'NS', 'TED32', 'M51', 'TM250', 'QO', 'THQL', 'N/A'];
 
 export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
+  const [editingCircuit, setEditingCircuit] = useState(null);
+  const [elementosPorCrear, setElementosPorCrear] = useState([]);
+
   if (!tableroData) return <div className="text-center p-8">No hay datos de tablero seleccionados.</div>;
 
   const {
@@ -78,6 +83,20 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
           };
         }
         return { ...c, [field]: value };
+      }
+      return c;
+    });
+    onUpdateTablero(newData);
+  };
+
+  const saveCircuitFromModal = (circuitId, updatedFields) => {
+    const newData = { ...tableroData };
+    newData.circuits = normalizedCircuits.map(c => {
+      if (c.id === circuitId) {
+        return {
+          ...c,
+          ...updatedFields
+        };
       }
       return c;
     });
@@ -408,27 +427,52 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
                       {/* Equipo que Alimenta */}
                       <td
                         rowSpan={rowSpanLeft}
-                        className="border-r border-slate-800 dark:border-slate-700 p-0 font-medium align-middle"
+                        className="border-r border-slate-800 dark:border-slate-700 p-1.5 font-medium align-middle cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors relative group/cell"
+                        onClick={() => setEditingCircuit(cLeft)}
                       >
-                        <div className="relative group/cell flex items-center justify-between">
-                          <div className="w-full">
-                            <EditableCell
-                              value={cLeft.equipo}
-                              onSave={(val) => updateCircuit(cLeft.id, 'equipo', val)}
-                              placeholder="RESERVA"
-                              className="font-sans px-2 text-slate-800 dark:text-slate-200"
-                            />
+                        <div className="flex flex-col justify-center min-h-[2rem] pr-6">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs ${
+                              !cLeft.equipo || cLeft.equipo === 'RESERVA' 
+                                ? 'text-slate-400 dark:text-slate-600 italic' 
+                                : 'text-slate-900 dark:text-slate-100 font-bold'
+                            }`}>
+                              {cLeft.equipo || 'RESERVA'}
+                            </span>
+                            {cLeft.fotografia && (
+                              <Image className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
+                            )}
                           </div>
-                          {rowSpanLeft > 1 && (
-                            <button
-                              onClick={() => splitCircuit(cLeft.id)}
-                              title="Separar Polos"
-                              className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-0 group-hover/cell:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
+                          
+                          {/* Badges based on tipoDestino */}
+                          {cLeft.tipoDestino === 'ARTEFACTO' && (
+                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 mt-1">
+                              🔌 ARTEFACTO
+                            </span>
+                          )}
+                          {cLeft.tipoDestino === 'SUB_TABLERO' && (
+                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 mt-1">
+                              ⚡ SUB-TABLERO
+                            </span>
+                          )}
+                          {cLeft.tipoDestino === 'SUB_TABLERO_PENDIENTE' && (
+                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 mt-1">
+                              ⚠️ POR CREAR
+                            </span>
                           )}
                         </div>
+                        {rowSpanLeft > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              splitCircuit(cLeft.id);
+                            }}
+                            title="Separar Polos"
+                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-0 group-hover/cell:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                        )}
                       </td>
 
                       {/* Breaker Marca */}
@@ -593,27 +637,52 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
                       {/* Equipo que Alimenta */}
                       <td
                         rowSpan={rowSpanRight}
-                        className="p-0 font-medium align-middle"
+                        className="p-1.5 font-medium align-middle cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors relative group/cell"
+                        onClick={() => setEditingCircuit(cRight)}
                       >
-                        <div className="relative group/cell flex items-center justify-between">
-                          <div className="w-full">
-                            <EditableCell
-                              value={cRight.equipo}
-                              onSave={(val) => updateCircuit(cRight.id, 'equipo', val)}
-                              placeholder="RESERVA"
-                              className="font-sans px-2 text-slate-800 dark:text-slate-200"
-                            />
+                        <div className="flex flex-col justify-center min-h-[2rem] pr-6">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs ${
+                              !cRight.equipo || cRight.equipo === 'RESERVA' 
+                                ? 'text-slate-400 dark:text-slate-600 italic' 
+                                : 'text-slate-900 dark:text-slate-100 font-bold'
+                            }`}>
+                              {cRight.equipo || 'RESERVA'}
+                            </span>
+                            {cRight.fotografia && (
+                              <Image className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
+                            )}
                           </div>
-                          {rowSpanRight > 1 && (
-                            <button
-                              onClick={() => splitCircuit(cRight.id)}
-                              title="Separar Polos"
-                              className="no-print absolute left-1 top-1/2 -translate-y-1/2 p-0.5 opacity-0 group-hover/cell:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
+                          
+                          {/* Badges based on tipoDestino */}
+                          {cRight.tipoDestino === 'ARTEFACTO' && (
+                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 mt-1">
+                              🔌 ARTEFACTO
+                            </span>
+                          )}
+                          {cRight.tipoDestino === 'SUB_TABLERO' && (
+                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 mt-1">
+                              ⚡ SUB-TABLERO
+                            </span>
+                          )}
+                          {cRight.tipoDestino === 'SUB_TABLERO_PENDIENTE' && (
+                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 mt-1">
+                              ⚠️ POR CREAR
+                            </span>
                           )}
                         </div>
+                        {rowSpanRight > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              splitCircuit(cRight.id);
+                            }}
+                            title="Separar Polos"
+                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-0 group-hover/cell:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                        )}
                       </td>
                     </>
                   )}
@@ -698,6 +767,53 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
           </tr>
         </tbody>
       </table>
+
+      {/* Lista de Elementos por Crear (segun Diagrama de Flujo: Crear Elemento) */}
+      {elementosPorCrear.length > 0 && (
+        <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-800/20 border border-slate-200 dark:border-slate-800 rounded-2xl no-print shadow-sm">
+          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-amber-500" /> Lista de Elementos por Crear ({elementosPorCrear.length})
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {elementosPorCrear.map((item, idx) => (
+              <div 
+                key={idx} 
+                className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{item.nombre}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Polo Circuito: {item.circuitoId.replace('auto_', '')}</p>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  PENDIENTE
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal interactivo de Edición Condicional de Circuitos */}
+      <ModalEdicionCircuito
+        isOpen={!!editingCircuit}
+        onClose={() => setEditingCircuit(null)}
+        circuitData={editingCircuit}
+        onSave={saveCircuitFromModal}
+        onAgregarPorCrear={(item) => {
+          setElementosPorCrear((prev) => [...prev, item]);
+        }}
+      />
+
+      {/* Botón flotante para exportar a Excel (no-print) */}
+      <div className="fixed bottom-6 right-6 z-40 no-print flex flex-col gap-3">
+        <button
+          onClick={() => exportTableroToExcel(tableroData)}
+          className="flex items-center justify-center w-14 h-14 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-full shadow-2xl transition-all cursor-pointer group hover:rotate-6"
+          title="Exportar a Excel (.xlsx)"
+        >
+          <span className="text-xl font-bold group-hover:scale-110 transition-transform">📊</span>
+        </button>
+      </div>
 
     </div>
   );

@@ -10,17 +10,26 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@prisma/client": "^7.8.0",
     "@tailwindcss/vite": "^4.3.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "tailwindcss": "^4.3.2"
+    "react-router-dom": "^7.18.1",
+    "tailwindcss": "^4.3.2",
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "prisma": "^7.8.0",
     "vite": "^8.1.1"
   }
 }
