@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import { 
@@ -11,8 +11,31 @@ import {
   FolderOpen,
   Sliders,
   CheckCircle2,
-  X
+  X,
+  Camera
 } from 'lucide-react';
+
+// Componente para renderizar Blobs de forma segura evitando fugas de memoria
+export const SafeImage = ({ blob, src, alt, className }) => {
+  const [objectUrl, setObjectUrl] = useState(null);
+
+  useEffect(() => {
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      setObjectUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setObjectUrl(null);
+    }
+  }, [blob]);
+
+  const finalSrc = objectUrl || src;
+  if (!finalSrc) return null;
+
+  return <img src={finalSrc} alt={alt} className={className} />;
+};
 
 export const EmpresaView = () => {
   const { companyId } = useParams();
@@ -30,6 +53,8 @@ export const EmpresaView = () => {
   const [ubicacion, setUbicacion] = useState('');
   const [maxPoles, setMaxPoles] = useState(24);
   const [alimentadoPor, setAlimentadoPor] = useState('');
+  const [fotoBlob, setFotoBlob] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   if (!company) {
     return (
@@ -54,6 +79,23 @@ export const EmpresaView = () => {
 
   const isValid = tableroId.trim() !== '' && tableroNombre.trim() !== '' && !idDuplicado && !nombreDuplicado;
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
+      return;
+    }
+
+    setFotoBlob(file);
+    // Revocar URL anterior si existía para evitar fugas de memoria
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
   const handleCreateTablero = (e) => {
     e.preventDefault();
     if (!isValid) return;
@@ -64,6 +106,7 @@ export const EmpresaView = () => {
       ubicacion: ubicacion.trim() || 'Sin ubicación',
       maxPoles: parseInt(maxPoles, 10),
       alimentadoPor: alimentadoPor.trim(),
+      fotoBlob,
       circuits: []
     });
 
@@ -73,6 +116,11 @@ export const EmpresaView = () => {
       setTableroNombre('');
       setUbicacion('');
       setAlimentadoPor('');
+      setFotoBlob(null);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(null);
       setMaxPoles(24);
       setShowModal(false);
     } else {
@@ -145,42 +193,62 @@ export const EmpresaView = () => {
               <div
                 key={tablero.id}
                 onClick={() => navigate(`/empresa/${company.id}/tablero/${tablero.id}`)}
-                className="bg-slate-950 border border-slate-800 hover:border-slate-700 p-5 rounded-2xl shadow-md hover:shadow-lg flex flex-col justify-between cursor-pointer transition-all hover:translate-y-[-2px] group"
+                className="bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-2xl shadow-md hover:shadow-lg flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:translate-y-[-2px] group"
               >
-                <div>
-                  <div className="flex justify-between items-start">
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 font-mono">
+                {/* Header visual con Foto */}
+                <div className="h-32 w-full bg-slate-900 relative overflow-hidden flex items-center justify-center border-b border-slate-900/60">
+                  {tablero.fotoBlob || tablero.foto ? (
+                    <SafeImage 
+                      blob={tablero.fotoBlob}
+                      src={tablero.foto} 
+                      alt={tablero.nombre} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-700 gap-1 select-none">
+                      <Layers className="w-8 h-8 opacity-30" />
+                      <span className="text-[9px] uppercase font-bold tracking-widest opacity-35">Sin Foto</span>
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3">
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-950/80 text-amber-500 border border-amber-500/20 font-mono backdrop-blur-sm">
                       ID: {tablero.id}
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el tablero "${tablero.nombre}" (ID: ${tablero.id})?`)) {
-                          deleteTablero(company.id, tablero.id);
-                        }
-                      }}
-                      className="p-1.5 hover:bg-red-950/40 text-slate-600 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                      title="Eliminar Tablero"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
-                  <h3 className="text-sm font-bold text-slate-100 mt-2.5 group-hover:text-amber-400 transition-colors">
-                    {tablero.nombre}
-                  </h3>
-                  
-                  <div className="space-y-1.5 mt-4 text-[11px] text-slate-400 border-t border-slate-900 pt-3">
-                    <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {tablero.ubicacion}</p>
-                    <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {tablero.alimentadoPor || 'No definido'}</p>
-                    <p><span className="text-slate-500 font-bold">Capacidad:</span> {tablero.maxPoles} polos</p>
-                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el tablero "${tablero.nombre}" (ID: ${tablero.id})?`)) {
+                        deleteTablero(company.id, tablero.id);
+                      }
+                    }}
+                    className="absolute top-3 right-3 p-1.5 bg-slate-950/85 hover:bg-red-950/80 text-slate-400 hover:text-red-400 rounded-lg backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                    title="Eliminar Tablero"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-slate-400 font-medium">Circuitos Registrados:</span>
-                  <span className="font-bold text-amber-500 font-mono">
-                    {tablero.circuits?.length || 0} de {tablero.maxPoles}
-                  </span>
+                {/* Contenido de la Tarjeta */}
+                <div className="p-5 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
+                      {tablero.nombre}
+                    </h3>
+                    
+                    <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900 pt-3">
+                      <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {tablero.ubicacion}</p>
+                      <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {tablero.alimentadoPor || 'No definido'}</p>
+                      <p><span className="text-slate-500 font-bold">Capacidad:</span> {tablero.maxPoles} polos</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                    <span className="text-slate-400 font-medium">Circuitos Registrados:</span>
+                    <span className="font-bold text-amber-500 font-mono">
+                      {tablero.circuits?.length || 0} de {tablero.maxPoles}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -312,6 +380,53 @@ export const EmpresaView = () => {
                   <option value={42}>42 Polos</option>
                   <option value={60}>60 Polos</option>
                 </select>
+              </div>
+
+              {/* Foto del Tablero (Tomar foto o subir archivo) */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-amber-500" />
+                  Foto o Imagen del Tablero
+                </label>
+                
+                {previewUrl ? (
+                  <div className="relative rounded-lg overflow-hidden border border-slate-700 bg-slate-900 aspect-video flex items-center justify-center group shadow-md">
+                    <img src={previewUrl} alt="Vista previa del tablero" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFotoBlob(null);
+                        if (previewUrl) URL.revokeObjectURL(previewUrl);
+                        setPreviewUrl(null);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-slate-950/80 hover:bg-red-600 text-white rounded-lg cursor-pointer shadow-md transition-colors"
+                      title="Eliminar imagen"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center w-full">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-800 border-dashed rounded-xl cursor-pointer bg-slate-900/40 hover:bg-slate-900/70 hover:border-slate-700 transition-all select-none">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Camera className="w-8 h-8 text-slate-500 mb-2" />
+                        <p className="mb-1 text-xs text-slate-400">
+                          <span className="font-bold">Tomar Foto</span> o subir archivo
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          PNG, JPG (Máx. 2MB)
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleImageChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Botones de Guardar */}

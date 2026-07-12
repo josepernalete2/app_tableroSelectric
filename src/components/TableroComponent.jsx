@@ -1,6 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X } from 'lucide-react';
+
+// Componente para renderizar Blobs de forma segura evitando fugas de memoria
+const SafeImage = ({ blob, src, alt, className }) => {
+  const [objectUrl, setObjectUrl] = useState(null);
+
+  useEffect(() => {
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      setObjectUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setObjectUrl(null);
+    }
+  }, [blob]);
+
+  const finalSrc = objectUrl || src;
+  if (!finalSrc) return null;
+
+  return <img src={finalSrc} alt={alt} className={className} />;
+};
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import { exportTableroToExcel } from '../utils/excelExport';
 
@@ -21,6 +43,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
     ubicacion,
     alimentadoPor,
     tipo,
+    foto,
+    fotoBlob,
     barrasPrincipales = {},
     breakerPrincipal = {},
     voltaje = {},
@@ -168,21 +192,27 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
   return (
     <div className="w-full text-slate-900 dark:text-slate-100 print-card font-sans select-text">
       
-      {/* 1. SECCIÓN CABECERA */}
-      <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 text-xs table-fixed mb-0">
+      {/* Grilla Superior Dividida: Tabla a la Izquierda, Foto a la Derecha */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        
+        {/* Lado Izquierdo (3/4 de ancho): Tabla General */}
+        <div className="md:col-span-3">
+          <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 text-xs table-fixed mb-0">
         <tbody>
           {/* Fila 1: Título General */}
           <tr className="border-b border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80">
-            <td colSpan={7} className="p-0 text-center font-bold text-sm tracking-wide">
-              <div className="flex justify-center items-center gap-1 py-1.5 uppercase font-bold text-slate-800 dark:text-slate-200">
-                <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-                <span>Información General de Tablero No.</span>
-                <div className="w-16 inline-block font-mono">
+            <td colSpan={7} className="p-0 font-bold text-sm tracking-wide">
+              <div className="flex flex-row items-center justify-between gap-4 py-2 px-4 uppercase font-bold text-slate-800 dark:text-slate-200 w-full">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
+                  <span className="shrink-0">Información General de Tablero No.</span>
+                </div>
+                <div className="flex flex-row items-center gap-2 font-mono truncate text-ellipsis overflow-hidden whitespace-nowrap max-w-[180px] sm:max-w-xs md:max-w-md" title={id}>
                   <EditableCell
                     value={id}
                     onSave={(val) => updateField('id', val)}
                     placeholder="No."
-                    className="text-center font-bold text-slate-900 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"
+                    className="text-center font-bold text-slate-900 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 truncate overflow-hidden text-ellipsis whitespace-nowrap"
                   />
                 </div>
               </div>
@@ -372,10 +402,78 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    {/* Lado Derecho (1/4 de ancho): Foto de Inspección */}
+    <div className="md:col-span-1 border-2 border-slate-800 dark:border-slate-700 bg-slate-950/40 rounded-lg p-3 flex flex-col justify-between h-full min-h-[220px]">
+      <div>
+        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+          <Camera className="w-3.5 h-3.5 text-amber-500" />
+          <span>Foto de Inspección</span>
+        </div>
+        
+        {fotoBlob || foto ? (
+          <div className="relative rounded overflow-hidden border border-slate-800 bg-slate-900 aspect-video flex items-center justify-center group shadow">
+            <SafeImage blob={fotoBlob} src={foto} alt="Inspección del tablero" className="w-full h-full object-cover" />
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateTablero({
+                  ...tableroData,
+                  fotoBlob: null,
+                  foto: null
+                });
+              }}
+              className="no-print absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer transition-colors shadow"
+              title="Eliminar foto"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-800 border-dashed rounded cursor-pointer bg-slate-900/30 hover:bg-slate-900/50 hover:border-slate-700 transition-all select-none">
+              <div className="flex flex-col items-center justify-center p-4 text-center">
+                <Camera className="w-7 h-7 text-slate-500 mb-1" />
+                <span className="text-[10px] font-bold text-slate-400">Tomar Foto</span>
+                <span className="text-[9px] text-slate-500">o subir archivo</span>
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  
+                  if (file.size > 2 * 1024 * 1024) {
+                    alert("La imagen es demasiado grande. Máximo 2MB.");
+                    return;
+                  }
+                  
+                  onUpdateTablero({
+                    ...tableroData,
+                    fotoBlob: file,
+                    foto: null
+                  });
+                }}
+                className="hidden"
+              />
+            </label>
+          </div>
+        )}
+      </div>
+      
+      <div className="text-[9px] text-slate-500 mt-2 leading-relaxed border-t border-slate-900 pt-2 no-print">
+        Sube o captura la foto del cableado/gabinete para documentar el tablero.
+      </div>
+    </div>
+
+  </div>
 
       {/* 2. GRID DE CIRCUITOS (SIMETRÍA COMPLETA) */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 border-t-0 text-[11px] table-fixed min-w-[900px]">
+        <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 border-t-0 text-[10px] md:text-[11px] table-fixed min-w-[750px]">
           <thead>
             {/* Encabezado Nivel 1 */}
             <tr className="border-b border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-center font-bold text-xs">

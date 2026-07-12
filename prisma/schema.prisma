@@ -26,6 +26,7 @@ model Tablero {
   ubicacion              String
   alimentadoPor          String
   tipo                   String     // "superficial" | "empotrado"
+  foto                   String?    // Foto del tablero (Base64)
   
   // Mediciones de corriente/voltaje
   ia                     String?
@@ -51,8 +52,6 @@ model Tablero {
   createdAt              DateTime   @default(now())
   updatedAt              DateTime   @updatedAt
 
-  // Restricción única compuesta
-  @@unique([empresaId, nombre])
   @@map("tableros")
 }
 

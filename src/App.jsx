@@ -58,7 +58,7 @@ const TableroWrapper = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
       {/* Top Navbar */}
-      <header className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex items-center justify-between shadow-md no-print">
+      <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
         <div className="flex items-center gap-3">
           <button 
             onClick={() => navigate(`/empresa/${companyId}`)}
@@ -94,7 +94,7 @@ const TableroWrapper = () => {
       </header>
 
       {/* Renders Tablero Component */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
         <TableroComponent 
           tableroData={enrichedTablero}
           onUpdateTablero={handleUpdateTablero}
@@ -104,9 +104,12 @@ const TableroWrapper = () => {
   );
 };
 
+import SyncStatusBanner from './components/SyncStatusBanner';
+
 export function App() {
   return (
     <BrowserRouter>
+      <SyncStatusBanner />
       <Routes>
         <Route path="/login" element={<LoginView />} />
         <Route 

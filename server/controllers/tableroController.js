@@ -1,5 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import prisma from '../db.js';
 
 /**
  * POST /api/empresas/:empresaId/tableros
@@ -9,6 +8,7 @@ export const crearTableroCompleto = async (req, res) => {
   try {
     const { empresaId } = req.params;
     const {
+      id,
       nombre,
       ubicacion,
       alimentadoPor,
@@ -25,6 +25,7 @@ export const crearTableroCompleto = async (req, res) => {
       tierraCalibre,
       tierraObservaciones,
       observacionesGenerales,
+      foto,
       circuitos = []
     } = req.body;
 
@@ -46,10 +47,12 @@ export const crearTableroCompleto = async (req, res) => {
     // Inserción anidada (Nested Write) en Prisma: Todo ocurre dentro de una transacción.
     const nuevoTablero = await prisma.tablero.create({
       data: {
+        id: id || undefined,
         nombre,
         ubicacion,
         alimentadoPor,
         tipo,
+        foto,
         ia,
         ib,
         ic,
