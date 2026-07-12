@@ -10,12 +10,13 @@ datasource db {
 }
 
 model Empresa {
-  id        String    @id @default(uuid())
-  nombre    String
-  direccion String
-  tableros  Tablero[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                      String                  @id @default(uuid())
+  nombre                  String
+  direccion               String
+  tableros                Tablero[]
+  inspeccionesSubestacion InspeccionSubestacion[]
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
 
   @@map("empresas")
 }
@@ -72,4 +73,33 @@ model Circuito {
   updatedAt        DateTime @updatedAt
 
   @@map("circuitos")
+}
+
+model InspeccionSubestacion {
+  id                 String   @id // UUID v4 del cliente
+  nombre             String   // Nombre o código de la subestación
+  ubicacion          String   // Ubicación física
+  fecha              String
+  hora               String
+  inspector          String
+  nivelTension       String   // Nivel de tensión (kV)
+
+  // Bloques de evaluación visual estructurada como JSON nativo de PostgreSQL
+  estadoEntorno      Json
+  obrasCiviles       Json
+  equiposPrincipales Json
+  puestaTierra       Json
+  edificioControl    Json
+
+  firmaInspector     String?
+  firmaSupervisor    String?
+
+  // Relaciones
+  empresaId          String
+  empresa            Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("inspecciones_subestacion")
 }

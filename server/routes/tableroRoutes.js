@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import { crearTableroCompleto, obtenerTablerosPorEmpresa } from '../controllers/tableroController.js';
+import { crearInspeccionSubestacion } from '../controllers/subestacionController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 
 const router = Router();
 
-// Endpoint para registrar un tablero con sus circuitos
+// Endpoints para registrar elementos (cola de sincronización universal)
+router.post('/tableros', crearTableroCompleto);
+router.post('/subestaciones', crearInspeccionSubestacion);
+
+// Rutas originales con compatibilidad
 router.post('/empresas/:empresaId/tableros', crearTableroCompleto);
 
 // Endpoint para listar todos los tableros de una empresa específica

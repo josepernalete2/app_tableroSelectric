@@ -30,12 +30,14 @@ const initialCompanies = [
     tableros: [
       { ...initialTablerosData['11'], id: '11', nombre: 'Tablero TD-11 (Sótano)' },
       { ...initialTablerosData['10'], id: '10', nombre: 'Tablero TD-10 (Imágenes)' }
-    ]
+    ],
+    subestaciones: []
   },
   {
     id: 'c-2',
     nombre: 'Alimentos Polar Planta Turmero',
-    tableros: []
+    tableros: [],
+    subestaciones: []
   }
 ];
 
@@ -45,7 +47,8 @@ export const useStore = create(
       user: null,
       companies: initialCompanies,
       tablerosLocales: [],
-      syncQueue: [],
+      subestacionesLocales: [],
+      syncQueue: [], // Cola universal: { id, tipo: 'TABLERO'|'SUBESTACION', companyId, payload }
 
       // Autenticación básica
       login: (email, password) => {
@@ -65,7 +68,8 @@ export const useStore = create(
         const newCompany = {
           id: `company-${Date.now()}`,
           nombre,
-          tableros: []
+          tableros: [],
+          subestaciones: []
         };
         set((state) => ({
           companies: [...state.companies, newCompany]
@@ -79,27 +83,31 @@ export const useStore = create(
       },
 
       importCompanies: (companiesList) => {
-        set({ companies: companiesList });
+        // Asegurar que existan subestaciones en cada empresa importada
+        const enrichedList = companiesList.map((c) => ({
+          ...c,
+          subestaciones: c.subestaciones || []
+        }));
+        set({ companies: enrichedList });
       },
 
-      // Crear Tablero Offline con UUID v4 y soporte de Blobs para fotos
+      // 1. Crear Tablero con Cola Universal
       addTablero: (companyId, tableroData) => {
         const { companies } = get();
         const company = companies.find((c) => c.id === companyId);
         if (!company) return { success: false, error: 'Empresa no encontrada.' };
 
-        // El ID único del tablero en el frontend se autogenera con UUID v4
         const uuidId = crypto.randomUUID();
 
         const nuevoTablero = {
           id: uuidId,
-          clientId: tableroData.id || uuidId, // Código/ID ingresado por el inspector (ej: TD-11)
+          clientId: tableroData.id || uuidId,
           nombre: tableroData.nombre,
           ubicacion: tableroData.ubicacion || 'Sin ubicación',
           alimentadoPor: tableroData.alimentadoPor || '',
           tipo: tableroData.tipo || 'superficial',
-          foto: null, // URL del servidor (cuando se sincronice)
-          fotoBlob: tableroData.fotoBlob || null, // Guardado directo en IndexedDB como objeto Blob
+          foto: null,
+          fotoBlob: tableroData.fotoBlob || null,
           barrasPrincipales: tableroData.barrasPrincipales || { ia: '0', ib: '0', ic: '0' },
           breakerPrincipal: tableroData.breakerPrincipal || { marca: '', tipo: '', amp: '' },
           voltaje: tableroData.voltaje || { va: '208', vb: '205', vc: '205' },
@@ -115,12 +123,20 @@ export const useStore = create(
         set((state) => ({
           companies: state.companies.map((c) => {
             if (c.id === companyId) {
-              return { ...c, tableros: [...c.tableros, nuevoTablero] };
+              return { 
+                ...c, 
+                tableros: [...c.tableros, nuevoTablero]
+              };
             }
             return c;
           }),
           tablerosLocales: [...state.tablerosLocales, nuevoTablero],
-          syncQueue: [...state.syncQueue, { action: 'CREATE_TABLERO', companyId, tableroId: uuidId }]
+          syncQueue: [...state.syncQueue, { 
+            id: uuidId, 
+            tipo: 'TABLERO', 
+            companyId, 
+            payload: nuevoTablero 
+          }]
         }));
 
         return { success: true, tablero: nuevoTablero };
@@ -143,7 +159,6 @@ export const useStore = create(
             return c;
           });
 
-          // Actualizar en tableros locales si está pendiente de sincronización
           const updatedTablerosLocales = state.tablerosLocales.map((t) => {
             if (t.id === tableroId) {
               return { ...t, ...updatedData };
@@ -151,9 +166,18 @@ export const useStore = create(
             return t;
           });
 
+          // Sincronizar actualización local dentro de la cola universal
+          const updatedSyncQueue = state.syncQueue.map((item) => {
+            if (item.id === tableroId && item.tipo === 'TABLERO') {
+              return { ...item, payload: { ...item.payload, ...updatedData } };
+            }
+            return item;
+          });
+
           return {
             companies: updatedCompanies,
-            tablerosLocales: updatedTablerosLocales
+            tablerosLocales: updatedTablerosLocales,
+            syncQueue: updatedSyncQueue
           };
         });
       },
@@ -170,21 +194,126 @@ export const useStore = create(
             return c;
           }),
           tablerosLocales: state.tablerosLocales.filter((t) => t.id !== tableroId),
-          syncQueue: state.syncQueue.filter((item) => item.tableroId !== tableroId)
+          syncQueue: state.syncQueue.filter((item) => item.id !== tableroId)
+        }));
+      },
+
+      // 2. Crear Inspección de Subestación con Cola Universal
+      addInspeccionSubestacion: (companyId, payload) => {
+        const { companies } = get();
+        const company = companies.find((c) => c.id === companyId);
+        if (!company) return { success: false, error: 'Empresa no encontrada.' };
+
+        const uuidId = payload.id || crypto.randomUUID();
+
+        const nuevaSubestacion = {
+          ...payload,
+          id: uuidId,
+          companyId,
+          tipoPlantilla: 'INSPECCION_SUBESTACION',
+          createdAt: new Date().toISOString()
+        };
+
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              const subestaciones = c.subestaciones || [];
+              return { 
+                ...c, 
+                subestaciones: [...subestaciones, nuevaSubestacion]
+              };
+            }
+            return c;
+          }),
+          subestacionesLocales: [...(state.subestacionesLocales || []), nuevaSubestacion],
+          syncQueue: [...state.syncQueue, { 
+            id: uuidId, 
+            tipo: 'SUBESTACION', 
+            companyId, 
+            payload: nuevaSubestacion 
+          }]
+        }));
+
+        return { success: true, subestacion: nuevaSubestacion };
+      },
+
+      updateSubestacion: (companyId, subestacionId, updatedData) => {
+        set((state) => {
+          const updatedCompanies = state.companies.map((c) => {
+            if (c.id === companyId) {
+              const subestaciones = c.subestaciones || [];
+              return {
+                ...c,
+                subestaciones: subestaciones.map((s) => {
+                  if (s.id === subestacionId) {
+                    return { ...s, ...updatedData };
+                  }
+                  return s;
+                })
+              };
+            }
+            return c;
+          });
+
+          const updatedSubestacionesLocales = (state.subestacionesLocales || []).map((s) => {
+            if (s.id === subestacionId) {
+              return { ...s, ...updatedData };
+            }
+            return s;
+          });
+
+          // Sincronizar actualización local dentro de la cola universal
+          const updatedSyncQueue = state.syncQueue.map((item) => {
+            if (item.id === subestacionId && item.tipo === 'SUBESTACION') {
+              return { ...item, payload: { ...item.payload, ...updatedData } };
+            }
+            return item;
+          });
+
+          return {
+            companies: updatedCompanies,
+            subestacionesLocales: updatedSubestacionesLocales,
+            syncQueue: updatedSyncQueue
+          };
+        });
+      },
+
+      deleteSubestacion: (companyId, subestacionId) => {
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              const subestaciones = c.subestaciones || [];
+              return {
+                ...c,
+                subestaciones: subestaciones.filter((s) => s.id !== subestacionId)
+              };
+            }
+            return c;
+          }),
+          subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== subestacionId),
+          syncQueue: state.syncQueue.filter((item) => item.id !== subestacionId)
         }));
       },
 
       // Remover elemento de la cola de sincronización tras envío exitoso
-      removeFromQueue: (tableroId) => {
+      removeFromQueue: (id) => {
         set((state) => ({
-          syncQueue: state.syncQueue.filter((item) => item.tableroId !== tableroId),
-          tablerosLocales: state.tablerosLocales.filter((t) => t.id !== tableroId)
+          syncQueue: state.syncQueue.filter((item) => item.id !== id),
+          tablerosLocales: state.tablerosLocales.filter((t) => t.id !== id),
+          subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id)
         }));
       }
     }),
     {
       name: 'tableroselectrico_zustand_store',
-      storage: localForageStorage // Usar localforage de forma directa
+      storage: localForageStorage, // Usar localforage de forma directa
+      partialize: (state) => ({
+        user: state.user,
+        companies: state.companies,
+        tablerosLocales: state.tablerosLocales,
+        subestacionesLocales: state.subestacionesLocales,
+        syncQueue: state.syncQueue
+      })
     }
   )
 );

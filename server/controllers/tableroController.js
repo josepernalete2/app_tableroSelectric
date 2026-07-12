@@ -6,7 +6,7 @@ import prisma from '../db.js';
  */
 export const crearTableroCompleto = async (req, res) => {
   try {
-    const { empresaId } = req.params;
+    const empresaId = req.params.empresaId || req.body.empresaId;
     const {
       id,
       nombre,

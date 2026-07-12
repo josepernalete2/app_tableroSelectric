@@ -2,11 +2,11 @@ import { useEffect, useState, useRef } from 'react';
 import useStore from '../store/useStore';
 
 export function useSync() {
-  const { syncQueue, removeFromQueue, companies } = useStore();
+  const { syncQueue, removeFromQueue } = useStore();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   
-  // Flag de bloqueo mutable mediante ref para evitar ejecuciones concurrentes y bucles infinitos
+  // Semáforo de bloqueo para impedir la ejecución concurrente de la cola de sincronización
   const isSyncingRef = useRef(false);
 
   useEffect(() => {
@@ -22,7 +22,7 @@ export function useSync() {
     };
   }, []);
 
-  // Sincronizar de forma automática al detectar conexión si la cola tiene elementos
+  // Disparar sincronización automática cuando cambie la red o la cola de elementos
   useEffect(() => {
     if (isOnline && syncQueue.length > 0 && !isSyncingRef.current) {
       procesarColaSincronizacion();
@@ -30,58 +30,53 @@ export function useSync() {
   }, [isOnline, syncQueue]);
 
   const procesarColaSincronizacion = async () => {
-    // Activar bloqueo de sincronización
     isSyncingRef.current = true;
     setIsSyncing(true);
 
-    // Iterar una copia de la cola actual en orden FIFO
     const queueCopy = [...syncQueue];
-    
+
     for (const item of queueCopy) {
       if (!navigator.onLine) {
         setIsOnline(false);
-        break; // Detener la sincronización si la conexión física se cae en el proceso
+        break; // Detener la sincronización si la red física se desconecta en pleno envío
       }
 
-      if (item.action === 'CREATE_TABLERO') {
-        const company = companies.find((c) => c.id === item.companyId);
-        const tableroCompleto = company?.tableros.find((t) => t.id === item.tableroId);
+      let res = null;
 
-        if (tableroCompleto) {
-          const res = await subirTableroServidor(item.companyId, tableroCompleto);
-          
-          if (res.success) {
-            // Caso de Éxito (HTTP 200/201): Limpiar del store y persistir en IndexedDB
-            removeFromQueue(item.tableroId);
-          } else {
-            // Manejo diferencial de errores para evitar bucles infinitos
-            if (res.status === 'NETWORK_ERROR') {
-              // Error de red temporal: detener procesamiento para reintentar cuando la red esté estable
-              break;
-            } else {
-              // Error lógico/servidor definitivo (400, 422, 500, etc.)
-              console.error(`Error definitivo en la sincronización (status: ${res.status}) del tablero: ${tableroCompleto.nombre}`);
-              
-              alert(`Error al sincronizar el tablero "${tableroCompleto.nombre}" con el servidor central.\n\nCódigo de error: ${res.status}\n\nDetalle: El elemento ha sido retirado de la cola de sincronización para evitar bucles de red. Por favor, verifique el contenido de la inspección.`);
-              
-              // Remover de la cola de sincronización para no atascar el flujo del resto de tableros
-              removeFromQueue(item.tableroId);
-            }
-          }
+      if (item.tipo === 'TABLERO') {
+        res = await sincronizarTablero(item.companyId, item.payload);
+      } else if (item.tipo === 'SUBESTACION') {
+        res = await sincronizarSubestacion(item.companyId, item.payload);
+      }
+
+      if (res) {
+        if (res.success) {
+          // Éxito: borrar inmediatamente de la cola en Zustand + IndexedDB
+          removeFromQueue(item.id);
         } else {
-          // Si el tablero no se encuentra en el store, limpiarlo de la cola
-          removeFromQueue(item.tableroId);
+          if (res.status === 'NETWORK_ERROR') {
+            // Error temporal de conexión: detener la cola para reintentar más tarde
+            break;
+          } else {
+            // Error definitivo del servidor (400, 422, 500, etc.): retirar y notificar
+            console.error(`Error definitivo (HTTP ${res.status}) al sincronizar elemento con ID: ${item.id}`);
+            alert(`Error de validación al sincronizar la inspección con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
+            removeFromQueue(item.id);
+          }
         }
+      } else {
+        // En caso de que no coincida ningún tipo de operación, limpiar de la cola
+        removeFromQueue(item.id);
       }
     }
 
-    // Desactivar bloqueo de sincronización
     setIsSyncing(false);
     isSyncingRef.current = false;
   };
 
-  const subirTableroServidor = async (empresaId, tablero) => {
+  const sincronizarTablero = async (empresaId, tablero) => {
     try {
+      // Traducir el Blob a base64 solo para el envío
       let fotoBase64 = null;
       if (tablero.fotoBlob) {
         fotoBase64 = await new Promise((resolve, reject) => {
@@ -111,6 +106,7 @@ export function useSync() {
         tierraCalibre: tablero.puestaTierra?.calibre || '',
         tierraObservaciones: tablero.puestaTierra?.observaciones || '',
         observacionesGenerales: tablero.observacionesGenerales || '',
+        empresaId, // Enviado directamente en el cuerpo del request
         circuitos: (tablero.circuits || []).map((circ) => {
           const poloNum = circ.poles && circ.poles.length > 0 ? circ.poles[0] : 1;
           return {
@@ -124,12 +120,9 @@ export function useSync() {
         })
       };
 
-      const backendUrl = `http://localhost:3001/api/empresas/${empresaId}/tableros`;
-      const response = await fetch(backendUrl, {
+      const response = await fetch('http://localhost:3001/api/tableros', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -139,7 +132,44 @@ export function useSync() {
 
       return { success: true };
     } catch (error) {
-      console.error('Error al sincronizar tablero:', error);
+      console.error('Error de red en sincronizarTablero:', error);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
+  };
+
+  const sincronizarSubestacion = async (empresaId, subestacion) => {
+    try {
+      const payload = {
+        id: subestacion.id,
+        nombre: subestacion.nombre,
+        ubicacion: subestacion.ubicacion,
+        fecha: subestacion.fecha,
+        hora: subestacion.hora,
+        inspector: subestacion.inspector,
+        nivelTension: subestacion.nivelTension,
+        estadoEntorno: subestacion.estadoEntorno,
+        obrasCiviles: subestacion.obrasCiviles,
+        equiposPrincipales: subestacion.equiposPrincipales,
+        puestaTierra: subestacion.puestaTierra,
+        edificioControl: subestacion.edificioControl,
+        firmaInspector: subestacion.firmaInspector || null,
+        firmaSupervisor: subestacion.firmaSupervisor || null,
+        empresaId // Enviado en el payload
+      };
+
+      const response = await fetch('http://localhost:3001/api/subestaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error de red en sincronizarSubestacion:', error);
       return { success: false, status: 'NETWORK_ERROR' };
     }
   };
