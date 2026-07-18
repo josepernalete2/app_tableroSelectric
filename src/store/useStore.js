@@ -13,7 +13,7 @@ localforage.config({
 const localForageStorage = {
   getItem: async (name) => {
     const value = await localforage.getItem(name);
-    return value; // Retorna el objeto deserializado directamente (incluyendo Blobs)
+    return value; // Retorna el objeto deserializado directamente
   },
   setItem: async (name, value) => {
     await localforage.setItem(name, value);
@@ -27,17 +27,24 @@ const initialCompanies = [
   {
     id: 'c-1',
     nombre: 'Clínica Metropolitana de Caracas',
-    tableros: [
-      { ...initialTablerosData['11'], id: '11', nombre: 'Tablero TD-11 (Sótano)' },
-      { ...initialTablerosData['10'], id: '10', nombre: 'Tablero TD-10 (Imágenes)' }
-    ],
-    subestaciones: []
+    proyectos: [
+      {
+        id: 'p-1',
+        nombre: 'Proyecto Sótano / Imágenes',
+        descripcion: 'Inspecciones iniciales del sótano e imágenes de la clínica.',
+        tableros: [
+          { ...initialTablerosData['11'], id: '11', nombre: 'Tablero TD-11 (Sótano)', proyectoId: 'p-1' },
+          { ...initialTablerosData['10'], id: '10', nombre: 'Tablero TD-10 (Imágenes)', proyectoId: 'p-1' }
+        ],
+        subestaciones: [],
+        createdAt: new Date().toISOString()
+      }
+    ]
   },
   {
     id: 'c-2',
     nombre: 'Alimentos Polar Planta Turmero',
-    tableros: [],
-    subestaciones: []
+    proyectos: []
   }
 ];
 
@@ -46,9 +53,10 @@ export const useStore = create(
     (set, get) => ({
       user: null,
       companies: initialCompanies,
+      proyectosLocales: [],
       tablerosLocales: [],
       subestacionesLocales: [],
-      syncQueue: [], // Cola universal: { id, tipo: 'TABLERO'|'SUBESTACION', companyId, payload }
+      syncQueue: [], // Cola universal: { id, tipo: 'PROYECTO'|'TABLERO'|'SUBESTACION', companyId, payload }
 
       // Autenticación básica
       login: (email, password) => {
@@ -68,8 +76,7 @@ export const useStore = create(
         const newCompany = {
           id: `company-${Date.now()}`,
           nombre,
-          tableros: [],
-          subestaciones: []
+          proyectos: []
         };
         set((state) => ({
           companies: [...state.companies, newCompany]
@@ -83,19 +90,75 @@ export const useStore = create(
       },
 
       importCompanies: (companiesList) => {
-        // Asegurar que existan subestaciones en cada empresa importada
         const enrichedList = companiesList.map((c) => ({
           ...c,
-          subestaciones: c.subestaciones || []
+          proyectos: (c.proyectos || []).map((p) => ({
+            ...p,
+            tableros: p.tableros || [],
+            subestaciones: p.subestaciones || []
+          }))
         }));
         set({ companies: enrichedList });
       },
 
-      // 1. Crear Tablero con Cola Universal
-      addTablero: (companyId, tableroData) => {
+      // 1. Crear Proyecto Offline
+      addProyecto: (nombre, descripcion, companyId) => {
         const { companies } = get();
         const company = companies.find((c) => c.id === companyId);
         if (!company) return { success: false, error: 'Empresa no encontrada.' };
+
+        const uuidId = crypto.randomUUID();
+
+        const nuevoProyecto = {
+          id: uuidId,
+          nombre,
+          descripcion: descripcion || '',
+          empresaId: companyId,
+          tableros: [],
+          subestaciones: [],
+          createdAt: new Date().toISOString()
+        };
+
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              return {
+                ...c,
+                proyectos: [nuevoProyecto, ...(c.proyectos || [])]
+              };
+            }
+            return c;
+          }),
+          proyectosLocales: [...(state.proyectosLocales || []), nuevoProyecto],
+          syncQueue: [...state.syncQueue, {
+            id: uuidId,
+            tipo: 'PROYECTO',
+            companyId,
+            payload: nuevoProyecto
+          }]
+        }));
+
+        return { success: true, proyecto: nuevoProyecto };
+      },
+
+      // 2. Crear Tablero con Cola Universal
+      addTablero: (proyectoId, tableroData) => {
+        const { companies } = get();
+        
+        // Encontrar empresa y proyecto padre
+        let parentCompanyId = null;
+        let targetProyecto = null;
+
+        for (const company of companies) {
+          const proj = (company.proyectos || []).find((p) => p.id === proyectoId);
+          if (proj) {
+            parentCompanyId = company.id;
+            targetProyecto = proj;
+            break;
+          }
+        }
+
+        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
 
         const uuidId = crypto.randomUUID();
 
@@ -117,15 +180,25 @@ export const useStore = create(
           neutroLlegada: tableroData.neutroLlegada || { calibre: '', observaciones: '' },
           puestaTierra: tableroData.puestaTierra || { calibre: '', observaciones: '' },
           observacionesGenerales: tableroData.observacionesGenerales || '',
+          proyectoId,
+          companyId: parentCompanyId,
           createdAt: new Date().toISOString()
         };
 
         set((state) => ({
           companies: state.companies.map((c) => {
-            if (c.id === companyId) {
-              return { 
-                ...c, 
-                tableros: [...c.tableros, nuevoTablero]
+            if (c.id === parentCompanyId) {
+              return {
+                ...c,
+                proyectos: c.proyectos.map((p) => {
+                  if (p.id === proyectoId) {
+                    return {
+                      ...p,
+                      tableros: [...p.tableros, nuevoTablero]
+                    };
+                  }
+                  return p;
+                })
               };
             }
             return c;
@@ -134,7 +207,7 @@ export const useStore = create(
           syncQueue: [...state.syncQueue, { 
             id: uuidId, 
             tipo: 'TABLERO', 
-            companyId, 
+            companyId: parentCompanyId, 
             payload: nuevoTablero 
           }]
         }));
@@ -142,22 +215,25 @@ export const useStore = create(
         return { success: true, tablero: nuevoTablero };
       },
 
-      updateTablero: (companyId, tableroId, updatedData) => {
+      updateTablero: (proyectoId, tableroId, updatedData) => {
         set((state) => {
-          const updatedCompanies = state.companies.map((c) => {
-            if (c.id === companyId) {
-              return {
-                ...c,
-                tableros: c.tableros.map((t) => {
-                  if (t.id === tableroId) {
-                    return { ...t, ...updatedData };
-                  }
-                  return t;
-                })
-              };
-            }
-            return c;
-          });
+          const updatedCompanies = state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                return {
+                  ...p,
+                  tableros: p.tableros.map((t) => {
+                    if (t.id === tableroId) {
+                      return { ...t, ...updatedData };
+                    }
+                    return t;
+                  })
+                };
+              }
+              return p;
+            })
+          }));
 
           const updatedTablerosLocales = state.tablerosLocales.map((t) => {
             if (t.id === tableroId) {
@@ -182,45 +258,70 @@ export const useStore = create(
         });
       },
 
-      deleteTablero: (companyId, tableroId) => {
+      deleteTablero: (proyectoId, tableroId) => {
         set((state) => ({
-          companies: state.companies.map((c) => {
-            if (c.id === companyId) {
-              return {
-                ...c,
-                tableros: c.tableros.filter((t) => t.id !== tableroId)
-              };
-            }
-            return c;
-          }),
+          companies: state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                return {
+                  ...p,
+                  tableros: p.tableros.filter((t) => t.id !== tableroId)
+                };
+              }
+              return p;
+            })
+          })),
           tablerosLocales: state.tablerosLocales.filter((t) => t.id !== tableroId),
           syncQueue: state.syncQueue.filter((item) => item.id !== tableroId)
         }));
       },
 
-      // 2. Crear Inspección de Subestación con Cola Universal
-      addInspeccionSubestacion: (companyId, payload) => {
+      // 3. Crear Inspección de Subestación con Cola Universal
+      addInspeccionSubestacion: (proyectoId, payload) => {
         const { companies } = get();
-        const company = companies.find((c) => c.id === companyId);
-        if (!company) return { success: false, error: 'Empresa no encontrada.' };
+        
+        // Encontrar empresa y proyecto padre
+        let parentCompanyId = null;
+        let targetProyecto = null;
+
+        for (const company of companies) {
+          const proj = (company.proyectos || []).find((p) => p.id === proyectoId);
+          if (proj) {
+            parentCompanyId = company.id;
+            targetProyecto = proj;
+            break;
+          }
+        }
+
+        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
 
         const uuidId = payload.id || crypto.randomUUID();
 
         const nuevaSubestacion = {
           ...payload,
           id: uuidId,
-          companyId,
+          proyectoId,
+          companyId: parentCompanyId,
           tipoPlantilla: 'INSPECCION_SUBESTACION',
           createdAt: new Date().toISOString()
         };
 
         set((state) => ({
           companies: state.companies.map((c) => {
-            if (c.id === companyId) {
-              const subestaciones = c.subestaciones || [];
-              return { 
-                ...c, 
-                subestaciones: [...subestaciones, nuevaSubestacion]
+            if (c.id === parentCompanyId) {
+              return {
+                ...c,
+                proyectos: c.proyectos.map((p) => {
+                  if (p.id === proyectoId) {
+                    const subestaciones = p.subestaciones || [];
+                    return {
+                      ...p,
+                      subestaciones: [...subestaciones, nuevaSubestacion]
+                    };
+                  }
+                  return p;
+                })
               };
             }
             return c;
@@ -229,7 +330,7 @@ export const useStore = create(
           syncQueue: [...state.syncQueue, { 
             id: uuidId, 
             tipo: 'SUBESTACION', 
-            companyId, 
+            companyId: parentCompanyId, 
             payload: nuevaSubestacion 
           }]
         }));
@@ -237,23 +338,26 @@ export const useStore = create(
         return { success: true, subestacion: nuevaSubestacion };
       },
 
-      updateSubestacion: (companyId, subestacionId, updatedData) => {
+      updateSubestacion: (proyectoId, subestacionId, updatedData) => {
         set((state) => {
-          const updatedCompanies = state.companies.map((c) => {
-            if (c.id === companyId) {
-              const subestaciones = c.subestaciones || [];
-              return {
-                ...c,
-                subestaciones: subestaciones.map((s) => {
-                  if (s.id === subestacionId) {
-                    return { ...s, ...updatedData };
-                  }
-                  return s;
-                })
-              };
-            }
-            return c;
-          });
+          const updatedCompanies = state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const subestaciones = p.subestaciones || [];
+                return {
+                  ...p,
+                  subestaciones: subestaciones.map((s) => {
+                    if (s.id === subestacionId) {
+                      return { ...s, ...updatedData };
+                    }
+                    return s;
+                  })
+                };
+              }
+              return p;
+            })
+          }));
 
           const updatedSubestacionesLocales = (state.subestacionesLocales || []).map((s) => {
             if (s.id === subestacionId) {
@@ -278,18 +382,21 @@ export const useStore = create(
         });
       },
 
-      deleteSubestacion: (companyId, subestacionId) => {
+      deleteSubestacion: (proyectoId, subestacionId) => {
         set((state) => ({
-          companies: state.companies.map((c) => {
-            if (c.id === companyId) {
-              const subestaciones = c.subestaciones || [];
-              return {
-                ...c,
-                subestaciones: subestaciones.filter((s) => s.id !== subestacionId)
-              };
-            }
-            return c;
-          }),
+          companies: state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const subestaciones = p.subestaciones || [];
+                return {
+                  ...p,
+                  subestaciones: subestaciones.filter((s) => s.id !== subestacionId)
+                };
+              }
+              return p;
+            })
+          })),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== subestacionId),
           syncQueue: state.syncQueue.filter((item) => item.id !== subestacionId)
         }));
@@ -299,6 +406,7 @@ export const useStore = create(
       removeFromQueue: (id) => {
         set((state) => ({
           syncQueue: state.syncQueue.filter((item) => item.id !== id),
+          proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== id),
           tablerosLocales: state.tablerosLocales.filter((t) => t.id !== id),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id)
         }));
@@ -310,6 +418,7 @@ export const useStore = create(
       partialize: (state) => ({
         user: state.user,
         companies: state.companies,
+        proyectosLocales: state.proyectosLocales || [],
         tablerosLocales: state.tablerosLocales,
         subestacionesLocales: state.subestacionesLocales,
         syncQueue: state.syncQueue

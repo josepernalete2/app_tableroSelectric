@@ -4,7 +4,7 @@ import prisma from '../db.js';
  * POST /api/subestaciones
  * Guarda de forma nativa un registro de inspección de subestación en PostgreSQL.
  */
-export const crearInspeccionSubestacion = async (req, res) => {
+export const crearInspeccionSubestacion = async (req, res, next) => {
   try {
     const {
       id,
@@ -21,14 +21,15 @@ export const crearInspeccionSubestacion = async (req, res) => {
       edificioControl,
       firmaInspector,
       firmaSupervisor,
-      empresaId
+      empresaId,
+      proyectoId
     } = req.body;
 
     // Validar campos obligatorios
-    if (!id || !nombre || !empresaId) {
+    if (!id || !nombre || !proyectoId) {
       return res.status(400).json({
         ok: false,
-        error: 'Los campos id, nombre y empresaId son requeridos.'
+        error: 'Los campos id, nombre y proyectoId son requeridos.'
       });
     }
 
@@ -49,9 +50,10 @@ export const crearInspeccionSubestacion = async (req, res) => {
         edificioControl: edificioControl || {},
         firmaInspector: firmaInspector || null,
         firmaSupervisor: firmaSupervisor || null,
-        empresa: {
-          connect: { id: empresaId }
-        }
+        proyecto: {
+          connect: { id: proyectoId }
+        },
+        ...(empresaId ? { empresa: { connect: { id: empresaId } } } : {})
       }
     });
 
@@ -63,11 +65,6 @@ export const crearInspeccionSubestacion = async (req, res) => {
 
   } catch (error) {
     console.error('Error en crearInspeccionSubestacion:', error);
-
-    return res.status(500).json({
-      ok: false,
-      error: 'Error interno del servidor al registrar la inspección de subestación.',
-      details: error.message
-    });
+    next(error);
   }
 };

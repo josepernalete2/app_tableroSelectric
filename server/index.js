@@ -1,3 +1,10 @@
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Rechazo no manejado en:', promise, 'razón:', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('❌ Excepción no capturada:', error);
+});
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -17,6 +24,12 @@ app.use('/api', tableroRoutes);
 // Endpoint de Health Check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', uptime: process.uptime(), date: new Date() });
+});
+
+// Middleware Global de Manejo de Errores en Express
+app.use((err, req, res, next) => {
+  console.error("❌ ERROR EN EL SERVIDOR:", err.stack);
+  res.status(500).json({ error: "Error interno", detalle: err.message });
 });
 
 app.listen(PORT, () => {

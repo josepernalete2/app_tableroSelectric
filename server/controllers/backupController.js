@@ -6,7 +6,7 @@ import prisma from '../db.js';
  * GET /api/backup/export
  * Exporta la base de datos completa (Empresas -> Tableros -> Circuitos) en formato JSON.
  */
-export const exportDatabase = async (req, res) => {
+export const exportDatabase = async (req, res, next) => {
   try {
     const data = await prisma.empresa.findMany({
       include: {
@@ -34,11 +34,7 @@ export const exportDatabase = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al exportar base de datos:', error);
-    return res.status(500).json({
-      ok: false,
-      error: 'Error interno al exportar los datos.',
-      details: error.message
-    });
+    next(error);
   }
 };
 
@@ -46,7 +42,7 @@ export const exportDatabase = async (req, res) => {
  * POST /api/backup/import
  * Reemplaza la base de datos completa con los datos proporcionados en formato JSON de forma transaccional.
  */
-export const importDatabase = async (req, res) => {
+export const importDatabase = async (req, res, next) => {
   try {
     const { data } = req.body;
 
@@ -120,11 +116,7 @@ export const importDatabase = async (req, res) => {
 
   } catch (error) {
     console.error('Error al importar base de datos:', error);
-    return res.status(500).json({
-      ok: false,
-      error: 'Error interno al importar y sobrescribir la base de datos.',
-      details: error.message
-    });
+    next(error);
   }
 };
 
@@ -132,7 +124,7 @@ export const importDatabase = async (req, res) => {
  * POST /api/backup/gdrive-sync
  * Exporta el estado actual y lo sube directamente a la cuenta de Google Drive configurada.
  */
-export const syncToGoogleDrive = async (req, res) => {
+export const syncToGoogleDrive = async (req, res, next) => {
   try {
     const { email } = req.body;
 
@@ -225,10 +217,6 @@ export const syncToGoogleDrive = async (req, res) => {
 
   } catch (error) {
     console.error('Error en syncToGoogleDrive:', error);
-    return res.status(500).json({
-      ok: false,
-      error: 'Error en el servidor al sincronizar con Google Drive.',
-      details: error.message
-    });
+    next(error);
   }
 };

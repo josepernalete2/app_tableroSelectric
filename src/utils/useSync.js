@@ -43,7 +43,9 @@ export function useSync() {
 
       let res = null;
 
-      if (item.tipo === 'TABLERO') {
+      if (item.tipo === 'PROYECTO') {
+        res = await sincronizarProyecto(item.companyId, item.payload);
+      } else if (item.tipo === 'TABLERO') {
         res = await sincronizarTablero(item.companyId, item.payload);
       } else if (item.tipo === 'SUBESTACION') {
         res = await sincronizarSubestacion(item.companyId, item.payload);
@@ -72,6 +74,32 @@ export function useSync() {
 
     setIsSyncing(false);
     isSyncingRef.current = false;
+  };
+
+  const sincronizarProyecto = async (empresaId, proyecto) => {
+    try {
+      const payload = {
+        id: proyecto.id,
+        nombre: proyecto.nombre,
+        descripcion: proyecto.descripcion || '',
+        empresaId
+      };
+
+      const response = await fetch('http://localhost:3001/api/proyectos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error de red en sincronizarProyecto:', error);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
   };
 
   const sincronizarTablero = async (empresaId, tablero) => {
@@ -106,7 +134,8 @@ export function useSync() {
         tierraCalibre: tablero.puestaTierra?.calibre || '',
         tierraObservaciones: tablero.puestaTierra?.observaciones || '',
         observacionesGenerales: tablero.observacionesGenerales || '',
-        empresaId, // Enviado directamente en el cuerpo del request
+        proyectoId: tablero.proyectoId, // Obligatorio para vincular a Proyecto
+        empresaId, // Opcional para compatibilidad
         circuitos: (tablero.circuits || []).map((circ) => {
           const poloNum = circ.poles && circ.poles.length > 0 ? circ.poles[0] : 1;
           return {
@@ -154,7 +183,8 @@ export function useSync() {
         edificioControl: subestacion.edificioControl,
         firmaInspector: subestacion.firmaInspector || null,
         firmaSupervisor: subestacion.firmaSupervisor || null,
-        empresaId // Enviado en el payload
+        proyectoId: subestacion.proyectoId, // Obligatorio para vincular a Proyecto
+        empresaId // Opcional para compatibilidad
       };
 
       const response = await fetch('http://localhost:3001/api/subestaciones', {

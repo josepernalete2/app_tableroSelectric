@@ -6,9 +6,10 @@ import useStore from './store/useStore';
 import LoginView from './views/LoginView';
 import DashboardView from './views/DashboardView';
 import EmpresaView from './views/EmpresaView';
+import ProyectoView from './views/ProyectoView';
 import TableroComponent from './components/TableroComponent';
 import SubestacionComponent from './components/SubestacionComponent';
-import { ArrowLeft, User, LogOut, Zap } from 'lucide-react';
+import { ArrowLeft, User, LogOut } from 'lucide-react';
 
 // Wrapper para Rutas Protegidas
 const ProtectedRoute = ({ children }) => {
@@ -28,14 +29,36 @@ const TableroWrapper = () => {
   const logout = useStore((state) => state.logout);
 
   const company = companies.find((c) => c.id === companyId);
-  
-  // Buscar en tableros o subestaciones
-  const tablero = company?.tableros?.find((t) => t.id === tableroId);
-  const subestacion = company?.subestaciones?.find((s) => s.id === tableroId);
+
+  // Buscar en tableros o subestaciones dentro de los proyectos
+  let tablero = null;
+  let subestacion = null;
+  let targetProyecto = null;
+
+  if (company?.proyectos) {
+    for (const p of company.proyectos) {
+      const t = (p.tableros || []).find((tab) => tab.id === tableroId);
+      if (t) {
+        tablero = t;
+        targetProyecto = p;
+        break;
+      }
+      const s = (p.subestaciones || []).find((sub) => sub.id === tableroId);
+      if (s) {
+        subestacion = s;
+        targetProyecto = p;
+        break;
+      }
+    }
+  }
+
+  const backPath = targetProyecto
+    ? `/empresa/${companyId}/proyecto/${targetProyecto.id}`
+    : `/empresa/${companyId}`;
 
   if (!company || (!tablero && !subestacion)) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-6 text-center space-y-4">
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-6 text-center space-y-4 font-sans">
         <h2 className="text-lg font-bold">Elemento o Empresa no encontrado</h2>
         <button onClick={() => navigate('/')} className="px-4 py-2 bg-slate-800 rounded-lg text-xs">
           Volver al Dashboard
@@ -56,18 +79,18 @@ const TableroWrapper = () => {
         {/* Top Navbar */}
         <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => navigate(`/empresa/${companyId}`)}
+            <button
+              onClick={() => navigate(backPath)}
               className="p-2 hover:bg-slate-900 rounded-xl text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-              title="Volver a la Empresa"
+              title="Volver al Proyecto"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
               <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
-                Subestación: {company.nombre}
+                Subestación en: {company.nombre}
               </span>
-              <h1 className="text-base font-bold text-slate-100">
+              <h1 className="text-base font-bold text-slate-100 animate-fade-in">
                 {subestacion.nombre}
               </h1>
             </div>
@@ -78,7 +101,7 @@ const TableroWrapper = () => {
               <User className="w-4 h-4 text-slate-400" />
               <span className="text-xs font-semibold text-slate-300">{user?.email}</span>
             </div>
-            <button 
+            <button
               onClick={handleLogout}
               className="p-2.5 bg-slate-900 hover:bg-red-950/40 hover:text-red-400 border border-slate-800 hover:border-red-900/60 rounded-xl transition-all cursor-pointer"
               title="Cerrar Sesión"
@@ -90,9 +113,9 @@ const TableroWrapper = () => {
 
         {/* Formulario de Subestación */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
-          <SubestacionComponent 
+          <SubestacionComponent
             subestacionData={subestacion}
-            onUpdate={(updatedData) => updateSubestacion(companyId, tableroId, updatedData)}
+            onUpdate={(updatedData) => updateSubestacion(targetProyecto.id, tableroId, updatedData)}
           />
         </main>
       </div>
@@ -106,7 +129,7 @@ const TableroWrapper = () => {
   };
 
   const handleUpdateTablero = (updatedData) => {
-    updateTablero(companyId, tableroId, updatedData);
+    updateTablero(targetProyecto.id, tableroId, updatedData);
   };
 
   return (
@@ -114,10 +137,10 @@ const TableroWrapper = () => {
       {/* Top Navbar */}
       <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigate(`/empresa/${companyId}`)}
+          <button
+            onClick={() => navigate(backPath)}
             className="p-2 hover:bg-slate-900 rounded-xl text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-            title="Volver a la Empresa"
+            title="Volver al Proyecto"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -137,7 +160,7 @@ const TableroWrapper = () => {
             <User className="w-4 h-4 text-slate-400" />
             <span className="text-xs font-semibold text-slate-300">{user?.email}</span>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             className="p-2.5 bg-slate-900 hover:bg-red-950/40 hover:text-red-400 border border-slate-800 hover:border-red-900/60 rounded-xl transition-all cursor-pointer"
             title="Cerrar Sesión"
@@ -149,7 +172,7 @@ const TableroWrapper = () => {
 
       {/* Renders Tablero Component */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
-        <TableroComponent 
+        <TableroComponent
           tableroData={enrichedTablero}
           onUpdateTablero={handleUpdateTablero}
         />
@@ -166,29 +189,37 @@ export function App() {
       <SyncStatusBanner />
       <Routes>
         <Route path="/login" element={<LoginView />} />
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             <ProtectedRoute>
               <DashboardView />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/empresa/:companyId" 
+        <Route
+          path="/empresa/:companyId"
           element={
             <ProtectedRoute>
               <EmpresaView />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/empresa/:companyId/tablero/:tableroId" 
+        <Route
+          path="/empresa/:companyId/proyecto/:proyectoId"
+          element={
+            <ProtectedRoute>
+              <ProyectoView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/empresa/:companyId/tablero/:tableroId"
           element={
             <ProtectedRoute>
               <TableroWrapper />
             </ProtectedRoute>
-          } 
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

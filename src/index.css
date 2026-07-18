@@ -2,17 +2,107 @@
 
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'Roboto Mono', monospace;
+
+  /* Colores unificados del Sistema de Diseño */
+  --color-app-bg: #070a13; /* Fondo principal Dark Slate profundo */
+  --color-card-bg: #0f172a; /* Slate-900 para tarjetas y contenedores */
+  --color-card-border: #1e293b; /* Slate-800 para contraste */
+  
+  --color-electric-accent: #f59e0b; /* Ámbar Eléctrico de Acción Principal */
+  --color-electric-accent-hover: #d97706; /* Ámbar hover */
+  
+  --color-sec-border: #334155; /* Slate-700 */
 }
 
 body {
-  background-color: #0f172a; /* Slate-900 */
+  background-color: var(--color-app-bg);
   color: #f1f5f9; /* Slate-100 */
   font-family: var(--font-sans);
   margin: 0;
   padding: 0;
+}
+
+/* Estandarización de Elementos del Sistema de Diseño (UX Táctil) */
+
+/* Botón Primario: Ámbar Eléctrico */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem; /* px-4 py-2.5 */
+  background-color: var(--color-electric-accent);
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.5rem; /* rounded-lg (8px) unificado */
+  border: none;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.12), 0 2px 4px -2px rgba(245, 158, 11, 0.06);
+  cursor: pointer;
+  height: 2.5rem; /* h-10 */
+  white-space: nowrap; /* whitespace-nowrap */
+}
+.btn-primary:hover {
+  background-color: var(--color-electric-accent-hover);
+}
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Botón Secundario: Slate Translúcido con Borde Sutil */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem; /* px-4 py-2.5 */
+  background-color: rgba(15, 23, 42, 0.5); /* bg-slate-900/50 */
+  border: 1px solid var(--color-sec-border);
+  color: #e2e8f0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.5rem; /* rounded-lg (8px) unificado */
+  transition: all 0.15s ease;
+  cursor: pointer;
+  height: 2.5rem; /* h-10 */
+  white-space: nowrap; /* whitespace-nowrap */
+}
+.btn-secondary:hover {
+  background-color: rgba(30, 41, 59, 0.95);
+  color: #ffffff;
+}
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* Contenedor de Entrada de Búsqueda */
+.input-search-container {
+  position: relative;
+  width: 100%;
+}
+
+/* Campo de Búsqueda Estandarizado */
+.input-search {
+  width: 100%;
+  padding-left: 2.5rem;
+  padding-right: 1rem;
+  background-color: #070a13;
+  border: 1px solid var(--color-card-border);
+  border-radius: 0.5rem; /* rounded-lg (8px) unificado */
+  font-size: 0.875rem;
+  color: #f1f5f9;
+  outline: none;
+  height: 2.5rem; /* h-10 (40px) */
+  transition: all 0.2s;
+}
+.input-search:focus {
+  border-color: var(--color-electric-accent);
 }
 
 /* Scrollbar styles */
@@ -21,14 +111,14 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #1e293b; /* Slate-800 */
+  background: #1e293b;
 }
 ::-webkit-scrollbar-thumb {
-  background: #475569; /* Slate-600 */
+  background: #475569;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b; /* Slate-500 */
+  background: #64748b;
 }
 
 /* Print layout optimizations */
@@ -48,7 +138,6 @@ body {
     padding: 0 !important;
     margin: 0 !important;
   }
-  /* Force table border colors to be visible on black & white print */
   table, th, td {
     border-color: #000000 !important;
     color: #000000 !important;

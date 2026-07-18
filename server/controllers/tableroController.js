@@ -4,7 +4,7 @@ import prisma from '../db.js';
  * POST /api/empresas/:empresaId/tableros
  * Crea un tablero técnico asociado a una empresa junto con todos sus circuitos de forma anidada transaccional.
  */
-export const crearTableroCompleto = async (req, res) => {
+export const crearTableroCompleto = async (req, res, next) => {
   try {
     const empresaId = req.params.empresaId || req.body.empresaId;
     const {
@@ -26,6 +26,7 @@ export const crearTableroCompleto = async (req, res) => {
       tierraObservaciones,
       observacionesGenerales,
       foto,
+      proyectoId,
       circuitos = []
     } = req.body;
 
@@ -34,6 +35,13 @@ export const crearTableroCompleto = async (req, res) => {
       return res.status(400).json({
         ok: false,
         error: 'El nombre o código del tablero es obligatorio.'
+      });
+    }
+
+    if (!proyectoId) {
+      return res.status(400).json({
+        ok: false,
+        error: 'El campo proyectoId es requerido para asociar el tablero.'
       });
     }
 
@@ -65,9 +73,10 @@ export const crearTableroCompleto = async (req, res) => {
         tierraCalibre,
         tierraObservaciones,
         observacionesGenerales,
-        empresa: {
-          connect: { id: empresaId }
+        proyecto: {
+          connect: { id: proyectoId }
         },
+        ...(empresaId ? { empresa: { connect: { id: empresaId } } } : {}),
         circuitos: {
           create: circuitos.map((circ) => ({
             numeroPolo: parseInt(circ.numeroPolo, 10),
@@ -94,7 +103,6 @@ export const crearTableroCompleto = async (req, res) => {
     console.error('Error en crearTableroCompleto:', error);
 
     // Capturar violación de restricción única en Prisma (P2002)
-    // Específicamente cuando se intenta duplicar [empresaId, nombre]
     if (error.code === 'P2002') {
       const targetFields = error.meta?.target || [];
       if (targetFields.includes('empresaId') && targetFields.includes('nombre')) {
@@ -109,11 +117,7 @@ export const crearTableroCompleto = async (req, res) => {
       });
     }
 
-    return res.status(500).json({
-      ok: false,
-      error: 'Error interno del servidor al registrar el tablero.',
-      details: error.message
-    });
+    next(error);
   }
 };
 
@@ -121,7 +125,7 @@ export const crearTableroCompleto = async (req, res) => {
  * GET /api/empresas/:empresaId/tableros
  * Lista todos los tableros que pertenecen a una empresa específica con sus circuitos correspondientes.
  */
-export const obtenerTablerosPorEmpresa = async (req, res) => {
+export const obtenerTablerosPorEmpresa = async (req, res, next) => {
   try {
     const { empresaId } = req.params;
 
@@ -161,10 +165,6 @@ export const obtenerTablerosPorEmpresa = async (req, res) => {
 
   } catch (error) {
     console.error('Error en obtenerTablerosPorEmpresa:', error);
-    return res.status(500).json({
-      ok: false,
-      error: 'Error al obtener la lista de tableros de la empresa.',
-      details: error.message
-    });
+    next(error);
   }
 };

@@ -1,0 +1,136 @@
+import prisma from '../db.js';
+
+/**
+ * GET /api/empresas/:empresaId/proyectos
+ * Lista todos los proyectos que pertenecen a una empresa específica.
+ */
+export const obtenerProyectosPorEmpresa = async (req, res, next) => {
+  try {
+    const { empresaId } = req.params;
+
+    // Verificar si la empresa existe
+    const empresaExiste = await prisma.empresa.findUnique({
+      where: { id: empresaId }
+    });
+
+    if (!empresaExiste) {
+      return res.status(404).json({
+        ok: false,
+        error: 'La empresa especificada no existe.'
+      });
+    }
+
+    const proyectos = await prisma.proyecto.findMany({
+      where: {
+        empresaId
+      },
+      orderBy: {
+        fechaCreacion: 'desc'
+      }
+    });
+
+    return res.status(200).json({
+      ok: true,
+      data: proyectos
+    });
+  } catch (error) {
+    console.error('Error en obtenerProyectosPorEmpresa:', error);
+    next(error);
+  }
+};
+
+/**
+ * POST /api/proyectos
+ * Crea un proyecto de forma nativa en PostgreSQL (recibido desde la cola de sincronización offline).
+ */
+export const crearProyecto = async (req, res, next) => {
+  try {
+    const { id, nombre, descripcion, empresaId } = req.body;
+
+    // Validación de campos requeridos
+    if (!id || !nombre || !empresaId) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Los campos id, nombre y empresaId son obligatorios.'
+      });
+    }
+
+    // Inserción del proyecto en base de datos PostgreSQL
+    const nuevoProyecto = await prisma.proyecto.create({
+      data: {
+        id,
+        nombre,
+        descripcion: descripcion || null,
+        empresa: {
+          connect: { id: empresaId }
+        }
+      }
+    });
+
+    return res.status(201).json({
+      ok: true,
+      message: 'Proyecto registrado con éxito en el servidor.',
+      data: nuevoProyecto
+    });
+  } catch (error) {
+    console.error('Error en crearProyecto:', error);
+
+    // Capturar violación de restricción única
+    if (error.code === 'P2002') {
+      return res.status(400).json({
+        ok: false,
+        error: 'El ID del proyecto ya está registrado en el servidor.'
+      });
+    }
+
+    next(error);
+  }
+};
+
+/**
+ * GET /api/proyectos/:proyectoId
+ * Obtiene los detalles de un proyecto específico, incluyendo sus tableros y subestaciones.
+ */
+export const obtenerProyectoCompleto = async (req, res, next) => {
+  try {
+    const { proyectoId } = req.params;
+
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id: proyectoId },
+      include: {
+        tableros: {
+          include: {
+            circuitos: {
+              orderBy: {
+                numeroPolo: 'asc'
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        },
+        inspeccionesSubestacion: {
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+
+    if (!proyecto) {
+      return res.status(404).json({
+        ok: false,
+        error: 'El proyecto especificado no existe.'
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      data: proyecto
+    });
+  } catch (error) {
+    console.error('Error en obtenerProyectoCompleto:', error);
+    next(error);
+  }
+};

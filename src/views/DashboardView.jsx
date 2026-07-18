@@ -239,32 +239,32 @@ export const DashboardView = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
         
         {/* Dashboard Title / Action */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 pb-6 border-b border-slate-800/80">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-100 tracking-wide flex items-center gap-2">
+            <h2 className="text-xl font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
               <Briefcase className="w-5 h-5 text-amber-500" /> Mis Empresas Inspeccionadas
             </h2>
             <p className="text-xs text-slate-400 mt-1">Selecciona una empresa para gestionar sus tableros eléctricos o registra una nueva.</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 justify-end w-full sm:w-auto">
             {/* Buscador de Empresas */}
-            <div className="relative w-full md:w-64">
+            <div className="input-search-container w-full sm:w-64">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar empresa..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 placeholder-slate-600 focus:outline-none h-10"
+                className="input-search"
               />
-              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-600" />
+              <Search className="w-4.5 h-4.5 absolute left-3.5 top-3 text-slate-500" />
             </div>
 
             <button
               onClick={() => setShowModal(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer w-full md:w-auto"
+              className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
             >
-              <FolderPlus className="w-4 h-4" /> Registrar Empresa
+              <FolderPlus className="w-4.5 h-4.5" /> Registrar Empresa
             </button>
           </div>
         </div>
@@ -336,7 +336,7 @@ export const DashboardView = () => {
               <p className="text-xs text-slate-500 max-w-sm mx-auto">Comienza registrando tu primera empresa contratante para inspeccionar sus tableros eléctricos.</p>
               <button
                 onClick={() => setShowModal(true)}
-                className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs cursor-pointer"
+                className="mt-2 btn-secondary h-10 px-4 text-xs"
               >
                 <Plus className="w-3.5 h-3.5" /> Registrar Ahora
               </button>

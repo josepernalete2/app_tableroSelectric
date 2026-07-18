@@ -13,12 +13,31 @@ model Empresa {
   id                      String                  @id @default(uuid())
   nombre                  String
   direccion               String
+  proyectos               Proyecto[]
   tableros                Tablero[]
   inspeccionesSubestacion InspeccionSubestacion[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
 
   @@map("empresas")
+}
+
+model Proyecto {
+  id                      String                  @id
+  nombre                  String
+  descripcion             String?
+  fechaCreacion           DateTime                @default(now())
+
+  // Relaciones
+  empresaId               String
+  empresa                 Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tableros                Tablero[]
+  inspeccionesSubestacion InspeccionSubestacion[]
+
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@map("proyectos")
 }
 
 model Tablero {
@@ -46,8 +65,10 @@ model Tablero {
   observacionesGenerales String?
 
   // Relaciones
-  empresaId              String
-  empresa                Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId              String?
+  empresa                Empresa?   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proyectoId             String
+  proyecto               Proyecto   @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   circuitos              Circuito[]
 
   createdAt              DateTime   @default(now())
@@ -95,8 +116,10 @@ model InspeccionSubestacion {
   firmaSupervisor    String?
 
   // Relaciones
-  empresaId          String
-  empresa            Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresaId          String?
+  empresa            Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  proyectoId         String
+  proyecto           Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
