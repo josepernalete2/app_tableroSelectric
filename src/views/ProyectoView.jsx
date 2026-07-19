@@ -534,25 +534,35 @@ export const ProyectoView = () => {
                             {item.nombre}
                           </h3>
                           
-                          <div className="space-y-1 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
+                          <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
                             <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
                             <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {item.alimentadoPor || 'No definido'}</p>
 
-                            {/* Mostrar campos representativos del informe técnico */}
+                            {/* Mostrar resúmenes enriquecidos de las fichas técnicas reales */}
                             {isTablero && (
-                              <p><span className="text-slate-500 font-bold">Capacidad:</span> {item.datosTecnicos?.maxPoles || 24} Polos</p>
+                              <p className="text-sky-400 font-mono font-semibold text-[10px] bg-sky-950/40 p-1.5 rounded-lg border border-sky-900/40">
+                                ⚡ Capacidad: {item.datosTecnicos?.maxPoles || 24} Polos ({item.datosTecnicos?.voltajeAcometida || '208/120 V'})
+                              </p>
                             )}
                             {isTrafo && (
-                              <p><span className="text-slate-500 font-bold">Potencia:</span> {item.datosTecnicos?.kva || '500 KVA'} ({item.datosTecnicos?.conexion || 'Estrella'})</p>
+                              <p className="text-purple-400 font-mono font-semibold text-[10px] bg-purple-950/40 p-1.5 rounded-lg border border-purple-900/40">
+                                ⚡ {item.datosTecnicos?.kva || '500 KVA'} | GE {item.datosTecnicos?.conexion || 'Estrella-Estrella'} ({item.datosTecnicos?.voltajePrimario || '13.8 kV'})
+                              </p>
                             )}
                             {isGen && (
-                              <p><span className="text-slate-500 font-bold">Potencia / Comb:</span> {item.datosTecnicos?.kva || '580 kVA'} - {item.datosTecnicos?.combustible || 'Diésel'}</p>
+                              <p className="text-amber-400 font-mono font-semibold text-[10px] bg-amber-950/40 p-1.5 rounded-lg border border-amber-900/40">
+                                ⚡ {item.datosTecnicos?.kva || '580 kVA'} | {item.datosTecnicos?.voltajeGeneracion || '208 V'} | Breaker {item.datosTecnicos?.amperaje || '1600 A'}
+                              </p>
                             )}
                             {isPuestaTierra && (
-                              <p><span className="text-slate-500 font-bold">Corriente Fuga:</span> <span className="text-amber-400 font-bold">{item.datosTecnicos?.corrienteFugaAmperios || '0 A'}</span></p>
+                              <p className="text-teal-400 font-mono font-semibold text-[10px] bg-teal-950/40 p-1.5 rounded-lg border border-teal-900/40">
+                                🛡️ Corriente Fuga: {item.datosTecnicos?.corrienteFugaAmperios || '6.4 A'} | {item.datosTecnicos?.tipoMalla || 'Malla Concreto'}
+                              </p>
                             )}
                             {isTransfer && (
-                              <p><span className="text-slate-500 font-bold">Capacidad / Tipo:</span> {item.datosTecnicos?.capacidadAmperios || '3200A'} ({item.datosTecnicos?.tipoTransferencia || 'ATS'})</p>
+                              <p className="text-emerald-400 font-mono font-semibold text-[10px] bg-emerald-950/40 p-1.5 rounded-lg border border-emerald-900/40">
+                                🔄 {item.datosTecnicos?.capacidadAmperios || '3200 A'} | {item.datosTecnicos?.tipoTransferencia || 'ATS YUYE-YES1'}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -568,7 +578,7 @@ export const ProyectoView = () => {
                         ) : (
                           <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
                             <span className="text-slate-400 font-medium">Ficha Técnica:</span>
-                            <span className="font-bold text-amber-500">Parámetros Completos</span>
+                            <span className="font-bold text-amber-500">Ficha Completa 2025</span>
                           </div>
                         )}
                       </div>

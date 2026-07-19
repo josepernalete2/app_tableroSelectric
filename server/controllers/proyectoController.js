@@ -41,7 +41,7 @@ export const obtenerProyectosPorEmpresa = async (req, res, next) => {
 
 /**
  * POST /api/proyectos
- * Crea un proyecto de forma nativa en PostgreSQL (recibido desde la cola de sincronización offline).
+ * Crea o actualiza (upsert) un proyecto en PostgreSQL usando connectOrCreate para la empresa.
  */
 export const crearProyecto = async (req, res, next) => {
   try {
@@ -55,14 +55,26 @@ export const crearProyecto = async (req, res, next) => {
       });
     }
 
-    // Inserción del proyecto en base de datos PostgreSQL
-    const nuevoProyecto = await prisma.proyecto.create({
-      data: {
+    // Inserción / Upsert del proyecto en PostgreSQL con autocreado de empresa si no existe
+    const nuevoProyecto = await prisma.proyecto.upsert({
+      where: { id },
+      update: {
+        nombre,
+        descripcion: descripcion || null
+      },
+      create: {
         id,
         nombre,
         descripcion: descripcion || null,
         empresa: {
-          connect: { id: empresaId }
+          connectOrCreate: {
+            where: { id: empresaId },
+            create: {
+              id: empresaId,
+              nombre: 'Empresa ' + empresaId,
+              direccion: 'Registrada por Sincronización'
+            }
+          }
         }
       }
     });
@@ -74,22 +86,13 @@ export const crearProyecto = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Error en crearProyecto:', error);
-
-    // Capturar violación de restricción única
-    if (error.code === 'P2002') {
-      return res.status(400).json({
-        ok: false,
-        error: 'El ID del proyecto ya está registrado en el servidor.'
-      });
-    }
-
     next(error);
   }
 };
 
 /**
  * GET /api/proyectos/:proyectoId
- * Obtiene los detalles de un proyecto específico, incluyendo sus tableros y subestaciones.
+ * Obtiene los detalles de un proyecto específico.
  */
 export const obtenerProyectoCompleto = async (req, res, next) => {
   try {
@@ -98,23 +101,8 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
     const proyecto = await prisma.proyecto.findUnique({
       where: { id: proyectoId },
       include: {
-        tableros: {
-          include: {
-            circuitos: {
-              orderBy: {
-                numeroPolo: 'asc'
-              }
-            }
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
-        },
-        inspeccionesSubestacion: {
-          orderBy: {
-            createdAt: 'desc'
-          }
-        }
+        elementosUnifilares: true,
+        inspeccionesSubestacion: true
       }
     });
 

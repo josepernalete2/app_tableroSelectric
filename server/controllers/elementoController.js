@@ -2,8 +2,7 @@ import prisma from '../db.js';
 
 /**
  * POST /api/elementos-unifilares
- * Registra un ElementoUnifilar en PostgreSQL con comprobación previa de existencia
- * de Proyecto y Empresa para evitar errores de restricción de clave foránea (Prisma P2025).
+ * Registra un ElementoUnifilar en PostgreSQL con auto-resuelto de Proyecto y Empresa (P2025 prevention).
  */
 export const crearElementoUnifilar = async (req, res, next) => {
   try {
@@ -28,10 +27,36 @@ export const crearElementoUnifilar = async (req, res, next) => {
       });
     }
 
-    // 2. Comprobación previa de la existencia del Proyecto en PostgreSQL (evita error P2025)
-    const proyectoExiste = await prisma.proyecto.findUnique({
+    // 2. Comprobación de existencia del Proyecto en PostgreSQL (Auto-creado si viene empresaId)
+    let proyectoExiste = await prisma.proyecto.findUnique({
       where: { id: proyectoId }
     });
+
+    if (!proyectoExiste && empresaId) {
+      try {
+        proyectoExiste = await prisma.proyecto.upsert({
+          where: { id: proyectoId },
+          update: {},
+          create: {
+            id: proyectoId,
+            nombre: 'Proyecto ' + proyectoId.slice(0, 8),
+            descripcion: 'Registrado automáticamente desde sincronización de elemento',
+            empresa: {
+              connectOrCreate: {
+                where: { id: empresaId },
+                create: {
+                  id: empresaId,
+                  nombre: 'Empresa ' + empresaId,
+                  direccion: 'Registrada por Sincronización'
+                }
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Error al auto-crear el proyecto padre:', err);
+      }
+    }
 
     if (!proyectoExiste) {
       console.warn(`[AF WARNING] El proyecto con ID '${proyectoId}' no existe en el servidor todavía.`);

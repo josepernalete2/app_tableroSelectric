@@ -30,16 +30,22 @@ export function useSync() {
   }, [isOnline, syncQueue]);
 
   const procesarColaSincronizacion = async () => {
+    if (isSyncingRef.current) return;
+
     isSyncingRef.current = true;
     setIsSyncing(true);
 
-    const queueCopy = [...syncQueue];
-
-    for (const item of queueCopy) {
+    // Iteración secuencial respetando el orden FIFO y la jerarquía relacional
+    while (useStore.getState().syncQueue.length > 0) {
       if (!navigator.onLine) {
         setIsOnline(false);
-        break; // Detener la sincronización si la red física se desconecta en pleno envío
+        break; // Detener si la conexión se interrumpe físicamente durante la iteración
       }
+
+      const currentQueue = useStore.getState().syncQueue;
+      const item = currentQueue[0];
+
+      if (!item) break;
 
       let res = null;
 
@@ -57,17 +63,74 @@ export function useSync() {
           removeFromQueue(item.id);
         } else {
           if (res.status === 'NETWORK_ERROR') {
-            // Error temporal de conexión: detener la cola para reintentar más tarde
+            // Error de red física: pausar la cola para reintentar cuando regrese la conexión
             break;
+          } else if (res.status === 422) {
+            // BLOQUEO POR DEPENDENCIA: El proyecto padre no existe en PostgreSQL aún
+            const parentId = item.payload?.proyectoId;
+            let parentCompanyId = item.companyId;
+            let parentTaskPayload = null;
+
+            // 1. Buscar si la tarea PROYECTO está en la cola local
+            const parentTaskInQueue = currentQueue.find(
+              (q) => q.tipo === 'PROYECTO' && q.id === parentId
+            );
+
+            if (parentTaskInQueue) {
+              parentCompanyId = parentTaskInQueue.companyId;
+              parentTaskPayload = parentTaskInQueue.payload;
+            } else {
+              // 2. Buscar si el proyecto existe en las empresas locales del store
+              const companies = useStore.getState().companies || [];
+              for (const comp of companies) {
+                const proj = (comp.proyectos || []).find((p) => p.id === parentId);
+                if (proj) {
+                  parentCompanyId = comp.id;
+                  parentTaskPayload = proj;
+                  break;
+                }
+              }
+            }
+
+            if (parentId && parentTaskPayload) {
+              console.warn(`[AUTO RESOLVER 422] Sincronizando proyecto padre ${parentId} de inmediato para desatascar hijo ${item.id}...`);
+              
+              const parentRes = await sincronizarProyecto(parentCompanyId, parentTaskPayload);
+
+              if (parentRes.success) {
+                if (parentTaskInQueue) {
+                  removeFromQueue(parentTaskInQueue.id);
+                }
+                // Reintentar inmediatamente la sincronización del hijo ahora que el padre fue creado en PostgreSQL
+                const retryRes = item.tipo === 'SUBESTACION' 
+                  ? await sincronizarSubestacion(item.companyId, item.payload)
+                  : await sincronizarElementoUnifilar(item.companyId, item.payload);
+
+                if (retryRes.success) {
+                  removeFromQueue(item.id);
+                } else {
+                  console.error(`Fallo reintento de elemento tras crear proyecto padre (HTTP ${retryRes.status})`);
+                  removeFromQueue(item.id);
+                }
+              } else {
+                console.error(`Fallo la creación del proyecto padre ${parentId}`);
+                removeFromQueue(item.id);
+              }
+            } else {
+              // El proyecto no existe localmente ni en cola
+              console.error(`Error 422: El proyecto asociado con ID ${parentId} no existe.`);
+              alert(`Error de validación: El proyecto de destino no existe en la base de datos del servidor.\n\nDetalle: Se removió el elemento para evitar atascos.`);
+              removeFromQueue(item.id);
+            }
           } else {
-            // Error definitivo del servidor (400, 422, 500, etc.): retirar y notificar
+            // Errores definitivos (400, 500, etc.): retirar y notificar
             console.error(`Error definitivo (HTTP ${res.status}) al sincronizar elemento con ID: ${item.id}`);
-            alert(`Error de validación al sincronizar el elemento con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
+            alert(`Error de validación al sincronizar con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
             removeFromQueue(item.id);
           }
         }
       } else {
-        // En caso de que no coincida ningún tipo de operación, limpiar de la cola
+        // Tipo no reconocido: limpiar de la cola
         removeFromQueue(item.id);
       }
     }
@@ -104,7 +167,6 @@ export function useSync() {
 
   const sincronizarElementoUnifilar = async (empresaId, elemento) => {
     try {
-      // Usar FormData para transferir el Blob binario offline
       const formData = new FormData();
       formData.append('id', elemento.id);
       formData.append('nombre', elemento.nombre);
@@ -117,10 +179,8 @@ export function useSync() {
         formData.append('empresaId', empresaId);
       }
 
-      // Convertir datosTecnicos a JSON String para que viaje vía FormData
       formData.append('datosTecnicos', JSON.stringify(elemento.datosTecnicos || {}));
 
-      // Si existe fotoBlob binario (cargada offline), se adjunta
       if (elemento.fotoBlob) {
         const fileExt = elemento.fotoBlob.type ? elemento.fotoBlob.type.split('/')[1] : 'jpg';
         formData.append('foto', elemento.fotoBlob, `foto_${elemento.id}.${fileExt}`);
@@ -130,7 +190,6 @@ export function useSync() {
 
       const response = await fetch('http://localhost:3001/api/elementos-unifilares', {
         method: 'POST',
-        // Nota: NO definir Content-Type, el navegador lo añade con el boundary adecuado de forma automática
         body: formData
       });
 
@@ -139,11 +198,10 @@ export function useSync() {
       }
 
       const resJson = await response.json();
-      // Si la carga fue exitosa y devolvió la URL de la imagen guardada en PostgreSQL
       if (resJson.data && resJson.data.foto) {
         useStore.getState().updateElementoUnifilar(elemento.proyectoId, elemento.id, {
-          foto: `http://localhost:3001${resJson.data.foto}`, // URL absoluta de la foto en el servidor
-          fotoBlob: null // Limpiamos el Blob temporal una vez sincronizado
+          foto: `http://localhost:3001${resJson.data.foto}`,
+          fotoBlob: null
         });
       }
 
@@ -194,3 +252,5 @@ export function useSync() {
 
   return { isOnline, isSyncing, pendingCount: syncQueue.length, triggerSync: procesarColaSincronizacion };
 }
+
+export default useSync;
