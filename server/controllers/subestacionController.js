@@ -3,6 +3,7 @@ import prisma from '../db.js';
 /**
  * POST /api/subestaciones
  * Guarda de forma nativa un registro de inspección de subestación en PostgreSQL.
+ * Incluye comprobación previa de existencia de Proyecto y Empresa para evitar P2025.
  */
 export const crearInspeccionSubestacion = async (req, res, next) => {
   try {
@@ -33,7 +34,28 @@ export const crearInspeccionSubestacion = async (req, res, next) => {
       });
     }
 
-    // Inserción de inspección visual de subestación en base de datos PostgreSQL
+    // Comprobación previa de la existencia del Proyecto en PostgreSQL
+    const proyectoExiste = await prisma.proyecto.findUnique({
+      where: { id: proyectoId }
+    });
+
+    if (!proyectoExiste) {
+      console.warn(`[AF WARNING] La subestación depende del proyecto '${proyectoId}' que no existe aún en el servidor.`);
+      return res.status(422).json({
+        error: 'Falta dependencia',
+        detalle: 'El proyecto asociado no existe en el servidor todavía'
+      });
+    }
+
+    // Comprobación previa de la existencia de Empresa
+    let empresaExiste = null;
+    if (empresaId) {
+      empresaExiste = await prisma.empresa.findUnique({
+        where: { id: empresaId }
+      });
+    }
+
+    // Inserción de inspección visual de subestación en PostgreSQL
     const nuevaInspeccion = await prisma.inspeccionSubestacion.create({
       data: {
         id,
@@ -53,7 +75,7 @@ export const crearInspeccionSubestacion = async (req, res, next) => {
         proyecto: {
           connect: { id: proyectoId }
         },
-        ...(empresaId ? { empresa: { connect: { id: empresaId } } } : {})
+        ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
       }
     });
 
