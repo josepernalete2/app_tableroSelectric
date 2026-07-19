@@ -20,6 +20,12 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
 
   const renderBadge = () => {
     switch (tipoElemento) {
+      case 'TRANSFORMADOR':
+        return <span className="px-3 py-1 bg-purple-950/80 text-purple-400 border border-purple-800/40 rounded-full text-xs font-bold font-mono">⚡ TRANSFORMADOR</span>;
+      case 'PUESTA_TIERRA':
+        return <span className="px-3 py-1 bg-teal-950/80 text-teal-400 border border-teal-800/40 rounded-full text-xs font-bold font-mono">🛡️ PUESTA A TIERRA</span>;
+      case 'SUBESTACION':
+        return <span className="px-3 py-1 bg-amber-950/80 text-amber-400 border border-amber-800/40 rounded-full text-xs font-bold font-mono">🏢 SUBESTACIÓN</span>;
       case 'GENERADOR':
         return <span className="px-3 py-1 bg-amber-950/80 text-amber-400 border border-amber-800/40 rounded-full text-xs font-bold font-mono">⚡ GENERADOR</span>;
       case 'TRANSFER':
@@ -27,7 +33,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
       case 'TABLERO':
         return <span className="px-3 py-1 bg-sky-950/80 text-sky-400 border border-sky-800/40 rounded-full text-xs font-bold font-mono">⚡ TABLERO ELÉCTRICO</span>;
       default:
-        return <span className="px-3 py-1 bg-purple-950/80 text-purple-400 border border-purple-800/40 rounded-full text-xs font-bold font-mono">⚙️ EQUIPO ESPECIAL</span>;
+        return <span className="px-3 py-1 bg-slate-800 text-slate-300 border border-slate-700 rounded-full text-xs font-bold font-mono">⚙️ EQUIPO TÉCNICO</span>;
     }
   };
 

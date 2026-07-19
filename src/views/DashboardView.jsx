@@ -264,7 +264,7 @@ export const DashboardView = () => {
               onClick={() => setShowModal(true)}
               className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
             >
-              <FolderPlus className="w-4.5 h-4.5" /> Registrar Empresa
+              <FolderPlus className="w-4.5 h-4.5" /> + Registrar Empresa
             </button>
           </div>
         </div>
@@ -336,9 +336,9 @@ export const DashboardView = () => {
               <p className="text-xs text-slate-500 max-w-sm mx-auto">Comienza registrando tu primera empresa contratante para inspeccionar sus tableros eléctricos.</p>
               <button
                 onClick={() => setShowModal(true)}
-                className="mt-2 btn-secondary h-10 px-4 text-xs"
+                className="mt-2 bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap mx-auto cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" /> Registrar Ahora
+                <FolderPlus className="w-4.5 h-4.5" /> + Registrar Empresa
               </button>
             </div>
           );

@@ -9,7 +9,8 @@ import {
   FolderOpen,
   X,
   Building,
-  Layers
+  Layers,
+  Zap
 } from 'lucide-react';
 
 export const EmpresaView = () => {
@@ -18,6 +19,7 @@ export const EmpresaView = () => {
   const { 
     companies, 
     addProyecto, 
+    addElementoUnifilar,
     addInspeccionSubestacion 
   } = useStore();
   
@@ -25,19 +27,20 @@ export const EmpresaView = () => {
   
   // Modales y búsqueda
   const [showModal, setShowModal] = useState(false); // Modal Proyecto
-  const [showInspeccionModal, setShowInspeccionModal] = useState(false); // Modal Subestación
+  const [showElementoModal, setShowElementoModal] = useState(false); // Modal Elemento
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form states de Proyectos
   const [proyectoNombre, setProyectoNombre] = useState('');
   const [proyectoDescripcion, setProyectoDescripcion] = useState('');
 
-  // Form states de Subestaciones
+  // Form states de Elementos
   const [selectedProyectoId, setSelectedProyectoId] = useState('');
-  const [subestacionNombre, setSubestacionNombre] = useState('');
+  const [tipoElemento, setTipoElemento] = useState('TABLERO');
+  const [elementoNombre, setElementoNombre] = useState('');
   const [ubicacion, setUbicacion] = useState('');
-  const [nivelTension, setNivelTension] = useState('');
-  const [inspectorName, setInspectorName] = useState('');
+  const [alimentadoPor, setAlimentadoPor] = useState('');
+  const [maxPoles, setMaxPoles] = useState(24);
 
   if (!company) {
     return (
@@ -53,28 +56,23 @@ export const EmpresaView = () => {
 
   const proyectos = company.proyectos || [];
 
-  // Filtrado de proyectos por búsqueda
   const filteredProjects = proyectos.filter((p) =>
     p.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.descripcion && p.descripcion.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Validación de duplicados de Proyectos
   const nombreProyectoDuplicado = proyectos.some(
     (p) => p.nombre.toLowerCase().trim() === proyectoNombre.toLowerCase().trim()
   );
   const isProyectoValid = proyectoNombre.trim() !== '' && !nombreProyectoDuplicado;
 
-  // Validación de duplicados de Subestaciones
   const targetProyecto = proyectos.find((p) => p.id === selectedProyectoId);
-  const nombreSubestacionDuplicado = targetProyecto
-    ? (targetProyecto.tableros || []).some(
-        (t) => t.nombre.toLowerCase().trim() === subestacionNombre.toLowerCase().trim()
-      ) || (targetProyecto.subestaciones || []).some(
-        (s) => s.nombre.toLowerCase().trim() === subestacionNombre.toLowerCase().trim()
+  const nombreElementoDuplicado = targetProyecto
+    ? (targetProyecto.elementosUnifilares || targetProyecto.tableros || []).some(
+        (t) => t.nombre.toLowerCase().trim() === elementoNombre.toLowerCase().trim()
       )
     : false;
-  const isInspeccionValid = selectedProyectoId !== '' && subestacionNombre.trim() !== '' && !nombreSubestacionDuplicado;
+  const isElementoValid = selectedProyectoId !== '' && elementoNombre.trim() !== '' && !nombreElementoDuplicado;
 
   const handleCreateProyecto = (e) => {
     e.preventDefault();
@@ -95,43 +93,41 @@ export const EmpresaView = () => {
     }
   };
 
-  const handleCreateInspeccion = (e) => {
+  const handleCreateElemento = (e) => {
     e.preventDefault();
-    if (!isInspeccionValid) return;
+    if (!isElementoValid) return;
 
-    const result = addInspeccionSubestacion(selectedProyectoId, {
-      nombre: subestacionNombre.trim(),
+    const result = addElementoUnifilar({
+      proyectoId: selectedProyectoId,
+      companyId,
+      nombre: elementoNombre.trim(),
+      tipoElemento,
       ubicacion: ubicacion.trim() || 'Sin ubicación',
-      nivelTension: nivelTension.trim() || 'No definido',
-      inspector: inspectorName.trim() || 'No asignado',
-      fecha: new Date().toISOString().split('T')[0],
-      hora: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-      estadoEntorno: {},
-      obrasCiviles: {},
-      equiposPrincipales: {},
-      puestaTierra: {},
-      edificioControl: {}
+      alimentadoPor: alimentadoPor.trim() || 'No definido',
+      datosTecnicos: {
+        maxPoles: parseInt(maxPoles, 10),
+        circuits: []
+      }
     });
 
     if (result.success) {
-      setSubestacionNombre('');
+      setElementoNombre('');
       setUbicacion('');
-      setNivelTension('');
-      setInspectorName('');
+      setAlimentadoPor('');
       setSelectedProyectoId('');
-      setShowInspeccionModal(false);
+      setShowElementoModal(false);
     } else {
       alert(result.error);
     }
   };
 
-  const handleOpenInspeccionModal = () => {
+  const handleOpenTableroModal = () => {
     if (proyectos.length === 0) {
-      alert('Crea un proyecto primero para poder asociar la inspección.');
+      alert('Crea un proyecto primero para poder registrar tableros o elementos.');
       return;
     }
     setSelectedProyectoId(proyectos[0].id);
-    setShowInspeccionModal(true);
+    setShowElementoModal(true);
   };
 
   return (
@@ -159,9 +155,8 @@ export const EmpresaView = () => {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
         
-        {/* Actions panel: MAQUETACIÓN RESPONSIVE DE BARRA DE ACCIONES */}
+        {/* Actions panel */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 pb-6 border-b border-slate-800/80">
-          {/* Buscador a la izquierda */}
           <div className="input-search-container w-full sm:w-64">
             <input
               type="text"
@@ -173,27 +168,26 @@ export const EmpresaView = () => {
             <Search className="w-4.5 h-4.5 absolute left-3.5 top-3 text-slate-500" />
           </div>
 
-          {/* Botones de creación principales en paralelo a la derecha */}
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            {/* Botón 1: Crear Proyecto (Fondo Slate con borde sutil - btn-secondary) */}
+            {/* Botón Principal Amarillo: + Crear Tablero */}
+            <button
+              onClick={handleOpenTableroModal}
+              className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+            >
+              <Zap className="w-4.5 h-4.5" /> + Crear Tablero
+            </button>
+
+            {/* Botón Secundario Oscuro con Borde: + Crear Proyecto */}
             <button
               onClick={() => setShowModal(true)}
               className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
             >
-              <Plus className="w-4.5 h-4.5" /> Crear Proyecto
-            </button>
-
-            {/* Botón 2: Crear Inspección (Color de Acento Eléctrico - btn-primary) */}
-            <button
-              onClick={handleOpenInspeccionModal}
-              className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
-            >
-              <Building className="w-4.5 h-4.5" /> Crear Inspección
+              <Plus className="w-4.5 h-4.5" /> + Crear Proyecto
             </button>
           </div>
         </div>
 
-        {/* CONTENIDO PRINCIPAL: LISTADO DE PROYECTOS */}
+        {/* LISTADO DE PROYECTOS */}
         <div>
           <div className="mb-4">
             <h2 className="text-xl font-extrabold text-slate-100 tracking-wide flex items-center gap-2">
@@ -231,11 +225,11 @@ export const EmpresaView = () => {
                     <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400">
                       <div className="flex items-center gap-1.5 bg-slate-900/40 p-2 rounded-lg border border-slate-900/60 justify-center">
                         <Layers className="w-3.5 h-3.5 text-sky-450 shrink-0" />
-                        <span className="font-mono font-bold text-slate-200">{(proj.tableros || []).length}</span> Tableros
+                        <span className="font-mono font-bold text-slate-200">{(proj.elementosUnifilares || proj.tableros || []).length}</span> Equipos
                       </div>
                       <div className="flex items-center gap-1.5 bg-slate-900/40 p-2 rounded-lg border border-slate-900/60 justify-center">
                         <Building className="w-3.5 h-3.5 text-amber-550 shrink-0" />
-                        <span className="font-mono font-bold text-slate-200">{(proj.subestaciones || []).length}</span> Subestac.
+                        <span className="font-mono font-bold text-slate-200">{(proj.inspeccionesSubestacion || proj.subestaciones || []).length}</span> Subestac.
                       </div>
                     </div>
 
@@ -281,8 +275,6 @@ export const EmpresaView = () => {
             </div>
 
             <form onSubmit={handleCreateProyecto} className="mt-4 space-y-4">
-              
-              {/* Nombre del Proyecto */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nombre del Proyecto
@@ -306,7 +298,6 @@ export const EmpresaView = () => {
                 )}
               </div>
 
-              {/* Descripción */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Descripción (Opcional)
@@ -320,7 +311,6 @@ export const EmpresaView = () => {
                 />
               </div>
 
-              {/* Botones de Acción */}
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-900/60">
                 <button
                   type="button"
@@ -332,7 +322,7 @@ export const EmpresaView = () => {
                 <button
                   type="submit"
                   disabled={!isProyectoValid}
-                  className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-md"
+                  className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
                   Crear Proyecto
                 </button>
@@ -343,31 +333,31 @@ export const EmpresaView = () => {
         </div>
       )}
 
-      {/* MODAL 2: REGISTRAR NUEVA INSPECCIÓN DE SUBESTACIÓN DESDE EMPRESA */}
-      {showInspeccionModal && (
+      {/* MODAL 2: REGISTRAR ELEMENTO DESDE FUERA (CON SELECTOR DE PROYECTO OBLIGATORIO) */}
+      {showElementoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowInspeccionModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowElementoModal(false)} />
           
           <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Building className="w-4 h-4 text-amber-500" />
-                Registrar Subestación
+                <Zap className="w-4 h-4 text-amber-500" />
+                Registrar Nuevo Elemento / Tablero
               </h3>
               <button 
-                onClick={() => setShowInspeccionModal(false)}
+                onClick={() => setShowElementoModal(false)}
                 className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateInspeccion} className="mt-4 space-y-4">
+            <form onSubmit={handleCreateElemento} className="mt-4 space-y-4">
               
-              {/* Proyecto de Destino (Requerido) */}
+              {/* Selección Obligatoria de Proyecto Destino */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Proyecto Destino (Carpeta)
+                  Proyecto Destino (Selección Obligatoria)
                 </label>
                 <select
                   required
@@ -381,24 +371,43 @@ export const EmpresaView = () => {
                 </select>
               </div>
 
+              {/* Tipo de Elemento */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  Tipo de Plantilla
+                </label>
+                <select
+                  value={tipoElemento}
+                  onChange={(e) => setTipoElemento(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-semibold text-amber-400"
+                >
+                  <option value="TABLERO">⚡ TABLERO ELÉCTRICO</option>
+                  <option value="TRANSFORMADOR">⚡ TRANSFORMADOR</option>
+                  <option value="GENERADOR">⚡ GENERADOR DE EMERGENCIA</option>
+                  <option value="PUESTA_TIERRA">🛡️ PUESTA A TIERRA</option>
+                  <option value="TRANSFER">🔄 TRANSFERENCIA (ATS/MTS)</option>
+                  <option value="OTRO">⚙️ OTRO EQUIPO TÉCNICO</option>
+                </select>
+              </div>
+
               {/* Nombre descriptivo */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nombre / Código de la Subestación
+                  Nombre descriptivo del equipo
                 </label>
                 <input
                   type="text"
                   required
-                  value={subestacionNombre}
-                  onChange={(e) => setSubestacionNombre(e.target.value)}
-                  placeholder="Ej. Subestación Principal Norte"
+                  value={elementoNombre}
+                  onChange={(e) => setElementoNombre(e.target.value)}
+                  placeholder="Ej. Tablero Principal TAB 20"
                   className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
-                    nombreSubestacionDuplicado 
+                    nombreElementoDuplicado 
                       ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
                       : 'border-slate-800 focus:border-amber-500 focus:ring-amber-500'
                   }`}
                 />
-                {nombreSubestacionDuplicado && (
+                {nombreElementoDuplicado && (
                   <p className="text-[10px] text-red-555 font-bold flex items-center gap-1.5 mt-1.5">
                     <AlertTriangle className="w-3.5 h-3.5" /> Nombre duplicado: ya existe un elemento en este proyecto con este nombre.
                   </p>
@@ -414,35 +423,21 @@ export const EmpresaView = () => {
                   type="text"
                   value={ubicacion}
                   onChange={(e) => setUbicacion(e.target.value)}
-                  placeholder="Ej. Patio de Transformadores o Sótano 1"
+                  placeholder="Ej. Sótano Sala Técnica"
                   className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
                 />
               </div>
 
-              {/* Nivel de Tensión */}
+              {/* Alimentado por */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nivel de Tensión (kV)
+                  Alimentado Por
                 </label>
                 <input
                   type="text"
-                  value={nivelTension}
-                  onChange={(e) => setNivelTension(e.target.value)}
-                  placeholder="Ej. 13.8 kV o 4.16 kV"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all font-mono"
-                />
-              </div>
-
-              {/* Nombre del Inspector */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nombre del Inspector
-                </label>
-                <input
-                  type="text"
-                  value={inspectorName}
-                  onChange={(e) => setInspectorName(e.target.value)}
-                  placeholder="Ej. Ing. Carlos Pérez"
+                  value={alimentadoPor}
+                  onChange={(e) => setAlimentadoPor(e.target.value)}
+                  placeholder="Ej. Transferencia 580 o Transformador 500 KVA"
                   className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
                 />
               </div>
@@ -451,17 +446,17 @@ export const EmpresaView = () => {
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-900/60">
                 <button
                   type="button"
-                  onClick={() => setShowInspeccionModal(false)}
+                  onClick={() => setShowElementoModal(false)}
                   className="px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-xl text-slate-350 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={!isInspeccionValid}
-                  className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-md"
+                  disabled={!isElementoValid}
+                  className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
-                  Crear Inspección
+                  + Crear Elemento
                 </button>
               </div>
 

@@ -9,11 +9,11 @@ localforage.config({
   storeName: 'inspecciones_store'
 });
 
-// Implementar almacenamiento personalizado para localforage (admite objetos Blob binarios)
+// Almacenamiento personalizado para localforage (soporta objetos Blob binarios)
 const localForageStorage = {
   getItem: async (name) => {
     const value = await localforage.getItem(name);
-    return value; // Retorna el objeto deserializado directamente (soporta Blobs)
+    return value;
   },
   setItem: async (name, value) => {
     await localforage.setItem(name, value);
@@ -26,31 +26,53 @@ const localForageStorage = {
 const initialCompanies = [
   {
     id: 'c-1',
-    nombre: 'Clínica Metropolitana de Caracas',
+    nombre: 'Clínica Valentina Canabal',
     proyectos: [
       {
         id: 'p-1',
-        nombre: 'Proyecto Sótano / Imágenes',
-        descripcion: 'Inspecciones iniciales del sótano e imágenes de la clínica.',
+        nombre: 'Proyecto Diagrama Unifilar y Tableros 2025',
+        descripcion: 'Estudio de transformadores, generadores, tableros y malla de puesta a tierra.',
         elementosUnifilares: [
           {
             id: '11',
-            nombre: 'Tablero TD-11 (Sótano)',
+            nombre: 'Tablero Principal (TAB 20)',
             tipoElemento: 'TABLERO',
-            ubicacion: 'Sótano 1',
-            alimentadoPor: 'Subestación Principal',
+            ubicacion: 'Sótano - Sala Técnica',
+            alimentadoPor: 'Transferencia 580',
             foto: null,
             fotoBlob: null,
-            observacionesGenerales: 'Operativo',
+            observacionesGenerales: 'Alimentado directamente por transferencia 580 sin protección principal.',
             datosTecnicos: {
-              maxPoles: 24,
-              barrasPrincipales: { ia: '120', ib: '115', ic: '118' },
-              breakerPrincipal: { marca: 'EATON', tipo: 'M35', amp: '225' },
-              voltaje: { va: '208', vb: '205', vc: '205' },
-              acometida: '3x1/0 AWG',
+              maxPoles: 30,
+              voltajeAcometida: '208/120 V',
+              barrasPrincipales: { ia: '211.5', ib: '207.4', ic: '208.6' },
+              breakerPrincipal: { marca: 'N/A (Sin Breaker)', tipo: 'Directo', amp: '0' },
+              voltaje: { va: '211.5', vb: '207.4', vc: '208.6' },
+              acometida: '3X500 MCM',
               circuits: [],
-              neutroLlegada: { calibre: '1/0', observaciones: 'Buen estado' },
-              puestaTierra: { calibre: '4 AWG', observaciones: 'Conectado a malla' }
+              neutroLlegada: { calibre: '1X500', observaciones: 'Llega en barra' },
+              puestaTierra: { calibre: 'Sólido #4', observaciones: 'Malla de tierra' }
+            },
+            proyectoId: 'p-1',
+            companyId: 'c-1',
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 'trafo-1',
+            nombre: 'Transformador Pedestal 500 KVA',
+            tipoElemento: 'TRANSFORMADOR',
+            ubicacion: 'Exterior / Banco de Transformadores',
+            alimentadoPor: 'CORPOELEC LARA 13.8 kV',
+            foto: null,
+            fotoBlob: null,
+            observacionesGenerales: 'Transformador tipo pedestal Marca GE de 500 KVA conexión estrella-estrella.',
+            datosTecnicos: {
+              kva: '500 KVA',
+              marca: 'General Electric (GE)',
+              tipoTransformador: 'Pedestal',
+              conexion: 'Estrella - Estrella (Aterrizado)',
+              voltajePrimario: '13.8 kV',
+              voltajeSecundario: '208 / 120 V'
             },
             proyectoId: 'p-1',
             companyId: 'c-1',
@@ -58,19 +80,41 @@ const initialCompanies = [
           },
           {
             id: 'gen-1',
-            nombre: 'Generador Principal Emergencia',
+            nombre: 'Generador DOMOSA 1 - 580 KVA',
             tipoElemento: 'GENERADOR',
-            ubicacion: 'Patio Técnico',
-            alimentadoPor: 'Tanque Principal 1000L',
+            ubicacion: 'Estacionamiento Exterior',
+            alimentadoPor: 'Tanque Gasoil Principal',
             foto: null,
             fotoBlob: null,
-            observacionesGenerales: 'Generador Diésel CATERPILLAR',
+            observacionesGenerales: 'Generador principal de la clínica, interruptor CHINT 1600 A.',
             datosTecnicos: {
-              kva: '500 kVA',
-              combustible: 'Diésel',
-              voltajeGeneracion: '480/277 V',
-              potenciaKw: '400 kW',
-              modoOperacion: 'Automático'
+              kva: '580 kVA',
+              marca: 'DOMOSA',
+              combustible: 'Diésel / Gasoil',
+              voltajeGeneracion: '208 / 120 V',
+              potenciaKw: '464 kW',
+              modoOperacion: 'Automático ATS 580',
+              amperaje: '1600 A'
+            },
+            proyectoId: 'p-1',
+            companyId: 'c-1',
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 'spt-1',
+            nombre: 'Malla de Puesta a Tierra N° 1 (Principal)',
+            tipoElemento: 'PUESTA_TIERRA',
+            ubicacion: 'Estructura de Concreto / Tanquilla',
+            alimentadoPor: 'Conexión a TAB 20',
+            foto: null,
+            fotoBlob: null,
+            observacionesGenerales: 'Presenta corriente de fuga de 6.4A. Requiere independizar tierra de equipos sensibles.',
+            datosTecnicos: {
+              resistenciaOhmios: 'Medición pendiente',
+              corrienteFugaAmperios: '6.4 A',
+              tipoMalla: 'Malla Antigua Concreto',
+              cableAcometida: 'N° 6 TW / Sólido #4',
+              estadoEmpalmes: 'Requiere revisión y normalización'
             },
             proyectoId: 'p-1',
             companyId: 'c-1',
@@ -97,9 +141,8 @@ export const useStore = create(
       proyectosLocales: [],
       elementosLocales: [],
       subestacionesLocales: [],
-      syncQueue: [], // Cola universal: { id, tipo: 'PROYECTO'|'ELEMENTO_UNIFILAR'|'SUBESTACION', companyId, payload }
+      syncQueue: [],
 
-      // Autenticación básica
       login: (email, password) => {
         if (email && password) {
           set({ user: { email } });
@@ -112,7 +155,6 @@ export const useStore = create(
         set({ user: null });
       },
 
-      // Gestión de Empresas
       addCompany: (nombre) => {
         const newCompany = {
           id: `company-${Date.now()}`,
@@ -142,7 +184,6 @@ export const useStore = create(
         set({ companies: enrichedList });
       },
 
-      // 1. Crear Proyecto Offline
       addProyecto: (nombre, descripcion, companyId) => {
         const { companies } = get();
         const company = companies.find((c) => c.id === companyId);
@@ -182,11 +223,18 @@ export const useStore = create(
         return { success: true, proyecto: nuevoProyecto };
       },
 
-      // 2. Gestionar ElementoUnifilar (Tablero, Transfer, Generador, Otro)
-      addElementoUnifilar: (proyectoId, elementoData) => {
+      // LÓGICA DE CREACIÓN ADAPTATIVA DENTRO Y FUERA DE PROYECTO
+      addElementoUnifilar: (arg1, arg2) => {
+        const proyectoId = typeof arg1 === 'string' ? arg1 : (arg1?.proyectoId || arg2?.proyectoId);
+        const elementoData = typeof arg1 === 'string' ? arg2 : arg1;
+
+        if (!proyectoId) {
+          return { success: false, error: 'Debe seleccionar un proyecto para asociar el elemento.' };
+        }
+
         const { companies } = get();
 
-        let parentCompanyId = null;
+        let parentCompanyId = elementoData?.companyId || elementoData?.empresaId || null;
         let targetProyecto = null;
 
         for (const company of companies) {
@@ -198,7 +246,7 @@ export const useStore = create(
           }
         }
 
-        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
+        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
 
         const uuidId = elementoData.id || crypto.randomUUID();
 
@@ -209,7 +257,7 @@ export const useStore = create(
           ubicacion: elementoData.ubicacion || 'Sin ubicación',
           alimentadoPor: elementoData.alimentadoPor || '',
           foto: elementoData.foto || null,
-          fotoBlob: elementoData.fotoBlob || null, // Soporta Blob binario offline
+          fotoBlob: elementoData.fotoBlob || null,
           observacionesGenerales: elementoData.observacionesGenerales || '',
           datosTecnicos: elementoData.datosTecnicos || {},
           proyectoId,
@@ -311,7 +359,6 @@ export const useStore = create(
         }));
       },
 
-      // Métodos de compatibilidad para Tableros (delegan a ElementoUnifilar con tipo TABLERO)
       addTablero: (proyectoId, tableroData) => {
         return get().addElementoUnifilar(proyectoId, {
           ...tableroData,
@@ -337,7 +384,6 @@ export const useStore = create(
         get().deleteElementoUnifilar(proyectoId, tableroId);
       },
 
-      // 3. Crear Inspección de Subestación
       addInspeccionSubestacion: (proyectoId, payload) => {
         const { companies } = get();
 

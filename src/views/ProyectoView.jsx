@@ -7,16 +7,15 @@ import {
   Trash2, 
   Search, 
   AlertTriangle,
-  FolderOpen,
-  Sliders,
   X,
   Camera,
   Calendar,
   User,
   Zap,
   Building,
-  RefreshCw,
-  Cpu
+  Cpu,
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
@@ -53,11 +52,10 @@ export const ProyectoView = () => {
     deleteSubestacion 
   } = useStore();
 
-  // Encontrar empresa y proyecto actual
   const company = companies.find((c) => c.id === companyId);
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
 
-  // Estados de vista principal
+  // Estados de pestaña activa
   const [activeTab, setActiveTab] = useState('UNIFILAR'); // 'UNIFILAR' | 'ESTRUCTURAL'
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,10 +63,10 @@ export const ProyectoView = () => {
   const [showElementoModal, setShowElementoModal] = useState(false);
   const [showInspeccionModal, setShowInspeccionModal] = useState(false);
 
-  // Selector de tipo de equipo a registrar en Diagrama Unifilar
-  const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFER' | 'GENERADOR' | 'OTRO'
+  // Selector de plantilla / tipo de elemento
+  const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
 
-  // Estados de formulario comunes
+  // Campos comunes
   const [nombre, setNombre] = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [alimentadoPor, setAlimentadoPor] = useState('');
@@ -76,25 +74,39 @@ export const ProyectoView = () => {
   const [fotoBlob, setFotoBlob] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  // Campos específicos de Tablero
+  // Campos de Tablero
   const [maxPoles, setMaxPoles] = useState(24);
 
-  // Campos específicos de Transfer
-  const [capacidadAmperios, setCapacidadAmperios] = useState('100A');
-  const [tipoTransferencia, setTipoTransferencia] = useState('AUTOMATICA'); // 'AUTOMATICA' | 'MANUAL'
-  const [tensionOperativa, setTensionOperativa] = useState('220V');
+  // Campos de Transformador
+  const [kvaTrafo, setKvaTrafo] = useState('500 KVA');
+  const [marcaTrafo, setMarcaTrafo] = useState('General Electric (GE)');
+  const [tipoTrafo, setTipoTrafo] = useState('Pedestal'); // 'Pedestal' | 'Seco' | 'Poste'
+  const [conexionTrafo, setConexionTrafo] = useState('Estrella - Estrella (Aterrizado)');
+  const [voltajePrimario, setVoltajePrimario] = useState('13.8 kV');
+  const [voltajeSecundario, setVoltajeSecundario] = useState('208 / 120 V');
 
-  // Campos específicos de Generador
-  const [kva, setKva] = useState('150 kVA');
-  const [combustible, setCombustible] = useState('DIESEL'); // 'DIESEL' | 'GAS' | 'GASOLINA'
-  const [voltajeGeneracion, setVoltajeGeneracion] = useState('480/277 V');
-  const [potenciaKw, setPotenciaKw] = useState('120 kW');
-  const [modoOperacion, setModoOperacion] = useState('AUTOMATICO');
+  // Campos de Generador
+  const [kvaGen, setKvaGen] = useState('580 kVA');
+  const [combustibleGen, setCombustibleGen] = useState('DIESEL');
+  const [voltajeGen, setVoltajeGen] = useState('208 / 120 V');
+  const [potenciaKwGen, setPotenciaKwGen] = useState('464 kW');
+  const [amperajeGen, setAmperajeGen] = useState('1600 A');
 
-  // Campos específicos de "Otro"
+  // Campos de Puesta a Tierra
+  const [resistenciaOhmios, setResistenciaOhmios] = useState('0.5 Ω');
+  const [corrienteFuga, setCorrienteFuga] = useState('6.4 A');
+  const [tipoMalla, setTipoMalla] = useState('Malla Subestación Concreto');
+  const [cableAcometidaTierra, setCableAcometidaTierra] = useState('Sólido #4 Desnudo');
+
+  // Campos de Transfer
+  const [capacidadAmperios, setCapacidadAmperios] = useState('3200 A');
+  const [tipoTransferencia, setTipoTransferencia] = useState('AUTOMATICA');
+  const [tensionOperativa, setTensionOperativa] = useState('208 V');
+
+  // Campos de Otro
   const [descripcionOtro, setDescripcionOtro] = useState('');
 
-  // Campos específicos de Ficha de Inspección Estructural (Subestación)
+  // Campos de Inspección Estructural
   const [subestacionNombre, setSubestacionNombre] = useState('');
   const [subestacionUbicacion, setSubestacionUbicacion] = useState('');
   const [nivelTension, setNivelTension] = useState('13.8 kV');
@@ -115,11 +127,9 @@ export const ProyectoView = () => {
     );
   }
 
-  // Obtener elementos unifilares e inspecciones
   const elementos = proyecto.elementosUnifilares || proyecto.tableros || [];
   const inspecciones = proyecto.inspeccionesSubestacion || proyecto.subestaciones || [];
 
-  // Filtrado por buscador
   const filteredElementos = elementos.filter((item) =>
     item.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (item.ubicacion && item.ubicacion.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -132,7 +142,6 @@ export const ProyectoView = () => {
     (item.inspector && item.inspector.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Validación de duplicados
   const nombreElementoDuplicado = elementos.some(
     (e) => e.nombre.toLowerCase().trim() === nombre.toLowerCase().trim()
   );
@@ -154,13 +163,10 @@ export const ProyectoView = () => {
     }
 
     setFotoBlob(file);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(URL.createObjectURL(file));
   };
 
-  // Crear Elemento Unifilar (Tablero, Transfer, Generador, Otro)
   const handleCreateElemento = (e) => {
     e.preventDefault();
     if (!isElementoFormValid) return;
@@ -178,19 +184,35 @@ export const ProyectoView = () => {
         neutroLlegada: { calibre: '', observaciones: '' },
         puestaTierra: { calibre: '', observaciones: '' }
       };
+    } else if (tipoElemento === 'TRANSFORMADOR') {
+      datosTecnicos = {
+        kva: kvaTrafo,
+        marca: marcaTrafo,
+        tipoTransformador: tipoTrafo,
+        conexion: conexionTrafo,
+        voltajePrimario,
+        voltajeSecundario
+      };
+    } else if (tipoElemento === 'GENERADOR') {
+      datosTecnicos = {
+        kva: kvaGen,
+        combustible: combustibleGen,
+        voltajeGeneracion: voltajeGen,
+        potenciaKw: potenciaKwGen,
+        amperaje: amperajeGen
+      };
+    } else if (tipoElemento === 'PUESTA_TIERRA') {
+      datosTecnicos = {
+        resistenciaOhmios,
+        corrienteFugaAmperios: corrienteFuga,
+        tipoMalla,
+        cableAcometida: cableAcometidaTierra
+      };
     } else if (tipoElemento === 'TRANSFER') {
       datosTecnicos = {
         capacidadAmperios,
         tipoTransferencia,
         tensionOperativa
-      };
-    } else if (tipoElemento === 'GENERADOR') {
-      datosTecnicos = {
-        kva,
-        combustible,
-        voltajeGeneracion,
-        potenciaKw,
-        modoOperacion
       };
     } else {
       datosTecnicos = {
@@ -209,7 +231,6 @@ export const ProyectoView = () => {
     });
 
     if (result.success) {
-      // Limpiar estados
       setNombre('');
       setUbicacion('');
       setAlimentadoPor('');
@@ -223,7 +244,6 @@ export const ProyectoView = () => {
     }
   };
 
-  // Crear Inspección de Subestación
   const handleCreateInspeccion = (e) => {
     e.preventDefault();
     if (!isInspeccionFormValid) return;
@@ -323,26 +343,25 @@ export const ProyectoView = () => {
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
             </div>
 
-            {/* DOS BOTONES DE CREACIÓN EN PARALELO */}
+            {/* DOS BOTONES DE CREACIÓN EN PARALELO CON CLASES UNIFICADAS AMARILLAS RECTANGULARES */}
             <div className="flex flex-row items-center gap-3 w-full md:w-auto justify-end">
               <button
                 onClick={() => {
                   setTipoElemento('TABLERO');
                   setShowElementoModal(true);
                 }}
-                className="bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md"
+                className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer"
               >
-                <Zap className="w-4 h-4" /> + Crear Elemento
+                <Zap className="w-4.5 h-4.5" /> + Crear Elemento
               </button>
 
               <button
                 onClick={() => setShowInspeccionModal(true)}
-                className="bg-slate-950 border border-slate-800 hover:border-slate-700/80 hover:bg-slate-900 text-slate-100 font-bold active:scale-98 transition-all px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md"
+                className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer"
               >
-                <Building className="w-4 h-4" /> + Crear Inspección
+                <Building className="w-4.5 h-4.5" /> + Crear Inspección
               </button>
             </div>
-
           </div>
         </div>
 
@@ -375,7 +394,7 @@ export const ProyectoView = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente la inspección de subestación "${item.nombre}"?`)) {
+                          if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
                             deleteSubestacion(proyectoId, item.id);
                           }
                         }}
@@ -392,16 +411,16 @@ export const ProyectoView = () => {
                           {item.nombre}
                         </h3>
                         <div className="space-y-1 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
-                          <p className="truncate"><span className="text-slate-550 font-bold">Ubicación:</span> {item.ubicacion}</p>
-                          <p className="truncate"><span className="text-slate-550 font-bold">Tensión:</span> {item.nivelTension}</p>
-                          <p className="truncate flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-650 shrink-0" /><span className="text-slate-550 font-bold">Fecha:</span> {item.fecha}</p>
-                          <p className="truncate flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-slate-650 shrink-0" /><span className="text-slate-550 font-bold">Inspector:</span> {item.inspector}</p>
+                          <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
+                          <p className="truncate"><span className="text-slate-500 font-bold">Tensión:</span> {item.nivelTension}</p>
+                          <p className="truncate flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-600 shrink-0" /><span className="text-slate-500 font-bold">Fecha:</span> {item.fecha}</p>
+                          <p className="truncate flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-slate-600 shrink-0" /><span className="text-slate-500 font-bold">Inspector:</span> {item.inspector}</p>
                         </div>
                       </div>
 
                       <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
                         <span className="text-slate-400 font-medium">Evaluación:</span>
-                        <span className="font-bold text-amber-500">6 Secciones</span>
+                        <span className="font-bold text-amber-500">6 Secciones Estructurales</span>
                       </div>
                     </div>
                   </div>
@@ -410,10 +429,10 @@ export const ProyectoView = () => {
             ) : (
               <div className="p-16 border-2 border-dashed border-slate-800 rounded-2xl text-center space-y-4 bg-slate-950/20">
                 <Building className="w-12 h-12 text-slate-700 mx-auto" />
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-slate-450">No hay inspecciones civiles</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto font-sans">
-                    Crea una ficha de Inspección Estructural de Subestación para registrar obras civiles y entorno.
+                <div className="space-y-1 font-sans">
+                  <h3 className="text-sm font-bold text-slate-400">No hay inspecciones civiles</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Crea una ficha de Inspección Estructural de Subestación para evaluar obras civiles.
                   </p>
                 </div>
               </div>
@@ -426,14 +445,16 @@ export const ProyectoView = () => {
           <div>
             <div className="mb-4">
               <h2 className="text-md font-bold text-slate-200">Equipos Registrados en el Diagrama Unifilar</h2>
-              <p className="text-xs text-slate-500">Gestión de Tableros, Unidades de Transferencia Automática/Manual (ATS/MTS) y Generadores de Emergencia.</p>
+              <p className="text-xs text-slate-500">Tableros, Transformadores, Generadores, Malla de Puesta a Tierra y Unidades de Transferencia.</p>
             </div>
 
             {filteredElementos.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredElementos.map((item) => {
                   const isTablero = item.tipoElemento === 'TABLERO';
-                  const isGenerador = item.tipoElemento === 'GENERADOR';
+                  const isTrafo = item.tipoElemento === 'TRANSFORMADOR';
+                  const isGen = item.tipoElemento === 'GENERADOR';
+                  const isPuestaTierra = item.tipoElemento === 'PUESTA_TIERRA';
                   const isTransfer = item.tipoElemento === 'TRANSFER';
 
                   return (
@@ -442,7 +463,7 @@ export const ProyectoView = () => {
                       onClick={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
                       className="bg-slate-950 border border-slate-800/80 hover:border-slate-700/60 rounded-2xl shadow-md hover:shadow-xl flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group"
                     >
-                      {/* Cabecera Tarjeta */}
+                      {/* Cabecera de Tarjeta */}
                       <div className="h-32 w-full bg-slate-900 relative overflow-hidden flex items-center justify-center border-b border-slate-900/50">
                         {item.fotoBlob || item.foto ? (
                           <SafeImage 
@@ -454,33 +475,40 @@ export const ProyectoView = () => {
                         ) : (
                           <div className="flex flex-col items-center justify-center text-slate-700 gap-1.5 select-none">
                             {isTablero && <Zap className="w-8 h-8 opacity-25 text-sky-400" />}
-                            {isGenerador && <Cpu className="w-8 h-8 opacity-25 text-amber-400" />}
+                            {isTrafo && <Cpu className="w-8 h-8 opacity-25 text-purple-400" />}
+                            {isGen && <Zap className="w-8 h-8 opacity-25 text-amber-400" />}
+                            {isPuestaTierra && <ShieldAlert className="w-8 h-8 opacity-25 text-teal-400" />}
                             {isTransfer && <RefreshCw className="w-8 h-8 opacity-25 text-emerald-400" />}
-                            {!isTablero && !isGenerador && !isTransfer && <Layers className="w-8 h-8 opacity-25 text-purple-400" />}
+                            {!isTablero && !isTrafo && !isGen && !isPuestaTierra && !isTransfer && <Layers className="w-8 h-8 opacity-25 text-slate-400" />}
                             <span className="text-[9px] uppercase font-bold tracking-widest opacity-30">Sin Imagen</span>
                           </div>
                         )}
                         
-                        {/* Badge de tipoElemento */}
+                        {/* Badge por tipoElemento */}
                         <div className="absolute top-3 left-3">
                           {isTablero && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-sky-950/95 text-sky-400 border border-sky-850/40 font-mono">
+                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-sky-950/95 text-sky-400 border border-sky-800/40 font-mono">
                               ⚡ TABLERO
                             </span>
                           )}
-                          {isGenerador && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-amber-950/95 text-amber-450 border border-amber-850/40 font-mono">
-                              ⚙️ GENERADOR
+                          {isTrafo && (
+                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-purple-950/95 text-purple-400 border border-purple-800/40 font-mono">
+                              ⚡ TRANSFORMADOR
+                            </span>
+                          )}
+                          {isGen && (
+                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-amber-950/95 text-amber-400 border border-amber-800/40 font-mono">
+                              ⚡ GENERADOR
+                            </span>
+                          )}
+                          {isPuestaTierra && (
+                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-teal-950/95 text-teal-400 border border-teal-800/40 font-mono">
+                              🛡️ PUESTA A TIERRA
                             </span>
                           )}
                           {isTransfer && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-emerald-950/95 text-emerald-400 border border-emerald-850/40 font-mono">
+                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-emerald-950/95 text-emerald-400 border border-emerald-800/40 font-mono">
                               🔄 TRANSFER
-                            </span>
-                          )}
-                          {!isTablero && !isGenerador && !isTransfer && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-purple-950/95 text-purple-450 border border-purple-850/40 font-mono">
-                              ⚙️ EQUIPO
                             </span>
                           )}
                         </div>
@@ -488,7 +516,7 @@ export const ProyectoView = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`)) {
+                            if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
                               deleteElementoUnifilar(proyectoId, item.id);
                             }
                           }}
@@ -499,7 +527,7 @@ export const ProyectoView = () => {
                         </button>
                       </div>
 
-                      {/* Contenido de la Tarjeta */}
+                      {/* Contenido de Tarjeta */}
                       <div className="p-5 flex-1 flex flex-col justify-between">
                         <div className="space-y-1">
                           <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
@@ -510,26 +538,26 @@ export const ProyectoView = () => {
                             <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
                             <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {item.alimentadoPor || 'No definido'}</p>
 
-                            {/* Mostrar parámetros rápidos dependiendo del tipo */}
+                            {/* Mostrar campos representativos del informe técnico */}
                             {isTablero && (
                               <p><span className="text-slate-500 font-bold">Capacidad:</span> {item.datosTecnicos?.maxPoles || 24} Polos</p>
                             )}
-                            {isGenerador && (
-                              <>
-                                <p><span className="text-slate-500 font-bold">Capacidad kVA:</span> {item.datosTecnicos?.kva || 'N/D'}</p>
-                                <p><span className="text-slate-500 font-bold">Combustible:</span> {item.datosTecnicos?.combustible || 'N/D'}</p>
-                              </>
+                            {isTrafo && (
+                              <p><span className="text-slate-500 font-bold">Potencia:</span> {item.datosTecnicos?.kva || '500 KVA'} ({item.datosTecnicos?.conexion || 'Estrella'})</p>
+                            )}
+                            {isGen && (
+                              <p><span className="text-slate-500 font-bold">Potencia / Comb:</span> {item.datosTecnicos?.kva || '580 kVA'} - {item.datosTecnicos?.combustible || 'Diésel'}</p>
+                            )}
+                            {isPuestaTierra && (
+                              <p><span className="text-slate-500 font-bold">Corriente Fuga:</span> <span className="text-amber-400 font-bold">{item.datosTecnicos?.corrienteFugaAmperios || '0 A'}</span></p>
                             )}
                             {isTransfer && (
-                              <>
-                                <p><span className="text-slate-500 font-bold">Capacidad Amperios:</span> {item.datosTecnicos?.capacidadAmperios || 'N/D'}</p>
-                                <p><span className="text-slate-500 font-bold">Tipo ATS/MTS:</span> {item.datosTecnicos?.tipoTransferencia || 'N/D'}</p>
-                              </>
+                              <p><span className="text-slate-500 font-bold">Capacidad / Tipo:</span> {item.datosTecnicos?.capacidadAmperios || '3200A'} ({item.datosTecnicos?.tipoTransferencia || 'ATS'})</p>
                             )}
                           </div>
                         </div>
 
-                        {/* Footer de Tarjeta */}
+                        {/* Footer */}
                         {isTablero ? (
                           <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
                             <span className="text-slate-400 font-medium">Circuitos Registrados:</span>
@@ -539,7 +567,7 @@ export const ProyectoView = () => {
                           </div>
                         ) : (
                           <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
-                            <span className="text-slate-400 font-medium font-sans">Ficha Técnica:</span>
+                            <span className="text-slate-400 font-medium">Ficha Técnica:</span>
                             <span className="font-bold text-amber-500">Parámetros Completos</span>
                           </div>
                         )}
@@ -550,11 +578,11 @@ export const ProyectoView = () => {
               </div>
             ) : (
               <div className="p-16 border-2 border-dashed border-slate-800 rounded-2xl text-center space-y-4 bg-slate-950/20">
-                <Sliders className="w-12 h-12 text-slate-700 mx-auto" />
-                <div className="space-y-1">
-                  <h3 className="text-sm font-bold text-slate-450">No hay equipos registrados</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto font-sans">
-                    Agrega un Tablero, un Transfer o un Generador de emergencia al Diagrama Unifilar.
+                <Zap className="w-12 h-12 text-slate-700 mx-auto" />
+                <div className="space-y-1 font-sans">
+                  <h3 className="text-sm font-bold text-slate-400">No hay equipos registrados</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    Registra un Tablero, Transformador, Generador, Puesta a Tierra o Transfer en este proyecto.
                   </p>
                 </div>
               </div>
@@ -564,7 +592,7 @@ export const ProyectoView = () => {
 
       </main>
 
-      {/* MODAL DETALLADO DE ELEMENTO UNIFILAR */}
+      {/* MODAL MULTI-PLANTILLA DE ELEMENTOS UNIFILARES */}
       {showElementoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowElementoModal(false)} />
@@ -572,7 +600,7 @@ export const ProyectoView = () => {
           <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" /> Registrar Nuevo Equipo
+                <Zap className="w-4 h-4 text-amber-500" /> Registrar Plantilla Técnica
               </h3>
               <button 
                 onClick={() => setShowElementoModal(false)}
@@ -584,30 +612,37 @@ export const ProyectoView = () => {
 
             <form onSubmit={handleCreateElemento} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
               
-              {/* Selector de Tipo de Equipo */}
+              {/* Selector de Tipo de Plantilla */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Tipo de Equipo a Registrar
+                  Tipo de Plantilla de Elemento
                 </label>
-                <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
-                  {['TABLERO', 'TRANSFER', 'GENERADOR', 'OTRO'].map((type) => (
+                <div className="grid grid-cols-3 gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
+                  {[
+                    { id: 'TABLERO', label: 'TABLERO' },
+                    { id: 'TRANSFORMADOR', label: 'TRAFO' },
+                    { id: 'GENERADOR', label: 'GENERADOR' },
+                    { id: 'PUESTA_TIERRA', label: 'P. TIERRA' },
+                    { id: 'TRANSFER', label: 'TRANSFER' },
+                    { id: 'OTRO', label: 'OTRO' }
+                  ].map((t) => (
                     <button
-                      key={type}
+                      key={t.id}
                       type="button"
-                      onClick={() => setTipoElemento(type)}
-                      className={`py-1.5 text-[10px] font-black rounded-lg transition-all ${
-                        tipoElemento === type 
-                          ? 'bg-amber-500 text-slate-950 font-bold' 
+                      onClick={() => setTipoElemento(t.id)}
+                      className={`py-1.5 px-2 font-black rounded-lg transition-all text-center truncate ${
+                        tipoElemento === t.id 
+                          ? 'bg-amber-500 text-slate-950' 
                           : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      {type}
+                      {t.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Nombre descriptivo (Común) */}
+              {/* Nombre descriptivo */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nombre descriptivo del equipo
@@ -617,7 +652,7 @@ export const ProyectoView = () => {
                   required
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  placeholder={`Ej. ${tipoElemento === 'TABLERO' ? 'Tablero General Distribución' : tipoElemento === 'GENERADOR' ? 'Generador KATERPILLAR 500kVA' : 'ATS Transferencia Emergencia'}`}
+                  placeholder={`Ej. ${tipoElemento === 'TABLERO' ? 'Tablero Principal (TAB 20)' : tipoElemento === 'TRANSFORMADOR' ? 'Transformador GE 500 KVA' : tipoElemento === 'PUESTA_TIERRA' ? 'Malla Puesta a Tierra N° 1' : 'Generador DOMOSA 1'}`}
                   className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
                     nombreElementoDuplicado 
                       ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
@@ -631,7 +666,7 @@ export const ProyectoView = () => {
                 )}
               </div>
 
-              {/* Ubicación (Común) */}
+              {/* Ubicación */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Ubicación Física
@@ -640,12 +675,12 @@ export const ProyectoView = () => {
                   type="text"
                   value={ubicacion}
                   onChange={(e) => setUbicacion(e.target.value)}
-                  placeholder="Ej. Sótano 1 o Patio Técnico Exterior"
+                  placeholder="Ej. Sótano Sala Técnica o Estacionamiento Exterior"
                   className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
                 />
               </div>
 
-              {/* Alimentación / Procedencia (Común) */}
+              {/* Alimentación */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Alimentado Por (Procedencia)
@@ -654,14 +689,14 @@ export const ProyectoView = () => {
                   type="text"
                   value={alimentadoPor}
                   onChange={(e) => setAlimentadoPor(e.target.value)}
-                  placeholder="Ej. Acometida Principal CORPOELEC o Salida de ATS"
+                  placeholder="Ej. Transformador 500 KVA o CORPOELEC"
                   className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
                 />
               </div>
 
-              {/* CAMPOS ADAPTATIVOS DE CONFIGURACIÓN SEGÚN EL TIPO */}
-              
-              {/* 1. Tablero */}
+              {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}
+
+              {/* TABLERO */}
               {tipoElemento === 'TABLERO' && (
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
@@ -681,44 +716,96 @@ export const ProyectoView = () => {
                 </div>
               )}
 
-              {/* 2. Transfer ATS */}
+              {/* TRANSFORMADOR */}
+              {tipoElemento === 'TRANSFORMADOR' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia KVA</label>
+                      <input type="text" value={kvaTrafo} onChange={(e) => setKvaTrafo(e.target.value)} placeholder="Ej. 500 KVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Marca</label>
+                      <input type="text" value={marcaTrafo} onChange={(e) => setMarcaTrafo(e.target.value)} placeholder="Ej. GE" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transformador</label>
+                      <select value={tipoTrafo} onChange={(e) => setTipoTrafo(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="Pedestal">Pedestal</option>
+                        <option value="Seco">Seco / Uso Interior</option>
+                        <option value="Poste">Montaje en Poste</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conexión</label>
+                      <input type="text" value={conexionTrafo} onChange={(e) => setConexionTrafo(e.target.value)} placeholder="Ej. Estrella - Estrella" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* GENERADOR */}
+              {tipoElemento === 'GENERADOR' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad kVA</label>
+                      <input type="text" value={kvaGen} onChange={(e) => setKvaGen(e.target.value)} placeholder="Ej. 580 kVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Combustible</label>
+                      <select value={combustibleGen} onChange={(e) => setCombustibleGen(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="DIESEL">DIÉSEL / GASOIL</option>
+                        <option value="GAS">GAS NATURAL</option>
+                        <option value="GASOLINA">GASOLINA</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Voltaje Generación</label>
+                      <input type="text" value={voltajeGen} onChange={(e) => setVoltajeGen(e.target.value)} placeholder="Ej. 208 / 120 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Interruptor Amperaje</label>
+                      <input type="text" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PUESTA A TIERRA */}
+              {tipoElemento === 'PUESTA_TIERRA' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Resistencia (Ω)</label>
+                      <input type="text" value={resistenciaOhmios} onChange={(e) => setResistenciaOhmios(e.target.value)} placeholder="Ej. 0.5 Ω" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Corriente Fuga (A)</label>
+                      <input type="text" value={corrienteFuga} onChange={(e) => setCorrienteFuga(e.target.value)} placeholder="Ej. 6.4 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono text-amber-400" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Malla / Ubicación</label>
+                    <input type="text" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value)} placeholder="Ej. Malla debajo de concreto" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                  </div>
+                </div>
+              )}
+
+              {/* TRANSFER */}
               {tipoElemento === 'TRANSFER' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                      Capacidad (Amperios)
-                    </label>
-                    <input
-                      type="text"
-                      value={capacidadAmperios}
-                      onChange={(e) => setCapacidadAmperios(e.target.value)}
-                      placeholder="Ej. 100A, 250A"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
-                    />
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
+                    <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 3200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
                   </div>
-
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                      Tensión Operativa (V)
-                    </label>
-                    <input
-                      type="text"
-                      value={tensionOperativa}
-                      onChange={(e) => setTensionOperativa(e.target.value)}
-                      placeholder="Ej. 208V, 480V"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
-                    />
-                  </div>
-
-                  <div className="col-span-2">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                      Tipo de Transferencia
-                    </label>
-                    <select
-                      value={tipoTransferencia}
-                      onChange={(e) => setTipoTransferencia(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11"
-                    >
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transferencia</label>
+                    <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
                       <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
                       <option value="MANUAL">MANUAL (MTS)</option>
                     </select>
@@ -726,123 +813,40 @@ export const ProyectoView = () => {
                 </div>
               )}
 
-              {/* 3. Generador */}
-              {tipoElemento === 'GENERADOR' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                        Capacidad (kVA)
-                      </label>
-                      <input
-                        type="text"
-                        value={kva}
-                        onChange={(e) => setKva(e.target.value)}
-                        placeholder="Ej. 150 kVA"
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                        Potencia (kW)
-                      </label>
-                      <input
-                        type="text"
-                        value={potenciaKw}
-                        onChange={(e) => setPotenciaKw(e.target.value)}
-                        placeholder="Ej. 120 kW"
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                        Tipo combustible
-                      </label>
-                      <select
-                        value={combustible}
-                        onChange={(e) => setCombustible(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11"
-                      >
-                        <option value="DIESEL">DIÉSEL</option>
-                        <option value="GAS">GAS NATURAL / GLP</option>
-                        <option value="GASOLINA">GASOLINA</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                        Voltaje generación
-                      </label>
-                      <input
-                        type="text"
-                        value={voltajeGeneracion}
-                        onChange={(e) => setVoltajeGeneracion(e.target.value)}
-                        placeholder="Ej. 480/277 V"
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                      Modo Operación
-                    </label>
-                    <select
-                      value={modoOperacion}
-                      onChange={(e) => setModoOperacion(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11"
-                    >
-                      <option value="AUTOMATICO">AUTOMÁTICO (Arranque ATS)</option>
-                      <option value="MANUAL">MANUAL</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* 4. Otro */}
+              {/* OTRO */}
               {tipoElemento === 'OTRO' && (
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                    Especificaciones Técnicas / Descripción
+                    Especificaciones Técnicas
                   </label>
-                  <textarea
-                    value={descripcionOtro}
-                    onChange={(e) => setDescripcionOtro(e.target.value)}
-                    rows={3}
-                    placeholder="Detalles técnicos especiales del equipo..."
-                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-650 transition-all resize-none"
-                  />
+                  <textarea value={descripcionOtro} onChange={(e) => setDescripcionOtro(e.target.value)} rows={3} placeholder="Detalles técnicos adicionales..." className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none resize-none" />
                 </div>
               )}
 
               {/* Observaciones generales */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Observaciones Generales
+                  Observaciones del Informe Técnico
                 </label>
                 <textarea
                   value={observacionesGenerales}
                   onChange={(e) => setObservacionesGenerales(e.target.value)}
                   rows={2}
-                  placeholder="Detalles sobre estado visual general, fallas o notas"
-                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-650 transition-all resize-none"
+                  placeholder="Detalles del estado de mantenimiento, polvo, humedad o recomendaciones..."
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 focus:outline-none placeholder-slate-650 transition-all resize-none"
                 />
               </div>
 
-              {/* Captura de Foto offline (Guardada como Blob binario) */}
+              {/* Foto Offline Blob */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                   <Camera className="w-4 h-4 text-amber-500" />
-                  Foto o Imagen (Soporte Offline Blob)
+                  Foto o Imagen de la Placa Técnico
                 </label>
                 
                 {previewUrl ? (
                   <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-900 aspect-video flex items-center justify-center group shadow-md shrink-0">
-                    <img src={previewUrl} alt="Vista previa del equipo" className="w-full h-full object-cover" />
+                    <img src={previewUrl} alt="Vista previa" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => {
@@ -857,13 +861,12 @@ export const ProyectoView = () => {
                   </div>
                 ) : (
                   <div className="flex items-center justify-center w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-slate-800 border-dashed rounded-xl cursor-pointer bg-slate-900/20 hover:bg-slate-900/40 hover:border-slate-700 transition-all select-none">
-                      <div className="flex flex-col items-center justify-center pt-4 pb-4">
-                        <Camera className="w-6 h-6 text-slate-500 mb-1" />
+                    <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-800 border-dashed rounded-xl cursor-pointer bg-slate-900/20 hover:bg-slate-900/40 hover:border-slate-700 transition-all select-none">
+                      <div className="flex flex-col items-center justify-center pt-3 pb-3">
+                        <Camera className="w-5 h-5 text-slate-500 mb-1" />
                         <p className="text-[11px] text-slate-450">
                           <span className="font-bold">Tomar Foto</span> o subir
                         </p>
-                        <p className="text-[9px] text-slate-550">PNG, JPG (Máx. 2MB)</p>
                       </div>
                       <input
                         type="file"
@@ -877,21 +880,21 @@ export const ProyectoView = () => {
                 )}
               </div>
 
-              {/* Botones de acción del Modal */}
+              {/* Botones de acción con estilo amarillo unificado */}
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-900 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowElementoModal(false)}
-                  className="px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-xl text-slate-350 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={!isElementoFormValid}
-                  className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-md"
+                  className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
-                  Crear Equipo
+                  Guardar Plantilla
                 </button>
               </div>
 
@@ -900,7 +903,7 @@ export const ProyectoView = () => {
         </div>
       )}
 
-      {/* MODAL DETALLADO DE FICHA DE INSPECCIÓN ESTRUCTURAL (SUBESTACIÓN) */}
+      {/* MODAL FICHA DE INSPECCIÓN ESTRUCTURAL */}
       {showInspeccionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowInspeccionModal(false)} />
@@ -908,7 +911,7 @@ export const ProyectoView = () => {
           <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Building className="w-4 h-4 text-amber-500" /> Registrar Inspección Civil / Estructuras
+                <Building className="w-4 h-4 text-amber-500" /> Registrar Inspección Estructural Subestación
               </h3>
               <button 
                 onClick={() => setShowInspeccionModal(false)}
@@ -920,7 +923,6 @@ export const ProyectoView = () => {
 
             <form onSubmit={handleCreateInspeccion} className="mt-4 space-y-4">
               
-              {/* Nombre de la Subestación */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nombre de la Subestación
@@ -944,7 +946,6 @@ export const ProyectoView = () => {
                 )}
               </div>
 
-              {/* Ubicación de la subestación */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Ubicación Física
@@ -958,7 +959,6 @@ export const ProyectoView = () => {
                 />
               </div>
 
-              {/* Nivel de Tensión */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nivel de Tensión (kV)
@@ -972,7 +972,6 @@ export const ProyectoView = () => {
                 />
               </div>
 
-              {/* Nombre del Inspector */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nombre del Inspector Encargado
@@ -986,19 +985,18 @@ export const ProyectoView = () => {
                 />
               </div>
 
-              {/* Botones de acción */}
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-900">
                 <button
                   type="button"
                   onClick={() => setShowInspeccionModal(false)}
-                  className="px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-xl text-slate-350 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={!isInspeccionFormValid}
-                  className="px-4.5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-md"
+                  className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
                   Crear Ficha
                 </button>

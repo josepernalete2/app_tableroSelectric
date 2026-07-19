@@ -11,8 +11,11 @@ datasource db {
 
 enum TipoElemento {
   TABLERO
-  TRANSFER
+  SUBESTACION
+  TRANSFORMADOR
   GENERADOR
+  PUESTA_TIERRA
+  TRANSFER
   OTRO
 }
 
