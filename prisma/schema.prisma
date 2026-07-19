@@ -9,12 +9,19 @@ datasource db {
   provider = "postgresql"
 }
 
+enum TipoElemento {
+  TABLERO
+  TRANSFER
+  GENERADOR
+  OTRO
+}
+
 model Empresa {
   id                      String                  @id @default(uuid())
   nombre                  String
   direccion               String
   proyectos               Proyecto[]
-  tableros                Tablero[]
+  elementosUnifilares     ElementoUnifilar[]
   inspeccionesSubestacion InspeccionSubestacion[]
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
@@ -31,7 +38,7 @@ model Proyecto {
   // Relaciones
   empresaId               String
   empresa                 Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  tableros                Tablero[]
+  elementosUnifilares     ElementoUnifilar[]
   inspeccionesSubestacion InspeccionSubestacion[]
 
   createdAt               DateTime                @default(now())
@@ -40,60 +47,28 @@ model Proyecto {
   @@map("proyectos")
 }
 
-model Tablero {
-  id                     String     @id @default(uuid())
-  nombre                 String     // Nombre o código del tablero (Ej: "Tablero No. 11")
-  ubicacion              String
-  alimentadoPor          String
-  tipo                   String     // "superficial" | "empotrado"
-  foto                   String?    // Foto del tablero (Base64)
-  
-  // Mediciones de corriente/voltaje
-  ia                     String?
-  ib                     String?
-  ic                     String?
-  va                     String?
-  vb                     String?
-  vc                     String?
-  acometida              String?
-
-  // Datos de cierre (calibre de neutro, tierra, observaciones)
-  neutroCalibre          String?
-  neutroObservaciones    String?
-  tierraCalibre          String?
-  tierraObservaciones    String?
+model ElementoUnifilar {
+  id                     String       @id @default(uuid())
+  nombre                 String
+  tipoElemento           TipoElemento
+  ubicacion              String?
+  alimentadoPor          String?
+  foto                   String?
   observacionesGenerales String?
+  datosTecnicos          Json
 
   // Relaciones
-  empresaId              String?
-  empresa                Empresa?   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   proyectoId             String
-  proyecto               Proyecto   @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  circuitos              Circuito[]
+  proyecto               Proyecto     @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
 
-  createdAt              DateTime   @default(now())
-  updatedAt              DateTime   @updatedAt
+  empresaId              String?
+  empresa                Empresa?     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
-  @@map("tableros")
-}
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
 
-model Circuito {
-  id               String   @id @default(uuid())
-  numeroPolo       Int      // Del 1 al 42
-  equipo           String?  // Equipo que alimenta
-  breakerMarca     String?
-  breakerTipo      String?
-  breakerAmperaje  String?
-  conductorCalibre String?
-
-  // Relaciones
-  tableroId        String
-  tablero          Tablero  @relation(fields: [tableroId], references: [id], onDelete: Cascade)
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@map("circuitos")
+  @@index([empresaId])
+  @@map("elementos_unifilares")
 }
 
 model InspeccionSubestacion {
@@ -116,13 +91,15 @@ model InspeccionSubestacion {
   firmaSupervisor    String?
 
   // Relaciones
-  empresaId          String?
-  empresa            Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   proyectoId         String
   proyecto           Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+
+  empresaId          String?
+  empresa            Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  @@index([empresaId])
   @@map("inspecciones_subestacion")
 }

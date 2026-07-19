@@ -45,8 +45,8 @@ export function useSync() {
 
       if (item.tipo === 'PROYECTO') {
         res = await sincronizarProyecto(item.companyId, item.payload);
-      } else if (item.tipo === 'TABLERO') {
-        res = await sincronizarTablero(item.companyId, item.payload);
+      } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') {
+        res = await sincronizarElementoUnifilar(item.companyId, item.payload);
       } else if (item.tipo === 'SUBESTACION') {
         res = await sincronizarSubestacion(item.companyId, item.payload);
       }
@@ -62,7 +62,7 @@ export function useSync() {
           } else {
             // Error definitivo del servidor (400, 422, 500, etc.): retirar y notificar
             console.error(`Error definitivo (HTTP ${res.status}) al sincronizar elemento con ID: ${item.id}`);
-            alert(`Error de validación al sincronizar la inspección con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
+            alert(`Error de validación al sincronizar el elemento con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
             removeFromQueue(item.id);
           }
         }
@@ -102,66 +102,54 @@ export function useSync() {
     }
   };
 
-  const sincronizarTablero = async (empresaId, tablero) => {
+  const sincronizarElementoUnifilar = async (empresaId, elemento) => {
     try {
-      // Traducir el Blob a base64 solo para el envío
-      let fotoBase64 = null;
-      if (tablero.fotoBlob) {
-        fotoBase64 = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(tablero.fotoBlob);
-        });
+      // Usar FormData para transferir el Blob binario offline
+      const formData = new FormData();
+      formData.append('id', elemento.id);
+      formData.append('nombre', elemento.nombre);
+      formData.append('tipoElemento', elemento.tipoElemento || 'TABLERO');
+      formData.append('ubicacion', elemento.ubicacion || '');
+      formData.append('alimentadoPor', elemento.alimentadoPor || '');
+      formData.append('observacionesGenerales', elemento.observacionesGenerales || '');
+      formData.append('proyectoId', elemento.proyectoId);
+      if (empresaId) {
+        formData.append('empresaId', empresaId);
       }
 
-      const payload = {
-        id: tablero.id,
-        nombre: tablero.nombre,
-        ubicacion: tablero.ubicacion,
-        alimentadoPor: tablero.alimentadoPor,
-        tipo: tablero.tipo,
-        foto: fotoBase64 || tablero.foto || null,
-        ia: tablero.barrasPrincipales?.ia || '0',
-        ib: tablero.barrasPrincipales?.ib || '0',
-        ic: tablero.barrasPrincipales?.ic || '0',
-        va: tablero.voltaje?.va || '208',
-        vb: tablero.voltaje?.vb || '205',
-        vc: tablero.voltaje?.vc || '205',
-        acometida: tablero.acometida || '',
-        neutroCalibre: tablero.neutroLlegada?.calibre || '',
-        neutroObservaciones: tablero.neutroLlegada?.observaciones || '',
-        tierraCalibre: tablero.puestaTierra?.calibre || '',
-        tierraObservaciones: tablero.puestaTierra?.observaciones || '',
-        observacionesGenerales: tablero.observacionesGenerales || '',
-        proyectoId: tablero.proyectoId, // Obligatorio para vincular a Proyecto
-        empresaId, // Opcional para compatibilidad
-        circuitos: (tablero.circuits || []).map((circ) => {
-          const poloNum = circ.poles && circ.poles.length > 0 ? circ.poles[0] : 1;
-          return {
-            numeroPolo: poloNum,
-            equipo: circ.equipo || 'RESERVA',
-            breakerMarca: circ.breaker?.marca || '',
-            breakerTipo: circ.breaker?.tipo || '',
-            breakerAmperaje: circ.breaker?.amp ? String(circ.breaker.amp) : '',
-            conductorCalibre: circ.conductor || ''
-          };
-        })
-      };
+      // Convertir datosTecnicos a JSON String para que viaje vía FormData
+      formData.append('datosTecnicos', JSON.stringify(elemento.datosTecnicos || {}));
 
-      const response = await fetch('http://localhost:3001/api/tableros', {
+      // Si existe fotoBlob binario (cargada offline), se adjunta
+      if (elemento.fotoBlob) {
+        const fileExt = elemento.fotoBlob.type ? elemento.fotoBlob.type.split('/')[1] : 'jpg';
+        formData.append('foto', elemento.fotoBlob, `foto_${elemento.id}.${fileExt}`);
+      } else if (elemento.foto) {
+        formData.append('fotoUrl', elemento.foto);
+      }
+
+      const response = await fetch('http://localhost:3001/api/elementos-unifilares', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        // Nota: NO definir Content-Type, el navegador lo añade con el boundary adecuado de forma automática
+        body: formData
       });
 
       if (!response.ok) {
         return { success: false, status: response.status };
       }
 
+      const resJson = await response.json();
+      // Si la carga fue exitosa y devolvió la URL de la imagen guardada en PostgreSQL
+      if (resJson.data && resJson.data.foto) {
+        useStore.getState().updateElementoUnifilar(elemento.proyectoId, elemento.id, {
+          foto: `http://localhost:3001${resJson.data.foto}`, // URL absoluta de la foto en el servidor
+          fotoBlob: null // Limpiamos el Blob temporal una vez sincronizado
+        });
+      }
+
       return { success: true };
     } catch (error) {
-      console.error('Error de red en sincronizarTablero:', error);
+      console.error('Error de red en sincronizarElementoUnifilar:', error);
       return { success: false, status: 'NETWORK_ERROR' };
     }
   };
@@ -183,8 +171,8 @@ export function useSync() {
         edificioControl: subestacion.edificioControl,
         firmaInspector: subestacion.firmaInspector || null,
         firmaSupervisor: subestacion.firmaSupervisor || null,
-        proyectoId: subestacion.proyectoId, // Obligatorio para vincular a Proyecto
-        empresaId // Opcional para compatibilidad
+        proyectoId: subestacion.proyectoId,
+        empresaId
       };
 
       const response = await fetch('http://localhost:3001/api/subestaciones', {

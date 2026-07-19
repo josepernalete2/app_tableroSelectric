@@ -9,11 +9,11 @@ localforage.config({
   storeName: 'inspecciones_store'
 });
 
-// Implementar almacenamiento personalizado para localforage
+// Implementar almacenamiento personalizado para localforage (admite objetos Blob binarios)
 const localForageStorage = {
   getItem: async (name) => {
     const value = await localforage.getItem(name);
-    return value; // Retorna el objeto deserializado directamente
+    return value; // Retorna el objeto deserializado directamente (soporta Blobs)
   },
   setItem: async (name, value) => {
     await localforage.setItem(name, value);
@@ -32,11 +32,52 @@ const initialCompanies = [
         id: 'p-1',
         nombre: 'Proyecto Sótano / Imágenes',
         descripcion: 'Inspecciones iniciales del sótano e imágenes de la clínica.',
-        tableros: [
-          { ...initialTablerosData['11'], id: '11', nombre: 'Tablero TD-11 (Sótano)', proyectoId: 'p-1' },
-          { ...initialTablerosData['10'], id: '10', nombre: 'Tablero TD-10 (Imágenes)', proyectoId: 'p-1' }
+        elementosUnifilares: [
+          {
+            id: '11',
+            nombre: 'Tablero TD-11 (Sótano)',
+            tipoElemento: 'TABLERO',
+            ubicacion: 'Sótano 1',
+            alimentadoPor: 'Subestación Principal',
+            foto: null,
+            fotoBlob: null,
+            observacionesGenerales: 'Operativo',
+            datosTecnicos: {
+              maxPoles: 24,
+              barrasPrincipales: { ia: '120', ib: '115', ic: '118' },
+              breakerPrincipal: { marca: 'EATON', tipo: 'M35', amp: '225' },
+              voltaje: { va: '208', vb: '205', vc: '205' },
+              acometida: '3x1/0 AWG',
+              circuits: [],
+              neutroLlegada: { calibre: '1/0', observaciones: 'Buen estado' },
+              puestaTierra: { calibre: '4 AWG', observaciones: 'Conectado a malla' }
+            },
+            proyectoId: 'p-1',
+            companyId: 'c-1',
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: 'gen-1',
+            nombre: 'Generador Principal Emergencia',
+            tipoElemento: 'GENERADOR',
+            ubicacion: 'Patio Técnico',
+            alimentadoPor: 'Tanque Principal 1000L',
+            foto: null,
+            fotoBlob: null,
+            observacionesGenerales: 'Generador Diésel CATERPILLAR',
+            datosTecnicos: {
+              kva: '500 kVA',
+              combustible: 'Diésel',
+              voltajeGeneracion: '480/277 V',
+              potenciaKw: '400 kW',
+              modoOperacion: 'Automático'
+            },
+            proyectoId: 'p-1',
+            companyId: 'c-1',
+            createdAt: new Date().toISOString()
+          }
         ],
-        subestaciones: [],
+        inspeccionesSubestacion: [],
         createdAt: new Date().toISOString()
       }
     ]
@@ -54,9 +95,9 @@ export const useStore = create(
       user: null,
       companies: initialCompanies,
       proyectosLocales: [],
-      tablerosLocales: [],
+      elementosLocales: [],
       subestacionesLocales: [],
-      syncQueue: [], // Cola universal: { id, tipo: 'PROYECTO'|'TABLERO'|'SUBESTACION', companyId, payload }
+      syncQueue: [], // Cola universal: { id, tipo: 'PROYECTO'|'ELEMENTO_UNIFILAR'|'SUBESTACION', companyId, payload }
 
       // Autenticación básica
       login: (email, password) => {
@@ -94,8 +135,8 @@ export const useStore = create(
           ...c,
           proyectos: (c.proyectos || []).map((p) => ({
             ...p,
-            tableros: p.tableros || [],
-            subestaciones: p.subestaciones || []
+            elementosUnifilares: p.elementosUnifilares || p.tableros || [],
+            inspeccionesSubestacion: p.inspeccionesSubestacion || p.subestaciones || []
           }))
         }));
         set({ companies: enrichedList });
@@ -114,8 +155,8 @@ export const useStore = create(
           nombre,
           descripcion: descripcion || '',
           empresaId: companyId,
-          tableros: [],
-          subestaciones: [],
+          elementosUnifilares: [],
+          inspeccionesSubestacion: [],
           createdAt: new Date().toISOString()
         };
 
@@ -141,11 +182,10 @@ export const useStore = create(
         return { success: true, proyecto: nuevoProyecto };
       },
 
-      // 2. Crear Tablero con Cola Universal
-      addTablero: (proyectoId, tableroData) => {
+      // 2. Gestionar ElementoUnifilar (Tablero, Transfer, Generador, Otro)
+      addElementoUnifilar: (proyectoId, elementoData) => {
         const { companies } = get();
-        
-        // Encontrar empresa y proyecto padre
+
         let parentCompanyId = null;
         let targetProyecto = null;
 
@@ -160,28 +200,20 @@ export const useStore = create(
 
         if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
 
-        const uuidId = crypto.randomUUID();
+        const uuidId = elementoData.id || crypto.randomUUID();
 
-        const nuevoTablero = {
+        const nuevoElemento = {
           id: uuidId,
-          clientId: tableroData.id || uuidId,
-          nombre: tableroData.nombre,
-          ubicacion: tableroData.ubicacion || 'Sin ubicación',
-          alimentadoPor: tableroData.alimentadoPor || '',
-          tipo: tableroData.tipo || 'superficial',
-          foto: null,
-          fotoBlob: tableroData.fotoBlob || null,
-          barrasPrincipales: tableroData.barrasPrincipales || { ia: '0', ib: '0', ic: '0' },
-          breakerPrincipal: tableroData.breakerPrincipal || { marca: '', tipo: '', amp: '' },
-          voltaje: tableroData.voltaje || { va: '208', vb: '205', vc: '205' },
-          acometida: tableroData.acometida || '',
-          maxPoles: tableroData.maxPoles || 24,
-          circuits: tableroData.circuits || [],
-          neutroLlegada: tableroData.neutroLlegada || { calibre: '', observaciones: '' },
-          puestaTierra: tableroData.puestaTierra || { calibre: '', observaciones: '' },
-          observacionesGenerales: tableroData.observacionesGenerales || '',
+          nombre: elementoData.nombre,
+          tipoElemento: elementoData.tipoElemento || 'TABLERO',
+          ubicacion: elementoData.ubicacion || 'Sin ubicación',
+          alimentadoPor: elementoData.alimentadoPor || '',
+          foto: elementoData.foto || null,
+          fotoBlob: elementoData.fotoBlob || null, // Soporta Blob binario offline
+          observacionesGenerales: elementoData.observacionesGenerales || '',
+          datosTecnicos: elementoData.datosTecnicos || {},
           proyectoId,
-          companyId: parentCompanyId,
+          empresaId: parentCompanyId,
           createdAt: new Date().toISOString()
         };
 
@@ -192,9 +224,10 @@ export const useStore = create(
                 ...c,
                 proyectos: c.proyectos.map((p) => {
                   if (p.id === proyectoId) {
+                    const elementos = p.elementosUnifilares || p.tableros || [];
                     return {
                       ...p,
-                      tableros: [...p.tableros, nuevoTablero]
+                      elementosUnifilares: [...elementos, nuevoElemento]
                     };
                   }
                   return p;
@@ -203,31 +236,32 @@ export const useStore = create(
             }
             return c;
           }),
-          tablerosLocales: [...state.tablerosLocales, nuevoTablero],
-          syncQueue: [...state.syncQueue, { 
-            id: uuidId, 
-            tipo: 'TABLERO', 
-            companyId: parentCompanyId, 
-            payload: nuevoTablero 
+          elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
+          syncQueue: [...state.syncQueue, {
+            id: uuidId,
+            tipo: 'ELEMENTO_UNIFILAR',
+            companyId: parentCompanyId,
+            payload: nuevoElemento
           }]
         }));
 
-        return { success: true, tablero: nuevoTablero };
+        return { success: true, elemento: nuevoElemento };
       },
 
-      updateTablero: (proyectoId, tableroId, updatedData) => {
+      updateElementoUnifilar: (proyectoId, elementoId, updatedData) => {
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
             proyectos: (c.proyectos || []).map((p) => {
               if (p.id === proyectoId) {
+                const list = p.elementosUnifilares || p.tableros || [];
                 return {
                   ...p,
-                  tableros: p.tableros.map((t) => {
-                    if (t.id === tableroId) {
-                      return { ...t, ...updatedData };
+                  elementosUnifilares: list.map((e) => {
+                    if (e.id === elementoId) {
+                      return { ...e, ...updatedData };
                     }
-                    return t;
+                    return e;
                   })
                 };
               }
@@ -235,16 +269,15 @@ export const useStore = create(
             })
           }));
 
-          const updatedTablerosLocales = state.tablerosLocales.map((t) => {
-            if (t.id === tableroId) {
-              return { ...t, ...updatedData };
+          const updatedElementosLocales = (state.elementosLocales || []).map((e) => {
+            if (e.id === elementoId) {
+              return { ...e, ...updatedData };
             }
-            return t;
+            return e;
           });
 
-          // Sincronizar actualización local dentro de la cola universal
           const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === tableroId && item.tipo === 'TABLERO') {
+            if (item.id === elementoId && item.tipo === 'ELEMENTO_UNIFILAR') {
               return { ...item, payload: { ...item.payload, ...updatedData } };
             }
             return item;
@@ -252,36 +285,62 @@ export const useStore = create(
 
           return {
             companies: updatedCompanies,
-            tablerosLocales: updatedTablerosLocales,
+            elementosLocales: updatedElementosLocales,
             syncQueue: updatedSyncQueue
           };
         });
       },
 
-      deleteTablero: (proyectoId, tableroId) => {
+      deleteElementoUnifilar: (proyectoId, elementoId) => {
         set((state) => ({
           companies: state.companies.map((c) => ({
             ...c,
             proyectos: (c.proyectos || []).map((p) => {
               if (p.id === proyectoId) {
+                const list = p.elementosUnifilares || p.tableros || [];
                 return {
                   ...p,
-                  tableros: p.tableros.filter((t) => t.id !== tableroId)
+                  elementosUnifilares: list.filter((e) => e.id !== elementoId)
                 };
               }
               return p;
             })
           })),
-          tablerosLocales: state.tablerosLocales.filter((t) => t.id !== tableroId),
-          syncQueue: state.syncQueue.filter((item) => item.id !== tableroId)
+          elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== elementoId),
+          syncQueue: state.syncQueue.filter((item) => item.id !== elementoId)
         }));
       },
 
-      // 3. Crear Inspección de Subestación con Cola Universal
+      // Métodos de compatibilidad para Tableros (delegan a ElementoUnifilar con tipo TABLERO)
+      addTablero: (proyectoId, tableroData) => {
+        return get().addElementoUnifilar(proyectoId, {
+          ...tableroData,
+          tipoElemento: 'TABLERO',
+          datosTecnicos: {
+            maxPoles: tableroData.maxPoles || 24,
+            barrasPrincipales: tableroData.barrasPrincipales || { ia: '0', ib: '0', ic: '0' },
+            breakerPrincipal: tableroData.breakerPrincipal || { marca: '', tipo: '', amp: '' },
+            voltaje: tableroData.voltaje || { va: '208', vb: '205', vc: '205' },
+            acometida: tableroData.acometida || '',
+            circuits: tableroData.circuits || [],
+            neutroLlegada: tableroData.neutroLlegada || { calibre: '', observaciones: '' },
+            puestaTierra: tableroData.puestaTierra || { calibre: '', observaciones: '' }
+          }
+        });
+      },
+
+      updateTablero: (proyectoId, tableroId, updatedData) => {
+        get().updateElementoUnifilar(proyectoId, tableroId, updatedData);
+      },
+
+      deleteTablero: (proyectoId, tableroId) => {
+        get().deleteElementoUnifilar(proyectoId, tableroId);
+      },
+
+      // 3. Crear Inspección de Subestación
       addInspeccionSubestacion: (proyectoId, payload) => {
         const { companies } = get();
-        
-        // Encontrar empresa y proyecto padre
+
         let parentCompanyId = null;
         let targetProyecto = null;
 
@@ -302,7 +361,7 @@ export const useStore = create(
           ...payload,
           id: uuidId,
           proyectoId,
-          companyId: parentCompanyId,
+          empresaId: parentCompanyId,
           tipoPlantilla: 'INSPECCION_SUBESTACION',
           createdAt: new Date().toISOString()
         };
@@ -314,10 +373,10 @@ export const useStore = create(
                 ...c,
                 proyectos: c.proyectos.map((p) => {
                   if (p.id === proyectoId) {
-                    const subestaciones = p.subestaciones || [];
+                    const subestaciones = p.inspeccionesSubestacion || p.subestaciones || [];
                     return {
                       ...p,
-                      subestaciones: [...subestaciones, nuevaSubestacion]
+                      inspeccionesSubestacion: [...subestaciones, nuevaSubestacion]
                     };
                   }
                   return p;
@@ -327,11 +386,11 @@ export const useStore = create(
             return c;
           }),
           subestacionesLocales: [...(state.subestacionesLocales || []), nuevaSubestacion],
-          syncQueue: [...state.syncQueue, { 
-            id: uuidId, 
-            tipo: 'SUBESTACION', 
-            companyId: parentCompanyId, 
-            payload: nuevaSubestacion 
+          syncQueue: [...state.syncQueue, {
+            id: uuidId,
+            tipo: 'SUBESTACION',
+            companyId: parentCompanyId,
+            payload: nuevaSubestacion
           }]
         }));
 
@@ -344,10 +403,10 @@ export const useStore = create(
             ...c,
             proyectos: (c.proyectos || []).map((p) => {
               if (p.id === proyectoId) {
-                const subestaciones = p.subestaciones || [];
+                const subestaciones = p.inspeccionesSubestacion || p.subestaciones || [];
                 return {
                   ...p,
-                  subestaciones: subestaciones.map((s) => {
+                  inspeccionesSubestacion: subestaciones.map((s) => {
                     if (s.id === subestacionId) {
                       return { ...s, ...updatedData };
                     }
@@ -366,7 +425,6 @@ export const useStore = create(
             return s;
           });
 
-          // Sincronizar actualización local dentro de la cola universal
           const updatedSyncQueue = state.syncQueue.map((item) => {
             if (item.id === subestacionId && item.tipo === 'SUBESTACION') {
               return { ...item, payload: { ...item.payload, ...updatedData } };
@@ -388,10 +446,10 @@ export const useStore = create(
             ...c,
             proyectos: (c.proyectos || []).map((p) => {
               if (p.id === proyectoId) {
-                const subestaciones = p.subestaciones || [];
+                const subestaciones = p.inspeccionesSubestacion || p.subestaciones || [];
                 return {
                   ...p,
-                  subestaciones: subestaciones.filter((s) => s.id !== subestacionId)
+                  inspeccionesSubestacion: subestaciones.filter((s) => s.id !== subestacionId)
                 };
               }
               return p;
@@ -402,25 +460,24 @@ export const useStore = create(
         }));
       },
 
-      // Remover elemento de la cola de sincronización tras envío exitoso
       removeFromQueue: (id) => {
         set((state) => ({
           syncQueue: state.syncQueue.filter((item) => item.id !== id),
           proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== id),
-          tablerosLocales: state.tablerosLocales.filter((t) => t.id !== id),
+          elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== id),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id)
         }));
       }
     }),
     {
       name: 'tableroselectrico_zustand_store',
-      storage: localForageStorage, // Usar localforage de forma directa
+      storage: localForageStorage,
       partialize: (state) => ({
         user: state.user,
         companies: state.companies,
         proyectosLocales: state.proyectosLocales || [],
-        tablerosLocales: state.tablerosLocales,
-        subestacionesLocales: state.subestacionesLocales,
+        elementosLocales: state.elementosLocales || [],
+        subestacionesLocales: state.subestacionesLocales || [],
         syncQueue: state.syncQueue
       })
     }

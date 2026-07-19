@@ -8,6 +8,7 @@ process.on('uncaughtException', (error) => {
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import tableroRoutes from './routes/tableroRoutes.js';
 
 dotenv.config();
@@ -17,6 +18,9 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Servir archivos de uploads
+app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // Endpoints Principales de la Inspección Eléctrica (Bajo el prefijo /api)
 app.use('/api', tableroRoutes);
