@@ -10,8 +10,12 @@ import {
   X,
   Building,
   Layers,
-  Zap
+  Zap,
+  Printer,
+  FileSpreadsheet
 } from 'lucide-react';
+import ReporteCompletoEmpresaModal from '../components/ReporteCompletoEmpresaModal';
+import { exportCompanyToExcel } from '../utils/excelExport';
 
 export const EmpresaView = () => {
   const { companyId } = useParams();
@@ -28,6 +32,7 @@ export const EmpresaView = () => {
   // Modales y búsqueda
   const [showModal, setShowModal] = useState(false); // Modal Proyecto
   const [showElementoModal, setShowElementoModal] = useState(false); // Modal Elemento
+  const [showReporteModal, setShowReporteModal] = useState(false); // Modal Reporte PDF Completo
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form states de Proyectos
@@ -168,21 +173,39 @@ export const EmpresaView = () => {
             <Search className="w-4.5 h-4.5 absolute left-3.5 top-3 text-slate-500" />
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            {/* Botón Principal Amarillo: + Crear Tablero */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
+            {/* Botón Excel Consolidado */}
             <button
-              onClick={handleOpenTableroModal}
-              className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+              onClick={() => exportCompanyToExcel(company)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2.5 rounded-lg flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs transition-all cursor-pointer shadow-md"
+              title="Exportar todos los proyectos de la empresa a un Libro Excel (.xlsx)"
             >
-              <Zap className="w-4.5 h-4.5" /> + Crear Tablero
+              <FileSpreadsheet className="w-4.5 h-4.5" /> Excel Empresa (.xlsx)
             </button>
 
-            {/* Botón Secundario Oscuro con Borde: + Crear Proyecto */}
+            {/* Botón Informe PDF Completo */}
+            <button
+              onClick={() => setShowReporteModal(true)}
+              className="bg-amber-500 text-slate-950 font-black hover:bg-amber-400 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md"
+              title="Generar Informe Técnico PDF Completo con Portada y Fichas Técnicas de la Empresa"
+            >
+              <Printer className="w-4.5 h-4.5" /> Informe PDF Completo
+            </button>
+
+            {/* Botón Principal: + Crear Tablero */}
+            <button
+              onClick={handleOpenTableroModal}
+              className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs"
+            >
+              <Zap className="w-4 h-4 text-amber-500" /> + Crear Elemento
+            </button>
+
+            {/* Botón Secundario: + Crear Proyecto */}
             <button
               onClick={() => setShowModal(true)}
-              className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+              className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs"
             >
-              <Plus className="w-4.5 h-4.5" /> + Crear Proyecto
+              <Plus className="w-4 h-4" /> + Crear Proyecto
             </button>
           </div>
         </div>
@@ -463,6 +486,14 @@ export const EmpresaView = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL REPORTE COMPLETO PDF Y EXCEL EMPRESA */}
+      {showReporteModal && (
+        <ReporteCompletoEmpresaModal 
+          company={company} 
+          onClose={() => setShowReporteModal(false)} 
+        />
       )}
 
     </div>

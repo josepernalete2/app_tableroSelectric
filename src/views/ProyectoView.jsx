@@ -15,8 +15,12 @@ import {
   Building,
   Cpu,
   ShieldAlert,
-  RefreshCw
+  RefreshCw,
+  Printer,
+  FileSpreadsheet
 } from 'lucide-react';
+import ReporteCompletoEmpresaModal from '../components/ReporteCompletoEmpresaModal';
+import { exportCompanyToExcel } from '../utils/excelExport';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -62,6 +66,7 @@ export const ProyectoView = () => {
   // Modales
   const [showElementoModal, setShowElementoModal] = useState(false);
   const [showInspeccionModal, setShowInspeccionModal] = useState(false);
+  const [showReporteModal, setShowReporteModal] = useState(false);
 
   // Selector de plantilla / tipo de elemento
   const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
@@ -343,23 +348,39 @@ export const ProyectoView = () => {
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
             </div>
 
-            {/* DOS BOTONES DE CREACIÓN EN PARALELO CON CLASES UNIFICADAS AMARILLAS RECTANGULARES */}
-            <div className="flex flex-row items-center gap-3 w-full md:w-auto justify-end">
+            {/* BOTONES DE EXPORTACIÓN Y CREACIÓN */}
+            <div className="flex flex-wrap md:flex-nowrap items-center gap-2.5 w-full md:w-auto justify-end">
+              <button
+                onClick={() => exportCompanyToExcel(company)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2.5 rounded-lg flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs transition-all cursor-pointer shadow-md"
+                title="Exportar todos los proyectos a Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" /> Excel (.xlsx)
+              </button>
+
+              <button
+                onClick={() => setShowReporteModal(true)}
+                className="bg-amber-500 text-slate-950 font-black hover:bg-amber-400 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md"
+                title="Generar Informe Técnico PDF Completo de la Empresa"
+              >
+                <Printer className="w-4 h-4" /> Informe PDF Completo
+              </button>
+
               <button
                 onClick={() => {
                   setTipoElemento('TABLERO');
                   setShowElementoModal(true);
                 }}
-                className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer"
+                className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
               >
-                <Zap className="w-4.5 h-4.5" /> + Crear Elemento
+                <Zap className="w-4 h-4 text-amber-500" /> + Crear Elemento
               </button>
 
               <button
                 onClick={() => setShowInspeccionModal(true)}
-                className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer"
+                className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
               >
-                <Building className="w-4.5 h-4.5" /> + Crear Inspección
+                <Building className="w-4 h-4" /> + Crear Inspección
               </button>
             </div>
           </div>
@@ -627,23 +648,20 @@ export const ProyectoView = () => {
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Tipo de Plantilla de Elemento
                 </label>
-                <div className="grid grid-cols-3 gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
+                <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[10px]">
                   {[
-                    { id: 'TABLERO', label: 'TABLERO' },
-                    { id: 'TRANSFORMADOR', label: 'TRAFO' },
-                    { id: 'GENERADOR', label: 'GENERADOR' },
-                    { id: 'PUESTA_TIERRA', label: 'P. TIERRA' },
-                    { id: 'TRANSFER', label: 'TRANSFER' },
-                    { id: 'OTRO', label: 'OTRO' }
+                    { id: 'TABLERO', label: 'PANEL ELÉCTRICO' },
+                    { id: 'TRANSFER', label: 'TRANSFERENCIA' },
+                    { id: 'GENERADOR', label: 'GENERADOR' }
                   ].map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setTipoElemento(t.id)}
-                      className={`py-1.5 px-2 font-black rounded-lg transition-all text-center truncate ${
+                      className={`py-2 px-2 font-black rounded-lg transition-all text-center truncate cursor-pointer ${
                         tipoElemento === t.id 
-                          ? 'bg-amber-500 text-slate-950' 
-                          : 'text-slate-400 hover:text-slate-200'
+                          ? 'bg-amber-500 text-slate-950 shadow-md' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                       }`}
                     >
                       {t.label}
@@ -1015,6 +1033,14 @@ export const ProyectoView = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL REPORTE COMPLETO PDF Y EXCEL EMPRESA */}
+      {showReporteModal && (
+        <ReporteCompletoEmpresaModal 
+          company={company} 
+          onClose={() => setShowReporteModal(false)} 
+        />
       )}
 
     </div>
