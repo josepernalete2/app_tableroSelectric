@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de Inspección Técnica - Tablero Eléctrico</title>
+    <style>
+        /* CSS Paged Media para WeasyPrint / Impresión A4 */
+        @page {
+            size: A4;
+            margin: 12mm 15mm 15mm 15mm;
+            @bottom-right {
+                content: "Página " counter(page) " de " counter(pages);
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                font-size: 8px;
+                color: #64748b;
+            }
+            @bottom-left {
+                content: "Sistemas Eléctricos y Tableros de Distribución";
+                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                font-size: 8px;
+                color: #64748b;
+            }
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            margin: 0;
+            padding: 0;
+            font-size: 10px;
+            line-height: 1.4;
+            -webkit-print-color-adjust: exact;
+        }
+
+        .report-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* Cabecera del Documento */
+        .header-card {
+            background: #0f172a;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: none;
+        }
+
+        .header-table td {
+            padding: 0;
+            border: none;
+            background: transparent !important;
+            vertical-align: middle;
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            margin: 0;
+            text-transform: uppercase;
+            color: #ffffff;
+        }
+
+        .header-subtitle {
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 3px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .id-container {
+            text-align: right;
+        }
+
+        .id-label {
+            font-size: 8px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .id-badge {
+            display: inline-block;
+            background-color: #2563eb;
+            color: #ffffff;
+            font-family: 'Roboto Mono', monospace, Courier;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Estilo de Secciones */
+        .section-title {
+            border-left: 4px solid #2563eb;
+            padding-left: 8px;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        }
+
+        /* Tabla de Información General */
+        .info-grid {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .info-grid td {
+            padding: 5px 8px;
+            vertical-align: middle;
+            border: none;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #475569;
+            width: 15%;
+            text-transform: uppercase;
+            font-size: 9px;
+        }
+
+        .info-value {
+            color: #0f172a;
+            width: 35%;
+            font-weight: 500;
+        }
+
+        /* Checkboxes Gráficos */
+        .checkbox-container {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+
+        .checkbox-box {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 1.5px solid #2563eb;
+            border-radius: 2px;
+            margin-right: 5px;
+            vertical-align: middle;
+            position: relative;
+            background-color: #ffffff;
+            box-sizing: border-box;
+        }
+
+        .checkbox-box.checked {
+            background-color: #2563eb;
+        }
+
+        .checkbox-box.checked::after {
+            content: "";
+            position: absolute;
+            left: 3px;
+            top: 0px;
+            width: 3px;
+            height: 6px;
+            border: solid white;
+            border-width: 0 1.5px 1.5px 0;
+            transform: rotate(45deg);
+        }
+
+        .checkbox-text {
+            font-size: 9px;
+            color: #1e293b;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        /* Badge de Sincronización */
+        .status-badge {
+            display: inline-block;
+            background-color: #dcfce7;
+            color: #15803d;
+            font-size: 8px;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+
+        /* Tablas de Datos */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2px;
+        }
+
+        .data-table th {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: bold;
+            text-align: left;
+            padding: 5px 8px;
+            font-size: 8.5px;
+            text-transform: uppercase;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
+        .data-table td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #1e293b;
+        }
+
+        .data-table tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Directorio de Circuitos (Simétrico de 2 columnas) */
+        .circuits-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2px;
+        }
+
+        .circuits-table th {
+            background-color: #0f172a;
+            color: #ffffff;
+            font-weight: 800;
+            padding: 5px 6px;
+            font-size: 8px;
+            text-transform: uppercase;
+            text-align: center;
+            border: 1px solid #1e293b;
+        }
+
+        .circuits-table th.left-align {
+            text-align: left;
+        }
+
+        .circuits-table th.right-align {
+            text-align: right;
+        }
+
+        .circuits-table td {
+            padding: 4px 6px;
+            border: 1px solid #e2e8f0;
+            font-size: 9px;
+            vertical-align: middle;
+        }
+
+        .circuits-table tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        .circuits-table td.num-col {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            font-weight: 800;
+            text-align: center;
+            width: 3%;
+            border-left: 1.5px solid #cbd5e1;
+            border-right: 1.5px solid #cbd5e1;
+            font-size: 9px;
+        }
+
+        .circuits-table td.reserva {
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        /* Caja de Comentarios / Observaciones */
+        .comments-box {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background-color: #ffffff;
+            padding: 10px 14px;
+            min-height: 40px;
+            font-size: 9.5px;
+            color: #334155;
+            line-height: 1.5;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        }
+
+        /* Pie de Firmas */
+        .footer-table {
+            margin-top: 25px;
+            width: 100%;
+            border-collapse: collapse;
+            page-break-inside: avoid;
+        }
+
+        .footer-table td {
+            border: none;
+            width: 33.33%;
+            text-align: center;
+            padding: 0 15px;
+            vertical-align: bottom;
+            background: transparent !important;
+        }
+
+        .signature-line {
+            border-top: 1px solid #94a3b8;
+            margin-top: 35px;
+            padding-top: 4px;
+            font-size: 8.5px;
+            color: #475569;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .footer-value {
+            font-size: 9px;
+            color: #0f172a;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- CABECERA PRINCIPAL -->
+    <div class="header-card">
+        <table class="header-table">
+            <tr>
+                <td>
+                    <h1 class="header-title">Reporte de Inspección Técnica</h1>
+                    <div class="header-subtitle">Sistemas Eléctricos y Tableros de Distribución</div>
+                </td>
+                <td style="width: 40%;">
+                    <div class="id-container">
+                        <div class="id-label">Código de Identificación</div>
+                        <div class="id-badge">{{ id|default('18CDC227-F9A2-4D89-A489-C2C41AC02727B') }}</div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- SECCIÓN 1: INFORMACIÓN GENERAL -->
+    <div class="section-title">1. Información General del Tablero</div>
+    <div class="card">
+        <table class="info-grid">
+            <tr>
+                <td class="info-label">Ubicación:</td>
+                <td class="info-value">{{ ubicacion|default('Área Principal (qw)') }}</td>
+                <td class="info-label">Tipo de Montaje:</td>
+                <td class="info-value">
+                    <div class="checkbox-container">
+                        <span class="checkbox-box {% if tipo_montaje|default('Superficial') == 'Superficial' %}checked{% endif %}"></span>
+                        <span class="checkbox-text">Superficial</span>
+                    </div>
+                    <div class="checkbox-container">
+                        <span class="checkbox-box {% if tipo_montaje|default('Superficial') == 'Empotrado' %}checked{% endif %}"></span>
+                        <span class="checkbox-text">Empotrado</span>
+                    </div>
+                </td>
+            </tr>
+            <tr>
+                <td class="info-label">Alimentado por:</td>
+                <td class="info-value">{{ alimentado_por|default('Acometida General (qw)') }}</td>
+                <td class="info-label">Estado de Sincro:</td>
+                <td class="info-value">
+                    <span class="status-badge">{{ estado_sincro|default('Sincronizado con Servidor') }}</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- SECCIÓN 2: BARRAS PRINCIPALES Y BREAKER PRINCIPAL -->
+    <div class="section-title">2. Barras Principales y Breaker Principal</div>
+    <div class="card" style="padding: 0; overflow: hidden;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 15%;">Fase</th>
+                    <th style="width: 15%;">Voltaje (V)</th>
+                    <th style="width: 15%;">Amperaje (A)</th>
+                    <th style="width: 20%;">Marca Breaker</th>
+                    <th style="width: 15%;">Tipo</th>
+                    <th style="width: 20%;">Calibre / Acometida</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Fase A (IA)</strong></td>
+                    <td>{{ barras.fase_a.voltaje|default('208 V') }}</td>
+                    <td>{{ barras.fase_a.amperaje|default('0 A') }}</td>
+                    <td>{{ breaker.marca|default('General Electric') }}</td>
+                    <td>{{ breaker.tipo|default('3-Poles') }}</td>
+                    <td rowspan="3" style="vertical-align: middle; border-left: 1px solid #e2e8f0; font-weight: 500;">
+                        {{ calibre_acometida|default('3x 3/0 AWG') }}
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Fase B (IB)</strong></td>
+                    <td>{{ barras.fase_b.voltaje|default('205 V') }}</td>
+                    <td>{{ barras.fase_b.amperaje|default('0 A') }}</td>
+                    <td>{{ breaker.marca|default('General Electric') }}</td>
+                    <td>{{ breaker.tipo|default('3-Poles') }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Fase C (IC)</strong></td>
+                    <td>{{ barras.fase_c.voltaje|default('205 V') }}</td>
+                    <td>{{ barras.fase_c.amperaje|default('0 A') }}</td>
+                    <td>{{ breaker.marca|default('General Electric') }}</td>
+                    <td>{{ breaker.tipo|default('3-Poles') }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- SECCIÓN 3: DIRECTORIO DE CIRCUITOS Y PROTECCIONES -->
+    <div class="section-title">3. Directorio de Circuitos y Protecciones (Breakers)</div>
+    <div class="card" style="padding: 0; overflow: hidden;">
+        <table class="circuits-table">
+            <thead>
+                <tr>
+                    <th class="left-align" style="width: 32%;">Equipo Alimentado</th>
+                    <th style="width: 10%;">Marca/Tipo</th>
+                    <th style="width: 6%;">Amp</th>
+                    <th style="width: 4%;">#</th>
+                    <th style="width: 4%;">#</th>
+                    <th style="width: 6%;">Amp</th>
+                    <th style="width: 10%;">Marca/Tipo</th>
+                    <th class="right-align" style="width: 32%;">Equipo Alimentado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Se generan las 12 filas estándar (polos 1 al 24) -->
+                <!-- Nota: En un motor de plantillas, esto se genera con un bucle dinámico -->
+                {% for row in circuits_rows|default([
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}},
+                    {'odd': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}, 'even': {'equipo': 'RESERVA', 'marca': '-', 'amp': '-'}}
+                ]) %}
+                {% set odd_num = 2 * loop.index - 1 %}
+                {% set even_num = 2 * loop.index %}
+                <tr>
+                    <!-- Polo Impar (Izquierda) -->
+                    <td class="{% if row.odd.equipo == 'RESERVA' %}reserva{% endif %}">
+                        {{ row.odd.equipo }}
+                    </td>
+                    <td style="text-align: center;">{{ row.odd.marca }}</td>
+                    <td style="text-align: center;">{{ row.odd.amp }}</td>
+                    
+                    <!-- Números de Polo (Centro) -->
+                    <td class="num-col">{{ odd_num }}</td>
+                    <td class="num-col">{{ even_num }}</td>
+                    
+                    <!-- Polo Par (Derecha) -->
+                    <td style="text-align: center;">{{ row.even.amp }}</td>
+                    <td style="text-align: center;">{{ row.even.marca }}</td>
+                    <td style="text-align: right; {% if row.even.equipo == 'RESERVA' %}color: #94a3b8; font-style: italic;{% endif %}">
+                        {{ row.even.equipo }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- SECCIÓN 4: NEUTRO DE LLEGADA Y PUESTA A TIERRA -->
+    <div class="section-title">4. Neutro de Llegada y Puesta a Tierra</div>
+    <div class="card">
+        <table class="info-grid">
+            <tr>
+                <td class="info-label" style="width: 15%;">Neutro de Llegada:</td>
+                <td class="info-value" style="width: 35%;">Calibre {{ neutro.calibre|default('2/0 AWG') }}</td>
+                <td class="info-label" style="width: 15%;">Puesta a Tierra:</td>
+                <td class="info-value" style="width: 35%;">Calibre {{ tierra.calibre|default('1/0 AWG') }}</td>
+            </tr>
+            <tr>
+                <td class="info-label" style="text-transform: capitalize; color: #64748b;">Obs. Neutro:</td>
+                <td class="info-value" style="font-size: 9px; color: #475569;">
+                    {{ neutro.observaciones|default('Barra limpia, identificación color blanco adecuada.') }}
+                </td>
+                <td class="info-label" style="text-transform: capitalize; color: #64748b;">Obs. Tierra:</td>
+                <td class="info-value" style="font-size: 9px; color: #475569;">
+                    {{ tierra.observaciones|default('Conectado a malla del edificio, continuidad verificada.') }}
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- SECCIÓN 5: OBSERVACIONES GENERALES Y RECOMENDACIONES -->
+    <div class="section-title">5. Observaciones Generales y Recomendaciones</div>
+    <div class="comments-box">
+        {{ observaciones_generales|default('El tablero presenta buen estado general de estructura y cableado. Se recomienda rotular adecuadamente los circuitos de reserva y realizar termografía de control en el siguiente mantenimiento preventivo.') }}
+    </div>
+
+    <!-- PIE DE FIRMA -->
+    <table class="footer-table">
+        <tr>
+            <td>
+                <div class="footer-value">{{ inspector_nombre|default('Ing. Héctor Pernalete') }}</div>
+                <div class="signature-line">Inspector Técnico</div>
+            </td>
+            <td>
+                <div class="footer-value">&nbsp;</div>
+                <div class="signature-line">Firma / Sello</div>
+            </td>
+            <td>
+                <div class="footer-value">{{ fecha|default('23/07/2026') }}</div>
+                <div class="signature-line">Fecha</div>
+            </td>
+        </tr>
+    </table>
+
+</div>
+
+</body>
+</html>

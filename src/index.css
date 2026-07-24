@@ -122,12 +122,22 @@ body {
 }
 
 /* Print layout optimizations */
+.print-only {
+  display: none !important;
+}
+
 @media print {
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
   }
   .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .screen-only {
     display: none !important;
   }
   .print-card {

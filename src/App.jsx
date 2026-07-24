@@ -10,7 +10,7 @@ import ProyectoView from './views/ProyectoView';
 import TableroComponent from './components/TableroComponent';
 import SubestacionComponent from './components/SubestacionComponent';
 import FichaTecnicaComponent from './components/FichaTecnicaComponent';
-import { ArrowLeft, User, LogOut } from 'lucide-react';
+import { ArrowLeft, User, LogOut, Printer } from 'lucide-react';
 
 // Wrapper para Rutas Protegidas
 const ProtectedRoute = ({ children }) => {
@@ -100,6 +100,14 @@ const TableroWrapper = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => window.print()}
+              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-black shadow-sm"
+              title="Guardar como PDF o Imprimir esta Inspección"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">Guardar PDF</span>
+            </button>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl">
               <User className="w-4 h-4 text-slate-400" />
               <span className="text-xs font-semibold text-slate-300">{user?.email}</span>
@@ -150,6 +158,14 @@ const TableroWrapper = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => window.print()}
+              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-black shadow-sm"
+              title="Guardar como PDF o Imprimir esta Plantilla"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">Guardar PDF</span>
+            </button>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl">
               <User className="w-4 h-4 text-slate-400" />
               <span className="text-xs font-semibold text-slate-300">{user?.email}</span>
@@ -229,6 +245,14 @@ const TableroWrapper = () => {
 
         {/* User / Logout */}
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => window.print()}
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-black shadow-sm"
+            title="Guardar como PDF o Imprimir este Tablero"
+          >
+            <Printer className="w-4 h-4" />
+            <span className="hidden sm:inline">Guardar PDF</span>
+          </button>
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl">
             <User className="w-4 h-4 text-slate-400" />
             <span className="text-xs font-semibold text-slate-300">{user?.email}</span>

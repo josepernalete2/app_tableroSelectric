@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer } from 'lucide-react';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -79,6 +79,19 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
     // Sort circuits by their first pole number
     return list.sort((a, b) => Math.min(...a.poles) - Math.min(...b.poles));
   }, [circuits, maxPoles]);
+
+  // Group poles for circuits rendering in print
+  const printRows = React.useMemo(() => {
+    const rows = [];
+    for (let i = 0; i < Math.ceil(maxPoles / 2); i++) {
+      const oddPole = 2 * i + 1;
+      const evenPole = 2 * i + 2;
+      const cLeft = normalizedCircuits.find(c => c.poles.includes(oddPole));
+      const cRight = normalizedCircuits.find(c => c.poles.includes(evenPole));
+      rows.push({ oddPole, evenPole, cLeft, cRight });
+    }
+    return rows;
+  }, [normalizedCircuits, maxPoles]);
 
   // Update specific fields of the main tablero structure
   const updateField = (path, value) => {
@@ -192,8 +205,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
   return (
     <div className="w-full text-slate-900 dark:text-slate-100 print-card font-sans select-text">
       
-      {/* Grilla Superior Dividida: Tabla a la Izquierda, Foto a la Derecha */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      {/* VISTA DE EDICIÓN EN PANTALLA (OCULTA EN IMPRESIÓN) */}
+      <div className="screen-only">
+        {/* Grilla Superior Dividida: Tabla a la Izquierda, Foto a la Derecha */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         
         {/* Lado Izquierdo (3/4 de ancho): Tabla General */}
         <div className="md:col-span-3">
@@ -902,8 +917,15 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
         }}
       />
 
-      {/* Botón flotante para exportar a Excel (no-print) */}
+      {/* Botones flotantes para exportar a Excel y PDF (no-print) */}
       <div className="fixed bottom-6 right-6 z-40 no-print flex flex-col gap-3">
+        <button
+          onClick={() => window.print()}
+          className="flex items-center justify-center w-14 h-14 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-full shadow-2xl transition-all cursor-pointer group hover:rotate-6"
+          title="Imprimir / Guardar PDF"
+        >
+          <Printer className="w-6 h-6 group-hover:scale-110 transition-transform" />
+        </button>
         <button
           onClick={() => exportTableroToExcel(tableroData)}
           className="flex items-center justify-center w-14 h-14 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-full shadow-2xl transition-all cursor-pointer group hover:rotate-6"
@@ -911,6 +933,497 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
         >
           <span className="text-xl font-bold group-hover:scale-110 transition-transform">📊</span>
         </button>
+      </div>
+      
+      </div> {/* Fin de screen-only */}
+
+      {/* VISTA DE IMPRESIÓN PROFESIONAL (OCULTA EN PANTALLA, ACTIVA EN IMPRESIÓN) */}
+      <div className="print-only print-only-container w-full max-w-[800px] mx-auto bg-white text-slate-900 p-0 font-sans">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            body {
+              background-color: #ffffff !important;
+              color: #000000 !important;
+            }
+            .print-only-container {
+              color: #1e293b !important;
+              font-size: 10px !important;
+              line-height: 1.4 !important;
+            }
+            .print-header-card {
+              background: #0f172a !important;
+              background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+              color: #ffffff !important;
+              border-radius: 8px;
+              padding: 16px 20px;
+              margin-bottom: 15px;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-header-title {
+              font-size: 16px !important;
+              font-weight: 800 !important;
+              letter-spacing: 0.5px;
+              margin: 0;
+              text-transform: uppercase;
+              color: #ffffff !important;
+            }
+            .print-header-subtitle {
+              font-size: 10px !important;
+              color: #94a3b8 !important;
+              margin-top: 3px;
+              text-transform: uppercase;
+              font-weight: bold;
+            }
+            .print-id-label {
+              font-size: 8px !important;
+              color: #94a3b8 !important;
+              text-transform: uppercase;
+              font-weight: bold;
+              margin-bottom: 3px;
+            }
+            .print-id-badge {
+              background-color: #2563eb !important;
+              color: #ffffff !important;
+              font-family: monospace;
+              font-size: 11px !important;
+              font-weight: bold;
+              padding: 4px 10px;
+              border-radius: 4px;
+              letter-spacing: 0.5px;
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              display: inline-block;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-section-title {
+              border-left: 4px solid #2563eb !important;
+              padding-left: 8px;
+              margin-top: 16px;
+              margin-bottom: 8px;
+              color: #0f172a !important;
+              font-size: 11px !important;
+              font-weight: 800 !important;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-card {
+              background-color: #ffffff !important;
+              border: 1px solid #e2e8f0 !important;
+              border-radius: 6px;
+              padding: 10px 14px;
+              margin-bottom: 10px;
+            }
+            .print-info-grid {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .print-info-grid td {
+              padding: 5px 8px;
+              vertical-align: middle;
+              border: none !important;
+            }
+            .print-info-label {
+              font-weight: bold !important;
+              color: #475569 !important;
+              width: 15%;
+              text-transform: uppercase;
+              font-size: 9px !important;
+            }
+            .print-info-value {
+              color: #0f172a !important;
+              width: 35%;
+              font-weight: 500;
+            }
+            .print-checkbox-box {
+              display: inline-block;
+              width: 12px;
+              height: 12px;
+              border: 1.5px solid #2563eb !important;
+              border-radius: 2px;
+              margin-right: 5px;
+              vertical-align: middle;
+              position: relative;
+              background-color: #ffffff;
+              box-sizing: border-box;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-checkbox-box.checked {
+              background-color: #2563eb !important;
+            }
+            .print-checkbox-box.checked::after {
+              content: "" !important;
+              position: absolute;
+              left: 3px;
+              top: 0px;
+              width: 3px;
+              height: 6px;
+              border: solid white !important;
+              border-width: 0 1.5px 1.5px 0 !important;
+              transform: rotate(45deg);
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-status-badge {
+              background-color: #dcfce7 !important;
+              color: #15803d !important;
+              font-size: 8px !important;
+              font-weight: bold !important;
+              padding: 2px 8px;
+              border-radius: 12px;
+              text-transform: uppercase;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-data-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 2px;
+            }
+            .print-data-table th {
+              background-color: #f1f5f9 !important;
+              color: #475569 !important;
+              font-weight: bold !important;
+              text-align: left;
+              padding: 5px 8px;
+              font-size: 8.5px !important;
+              text-transform: uppercase;
+              border-bottom: 2px solid #cbd5e1 !important;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-data-table td {
+              padding: 6px 8px;
+              border-bottom: 1px solid #e2e8f0 !important;
+              color: #1e293b !important;
+            }
+            .print-data-table tbody tr:nth-child(even) {
+              background-color: #f8fafc !important;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-circuits-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 2px;
+            }
+            .print-circuits-table th {
+              background-color: #0f172a !important;
+              color: #ffffff !important;
+              font-weight: 800 !important;
+              padding: 5px 6px;
+              font-size: 8px !important;
+              text-transform: uppercase;
+              text-align: center;
+              border: 1px solid #1e293b !important;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-circuits-table td {
+              padding: 4px 6px;
+              border: 1px solid #e2e8f0 !important;
+              font-size: 9px !important;
+            }
+            .print-circuits-table tbody tr:nth-child(even) {
+              background-color: #f8fafc !important;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-circuits-table td.num-col {
+              background-color: #f1f5f9 !important;
+              color: #0f172a !important;
+              font-weight: 800 !important;
+              text-align: center;
+              width: 3%;
+              border-left: 1.5px solid #cbd5e1 !important;
+              border-right: 1.5px solid #cbd5e1 !important;
+              font-size: 9px !important;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+            }
+            .print-circuits-table td.reserva {
+              color: #94a3b8 !important;
+              font-style: italic;
+            }
+            .print-comments-box {
+              border: 1px solid #e2e8f0 !important;
+              border-radius: 6px;
+              background-color: #ffffff !important;
+              padding: 10px 14px;
+              min-height: 40px;
+              font-size: 9.5px !important;
+              color: #334155 !important;
+              line-height: 1.5;
+            }
+            .print-footer-table {
+              margin-top: 25px;
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .print-footer-table td {
+              border: none !important;
+              width: 33.33%;
+              text-align: center;
+              padding: 0 15px;
+              vertical-align: bottom;
+              background: transparent !important;
+            }
+            .print-signature-line {
+              border-top: 1px solid #94a3b8 !important;
+              margin-top: 35px;
+              padding-top: 4px;
+              font-size: 8.5px !important;
+              color: #475569 !important;
+              text-transform: uppercase;
+              font-weight: bold;
+            }
+            .print-footer-value {
+              font-size: 9px !important;
+              color: #0f172a !important;
+              font-weight: bold;
+              margin-bottom: 2px;
+            }
+          }
+        ` }} />
+
+        {/* CABECERA PRINCIPAL */}
+        <div className="print-header-card">
+          <table className="w-full border-collapse border-none">
+            <tbody>
+              <tr className="border-none">
+                <td className="border-none text-left p-0 bg-transparent text-white">
+                  <h1 className="print-header-title">Reporte de Inspección Técnica</h1>
+                  <div className="print-header-subtitle">Sistemas Eléctricos y Tableros de Distribución</div>
+                </td>
+                <td style={{ width: '40%' }} className="border-none text-right p-0 bg-transparent text-white">
+                  <div className="text-right">
+                    <div className="print-id-label">Código de Identificación</div>
+                    <div className="print-id-badge">{id}</div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* SECCIÓN 1: INFORMACIÓN GENERAL */}
+        <div className="print-section-title">1. Información General del Tablero</div>
+        <div className="print-card">
+          <table className="print-info-grid">
+            <tbody>
+              <tr className="border-none">
+                <td className="print-info-label">Ubicación:</td>
+                <td className="print-info-value">{ubicacion || 'No especificada'}</td>
+                <td className="print-info-label">Tipo de Montaje:</td>
+                <td className="print-info-value">
+                  <div className="checkbox-container">
+                    <span className={`print-checkbox-box ${tipo === 'superficial' ? 'checked' : ''}`}></span>
+                    <span className="checkbox-text">Superficial</span>
+                  </div>
+                  <div className="checkbox-container">
+                    <span className={`print-checkbox-box ${tipo === 'empotrado' ? 'checked' : ''}`}></span>
+                    <span className="checkbox-text">Empotrado</span>
+                  </div>
+                </td>
+              </tr>
+              <tr className="border-none">
+                <td className="print-info-label">Alimentado por:</td>
+                <td className="print-info-value">{alimentadoPor || 'No especificado'}</td>
+                <td className="print-info-label">Estado de Sincro:</td>
+                <td className="print-info-value">
+                  <span className="print-status-badge">Sincronizado con Servidor</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* SECCIÓN 2: BARRAS PRINCIPALES Y BREAKER PRINCIPAL */}
+        <div className="print-section-title">2. Barras Principales y Breaker Principal</div>
+        <div className="print-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="print-data-table">
+            <thead>
+              <tr>
+                <th style={{ width: '15%' }}>Fase</th>
+                <th style={{ width: '15%' }}>Voltaje (V)</th>
+                <th style={{ width: '15%' }}>Amperaje (A)</th>
+                <th style={{ width: '20%' }}>Marca Breaker</th>
+                <th style={{ width: '15%' }}>Tipo</th>
+                <th style={{ width: '20%' }}>Calibre / Acometida</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-none">
+                <td><strong>Fase A (IA)</strong></td>
+                <td>{voltaje?.va ? `${voltaje.va} V` : '0 V'}</td>
+                <td>{barrasPrincipales?.ia ? `${barrasPrincipales.ia} A` : '0 A'}</td>
+                <td rowSpan={3} style={{ verticalAlign: 'middle', textAlign: 'left', borderRight: '1px solid #e2e8f0' }} className="border-r border-slate-200">
+                  {breakerPrincipal?.marca || 'N/A'}
+                </td>
+                <td rowSpan={3} style={{ verticalAlign: 'middle', textAlign: 'left', borderRight: '1px solid #e2e8f0' }} className="border-r border-slate-200">
+                  {breakerPrincipal?.tipo || 'N/A'}
+                </td>
+                <td rowSpan={3} style={{ verticalAlign: 'middle', textAlign: 'left' }}>
+                  {acometida || 'N/A'}
+                </td>
+              </tr>
+              <tr className="border-none">
+                <td><strong>Fase B (IB)</strong></td>
+                <td>{voltaje?.vb ? `${voltaje.vb} V` : '0 V'}</td>
+                <td>{barrasPrincipales?.ib ? `${barrasPrincipales.ib} A` : '0 A'}</td>
+              </tr>
+              <tr className="border-none">
+                <td><strong>Fase C (IC)</strong></td>
+                <td>{voltaje?.vc ? `${voltaje.vc} V` : '0 V'}</td>
+                <td>{barrasPrincipales?.ic ? `${barrasPrincipales.ic} A` : '0 A'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* SECCIÓN 3: DIRECTORIO DE CIRCUITOS Y PROTECCIONES */}
+        <div className="print-section-title">3. Directorio de Circuitos y Protecciones (Breakers)</div>
+        <div className="print-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="print-circuits-table">
+            <thead>
+              <tr>
+                <th className="left-align" style={{ width: '32%', textAlign: 'left' }}>Equipo Alimentado</th>
+                <th style={{ width: '10%' }}>Marca/Tipo</th>
+                <th style={{ width: '6%' }}>Amp</th>
+                <th style={{ width: '4%' }}>#</th>
+                <th style={{ width: '4%' }}>#</th>
+                <th style={{ width: '6%' }}>Amp</th>
+                <th style={{ width: '10%' }}>Marca/Tipo</th>
+                <th className="right-align" style={{ width: '32%', textAlign: 'right' }}>Equipo Alimentado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {printRows.map((row, idx) => {
+                const { oddPole, evenPole, cLeft, cRight } = row;
+                
+                // Helper to check if a pole is the start of a multi-pole circuit
+                const isFirstLeft = cLeft && Math.min(...cLeft.poles) === oddPole;
+                const isFirstRight = cRight && Math.min(...cRight.poles) === evenPole;
+                
+                const rowSpanLeft = cLeft ? cLeft.poles.length : 1;
+                const rowSpanRight = cRight ? cRight.poles.length : 1;
+
+                return (
+                  <tr key={idx} className="border-none">
+                    {/* Polo Impar (Izquierda) */}
+                    {isFirstLeft ? (
+                      <>
+                        <td 
+                          rowSpan={rowSpanLeft}
+                          className={!cLeft.equipo || cLeft.equipo === 'RESERVA' ? 'print-circuits-td reserva text-left' : 'print-circuits-td font-bold text-slate-800 text-left'}
+                        >
+                          {cLeft.equipo || 'RESERVA'}
+                        </td>
+                        <td rowSpan={rowSpanLeft} style={{ textAlign: 'center' }} className="print-circuits-td">
+                          {cLeft.breaker?.marca || cLeft.breaker?.tipo ? `${cLeft.breaker.marca || ''} ${cLeft.breaker.tipo || ''}`.trim() : '-'}
+                        </td>
+                        <td rowSpan={rowSpanLeft} style={{ textAlign: 'center' }} className="print-circuits-td">
+                          {cLeft.breaker?.amp || '-'}
+                        </td>
+                      </>
+                    ) : !cLeft ? (
+                      <>
+                        <td className="print-circuits-td reserva text-left">RESERVA</td>
+                        <td style={{ textAlign: 'center' }} className="print-circuits-td">-</td>
+                        <td style={{ textAlign: 'center' }} className="print-circuits-td">-</td>
+                      </>
+                    ) : null}
+
+                    {/* Números de Polo (Centro) */}
+                    <td className="num-col">{oddPole}</td>
+                    <td className="num-col">{evenPole}</td>
+
+                    {/* Polo Par (Derecha) */}
+                    {isFirstRight ? (
+                      <>
+                        <td rowSpan={rowSpanRight} style={{ textAlign: 'center' }} className="print-circuits-td">
+                          {cRight.breaker?.amp || '-'}
+                        </td>
+                        <td rowSpan={rowSpanRight} style={{ textAlign: 'center' }} className="print-circuits-td">
+                          {cRight.breaker?.marca || cRight.breaker?.tipo ? `${cRight.breaker.marca || ''} ${cRight.breaker.tipo || ''}`.trim() : '-'}
+                        </td>
+                        <td 
+                          rowSpan={rowSpanRight} 
+                          style={{ textAlign: 'right' }}
+                          className={!cRight.equipo || cRight.equipo === 'RESERVA' ? 'print-circuits-td reserva text-right' : 'print-circuits-td font-bold text-slate-800 text-right'}
+                        >
+                          {cRight.equipo || 'RESERVA'}
+                        </td>
+                      </>
+                    ) : !cRight ? (
+                      <>
+                        <td style={{ textAlign: 'center' }} className="print-circuits-td">-</td>
+                        <td style={{ textAlign: 'center' }} className="print-circuits-td">-</td>
+                        <td className="print-circuits-td reserva text-right">RESERVA</td>
+                      </>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* SECCIÓN 4: NEUTRO DE LLEGADA Y PUESTA A TIERRA */}
+        <div className="print-section-title">4. Neutro de Llegada y Puesta a Tierra</div>
+        <div className="print-card">
+          <table className="print-info-grid">
+            <tbody>
+              <tr className="border-none">
+                <td className="print-info-label" style={{ width: '15%' }}>Neutro de Llegada:</td>
+                <td className="print-info-value" style={{ width: '35%' }}>Calibre {neutroLlegada?.calibre || 'N/A'}</td>
+                <td className="print-info-label" style={{ width: '15%' }}>Puesta a Tierra:</td>
+                <td className="print-info-value" style={{ width: '35%' }}>Calibre {puestaTierra?.calibre || 'N/A'}</td>
+              </tr>
+              <tr className="border-none">
+                <td className="print-info-label" style={{ textTransform: 'capitalize', color: '#64748b' }}>Obs. Neutro:</td>
+                <td className="print-info-value" style={{ fontSize: '9px', color: '#475569' }}>
+                  {neutroLlegada?.observaciones || 'Sin observaciones.'}
+                </td>
+                <td className="print-info-label" style={{ textTransform: 'capitalize', color: '#64748b' }}>Obs. Tierra:</td>
+                <td className="print-info-value" style={{ fontSize: '9px', color: '#475569' }}>
+                  {puestaTierra?.observaciones || 'Sin observaciones.'}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* SECCIÓN 5: OBSERVACIONES GENERALES Y RECOMENDACIONES */}
+        <div className="print-section-title">5. Observaciones Generales y Recomendaciones</div>
+        <div className="print-comments-box">
+          {observacionesGenerales || 'El tablero presenta buen estado general de estructura y cableado.'}
+        </div>
+
+        {/* PIE DE FIRMA */}
+        <table className="print-footer-table">
+          <tbody>
+            <tr className="border-none">
+              <td className="border-none">
+                <div className="print-footer-value">Ing. Héctor Pernalete</div>
+                <div className="print-signature-line">Inspector Técnico</div>
+              </td>
+              <td className="border-none">
+                <div className="print-footer-value">&nbsp;</div>
+                <div className="print-signature-line">Firma / Sello</div>
+              </td>
+              <td className="border-none">
+                <div className="print-footer-value">
+                  {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                </div>
+                <div className="print-signature-line">Fecha</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
     </div>
