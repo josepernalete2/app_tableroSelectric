@@ -326,10 +326,10 @@ export const SidebarLayout = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col md:flex-row antialiased">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col lg:flex-row antialiased">
       
       {/* 1. TOP BAR MÓVIL (no-print) */}
-      <header className="md:hidden bg-slate-950/90 border-b border-slate-800/80 px-4 py-3 flex items-center justify-between shadow-md shrink-0 no-print sticky top-0 z-40 backdrop-blur-md">
+      <header className="lg:hidden bg-slate-950/90 border-b border-slate-800/80 px-4 py-3 flex items-center justify-between shadow-md shrink-0 no-print sticky top-0 z-40 backdrop-blur-md">
         <Link to="/" className="flex items-center gap-2">
           <div className="p-1.5 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg text-slate-950 shadow-md">
             <Zap className="w-5 h-5 fill-slate-950 text-slate-950" />
@@ -346,7 +346,7 @@ export const SidebarLayout = () => {
 
       {/* 2. DRAWER DE MENÚ MÓVIL (no-print) */}
       {isMobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden no-print flex">
+        <div className="fixed inset-0 z-50 lg:hidden no-print flex flex-row">
           <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setIsMobileOpen(false)} />
           <nav className="relative w-64 bg-slate-950 border-r border-slate-800 flex flex-col justify-between p-5 animate-in slide-in-from-left duration-250">
             <div className="space-y-6">
@@ -416,7 +416,7 @@ export const SidebarLayout = () => {
       )}
 
       {/* 3. SIDEBAR ESCRITORIO FIJO (no-print) */}
-      <aside className="hidden md:flex md:w-64 bg-slate-950 border-r border-slate-800/80 flex-col justify-between p-6 shrink-0 no-print sticky top-0 h-screen select-none">
+      <aside className="hidden lg:flex lg:w-64 bg-slate-950 border-r border-slate-800/80 flex-col justify-between p-6 shrink-0 no-print sticky top-0 h-screen select-none">
         <div className="space-y-8">
           {/* Logo / Branding */}
           <Link to="/" className="flex items-center gap-2.5 px-2">

@@ -229,10 +229,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       {/* VISTA DE EDICIÓN EN PANTALLA (OCULTA EN IMPRESIÓN) */}
       <div>
         {/* Grilla Superior Dividida: Tabla a la Izquierda, Foto a la Derecha */}
-        <div className="grid grid-cols-1 md:grid-cols-4 print:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 print:grid-cols-4 gap-4 mb-4">
         
         {/* Lado Izquierdo (3/4 de ancho): Tabla General */}
-        <div className="md:col-span-3 print:col-span-3">
+        <div className="lg:col-span-3 print:col-span-3">
           <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 text-xs table-fixed mb-0">
         <tbody>
           {/* Fila 1: Título General */}
