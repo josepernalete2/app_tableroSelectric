@@ -7,7 +7,7 @@ export default function SyncStatusBanner() {
 
   if (!isOnline) {
     return (
-      <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-500 px-4 py-2 flex items-center justify-between w-full text-xs font-bold shadow-sm animate-pulse">
+      <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-500 px-4 py-2 flex items-center justify-between w-full text-xs font-bold shadow-sm animate-pulse no-print">
         {/* Espaciador izquierdo para centrar el bloque del mensaje */}
         <div className="w-32 hidden sm:block" />
         
@@ -31,7 +31,7 @@ export default function SyncStatusBanner() {
 
   if (isSyncing) {
     return (
-      <div className="bg-blue-500/10 border-b border-blue-500/20 text-blue-400 px-4 py-2 flex items-center justify-between w-full text-xs font-semibold shadow-sm">
+      <div className="bg-blue-500/10 border-b border-blue-500/20 text-blue-400 px-4 py-2 flex items-center justify-between w-full text-xs font-semibold shadow-sm no-print">
         {/* Espaciador izquierdo para centrar el bloque del mensaje */}
         <div className="w-32 hidden sm:block" />
         
@@ -49,7 +49,7 @@ export default function SyncStatusBanner() {
 
   if (pendingCount > 0) {
     return (
-      <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-500 px-4 py-2 flex items-center justify-between w-full text-xs font-bold shadow-sm">
+      <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-500 px-4 py-2 flex items-center justify-between w-full text-xs font-bold shadow-sm no-print">
         {/* Espaciador izquierdo para centrar el bloque del mensaje */}
         <div className="w-32 hidden sm:block" />
         
@@ -74,7 +74,7 @@ export default function SyncStatusBanner() {
 
   // Si está online y todo está sincronizado
   return (
-    <div className="bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-500 px-4 py-1.5 flex items-center justify-between w-full text-xs font-semibold shadow-sm transition-all duration-300">
+    <div className="bg-emerald-500/10 border-b border-emerald-500/20 text-emerald-500 px-4 py-1.5 flex items-center justify-between w-full text-xs font-semibold shadow-sm transition-all duration-300 no-print">
       {/* Espaciador izquierdo para centrar el bloque del mensaje */}
       <div className="w-12 hidden sm:block" />
       

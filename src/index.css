@@ -127,9 +127,14 @@ body {
 }
 
 @media print {
+  @page {
+    size: auto;
+    margin: 0mm;
+  }
   body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    margin: 3mm 8mm 3mm 8mm !important; /* Sube la plantilla más hacia arriba */
   }
   .no-print {
     display: none !important;
@@ -140,16 +145,104 @@ body {
   .screen-only {
     display: none !important;
   }
+  
+  /* Force dark text and clean background for print-card elements and children */
+  .print-card, 
+  .print-card *,
+  .print-card div,
+  .print-card span,
+  .print-card p,
+  .print-card td,
+  .print-card th,
+  .print-card h1,
+  .print-card h2,
+  .print-card h3,
+  .print-card input,
+  .print-card textarea,
+  .print-card select {
+    color: #000000 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Clear dark backgrounds to keep prints clean and white */
+  .print-card,
+  .print-card div:not(.bg-emerald-500):not(.bg-amber-500):not(.bg-red-500):not(.bg-emerald-600),
+  .print-card table,
+  .print-card tr,
+  .print-card td,
+  .print-card th,
+  .print-card input,
+  .print-card textarea {
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+
+  /* Ensure background-color adjust is exact to preserve colored badges/states */
+  .bg-emerald-500, 
+  .bg-amber-500, 
+  .bg-red-500,
+  .bg-emerald-600 {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Define solid dark gray borders for printed components */
+  .print-card,
+  .print-card *,
+  .print-card table,
+  .print-card th,
+  .print-card td,
+  .print-card tr,
+  .print-card div,
+  .print-card input,
+  .print-card textarea {
+    border-color: #475569 !important;
+  }
+
   .print-card {
     border: none !important;
-    box-shadow: none !important;
-    background: white !important;
-    color: black !important;
     padding: 0 !important;
     margin: 0 !important;
+    zoom: 67% !important; /* Scale content down to fit on a single page */
   }
-  table, th, td {
-    border-color: #000000 !important;
-    color: #000000 !important;
+
+  /* Keep the photo size matching the system / screen layout proportions */
+  .print-card img,
+  .print-card .max-h-96,
+  .print-card .h-96 {
+    max-height: 250px !important;
+    height: auto !important;
+    object-fit: cover !important;
+  }
+
+  /* Shrink spacings */
+  .print-card .space-y-4 > :not([hidden]) ~ :not([hidden]),
+  .print-card .space-y-6 > :not([hidden]) ~ :not([hidden]),
+  .print-card .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 6px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .print-card .grid {
+    gap: 8px !important;
+  }
+
+  /* Shrink padding */
+  .print-card .p-6,
+  .print-card .p-5,
+  .print-card .p-4,
+  .print-card .md\:p-8 {
+    padding: 6px !important;
+  }
+
+  /* Page break rules for compiled technical reports */
+  .page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+  .page-break-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }

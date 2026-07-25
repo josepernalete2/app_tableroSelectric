@@ -16,11 +16,8 @@ import {
   Cpu,
   ShieldAlert,
   RefreshCw,
-  Printer,
-  FileSpreadsheet
+  FileText
 } from 'lucide-react';
-import ReporteCompletoEmpresaModal from '../components/ReporteCompletoEmpresaModal';
-import { exportCompanyToExcel } from '../utils/excelExport';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -66,7 +63,6 @@ export const ProyectoView = () => {
   // Modales
   const [showElementoModal, setShowElementoModal] = useState(false);
   const [showInspeccionModal, setShowInspeccionModal] = useState(false);
-  const [showReporteModal, setShowReporteModal] = useState(false);
 
   // Selector de plantilla / tipo de elemento
   const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
@@ -348,22 +344,14 @@ export const ProyectoView = () => {
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
             </div>
 
-            {/* BOTONES DE EXPORTACIÓN Y CREACIÓN */}
+            {/* BOTONES DE CREACIÓN */}
             <div className="flex flex-wrap md:flex-nowrap items-center gap-2.5 w-full md:w-auto justify-end">
-              <button
-                onClick={() => exportCompanyToExcel(company)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2.5 rounded-lg flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs transition-all cursor-pointer shadow-md"
-                title="Exportar todos los proyectos a Excel (.xlsx)"
-              >
-                <FileSpreadsheet className="w-4 h-4" /> Excel (.xlsx)
-              </button>
 
               <button
-                onClick={() => setShowReporteModal(true)}
-                className="bg-amber-500 text-slate-950 font-black hover:bg-amber-400 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md"
-                title="Generar Informe Técnico PDF Completo de la Empresa"
+                onClick={() => navigate(`/empresa/${companyId}/proyecto/${proyectoId}/informe`)}
+                className="bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 font-bold transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs shadow-md"
               >
-                <Printer className="w-4 h-4" /> Informe PDF Completo
+                <FileText className="w-4 h-4" /> Generar Informe PDF
               </button>
 
               <button
@@ -1035,13 +1023,7 @@ export const ProyectoView = () => {
         </div>
       )}
 
-      {/* MODAL REPORTE COMPLETO PDF Y EXCEL EMPRESA */}
-      {showReporteModal && (
-        <ReporteCompletoEmpresaModal 
-          company={company} 
-          onClose={() => setShowReporteModal(false)} 
-        />
-      )}
+
 
     </div>
   );

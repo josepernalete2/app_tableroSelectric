@@ -31,6 +31,7 @@
             font-size: 10px;
             line-height: 1.4;
             -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         .report-container {
@@ -482,7 +483,7 @@
                     <!-- Polo Par (Derecha) -->
                     <td style="text-align: center;">{{ row.even.amp }}</td>
                     <td style="text-align: center;">{{ row.even.marca }}</td>
-                    <td style="text-align: right; {% if row.even.equipo == 'RESERVA' %}color: #94a3b8; font-style: italic;{% endif %}">
+                    <td style="text-align: right;" class="{% if row.even.equipo == 'RESERVA' %}reserva{% endif %}">
                         {{ row.even.equipo }}
                     </td>
                 </tr>

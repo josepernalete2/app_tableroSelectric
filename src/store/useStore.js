@@ -256,28 +256,31 @@ export const useStore = create(
 
       // LÓGICA DE CREACIÓN ADAPTATIVA DENTRO Y FUERA DE PROYECTO
       addElementoUnifilar: (arg1, arg2) => {
-        const proyectoId = typeof arg1 === 'string' ? arg1 : (arg1?.proyectoId || arg2?.proyectoId);
+        let proyectoId = typeof arg1 === 'string' ? arg1 : (arg1?.proyectoId || arg2?.proyectoId);
         const elementoData = typeof arg1 === 'string' ? arg2 : arg1;
-
-        if (!proyectoId) {
-          return { success: false, error: 'Debe seleccionar un proyecto para asociar el elemento.' };
-        }
+        const companyId = elementoData?.companyId || elementoData?.empresaId || (typeof arg1 === 'string' ? null : arg1?.companyId);
 
         const { companies } = get();
-
-        let parentCompanyId = elementoData?.companyId || elementoData?.empresaId || null;
+        let parentCompanyId = companyId;
         let targetProyecto = null;
 
-        for (const company of companies) {
-          const proj = (company.proyectos || []).find((p) => p.id === proyectoId);
-          if (proj) {
-            parentCompanyId = company.id;
-            targetProyecto = proj;
-            break;
+        if (proyectoId) {
+          for (const company of companies) {
+            const proj = (company.proyectos || []).find((p) => p.id === proyectoId);
+            if (proj) {
+              parentCompanyId = company.id;
+              targetProyecto = proj;
+              break;
+            }
+          }
+        } else {
+          // If no proyectoId is given, default to the companyId provided
+          if (!parentCompanyId && companies.length > 0) {
+            parentCompanyId = companies[0].id;
           }
         }
 
-        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
+        if (proyectoId && !targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
 
         const uuidId = elementoData.id || crypto.randomUUID();
 
@@ -291,7 +294,7 @@ export const useStore = create(
           fotoBlob: elementoData.fotoBlob || null,
           observacionesGenerales: elementoData.observacionesGenerales || '',
           datosTecnicos: elementoData.datosTecnicos || {},
-          proyectoId,
+          proyectoId: proyectoId || null,
           empresaId: parentCompanyId,
           createdAt: new Date().toISOString()
         };
@@ -299,19 +302,27 @@ export const useStore = create(
         set((state) => ({
           companies: state.companies.map((c) => {
             if (c.id === parentCompanyId) {
-              return {
-                ...c,
-                proyectos: c.proyectos.map((p) => {
-                  if (p.id === proyectoId) {
-                    const elementos = p.elementosUnifilares || p.tableros || [];
-                    return {
-                      ...p,
-                      elementosUnifilares: [...elementos, nuevoElemento]
-                    };
-                  }
-                  return p;
-                })
-              };
+              if (proyectoId) {
+                return {
+                  ...c,
+                  proyectos: c.proyectos.map((p) => {
+                    if (p.id === proyectoId) {
+                      const elementos = p.elementosUnifilares || p.tableros || [];
+                      return {
+                        ...p,
+                        elementosUnifilares: [...elementos, nuevoElemento]
+                      };
+                    }
+                    return p;
+                  })
+                };
+              } else {
+                const elementosComp = c.elementosUnifilares || [];
+                return {
+                  ...c,
+                  elementosUnifilares: [...elementosComp, nuevoElemento]
+                };
+              }
             }
             return c;
           }),
@@ -329,24 +340,38 @@ export const useStore = create(
 
       updateElementoUnifilar: (proyectoId, elementoId, updatedData) => {
         set((state) => {
-          const updatedCompanies = state.companies.map((c) => ({
-            ...c,
-            proyectos: (c.proyectos || []).map((p) => {
-              if (p.id === proyectoId) {
-                const list = p.elementosUnifilares || p.tableros || [];
-                return {
-                  ...p,
-                  elementosUnifilares: list.map((e) => {
-                    if (e.id === elementoId) {
-                      return { ...e, ...updatedData };
-                    }
-                    return e;
-                  })
-                };
-              }
-              return p;
-            })
-          }));
+          const updatedCompanies = state.companies.map((c) => {
+            if (!proyectoId) {
+              const list = c.elementosUnifilares || [];
+              return {
+                ...c,
+                elementosUnifilares: list.map((e) => {
+                  if (e.id === elementoId) {
+                    return { ...e, ...updatedData };
+                  }
+                  return e;
+                })
+              };
+            }
+            return {
+              ...c,
+              proyectos: (c.proyectos || []).map((p) => {
+                if (p.id === proyectoId) {
+                  const list = p.elementosUnifilares || p.tableros || [];
+                  return {
+                    ...p,
+                    elementosUnifilares: list.map((e) => {
+                      if (e.id === elementoId) {
+                        return { ...e, ...updatedData };
+                      }
+                      return e;
+                    })
+                  };
+                }
+                return p;
+              })
+            };
+          });
 
           const updatedElementosLocales = (state.elementosLocales || []).map((e) => {
             if (e.id === elementoId) {
@@ -372,19 +397,28 @@ export const useStore = create(
 
       deleteElementoUnifilar: (proyectoId, elementoId) => {
         set((state) => ({
-          companies: state.companies.map((c) => ({
-            ...c,
-            proyectos: (c.proyectos || []).map((p) => {
-              if (p.id === proyectoId) {
-                const list = p.elementosUnifilares || p.tableros || [];
-                return {
-                  ...p,
-                  elementosUnifilares: list.filter((e) => e.id !== elementoId)
-                };
-              }
-              return p;
-            })
-          })),
+          companies: state.companies.map((c) => {
+            if (!proyectoId) {
+              const list = c.elementosUnifilares || [];
+              return {
+                ...c,
+                elementosUnifilares: list.filter((e) => e.id !== elementoId)
+              };
+            }
+            return {
+              ...c,
+              proyectos: (c.proyectos || []).map((p) => {
+                if (p.id === proyectoId) {
+                  const list = p.elementosUnifilares || p.tableros || [];
+                  return {
+                    ...p,
+                    elementosUnifilares: list.filter((e) => e.id !== elementoId)
+                  };
+                }
+                return p;
+              })
+            };
+          }),
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== elementoId),
           syncQueue: state.syncQueue.filter((item) => item.id !== elementoId)
         }));

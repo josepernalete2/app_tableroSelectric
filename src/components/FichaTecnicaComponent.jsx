@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Zap, 
-  RefreshCw, 
   Save, 
   Edit3, 
-  Printer, 
   Camera, 
-  CheckCircle2,
-  Sliders,
-  X,
-  FileSpreadsheet
+  Printer
 } from 'lucide-react';
-import { exportElementoToExcel } from '../utils/excelExport';
 
 // Componente para renderizar Blobs de imagen de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -36,26 +29,26 @@ const SafeImage = ({ blob, src, alt, className }) => {
 };
 
 export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
-  if (!elementoData) {
-    return <div className="text-center p-8 text-slate-400 font-sans">No hay datos del elemento seleccionados.</div>;
-  }
-
   const [isEditing, setIsEditing] = useState(false);
 
   // Campos principales
-  const [nombre, setNombre] = useState(elementoData.nombre || '');
-  const [ubicacion, setUbicacion] = useState(elementoData.ubicacion || '');
-  const [alimentadoPor, setAlimentadoPor] = useState(elementoData.alimentadoPor || '');
-  const [observacionesGenerales, setObservacionesGenerales] = useState(elementoData.observacionesGenerales || '');
-  const [fotoBlob, setFotoBlob] = useState(elementoData.fotoBlob || null);
-  const [fotoSrc, setFotoSrc] = useState(elementoData.foto || null);
+  const [nombre, setNombre] = useState(elementoData?.nombre || '');
+  const [ubicacion, setUbicacion] = useState(elementoData?.ubicacion || '');
+  const [alimentadoPor, setAlimentadoPor] = useState(elementoData?.alimentadoPor || '');
+  const [observacionesGenerales, setObservacionesGenerales] = useState(elementoData?.observacionesGenerales || '');
+  const [fotoBlob, setFotoBlob] = useState(elementoData?.fotoBlob || null);
+  const [fotoSrc, setFotoSrc] = useState(elementoData?.foto || null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
   // datosTecnicos JSON
-  const [dt, setDt] = useState(elementoData.datosTecnicos || {});
+  const [dt, setDt] = useState(elementoData?.datosTecnicos || {});
 
   // Restringir a las 3 opciones permitidas: TABLERO, TRANSFER, GENERADOR
-  const tipoElemento = elementoData.tipoElemento || 'TABLERO';
+  const tipoElemento = elementoData?.tipoElemento || 'TABLERO';
+
+  if (!elementoData) {
+    return <div className="text-center p-8 text-slate-400 font-sans">No hay datos del elemento seleccionados.</div>;
+  }
 
   const handleDtChange = (key, value) => {
     setDt((prev) => ({ ...prev, [key]: value }));
@@ -100,10 +93,6 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
     setIsEditing(false);
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const renderBadge = () => {
     switch (tipoElemento) {
       case 'GENERADOR':
@@ -117,7 +106,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in font-sans pb-12 print:p-0 print:m-0">
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in font-sans pb-12 print-card print:p-0 print:m-0">
       
       {/* Botones de control superior (Ocultos en impresión) */}
       <div className="flex justify-between items-center no-print">
@@ -128,15 +117,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => exportElementoToExcel(elementoData, elementoData.nombreEmpresa || '')}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-lg flex items-center gap-2 text-xs transition-all cursor-pointer shadow-sm"
-            title="Exportar esta plantilla a Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-4 h-4" /> Exportar Excel
-          </button>
-
-          <button
-            onClick={handlePrint}
+            onClick={() => window.print()}
             className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3.5 py-2 rounded-lg flex items-center gap-2 text-xs transition-all cursor-pointer shadow-sm"
             title="Guardar como PDF o Imprimir esta Plantilla Individual"
           >
@@ -686,7 +667,13 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
           <div className="p-4 bg-slate-900/30 text-center print:bg-white">
             {fotoBlob || fotoSrc || previewUrl ? (
               <div className="max-w-md mx-auto rounded-xl overflow-hidden border border-slate-700 shadow-lg print:border-black">
-                <SafeImage blob={fotoBlob} src={previewUrl || fotoSrc} alt="Transferencia Automática" className="w-full h-auto max-h-96 object-cover" />
+                <SafeImage 
+                  blob={fotoBlob} 
+                  src={previewUrl || fotoSrc} 
+                  alt="Transferencia Automática" 
+                  className="w-full object-cover" 
+                  style={{ maxHeight: `${dt.fotoScale || 280}px` }}
+                />
               </div>
             ) : (
               <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
@@ -698,10 +685,81 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
                 </label>
               </div>
             )}
+
+            {/* Slider de ajuste de tamaño (solo en pantalla si hay imagen) */}
+            {(fotoBlob || fotoSrc || previewUrl) && (
+              <div className="no-print mt-3 max-w-xs mx-auto space-y-1.5">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
+                  <span>Ajustar tamaño en PDF</span>
+                  <span className="text-amber-500 font-mono">{dt.fotoScale || 280}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="120"
+                  max="380"
+                  value={dt.fotoScale || 280}
+                  onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value))}
+                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                />
+              </div>
+            )}
           </div>
 
         </div>
       )}
+
+      {/* Cierre / Firmas */}
+      <div className="mt-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-slate-50 print:border-gray-200 print:mt-3">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-900 pb-2.5 print:text-slate-700 print:border-gray-200">
+          Firma y Cierre de Inspección
+        </h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Firma Inspector */}
+          <div className="flex flex-col gap-1.5 items-center text-center">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Firma del Inspector</span>
+            {isEditing ? (
+              <>
+                <input
+                  type="text"
+                  value={dt.firmaInspector || ''}
+                  onChange={(e) => handleDtChange('firmaInspector', e.target.value)}
+                  className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
+                  placeholder="Nombre del Inspector"
+                />
+                <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
+                  {dt.firmaInspector || '___________________________'}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-slate-100 font-bold print:text-slate-900">{dt.firmaInspector || '—'}</span>
+            )}
+            <div className="hidden print:block w-48 border-b border-gray-300 mt-6 h-1"></div>
+          </div>
+
+          {/* Firma / Sello de la Empresa */}
+          <div className="flex flex-col gap-1.5 items-center text-center">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Firma / Sello de la Empresa</span>
+            {isEditing ? (
+              <>
+                <input
+                  type="text"
+                  value={dt.firmaSupervisor || ''}
+                  onChange={(e) => handleDtChange('firmaSupervisor', e.target.value)}
+                  className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
+                  placeholder="Nombre / Sello de la Empresa"
+                />
+                <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
+                  {dt.firmaSupervisor || '___________________________'}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-slate-100 font-bold print:text-slate-900">{dt.firmaSupervisor || '—'}</span>
+            )}
+            <div className="hidden print:block w-48 border-b border-gray-300 mt-6 h-1"></div>
+          </div>
+        </div>
+      </div>
 
     </div>
   );

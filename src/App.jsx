@@ -10,6 +10,7 @@ import ProyectoView from './views/ProyectoView';
 import TableroComponent from './components/TableroComponent';
 import SubestacionComponent from './components/SubestacionComponent';
 import FichaTecnicaComponent from './components/FichaTecnicaComponent';
+import InformeCompiladoView from './views/InformeCompiladoView';
 import { ArrowLeft, User, LogOut, Printer } from 'lucide-react';
 
 // Wrapper para Rutas Protegidas
@@ -31,26 +32,32 @@ const TableroWrapper = () => {
 
   const company = companies.find((c) => c.id === companyId);
 
-  // Buscar en elementos unifilares o subestaciones dentro de los proyectos
+  // Buscar en elementos unifilares o subestaciones (primero a nivel de empresa, luego en proyectos)
   let element = null;
   let subestacion = null;
   let targetProyecto = null;
 
-  if (company?.proyectos) {
-    for (const p of company.proyectos) {
-      const elList = p.elementosUnifilares || p.tableros || [];
-      const el = elList.find((e) => e.id === tableroId);
-      if (el) {
-        element = el;
-        targetProyecto = p;
-        break;
-      }
-      const subList = p.inspeccionesSubestacion || p.subestaciones || [];
-      const s = subList.find((sub) => sub.id === tableroId);
-      if (s) {
-        subestacion = s;
-        targetProyecto = p;
-        break;
+  if (company) {
+    const compElList = company.elementosUnifilares || [];
+    const compEl = compElList.find((e) => e.id === tableroId);
+    if (compEl) {
+      element = compEl;
+    } else if (company.proyectos) {
+      for (const p of company.proyectos) {
+        const elList = p.elementosUnifilares || p.tableros || [];
+        const el = elList.find((e) => e.id === tableroId);
+        if (el) {
+          element = el;
+          targetProyecto = p;
+          break;
+        }
+        const subList = p.inspeccionesSubestacion || p.subestaciones || [];
+        const s = subList.find((sub) => sub.id === tableroId);
+        if (s) {
+          subestacion = s;
+          targetProyecto = p;
+          break;
+        }
       }
     }
   }
@@ -161,7 +168,7 @@ const TableroWrapper = () => {
             <button
               onClick={() => window.print()}
               className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-black shadow-sm"
-              title="Guardar como PDF o Imprimir esta Plantilla"
+              title="Guardar como PDF o Imprimir esta Ficha Técnica"
             >
               <Printer className="w-4 h-4" />
               <span className="hidden sm:inline">Guardar PDF</span>
@@ -184,7 +191,7 @@ const TableroWrapper = () => {
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
           <FichaTecnicaComponent
             elementoData={element}
-            onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto.id, tableroId, updatedData)}
+            onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto?.id || null, tableroId, updatedData)}
           />
         </main>
       </div>
@@ -210,7 +217,7 @@ const TableroWrapper = () => {
       nombreEmpresa, ...datosTecnicos 
     } = updatedData;
 
-    updateElementoUnifilar(targetProyecto.id, tableroId, {
+    updateElementoUnifilar(targetProyecto?.id || null, tableroId, {
       nombre,
       ubicacion,
       alimentadoPor,
@@ -248,7 +255,7 @@ const TableroWrapper = () => {
           <button
             onClick={() => window.print()}
             className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-black shadow-sm"
-            title="Guardar como PDF o Imprimir este Tablero"
+            title="Guardar como PDF o Imprimir esta Plantilla"
           >
             <Printer className="w-4 h-4" />
             <span className="hidden sm:inline">Guardar PDF</span>
@@ -307,6 +314,14 @@ export function App() {
           element={
             <ProtectedRoute>
               <ProyectoView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/empresa/:companyId/proyecto/:proyectoId/informe"
+          element={
+            <ProtectedRoute>
+              <InformeCompiladoView />
             </ProtectedRoute>
           }
         />
