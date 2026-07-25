@@ -32,7 +32,7 @@ const COND_OPTIONS = ['N/A', '14', '12', '10', '8', '6', '4', '2', '1/0', '2/0',
 const MARCA_OPTIONS = ['GE', 'EATON', 'ABB', 'INESLA', 'MG', 'SQUARE D', 'SIEMENS', 'CUTLER-HAMMER', 'N/A'];
 const TIPO_OPTIONS = ['TQ', 'TQD', 'M35', 'A2C', 'NS', 'TED32', 'M51', 'TM250', 'QO', 'THQL', 'N/A'];
 
-export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
+export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
   const [editingCircuit, setEditingCircuit] = useState(null);
   const [elementosPorCrear, setElementosPorCrear] = useState([]);
 
@@ -86,6 +86,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
 
   // Update specific fields of the main tablero structure
   const updateField = (path, value) => {
+    if (readOnly) return;
     const newData = { ...tableroData };
     
     if (path.includes('.')) {
@@ -100,6 +101,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
 
   // Update a single circuit's properties
   const updateCircuit = (circuitId, field, value) => {
+    if (readOnly) return;
     const newData = { ...tableroData };
     newData.circuits = normalizedCircuits.map(c => {
       if (c.id === circuitId) {
@@ -118,6 +120,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
   };
 
   const saveCircuitFromModal = (circuitId, updatedFields) => {
+    if (readOnly) return;
     const newData = { ...tableroData };
     newData.circuits = normalizedCircuits.map(c => {
       if (c.id === circuitId) {
@@ -132,29 +135,55 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
   };
 
   // Group a pole with the next pole on the same side
-  const groupWithNext = (circuitId, side) => {
+  const groupWithNext = (circuitId) => {
+    if (readOnly) return;
     const circuitIndex = normalizedCircuits.findIndex(c => c.id === circuitId);
     if (circuitIndex === -1) return;
 
     const circuit = normalizedCircuits[circuitIndex];
-    const maxPole = Math.max(...circuit.poles);
-    const nextPole = maxPole + 2;
+    const side = circuit.side;
+    
+    // Find next available single-pole circuit on the same side
+    const nextCircuitIndex = normalizedCircuits.findIndex((c, idx) => 
+      idx > circuitIndex && 
+      c.side === side && 
+      c.poles.length === 1 &&
+      !c.id.startsWith('auto_')
+    );
 
-    if (nextPole > maxPoles) return; // Exceeds limit
+    const nextCircuit = nextCircuitIndex !== -1 ? normalizedCircuits[nextCircuitIndex] : null;
 
-    // Find the circuit that contains the next pole
-    const nextCircuit = normalizedCircuits.find(c => c.poles.includes(nextPole));
-    if (!nextCircuit || nextCircuit.id === circuit.id) return;
+    if (!nextCircuit) {
+      // Find the auto fill next pole on the same side
+      const currentMaxPole = Math.max(...circuit.poles);
+      const targetPole = currentMaxPole + 2; // next on same side (odd/even)
+      if (targetPole > maxPoles) return;
+
+      const newData = { ...tableroData };
+      newData.circuits = normalizedCircuits
+        .map(c => {
+          if (c.id === circuitId) {
+            return {
+              ...c,
+              poles: [...c.poles, targetPole].sort((a, b) => a - b)
+            };
+          }
+          return c;
+        })
+        .filter(c => !c.poles.includes(targetPole) || c.id === circuitId);
+
+      onUpdateTablero(newData);
+      return;
+    }
 
     const newData = { ...tableroData };
-    
-    // Combine poles and remove the next circuit
     newData.circuits = normalizedCircuits
       .map(c => {
         if (c.id === circuitId) {
-          // Merge poles lists and keep them sorted
-          const mergedPoles = Array.from(new Set([...c.poles, ...nextCircuit.poles])).sort((a, b) => a - b);
-          return { ...c, poles: mergedPoles };
+          return {
+            ...c,
+            poles: [...c.poles, ...nextCircuit.poles].sort((a, b) => a - b)
+          };
         }
         return c;
       })
@@ -165,6 +194,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
 
   // Split a multi-pole circuit into individual single-pole circuits
   const splitCircuit = (circuitId) => {
+    if (readOnly) return;
     const circuit = normalizedCircuits.find(c => c.id === circuitId);
     if (!circuit || circuit.poles.length <= 1) return;
 
@@ -194,7 +224,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero }) => {
   };
 
   return (
-    <div className="w-full text-slate-900 dark:text-slate-100 print-card font-sans select-text">
+    <div className={`w-full text-slate-900 dark:text-slate-100 print-card font-sans select-text ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
       
       {/* VISTA DE EDICIÓN EN PANTALLA (OCULTA EN IMPRESIÓN) */}
       <div>

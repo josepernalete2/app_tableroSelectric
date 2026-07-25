@@ -1,6 +1,6 @@
 import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer } from 'lucide-react';
 
-export default function SubestacionComponent({ subestacionData, onUpdate }) {
+export default function SubestacionComponent({ subestacionData, onUpdate, readOnly }) {
   if (!subestacionData) return <div className="text-center p-8 text-slate-400">No hay datos de subestación seleccionados.</div>;
 
   const {
@@ -21,6 +21,7 @@ export default function SubestacionComponent({ subestacionData, onUpdate }) {
   } = subestacionData;
 
   const updateField = (field, value) => {
+    if (readOnly) return;
     onUpdate({
       ...subestacionData,
       [field]: value
@@ -28,6 +29,7 @@ export default function SubestacionComponent({ subestacionData, onUpdate }) {
   };
 
   const updateSectionItem = (section, elementKey, type, value) => {
+    if (readOnly) return;
     const sectionData = subestacionData[section] || {};
     const itemData = sectionData[elementKey] || { estado: 'B', observaciones: '' };
     
@@ -115,7 +117,7 @@ export default function SubestacionComponent({ subestacionData, onUpdate }) {
   ];
 
   return (
-    <div className="w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl mx-auto space-y-8 print-card print:bg-white print:text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0">
+    <div className={`w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl mx-auto space-y-8 print-card print:bg-white print:text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
       {/* Encabezado General */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-slate-800 print:border-gray-200">
         <div>

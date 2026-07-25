@@ -28,7 +28,7 @@ const SafeImage = ({ blob, src, alt, className }) => {
   return <img src={finalSrc} alt={alt} className={className} />;
 };
 
-export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
+export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly }) {
   const [isEditing, setIsEditing] = useState(false);
 
   // Campos principales
@@ -51,10 +51,12 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
   }
 
   const handleDtChange = (key, value) => {
+    if (readOnly) return;
     setDt((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleNestedDtChange = (parentKey, key, value) => {
+    if (readOnly) return;
     setDt((prev) => ({
       ...prev,
       [parentKey]: {
@@ -65,6 +67,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
   };
 
   const handleImageChange = (e) => {
+    if (readOnly) return;
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
@@ -78,6 +81,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
 
   const handleSave = (e) => {
     e.preventDefault();
+    if (readOnly) return;
     if (onUpdate) {
       onUpdate({
         ...elementoData,
@@ -106,7 +110,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in font-sans pb-12 print-card print:p-0 print:m-0">
+    <div className={`max-w-5xl mx-auto space-y-6 animate-fade-in font-sans pb-12 print-card print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
       
       {/* Botones de control superior (Ocultos en impresión) */}
       <div className="flex justify-between items-center no-print">
@@ -124,20 +128,24 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate }) {
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
 
-          {isEditing ? (
-            <button
-              onClick={handleSave}
-              className="bg-slate-100 text-slate-950 font-black hover:bg-white active:scale-98 transition-all px-4 py-2 rounded-lg flex items-center gap-2 text-xs cursor-pointer shadow-md"
-            >
-              <Save className="w-4 h-4 text-emerald-600" /> Guardar Cambios
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 rounded-lg flex items-center gap-2 text-xs transition-all cursor-pointer"
-            >
-              <Edit3 className="w-4 h-4 text-amber-500" /> Editar Plantilla
-            </button>
+          {!readOnly && (
+            <>
+              {isEditing ? (
+                <button
+                  onClick={handleSave}
+                  className="bg-slate-100 text-slate-950 font-black hover:bg-white active:scale-98 transition-all px-4 py-2 rounded-lg flex items-center gap-2 text-xs cursor-pointer shadow-md"
+                >
+                  <Save className="w-4 h-4 text-emerald-600" /> Guardar Cambios
+                </button>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold px-4 py-2 rounded-lg flex items-center gap-2 text-xs transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-4 h-4 text-amber-500" /> Editar Plantilla
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

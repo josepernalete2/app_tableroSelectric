@@ -46,6 +46,7 @@ export const ProyectoView = () => {
   const navigate = useNavigate();
   
   const { 
+    user,
     companies, 
     addElementoUnifilar, 
     deleteElementoUnifilar,
@@ -354,22 +355,26 @@ export const ProyectoView = () => {
                 <FileText className="w-4 h-4" /> Generar Informe PDF
               </button>
 
-              <button
-                onClick={() => {
-                  setTipoElemento('TABLERO');
-                  setShowElementoModal(true);
-                }}
-                className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
-              >
-                <Zap className="w-4 h-4 text-amber-500" /> + Crear Elemento
-              </button>
+              {user?.role !== 'CLIENT' && (
+                <>
+                  <button
+                    onClick={() => {
+                      setTipoElemento('TABLERO');
+                      setShowElementoModal(true);
+                    }}
+                    className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
+                  >
+                    <Zap className="w-4 h-4 text-amber-500" /> + Crear Elemento
+                  </button>
 
-              <button
-                onClick={() => setShowInspeccionModal(true)}
-                className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
-              >
-                <Building className="w-4 h-4" /> + Crear Inspección
-              </button>
+                  <button
+                    onClick={() => setShowInspeccionModal(true)}
+                    className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
+                  >
+                    <Building className="w-4 h-4" /> + Crear Inspección
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -400,18 +405,20 @@ export const ProyectoView = () => {
                         </span>
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
-                            deleteSubestacion(proyectoId, item.id);
-                          }
-                        }}
-                        className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-950/80 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                        title="Eliminar Inspección"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {user?.role !== 'CLIENT' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
+                              deleteSubestacion(proyectoId, item.id);
+                            }
+                          }}
+                          className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          title="Eliminar Inspección"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="p-5 flex-1 flex flex-col justify-between">
@@ -522,18 +529,20 @@ export const ProyectoView = () => {
                           )}
                         </div>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
-                              deleteElementoUnifilar(proyectoId, item.id);
-                            }
-                          }}
-                          className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-950/80 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                          title="Eliminar Elemento"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {user?.role !== 'CLIENT' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
+                                deleteElementoUnifilar(proyectoId, item.id);
+                              }
+                            }}
+                            className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-950/80 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                            title="Eliminar Elemento"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Contenido de Tarjeta */}

@@ -47,6 +47,7 @@ export const EmpresaView = () => {
   const navigate = useNavigate();
   
   const { 
+    user,
     companies, 
     addProyecto, 
     addElementoUnifilar,
@@ -297,21 +298,25 @@ export const EmpresaView = () => {
 
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
 
-            {/* Botón Principal: + Crear Elemento fuera de proyectos */}
-            <button
-              onClick={handleOpenTableroModal}
-              className="bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs shadow-md"
-            >
-              <Zap className="w-4 h-4 text-slate-950 fill-slate-950" /> + Crear Elemento
-            </button>
+          {user?.role !== 'CLIENT' && (
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
+              {/* Botón Principal: + Crear Elemento fuera de proyectos */}
+              <button
+                onClick={handleOpenTableroModal}
+                className="bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs shadow-md"
+              >
+                <Zap className="w-4 h-4 text-slate-950 fill-slate-950" /> + Crear Elemento
+              </button>
 
-            {/* Botón Secundario: + Crear Proyecto */}
-            <button
-              onClick={() => setShowModal(true)}
-              className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs"
-            >
-              <Plus className="w-4 h-4" /> + Crear Proyecto
-            </button>
+              {/* Botón Secundario: + Crear Proyecto */}
+              <button
+                onClick={() => setShowModal(true)}
+                className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs"
+              >
+                <Plus className="w-4 h-4" /> + Crear Proyecto
+              </button>
+            </div>
+          )}
           </div>
         </div>
 
@@ -458,18 +463,20 @@ export const EmpresaView = () => {
                         )}
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`)) {
-                            deleteElementoUnifilar(null, item.id);
-                          }
-                        }}
-                        className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-950/80 text-slate-455 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                        title="Eliminar Equipo"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {user?.role !== 'CLIENT' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`)) {
+                              deleteElementoUnifilar(null, item.id);
+                            }
+                          }}
+                          className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-950/80 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          title="Eliminar Equipo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="p-5 flex-1 flex flex-col justify-between">

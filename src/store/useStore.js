@@ -168,22 +168,115 @@ export const useStore = create(
   persist(
     (set, get) => ({
       user: null,
+      usersList: [
+        { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
+        { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
+      ],
       companies: initialCompanies,
       proyectosLocales: [],
       elementosLocales: [],
       subestacionesLocales: [],
       syncQueue: [],
 
-      login: (email, password) => {
-        if (email && password) {
-          set({ user: { email } });
-          return true;
+      login: (username, password) => {
+        const list = get().usersList || [];
+        const found = list.find((u) => {
+          const userKey = (u.username || u.email || '').toLowerCase().trim();
+          const inputKey = username.toLowerCase().trim();
+          return userKey === inputKey && u.password === password;
+        });
+        if (found) {
+          set({ user: found });
+          return { success: true, user: found };
         }
-        return false;
+        return { success: false, error: 'Usuario o contraseña incorrectos.' };
       },
 
       logout: () => {
         set({ user: null });
+      },
+
+      addUser: (userObj) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { success: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+
+        const usernameLower = userObj.username.toLowerCase().trim();
+        const exists = (get().usersList || []).some(
+          (u) => (u.username || u.email || '').toLowerCase().trim() === usernameLower
+        );
+        if (exists) {
+          return { success: false, error: 'Ya existe un usuario con este nombre de usuario.' };
+        }
+
+        const newUser = {
+          id: `user-${Date.now()}`,
+          username: userObj.username.trim(),
+          password: userObj.password,
+          role: userObj.role || 'WORKER',
+          companyId: userObj.role === 'CLIENT' ? userObj.companyId : null
+        };
+
+        set((state) => ({
+          usersList: [...(state.usersList || []), newUser]
+        }));
+        return { success: true, user: newUser };
+      },
+
+      updateUser: (userId, updatedData) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { success: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+
+        const usernameLower = updatedData.username?.toLowerCase().trim();
+        const existsOther = (get().usersList || []).some(
+          (u) => u.id !== userId && (u.username || u.email || '').toLowerCase().trim() === usernameLower
+        );
+        if (existsOther) {
+          return { success: false, error: 'Ya existe otro usuario con este nombre de usuario.' };
+        }
+
+        const mergedData = {
+          ...updatedData,
+          companyId: updatedData.role === 'CLIENT' ? updatedData.companyId : null
+        };
+
+        set((state) => {
+          const updatedList = (state.usersList || []).map((u) => {
+            if (u.id === userId) {
+              const updatedUser = { ...u, ...mergedData };
+              return updatedUser;
+            }
+            return u;
+          });
+
+          const currentLoggedUser = updatedList.find((u) => u.id === state.user?.id);
+
+          return {
+            usersList: updatedList,
+            user: currentLoggedUser || state.user
+          };
+        });
+
+        return { success: true };
+      },
+
+      deleteUser: (userId) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { success: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+
+        if (currentUser.id === userId) {
+          return { success: false, error: 'No puedes eliminar tu propia cuenta de usuario activo.' };
+        }
+
+        set((state) => ({
+          usersList: (state.usersList || []).filter((u) => u.id !== userId)
+        }));
+        return { success: true };
       },
 
       addCompany: (nombre) => {
@@ -578,6 +671,26 @@ export const useStore = create(
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== id),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id)
         }));
+      },
+      messages: [],
+      sendMessage: (receiverId, text) => {
+        const { user } = get();
+        if (!user) return { success: false, error: 'No ha iniciado sesión.' };
+        
+        const newMessage = {
+          id: `msg-${Date.now()}`,
+          senderId: user.id,
+          senderUsername: user.username || user.email || 'Anónimo',
+          receiverId,
+          text,
+          createdAt: new Date().toISOString()
+        };
+        
+        set((state) => ({
+          messages: [...(state.messages || []), newMessage]
+        }));
+        
+        return { success: true, message: newMessage };
       }
     }),
     {
@@ -585,6 +698,8 @@ export const useStore = create(
       storage: localForageStorage,
       partialize: (state) => ({
         user: state.user,
+        usersList: state.usersList || [],
+        messages: state.messages || [],
         companies: state.companies,
         proyectosLocales: state.proyectosLocales || [],
         elementosLocales: state.elementosLocales || [],

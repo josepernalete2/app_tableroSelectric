@@ -4,7 +4,7 @@ import useStore from '../store/useStore';
 import { Zap, ShieldCheck } from 'lucide-react';
 
 export const LoginView = () => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const login = useStore((state) => state.login);
@@ -12,16 +12,20 @@ export const LoginView = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!username || !password) {
       setError('Por favor, ingresa tus credenciales.');
       return;
     }
-    // Validación básica simple para tablet offline/local
-    if (email.includes('@') && password.length >= 4) {
-      login(email, password);
-      navigate('/');
+    
+    if (username.trim().length >= 3 && password.length >= 4) {
+      const result = login(username.trim(), password);
+      if (result.success) {
+        navigate('/');
+      } else {
+        setError(result.error);
+      }
     } else {
-      setError('El correo debe ser válido y la contraseña tener al menos 4 caracteres.');
+      setError('El usuario debe tener al menos 3 caracteres y la contraseña al menos 4 caracteres.');
     }
   };
 
@@ -46,22 +50,22 @@ export const LoginView = () => {
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="p-3 bg-red-950/40 border border-red-800 rounded-xl text-xs text-red-400 text-center font-medium">
+            <div className="p-3 bg-red-955/20 border border-red-800 rounded-xl text-xs text-red-400 text-center font-medium">
               ⚠️ {error}
             </div>
           )}
 
           <div className="space-y-4">
-            {/* Email */}
+            {/* Username */}
             <div>
               <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Correo Electrónico
+                Nombre de Usuario
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="inspector@empresa.com"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="ej. admin1, inspector1"
                 className="w-full px-4 py-3 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm focus:outline-none text-slate-100 placeholder-slate-500 h-12"
               />
             </div>

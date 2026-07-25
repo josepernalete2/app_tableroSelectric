@@ -11,6 +11,7 @@ import TableroComponent from './components/TableroComponent';
 import SubestacionComponent from './components/SubestacionComponent';
 import FichaTecnicaComponent from './components/FichaTecnicaComponent';
 import InformeCompiladoView from './views/InformeCompiladoView';
+import SidebarLayout from './components/SidebarLayout';
 import { ArrowLeft, User, LogOut, Printer } from 'lucide-react';
 
 // Wrapper para Rutas Protegidas
@@ -134,6 +135,7 @@ const TableroWrapper = () => {
           <SubestacionComponent
             subestacionData={subestacion}
             onUpdate={(updatedData) => updateSubestacion(targetProyecto.id, tableroId, updatedData)}
+            readOnly={user?.role === 'CLIENT'}
           />
         </main>
       </div>
@@ -192,6 +194,7 @@ const TableroWrapper = () => {
           <FichaTecnicaComponent
             elementoData={element}
             onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto?.id || null, tableroId, updatedData)}
+            readOnly={user?.role === 'CLIENT'}
           />
         </main>
       </div>
@@ -279,6 +282,7 @@ const TableroWrapper = () => {
         <TableroComponent
           tableroData={enrichedTablero}
           onUpdateTablero={handleUpdateTablero}
+          readOnly={user?.role === 'CLIENT'}
         />
       </main>
     </div>
@@ -293,46 +297,16 @@ export function App() {
       <SyncStatusBanner />
       <Routes>
         <Route path="/login" element={<LoginView />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <DashboardView />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/empresa/:companyId"
-          element={
-            <ProtectedRoute>
-              <EmpresaView />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/empresa/:companyId/proyecto/:proyectoId"
-          element={
-            <ProtectedRoute>
-              <ProyectoView />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/empresa/:companyId/proyecto/:proyectoId/informe"
-          element={
-            <ProtectedRoute>
-              <InformeCompiladoView />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/empresa/:companyId/tablero/:tableroId"
-          element={
-            <ProtectedRoute>
-              <TableroWrapper />
-            </ProtectedRoute>
-          }
-        />
+        
+        {/* Rutas protegidas bajo el Layout con Barra Lateral */}
+        <Route element={<ProtectedRoute><SidebarLayout /></ProtectedRoute>}>
+          <Route path="/" element={<DashboardView />} />
+          <Route path="/empresa/:companyId" element={<EmpresaView />} />
+          <Route path="/empresa/:companyId/proyecto/:proyectoId" element={<ProyectoView />} />
+          <Route path="/empresa/:companyId/proyecto/:proyectoId/informe" element={<InformeCompiladoView />} />
+          <Route path="/empresa/:companyId/tablero/:tableroId" element={<TableroWrapper />} />
+        </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
