@@ -30,6 +30,18 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', uptime: process.uptime(), date: new Date() });
 });
 
+// Servir archivos estáticos del frontend compilado (dist/)
+const distPath = path.join(process.cwd(), 'dist');
+app.use(express.static(distPath));
+
+// Cualquier otra ruta no-API debe retornar index.html del frontend
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
+    return next();
+  }
+  res.sendFile(path.join(distPath, 'index.html'));
+});
+
 // Middleware Global de Manejo de Errores en Express
 app.use((err, req, res, next) => {
   console.error("❌ ERROR EN EL SERVIDOR:", err.stack);
