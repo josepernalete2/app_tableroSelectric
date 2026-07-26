@@ -18,7 +18,9 @@ import {
   Sparkles,
   ShieldCheck,
   Users,
-  MessageSquare
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export const SidebarLayout = () => {
@@ -69,6 +71,7 @@ export const SidebarLayout = () => {
   // Estados de Chat
   const [activeContactId, setActiveContactId] = useState(null);
   const [chatMessageText, setChatMessageText] = useState('');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -416,24 +419,42 @@ export const SidebarLayout = () => {
       )}
 
       {/* 3. SIDEBAR ESCRITORIO FIJO (no-print) */}
-      <aside className="hidden lg:flex lg:w-64 bg-slate-950 border-r border-slate-800/80 flex-col justify-between p-6 shrink-0 no-print sticky top-0 h-screen select-none">
+      <aside className={`relative hidden lg:flex bg-slate-950 border-r border-slate-800/80 flex-col justify-between shrink-0 no-print sticky top-0 h-screen select-none transition-all duration-300 ${
+        isSidebarCollapsed ? 'w-20 p-4' : 'w-64 p-6'
+      }`}>
+        
+        {/* Botón de Colapso Flotante en el Borde */}
+        <button
+          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          className="absolute top-6 -right-3 z-35 w-6 h-6 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 flex items-center justify-center cursor-pointer shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+          title={isSidebarCollapsed ? "Expandir Menú" : "Colapsar Menú"}
+        >
+          {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+        </button>
+
         <div className="space-y-8">
           {/* Logo / Branding */}
-          <Link to="/" className="flex items-center gap-2.5 px-2">
-            <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl text-slate-950 shadow-md transform hover:rotate-12 transition-transform">
-              <Zap className="w-5 h-5 fill-slate-950 text-slate-950" />
-            </div>
-            <div>
-              <span className="font-black text-base tracking-widest text-slate-100 font-mono block leading-none">SELECTRIC</span>
-              <span className="text-[8px] text-amber-500 tracking-widest font-black uppercase">Inspección de Red</span>
-            </div>
-          </Link>
+          <div className="flex items-center justify-between gap-2 px-1">
+            <Link to="/" className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl text-slate-950 shadow-md transform hover:rotate-12 transition-transform shrink-0">
+                <Zap className="w-5 h-5 fill-slate-950 text-slate-950" />
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="animate-in fade-in duration-200">
+                  <span className="font-black text-sm tracking-widest text-slate-100 font-mono block leading-none">SELECTRIC</span>
+                  <span className="text-[8px] text-amber-500 tracking-widest font-black uppercase">Inspección de Red</span>
+                </div>
+              )}
+            </Link>
+          </div>
 
           {/* Links de Navegación */}
           <div className="space-y-1.5">
-            <span className="block px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 pb-1">
-              Menú Principal
-            </span>
+            {!isSidebarCollapsed && (
+              <span className="block px-2 text-[9px] font-black uppercase tracking-widest text-slate-500 pb-1 animate-in fade-in duration-200">
+                Menú Principal
+              </span>
+            )}
             {navLinks.map((link) => {
               const Icon = link.icon;
               const isActive = link.path ? location.pathname === link.path : false;
@@ -441,23 +462,29 @@ export const SidebarLayout = () => {
                 <Link
                   key={link.name}
                   to={link.path}
-                  className={`flex items-center gap-3 px-4.5 py-3 rounded-xl text-xs font-bold transition-all border ${
+                  title={isSidebarCollapsed ? link.name : undefined}
+                  className={`flex items-center rounded-xl text-xs font-bold transition-all border ${
+                    isSidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4.5 py-3'
+                  }  ${
                     isActive
                       ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
                       : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{link.name}</span>
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="animate-in fade-in duration-200">{link.name}</span>}
                 </Link>
               ) : (
                 <button
                   key={link.name}
                   onClick={link.onClick}
-                  className="w-full flex items-center gap-3 px-4.5 py-3 rounded-xl text-xs font-bold transition-all border bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900 text-left cursor-pointer"
+                  title={isSidebarCollapsed ? link.name : undefined}
+                  className={`w-full flex items-center rounded-xl text-xs font-bold transition-all border bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900 text-left cursor-pointer ${
+                    isSidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4.5 py-3'
+                  }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{link.name}</span>
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="animate-in fade-in duration-200">{link.name}</span>}
                 </button>
               );
             })}
@@ -466,23 +493,31 @@ export const SidebarLayout = () => {
 
         {/* Perfil & Acciones */}
         <div className="space-y-4 border-t border-slate-900 pt-6">
-          <div className="flex items-center gap-3 px-3 py-2.5 bg-slate-900/60 border border-slate-850 rounded-xl">
+          <div className={`flex items-center bg-slate-900/60 border border-slate-850 rounded-xl ${
+            isSidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
+          }`}>
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
               <User className="w-4.5 h-4.5 text-amber-500" />
             </div>
-            <div className="truncate min-w-0">
-              <p className="text-[9px] text-slate-500 uppercase font-mono font-black">
-                {user?.role === 'ADMIN' ? '👑 Administrador' : '👷 Inspector'}
-              </p>
-              <p className="text-xs font-bold text-slate-250 truncate">{user?.username || user?.email}</p>
-            </div>
+            {!isSidebarCollapsed && (
+              <div className="truncate min-w-0 animate-in fade-in duration-200">
+                <p className="text-[9px] text-slate-500 uppercase font-mono font-black">
+                  {user?.role === 'ADMIN' ? '👑 Administrador' : '👷 Inspector'}
+                </p>
+                <p className="text-xs font-bold text-slate-250 truncate">{user?.username || user?.email}</p>
+              </div>
+            )}
           </div>
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-red-955/20 hover:text-red-400 border border-slate-800 hover:border-red-900/40 rounded-xl transition-all cursor-pointer text-xs font-bold text-slate-400"
+            title={isSidebarCollapsed ? "Cerrar Sesión" : undefined}
+            className={`w-full flex items-center justify-center bg-slate-900 hover:bg-red-955/20 hover:text-red-400 border border-slate-800 hover:border-red-900/40 rounded-xl transition-all cursor-pointer text-xs font-bold text-slate-400 ${
+              isSidebarCollapsed ? 'p-3' : 'gap-2 py-3'
+            }`}
           >
-            <LogOut className="w-4 h-4" /> Cerrar Sesión
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!isSidebarCollapsed && <span className="animate-in fade-in duration-200">Cerrar Sesión</span>}
           </button>
         </div>
       </aside>

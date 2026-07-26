@@ -179,12 +179,36 @@ export const useStore = create(
       syncQueue: [],
 
       login: (username, password) => {
-        const list = get().usersList || [];
+        let list = get().usersList || [];
+        
+        // Garantizar que los administradores por defecto existan siempre en la lista
+        const hasAdmin1 = list.some((u) => {
+          const name = (u.username || u.email || '').toLowerCase().trim();
+          return name === 'admin1' || name === 'admin1@selectric.com';
+        });
+        
+        if (!hasAdmin1) {
+          const defaultAdmins = [
+            { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
+            { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
+          ];
+          list = [...defaultAdmins, ...list.filter(u => u.id !== 'u-1' && u.id !== 'u-2')];
+          set({ usersList: list });
+        }
+
         const found = list.find((u) => {
           const userKey = (u.username || u.email || '').toLowerCase().trim();
           const inputKey = username.toLowerCase().trim();
-          return userKey === inputKey && u.password === password;
+          
+          const isUserMatch = userKey === inputKey ||
+                              (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
+                              (userKey === 'admin1@selectric.com' && inputKey === 'admin1') ||
+                              (userKey === 'admin2' && inputKey === 'admin2@selectric.com') ||
+                              (userKey === 'admin2@selectric.com' && inputKey === 'admin2');
+                              
+          return isUserMatch && u.password === password;
         });
+
         if (found) {
           set({ user: found });
           return { success: true, user: found };
