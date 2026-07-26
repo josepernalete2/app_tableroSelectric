@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 
 export const SidebarLayout = () => {
+  const isChatEnabled = false;
   const { 
     user, 
     logout, 
@@ -82,7 +83,7 @@ export const SidebarLayout = () => {
 
   // Efectos de inicialización de sockets
   useEffect(() => {
-    if (user && navigator.onLine) {
+    if (isChatEnabled && user && navigator.onLine) {
       fetchUsersList();
       fetchMessagesList(user.id);
 
@@ -358,7 +359,7 @@ export const SidebarLayout = () => {
     );
   };
 
-  const totalUnreadCount = (messages || []).filter((m) => m.receiverId === user?.id && !m.read).length;
+  const totalUnreadCount = isChatEnabled ? (messages || []).filter((m) => m.receiverId === user?.id && !m.read).length : 0;
 
   const navLinks = [
     { name: 'Empresas', path: '/', icon: Briefcase },
@@ -1037,170 +1038,213 @@ export const SidebarLayout = () => {
                   setShowUsersModal(false);
                 }}
                 className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 4: CHAT DE SOPORTE E INSPECCIÓN */}
+                    {/* MODAL 4: CHAT DE SOPORTE E INSPECCIÓN */}
       {showChatModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowChatModal(false)} />
           
-          <div className="relative w-full max-w-4xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-amber-500" />
-                Chat de Soporte e Inspección
-              </h3>
-              <button 
-                onClick={() => setShowChatModal(false)}
-                className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          {!isChatEnabled ? (
+            /* Pantalla de bloqueo: Módulo en Desarrollo */
+            <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col items-center text-center space-y-6">
+              <div className="flex justify-between items-center w-full pb-3 border-b border-slate-800 shrink-0">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-amber-500" />
+                  Chat de Soporte e Inspección
+                </h3>
+                <button 
+                  onClick={() => setShowChatModal(false)}
+                  className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-            <div className="flex-1 flex min-h-0 divide-x divide-slate-850 mt-4">
-              
-              {/* Panel Izquierdo: Lista de Contactos */}
-              <div className="w-1/3 pr-4 flex flex-col min-h-0 overflow-y-auto">
-                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
-                  Contactos Disponibles
-                </span>
-                <div className="space-y-1.5 animate-in fade-in duration-200">
-                  {getContacts().length > 0 ? (
-                    getContacts().map((contact) => {
-                      const isSelected = activeContactId === contact.id;
-                      return (
-                        <button
-                          key={contact.id}
-                          onClick={() => {
-                            setActiveContactId(contact.id);
-                            markMessagesAsRead(contact.id);
-                          }}
-                          className={`w-full p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 cursor-pointer ${
-                            isSelected
-                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 font-bold'
-                              : 'bg-slate-900/40 border-slate-850 hover:bg-slate-900/80 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex justify-between items-center w-full gap-2">
-                            <div className="truncate text-xs font-mono flex-1">
-                              {contact.username || contact.email}
-                            </div>
-                            {(() => {
-                              const contactUnreadCount = (messages || []).filter(
-                                (m) => m.senderId === contact.id && m.receiverId === user?.id && !m.read
-                              ).length;
-                              return contactUnreadCount > 0 ? (
-                                <span className="bg-red-500 text-white rounded-full text-[9px] px-1.5 py-0.5 font-bold flex items-center justify-center animate-pulse shrink-0">
-                                  {contactUnreadCount}
-                                </span>
-                              ) : null;
-                            })()}
-                          </div>
-                          <div>
-                            {contact.role === 'ADMIN' ? (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold">ADMINISTRADOR</span>
-                            ) : contact.role === 'WORKER' ? (
-                              <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 text-[8px] font-bold">INSPECTOR</span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[8px] font-bold">CLIENTE</span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="text-[11px] text-slate-500 italic text-center py-6">No hay destinatarios disponibles para tu rol.</p>
-                  )}
+              <div className="flex flex-col items-center justify-center py-6 px-2 space-y-4">
+                <div className="p-4 bg-amber-500/10 text-amber-500 rounded-full animate-pulse border border-amber-500/20">
+                  <Clock className="w-10 h-10" />
+                </div>
+                <h4 className="text-base font-bold text-slate-100">Módulo en Desarrollo</h4>
+                <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                  Estamos construyendo un canal de soporte y mensajería en tiempo real para conectar a inspectores, administradores y clientes. Este módulo estará disponible próximamente.
+                </p>
+                
+                <div className="w-full bg-slate-900/40 border border-slate-850 rounded-xl p-4 text-left mt-2 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Características en Desarrollo:</p>
+                  <ul className="text-[11px] text-slate-350 space-y-1.5 list-disc pl-4 font-sans">
+                    <li>Mensajería instantánea bidireccional.</li>
+                    <li>Soporte técnico directo en campo.</li>
+                    <li>Compartición de tableros e informes.</li>
+                  </ul>
                 </div>
               </div>
 
-              {/* Panel Derecho: Historial de Mensajes y Caja de Envío */}
-              <div className="w-2/3 pl-4 flex flex-col min-h-0">
-                {activeContactId ? (
-                  <>
-                    {/* Encabezado del chat activo */}
-                    <div className="pb-3 border-b border-slate-900 flex justify-between items-center shrink-0">
-                      <div className="truncate">
-                        <p className="text-xs font-bold text-slate-100 font-mono">
-                          {usersList.find((u) => u.id === activeContactId)?.username || usersList.find((u) => u.id === activeContactId)?.email}
-                        </p>
-                        <p className="text-[9px] text-slate-500 font-mono">
-                          Rol: {usersList.find((u) => u.id === activeContactId)?.role}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Mensajes del chat */}
-                    <div className="flex-1 overflow-y-auto py-4 space-y-3.5 pr-1 font-sans">
-                      {getActiveMessages().length > 0 ? (
-                        getActiveMessages().map((msg) => {
-                          const isMe = msg.senderId === user?.id;
-                          return (
-                            <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                              <div className={`px-3.5 py-2 text-xs rounded-2xl max-w-[80%] ${
-                                isMe 
-                                  ? 'bg-amber-500 text-slate-950 font-semibold rounded-tr-none shadow-md shadow-amber-500/5' 
-                                  : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
-                              }`}>
-                                <p className="leading-relaxed whitespace-pre-wrap select-text">{msg.text}</p>
-                              </div>
-                              <span className="text-[8px] text-slate-555 font-mono mt-1 px-1">
-                                {isMe ? 'Tú' : (msg.senderUsername || msg.senderEmail || 'Anónimo')} • {new Date(msg.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-650 space-y-2 select-none">
-                          <MessageSquare className="w-8 h-8 opacity-20" />
-                          <p className="text-[11px] italic">No hay mensajes. Escribe algo abajo para iniciar.</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Caja de Entrada de Texto */}
-                    <form onSubmit={handleSendMessage} className="pt-3 border-t border-slate-900 flex gap-2 shrink-0">
-                      <input
-                        type="text"
-                        required
-                        value={chatMessageText}
-                        onChange={(e) => setChatMessageText(e.target.value)}
-                        placeholder="Escribe un mensaje de soporte..."
-                        className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 placeholder-slate-650 focus:outline-none h-10"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 text-xs font-bold rounded-xl cursor-pointer shadow-md"
-                      >
-                        Enviar
-                      </button>
-                    </form>
-                  </>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-slate-600 space-y-2.5 select-none">
-                    <MessageSquare className="w-12 h-12 opacity-15 animate-bounce" />
-                    <p className="text-xs font-bold">Selecciona un contacto del panel izquierdo para chatear</p>
-                    <p className="text-[10px] text-slate-550 text-center max-w-xs leading-normal">
-                      Los administradores chatean con trabajadores y clientes. Los trabajadores con administradores y clientes. Los clientes solo con administradores.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-slate-850 shrink-0 mt-4">
               <button
                 onClick={() => setShowChatModal(false)}
-                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer"
+                className="w-full py-3 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-95 transition-all font-bold rounded-xl text-xs cursor-pointer shadow-md shrink-0"
               >
+                Entendido
+              </button>
+            </div>
+          ) : (
+            /* El chat real completo */
+            <div className="relative w-full max-w-4xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 h-[80vh] flex flex-col">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-amber-500" />
+                  Chat de Soporte e Inspección
+                </h3>
+                <button 
+                  onClick={() => setShowChatModal(false)}
+                  className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 flex min-h-0 divide-x divide-slate-850 mt-4">
+                
+                {/* Panel Izquierdo: Lista de Contactos */}
+                <div className="w-1/3 pr-4 flex flex-col min-h-0 overflow-y-auto">
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                    Contactos Disponibles
+                  </span>
+                  <div className="space-y-1.5 animate-in fade-in duration-200">
+                    {getContacts().length > 0 ? (
+                      getContacts().map((contact) => {
+                        const isSelected = activeContactId === contact.id;
+                        return (
+                          <button
+                            key={contact.id}
+                            onClick={() => {
+                              setActiveContactId(contact.id);
+                              markMessagesAsRead(contact.id);
+                            }}
+                            className={`w-full p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 font-bold'
+                                : 'bg-slate-900/40 border-slate-850 hover:bg-slate-900/80 text-slate-300'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center w-full gap-2">
+                              <div className="truncate text-xs font-mono flex-1">
+                                {contact.username || contact.email}
+                              </div>
+                              {(() => {
+                                const contactUnreadCount = (messages || []).filter(
+                                  (m) => m.senderId === contact.id && m.receiverId === user?.id && !m.read
+                                ).length;
+                                return contactUnreadCount > 0 ? (
+                                  <span className="bg-red-500 text-white rounded-full text-[9px] px-1.5 py-0.5 font-bold flex items-center justify-center animate-pulse shrink-0">
+                                    {contactUnreadCount}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
+                            <div>
+                              {contact.role === 'ADMIN' ? (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 text-[8px] font-bold">ADMINISTRADOR</span>
+                              ) : contact.role === 'WORKER' ? (
+                                <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 text-[8px] font-bold">INSPECTOR</span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[8px] font-bold">CLIENTE</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="text-[11px] text-slate-500 italic text-center py-6">No hay destinatarios disponibles para tu rol.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Panel Derecho: Historial de Mensajes y Caja de Envío */}
+                <div className="w-2/3 pl-4 flex flex-col min-h-0">
+                  {activeContactId ? (
+                    <>
+                      {/* Encabezado del chat activo */}
+                      <div className="pb-3 border-b border-slate-900 flex justify-between items-center shrink-0">
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-slate-100 font-mono">
+                            {usersList.find((u) => u.id === activeContactId)?.username || usersList.find((u) => u.id === activeContactId)?.email}
+                          </p>
+                          <p className="text-[9px] text-slate-550 font-mono">
+                            Rol: {usersList.find((u) => u.id === activeContactId)?.role}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Mensajes del chat */}
+                      <div className="flex-1 overflow-y-auto py-4 space-y-3.5 pr-1 font-sans">
+                        {getActiveMessages().length > 0 ? (
+                          getActiveMessages().map((msg) => {
+                            const isMe = msg.senderId === user?.id;
+                            return (
+                              <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                <div className={`px-3.5 py-2 text-xs rounded-2xl max-w-[80%] ${
+                                  isMe 
+                                    ? 'bg-amber-500 text-slate-950 font-semibold rounded-tr-none shadow-md shadow-amber-500/5' 
+                                    : 'bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none'
+                                }`}>
+                                  <p className="leading-relaxed whitespace-pre-wrap select-text">{msg.text}</p>
+                                </div>
+                                <span className="text-[8px] text-slate-555 font-mono mt-1 px-1">
+                                  {isMe ? 'Tú' : (msg.senderUsername || msg.senderEmail || 'Anónimo')} • {new Date(msg.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-650 space-y-2 select-none">
+                            <MessageSquare className="w-8 h-8 opacity-20" />
+                            <p className="text-[11px] italic">No hay mensajes. Escribe algo abajo para iniciar.</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Caja de Entrada de Texto */}
+                      <form onSubmit={handleSendMessage} className="pt-3 border-t border-slate-900 flex gap-2 shrink-0">
+                        <input
+                          type="text"
+                          required
+                          value={chatMessageText}
+                          onChange={(e) => setChatMessageText(e.target.value)}
+                          placeholder="Escribe un mensaje de soporte..."
+                          className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 placeholder-slate-650 focus:outline-none h-10"
+                        />
+                        <button
+                          type="submit"
+                          className="px-4 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 text-xs font-bold rounded-xl cursor-pointer shadow-md"
+                        >
+                          Enviar
+                        </button>
+                      </form>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-600 space-y-2.5 select-none">
+                      <MessageSquare className="w-12 h-12 opacity-15 animate-bounce" />
+                      <p className="text-xs font-bold">Selecciona un contacto del panel izquierdo para chatear</p>
+                      <p className="text-[10px] text-slate-550 text-center max-w-xs leading-normal">
+                        Los administradores chatean con trabajadores y clientes. Los trabajadores con administradores y clientes. Los clientes solo con administradores.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-slate-850 shrink-0 mt-4">
+                <button
+                  onClick={() => setShowChatModal(false)}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}         >
                 Cerrar
               </button>
             </div>
