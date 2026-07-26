@@ -109,6 +109,13 @@ export const SidebarLayout = () => {
     }
   }, [user]);
 
+  // Sincronizar la lista de usuarios con el servidor
+  useEffect(() => {
+    if (user && navigator.onLine) {
+      fetchUsersList();
+    }
+  }, [user]);
+
   // Marcar como leído al abrir la conversación
   useEffect(() => {
     if (showChatModal && activeContactId) {
