@@ -10,7 +10,7 @@ export const LoginView = () => {
   const login = useStore((state) => state.login);
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username || !password) {
       setError('Por favor, ingresa tus credenciales.');
@@ -18,7 +18,7 @@ export const LoginView = () => {
     }
     
     if (username.trim().length >= 3 && password.length >= 4) {
-      const result = login(username.trim(), password);
+      const result = await login(username.trim(), password);
       if (result.success) {
         navigate('/');
       } else {
