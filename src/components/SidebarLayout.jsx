@@ -1038,7 +1038,15 @@ export const SidebarLayout = () => {
                   setShowUsersModal(false);
                 }}
                 className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer"
-                    {/* MODAL 4: CHAT DE SOPORTE E INSPECCIÓN */}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: CHAT DE SOPORTE E INSPECCIÓN */}
       {showChatModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowChatModal(false)} />
@@ -1243,12 +1251,6 @@ export const SidebarLayout = () => {
               </div>
             </div>
           )}
-        </div>
-      )}         >
-                Cerrar
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
