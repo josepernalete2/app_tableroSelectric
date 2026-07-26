@@ -178,7 +178,10 @@ export const useStore = create(
       subestacionesLocales: [],
       syncQueue: [],
       socket: null,
+      toast: { show: false, message: '', type: 'success' },
 
+      showToast: (message, type = 'success') => set({ toast: { show: true, message, type } }),
+      hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
       setSocket: (socket) => set({ socket }),
 
       fetchUsersList: async () => {

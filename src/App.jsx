@@ -290,11 +290,13 @@ const TableroWrapper = () => {
 };
 
 import SyncStatusBanner from './components/SyncStatusBanner';
+import ToastNotification from './components/ToastNotification';
 
 export function App() {
   return (
     <BrowserRouter>
       <SyncStatusBanner />
+      <ToastNotification />
       <Routes>
         <Route path="/login" element={<LoginView />} />
         

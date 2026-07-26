@@ -42,7 +42,8 @@ export const SidebarLayout = () => {
     addIncomingMessage,
     markMessagesAsRead,
     fetchUsersList,
-    fetchMessagesList
+    fetchMessagesList,
+    showToast
   } = useStore();
   
   const navigate = useNavigate();
@@ -128,7 +129,7 @@ export const SidebarLayout = () => {
     e.preventDefault();
     localStorage.setItem('tableroselectrico_gdrive_email', gdriveEmail.trim());
     localStorage.setItem('tableroselectrico_gdrive_autoBackup', autoBackup ? 'true' : 'false');
-    alert("Configuración de Google Drive guardada con éxito.");
+    showToast("Configuración de Google Drive guardada con éxito.", "success");
     setShowSettingsModal(false);
   };
 
@@ -145,12 +146,13 @@ export const SidebarLayout = () => {
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
+        showToast("Base de datos exportada con éxito.", "success");
       } else {
-        alert("Error al exportar base de datos: " + result.error);
+        showToast("Error al exportar base de datos: " + result.error, "error");
       }
     } catch (err) {
       console.error(err);
-      alert("Error de conexión al servidor backend para exportar.");
+      showToast("Error de conexión al servidor backend para exportar.", "error");
     }
   };
 
@@ -175,15 +177,17 @@ export const SidebarLayout = () => {
         const result = await res.json();
 
         if (result.ok) {
-          alert("Base de datos importada y restaurada con éxito.");
+          showToast("Base de datos importada y restaurada con éxito.", "success");
           importCompanies(parsed);
-          window.location.reload();
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
         } else {
-          alert("Fallo al importar datos: " + result.error);
+          showToast("Fallo al importar datos: " + result.error, "error");
         }
       } catch (err) {
         console.error(err);
-        alert("El archivo seleccionado no contiene una estructura JSON de respaldo válida.");
+        showToast("El archivo seleccionado no contiene una estructura JSON de respaldo válida.", "error");
       }
     };
     reader.readAsText(file);
@@ -192,7 +196,7 @@ export const SidebarLayout = () => {
   // Sincronizar a Google Drive
   const handleManualGDriveSync = async () => {
     if (!gdriveEmail.trim()) {
-      alert("Debe ingresar un correo electrónico válido de Google Drive.");
+      showToast("Debe ingresar un correo electrónico válido de Google Drive.", "warning");
       return;
     }
 
@@ -213,15 +217,15 @@ export const SidebarLayout = () => {
         setSyncStatus('Sincronizado con éxito');
         setLastSyncTime(time);
         localStorage.setItem('tableroselectrico_gdrive_lastSyncTime', time);
-        alert(result.message || "Respaldo cargado y compartido en Google Drive.");
+        showToast(result.message || "Respaldo cargado y compartido en Google Drive.", "success");
       } else {
         setSyncStatus('Fallo en sincronización');
-        alert("Error al sincronizar con Google Drive: " + result.error);
+        showToast("Error al sincronizar con Google Drive: " + result.error, "error");
       }
     } catch (err) {
       console.error(err);
       setSyncStatus('Error de conexión');
-      alert("Error de conexión al sincronizar con Google Drive.");
+      showToast("Error de conexión al sincronizar con Google Drive.", "error");
     } finally {
       setIsSyncing(false);
     }
@@ -267,13 +271,14 @@ export const SidebarLayout = () => {
   }, [location.pathname]);
 
   // Agregar usuario
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
     if (!newUserEmail.trim() || !newUserPassword.trim()) {
-      alert("Por favor, rellene todos los campos.");
+      showToast("Por favor, rellene todos los campos.", "warning");
       return;
     }
-    const result = addUser({
+    const result = await addUser({
+      username: newUserEmail.trim(),
       email: newUserEmail.trim(),
       password: newUserPassword.trim(),
       role: newUserRole,
@@ -284,19 +289,20 @@ export const SidebarLayout = () => {
       setNewUserPassword('');
       setNewUserRole('WORKER');
       setNewUserCompanyId('');
-      alert("Usuario registrado con éxito.");
+      showToast("Usuario registrado con éxito.", "success");
     } else {
-      alert(result.error);
+      showToast(result.error || "Error al registrar usuario.", "error");
     }
   };
 
   // Guardar edición
-  const handleSaveUserEdit = (userId) => {
+  const handleSaveUserEdit = async (userId) => {
     if (!editingEmail.trim() || !editingPassword.trim()) {
-      alert("Por favor, rellene todos los campos.");
+      showToast("Por favor, rellene todos los campos.", "warning");
       return;
     }
-    const result = updateUser(userId, {
+    const result = await updateUser(userId, {
+      username: editingEmail.trim(),
       email: editingEmail.trim(),
       password: editingPassword.trim(),
       role: editingRole,
@@ -305,27 +311,27 @@ export const SidebarLayout = () => {
     if (result.success) {
       setEditingUserId(null);
       setEditingCompanyId('');
-      alert("Usuario actualizado con éxito.");
+      showToast("Usuario actualizado con éxito.", "success");
     } else {
-      alert(result.error);
+      showToast(result.error || "Error al actualizar usuario.", "error");
     }
   };
 
   const handleStartEditUser = (u) => {
     setEditingUserId(u.id);
-    setEditingEmail(u.email);
+    setEditingEmail(u.username || u.email || '');
     setEditingPassword(u.password);
     setEditingRole(u.role);
     setEditingCompanyId(u.companyId || '');
   };
 
-  const handleDeleteUser = (userId) => {
+  const handleDeleteUser = async (userId) => {
     if (window.confirm("¿Está seguro de que desea eliminar este usuario?")) {
-      const result = deleteUser(userId);
+      const result = await deleteUser(userId);
       if (result.success) {
-        alert("Usuario eliminado con éxito.");
+        showToast("Usuario eliminado con éxito.", "success");
       } else {
-        alert(result.error);
+        showToast(result.error || "Error al eliminar usuario.", "error");
       }
     }
   };
