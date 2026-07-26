@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import useStore from '../store/useStore';
+import io from 'socket.io-client';
 import { 
   Briefcase, 
   TrendingUp, 
@@ -34,7 +35,13 @@ export const SidebarLayout = () => {
     updateUser,
     deleteUser,
     messages,
-    sendMessage
+    sendMessage,
+    socket,
+    setSocket,
+    addIncomingMessage,
+    markMessagesAsRead,
+    fetchUsersList,
+    fetchMessagesList
   } = useStore();
   
   const navigate = useNavigate();
@@ -73,7 +80,44 @@ export const SidebarLayout = () => {
   const [chatMessageText, setChatMessageText] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // Efectos de inicialización de sockets
+  useEffect(() => {
+    if (user && navigator.onLine) {
+      fetchUsersList();
+      fetchMessagesList(user.id);
+
+      const socketInstance = io('http://localhost:3001');
+
+      socketInstance.on('connect', () => {
+        console.log('⚡ Conectado al servidor de Sockets');
+        socketInstance.emit('register_user', user.id);
+      });
+
+      socketInstance.on('receive_message', (msg) => {
+        addIncomingMessage(msg);
+      });
+
+      setSocket(socketInstance);
+
+      return () => {
+        socketInstance.disconnect();
+        setSocket(null);
+      };
+    }
+  }, [user]);
+
+  // Marcar como leído al abrir la conversación
+  useEffect(() => {
+    if (showChatModal && activeContactId) {
+      markMessagesAsRead(activeContactId);
+    }
+  }, [showChatModal, activeContactId, messages]);
+
   const handleLogout = () => {
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
     logout();
     navigate('/login');
   };
@@ -314,6 +358,8 @@ export const SidebarLayout = () => {
     );
   };
 
+  const totalUnreadCount = (messages || []).filter((m) => m.receiverId === user?.id && !m.read).length;
+
   const navLinks = [
     { name: 'Empresas', path: '/', icon: Briefcase },
     { name: 'Mensajería / Chat', onClick: () => setShowChatModal(true), icon: MessageSquare }
@@ -389,10 +435,15 @@ export const SidebarLayout = () => {
                         setIsMobileOpen(false);
                         link.onClick();
                       }}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900 text-left cursor-pointer"
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900 text-left cursor-pointer relative"
                     >
                       <Icon className="w-4 h-4" />
                       <span>{link.name}</span>
+                      {link.name === 'Mensajería / Chat' && totalUnreadCount > 0 && (
+                        <span className="ml-auto bg-red-500 text-slate-950 font-bold rounded-full text-[9px] px-1.5 py-0.5 flex items-center justify-center animate-pulse shrink-0">
+                          {totalUnreadCount}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -479,12 +530,21 @@ export const SidebarLayout = () => {
                   key={link.name}
                   onClick={link.onClick}
                   title={isSidebarCollapsed ? link.name : undefined}
-                  className={`w-full flex items-center rounded-xl text-xs font-bold transition-all border bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900 text-left cursor-pointer ${
+                  className={`w-full flex items-center rounded-xl text-xs font-bold transition-all border bg-transparent border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900 text-left cursor-pointer relative ${
                     isSidebarCollapsed ? 'justify-center p-3' : 'gap-3 px-4.5 py-3'
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
                   {!isSidebarCollapsed && <span className="animate-in fade-in duration-200">{link.name}</span>}
+                  {link.name === 'Mensajería / Chat' && totalUnreadCount > 0 && (
+                    isSidebarCollapsed ? (
+                      <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border border-slate-950" />
+                    ) : (
+                      <span className="ml-auto bg-red-500 text-white font-bold rounded-full text-[9px] px-1.5 py-0.5 flex items-center justify-center animate-pulse shrink-0">
+                        {totalUnreadCount}
+                      </span>
+                    )
+                  )}
                 </button>
               );
             })}
@@ -1020,6 +1080,7 @@ export const SidebarLayout = () => {
                           key={contact.id}
                           onClick={() => {
                             setActiveContactId(contact.id);
+                            markMessagesAsRead(contact.id);
                           }}
                           className={`w-full p-2.5 rounded-xl border text-left transition-all flex flex-col gap-1.5 cursor-pointer ${
                             isSelected
@@ -1027,8 +1088,20 @@ export const SidebarLayout = () => {
                               : 'bg-slate-900/40 border-slate-850 hover:bg-slate-900/80 text-slate-300'
                           }`}
                         >
-                          <div className="truncate text-xs font-mono">
-                            {contact.username || contact.email}
+                          <div className="flex justify-between items-center w-full gap-2">
+                            <div className="truncate text-xs font-mono flex-1">
+                              {contact.username || contact.email}
+                            </div>
+                            {(() => {
+                              const contactUnreadCount = (messages || []).filter(
+                                (m) => m.senderId === contact.id && m.receiverId === user?.id && !m.read
+                              ).length;
+                              return contactUnreadCount > 0 ? (
+                                <span className="bg-red-500 text-white rounded-full text-[9px] px-1.5 py-0.5 font-bold flex items-center justify-center animate-pulse shrink-0">
+                                  {contactUnreadCount}
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
                           <div>
                             {contact.role === 'ADMIN' ? (

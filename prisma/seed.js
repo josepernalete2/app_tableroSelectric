@@ -34,6 +34,30 @@ async function main() {
   });
   console.log('Empresas c-1 y c-2 pobladas con éxito.');
 
+  console.log('Poblando usuarios iniciales...');
+  await prisma.user.upsert({
+    where: { username: 'admin1' },
+    update: {},
+    create: {
+      id: 'u-1',
+      username: 'admin1',
+      password: 'admin1',
+      role: 'ADMIN'
+    }
+  });
+
+  await prisma.user.upsert({
+    where: { username: 'admin2' },
+    update: {},
+    create: {
+      id: 'u-2',
+      username: 'admin2',
+      password: 'admin2',
+      role: 'ADMIN'
+    }
+  });
+  console.log('Usuarios admin1 y admin2 poblados con éxito.');
+
   console.log('--- Seeding completado con éxito ---');
 }
 

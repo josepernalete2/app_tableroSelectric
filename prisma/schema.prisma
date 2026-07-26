@@ -106,3 +106,27 @@ model InspeccionSubestacion {
   @@index([empresaId])
   @@map("inspecciones_subestacion")
 }
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  role      String   @default("WORKER") // ADMIN, WORKER, CLIENT
+  companyId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  senderId       String
+  senderUsername String
+  receiverId     String
+  text           String
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@map("messages")
+}

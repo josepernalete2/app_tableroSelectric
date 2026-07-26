@@ -9,12 +9,46 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import tableroRoutes from './routes/tableroRoutes.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+const connectedUsers = new Map(); // userId -> socketId
+
+app.set('io', io);
+app.set('connectedUsers', connectedUsers);
+
+io.on('connection', (socket) => {
+  console.log('⚡ Nuevo cliente WebSocket conectado:', socket.id);
+
+  socket.on('register_user', (userId) => {
+    connectedUsers.set(userId, socket.id);
+    console.log(`👤 Usuario registrado en Socket: ${userId} -> Socket ID: ${socket.id}`);
+  });
+
+  socket.on('disconnect', () => {
+    for (const [userId, socketId] of connectedUsers.entries()) {
+      if (socketId === socket.id) {
+        connectedUsers.delete(userId);
+        console.log(`🚪 Usuario desconectado de Socket: ${userId}`);
+        break;
+      }
+    }
+  });
+});
 
 app.use(cors());
 app.use(express.json());
@@ -48,6 +82,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Error interno", detalle: err.message });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor de Inspecciones Eléctricas corriendo en http://localhost:${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en http://localhost:${PORT}`);
 });

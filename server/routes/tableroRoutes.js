@@ -7,6 +7,8 @@ import { crearInspeccionSubestacion } from '../controllers/subestacionController
 import { crearElementoUnifilar } from '../controllers/elementoController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto } from '../controllers/proyectoController.js';
+import { obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
+import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 
 // Asegurar directorio public/uploads
 const uploadDir = path.join(process.cwd(), 'public', 'uploads');
@@ -48,5 +50,16 @@ router.get('/empresas/:empresaId/tableros', obtenerTablerosPorEmpresa);
 router.get('/backup/export', exportDatabase);
 router.post('/backup/import', importDatabase);
 router.post('/backup/gdrive-sync', syncToGoogleDrive);
+
+// Rutas de Gestión de Usuarios
+router.get('/users', obtenerUsuarios);
+router.post('/users', crearUsuario);
+router.put('/users/:id', actualizarUsuario);
+router.delete('/users/:id', eliminarUsuario);
+
+// Rutas de Mensajería / Chat
+router.get('/messages/:userId', obtenerMensajesUsuario);
+router.post('/messages', guardarMensaje);
+router.post('/messages/read', marcarMensajesComoLeidos);
 
 export default router;

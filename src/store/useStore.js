@@ -177,8 +177,39 @@ export const useStore = create(
       elementosLocales: [],
       subestacionesLocales: [],
       syncQueue: [],
+      socket: null,
 
-      login: (username, password) => {
+      setSocket: (socket) => set({ socket }),
+
+      fetchUsersList: async () => {
+        try {
+          const res = await fetch('http://localhost:3001/api/users');
+          const data = await res.json();
+          if (data.ok) {
+            set({ usersList: data.data });
+          }
+        } catch (e) {
+          console.error('Error al cargar lista de usuarios:', e);
+        }
+      },
+
+      fetchMessagesList: async (userId) => {
+        try {
+          const res = await fetch(`http://localhost:3001/api/messages/${userId}`);
+          const data = await res.json();
+          if (data.ok) {
+            set({ messages: data.data });
+          }
+        } catch (e) {
+          console.error('Error al cargar lista de mensajes:', e);
+        }
+      },
+
+      login: async (username, password) => {
+        if (navigator.onLine) {
+          await get().fetchUsersList();
+        }
+
         let list = get().usersList || [];
         
         // Garantizar que los administradores por defecto existan siempre en la lista
@@ -211,6 +242,10 @@ export const useStore = create(
 
         if (found) {
           set({ user: found });
+          if (navigator.onLine) {
+            get().fetchMessagesList(found.id);
+            get().fetchUsersList();
+          }
           return { success: true, user: found };
         }
         return { success: false, error: 'Usuario o contraseña incorrectos.' };
@@ -220,7 +255,7 @@ export const useStore = create(
         set({ user: null });
       },
 
-      addUser: (userObj) => {
+      addUser: async (userObj) => {
         const currentUser = get().user;
         if (!currentUser || currentUser.role !== 'ADMIN') {
           return { success: false, error: 'Acción permitida únicamente para administradores.' };
@@ -245,10 +280,25 @@ export const useStore = create(
         set((state) => ({
           usersList: [...(state.usersList || []), newUser]
         }));
+
+        try {
+          const res = await fetch('http://localhost:3001/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newUser)
+          });
+          const data = await res.json();
+          if (data.ok) {
+            get().fetchUsersList();
+          }
+        } catch (e) {
+          console.error('Error sincronizando nuevo usuario:', e);
+        }
+
         return { success: true, user: newUser };
       },
 
-      updateUser: (userId, updatedData) => {
+      updateUser: async (userId, updatedData) => {
         const currentUser = get().user;
         if (!currentUser || currentUser.role !== 'ADMIN') {
           return { success: false, error: 'Acción permitida únicamente para administradores.' };
@@ -284,10 +334,24 @@ export const useStore = create(
           };
         });
 
+        try {
+          const res = await fetch(`http://localhost:3001/api/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mergedData)
+          });
+          const data = await res.json();
+          if (data.ok) {
+            get().fetchUsersList();
+          }
+        } catch (e) {
+          console.error('Error actualizando usuario en base de datos:', e);
+        }
+
         return { success: true };
       },
 
-      deleteUser: (userId) => {
+      deleteUser: async (userId) => {
         const currentUser = get().user;
         if (!currentUser || currentUser.role !== 'ADMIN') {
           return { success: false, error: 'Acción permitida únicamente para administradores.' };
@@ -300,6 +364,19 @@ export const useStore = create(
         set((state) => ({
           usersList: (state.usersList || []).filter((u) => u.id !== userId)
         }));
+
+        try {
+          const res = await fetch(`http://localhost:3001/api/users/${userId}`, {
+            method: 'DELETE'
+          });
+          const data = await res.json();
+          if (data.ok) {
+            get().fetchUsersList();
+          }
+        } catch (e) {
+          console.error('Error eliminando usuario en base de datos:', e);
+        }
+
         return { success: true };
       },
 
@@ -697,7 +774,7 @@ export const useStore = create(
         }));
       },
       messages: [],
-      sendMessage: (receiverId, text) => {
+      sendMessage: async (receiverId, text) => {
         const { user } = get();
         if (!user) return { success: false, error: 'No ha iniciado sesión.' };
         
@@ -714,7 +791,56 @@ export const useStore = create(
           messages: [...(state.messages || []), newMessage]
         }));
         
+        try {
+          const res = await fetch('http://localhost:3001/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newMessage)
+          });
+          const data = await res.json();
+          if (data.ok) {
+            set((state) => ({
+              messages: (state.messages || []).map((m) => m.id === newMessage.id ? data.data : m)
+            }));
+          }
+        } catch (e) {
+          console.error('Error al enviar mensaje:', e);
+        }
+
         return { success: true, message: newMessage };
+      },
+
+      addIncomingMessage: (msg) => {
+        const exists = (get().messages || []).some((m) => m.id === msg.id);
+        if (exists) return;
+
+        set((state) => ({
+          messages: [...(state.messages || []), msg]
+        }));
+      },
+
+      markMessagesAsRead: async (senderId) => {
+        const { user } = get();
+        if (!user) return;
+
+        set((state) => ({
+          messages: (state.messages || []).map((m) => {
+            if (m.senderId === senderId && m.receiverId === user.id && !m.read) {
+              return { ...m, read: true };
+            }
+            return m;
+          })
+        }));
+
+        try {
+          await fetch('http://localhost:3001/api/messages/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ senderId, receiverId: user.id })
+          });
+        } catch (e) {
+          console.error('Error marcando mensajes como leídos:', e);
+        }
       }
     }),
     {
