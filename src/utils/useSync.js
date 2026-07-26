@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import useStore from '../store/useStore';
+import { API_BASE_URL } from './api';
 
 export function useSync() {
   const { syncQueue, removeFromQueue } = useStore();
@@ -148,7 +149,7 @@ export function useSync() {
         empresaId
       };
 
-      const response = await fetch('http://localhost:3001/api/proyectos', {
+      const response = await fetch(`${API_BASE_URL}/api/proyectos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -188,7 +189,7 @@ export function useSync() {
         formData.append('fotoUrl', elemento.foto);
       }
 
-      const response = await fetch('http://localhost:3001/api/elementos-unifilares', {
+      const response = await fetch(`${API_BASE_URL}/api/elementos-unifilares`, {
         method: 'POST',
         body: formData
       });
@@ -200,7 +201,7 @@ export function useSync() {
       const resJson = await response.json();
       if (resJson.data && resJson.data.foto) {
         useStore.getState().updateElementoUnifilar(elemento.proyectoId, elemento.id, {
-          foto: `http://localhost:3001${resJson.data.foto}`,
+          foto: `${API_BASE_URL}${resJson.data.foto}`,
           fotoBlob: null
         });
       }
@@ -233,7 +234,7 @@ export function useSync() {
         empresaId
       };
 
-      const response = await fetch('http://localhost:3001/api/subestaciones', {
+      const response = await fetch(`${API_BASE_URL}/api/subestaciones`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

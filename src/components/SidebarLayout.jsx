@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import useStore from '../store/useStore';
 import io from 'socket.io-client';
+import { API_BASE_URL } from '../utils/api';
 import { 
   Briefcase, 
   TrendingUp, 
@@ -88,7 +89,7 @@ export const SidebarLayout = () => {
       fetchUsersList();
       fetchMessagesList(user.id);
 
-      const socketInstance = io('http://localhost:3001');
+      const socketInstance = io(API_BASE_URL);
 
       socketInstance.on('connect', () => {
         console.log('⚡ Conectado al servidor de Sockets');

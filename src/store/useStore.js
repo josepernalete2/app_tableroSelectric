@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
+import { API_BASE_URL } from '../utils/api';
 import { initialTablerosData } from '../data/mockTableros';
 
 // Configurar localforage
@@ -186,7 +187,7 @@ export const useStore = create(
 
       fetchUsersList: async () => {
         try {
-          const res = await fetch('http://localhost:3001/api/users');
+          const res = await fetch(`${API_BASE_URL}/api/users`);
           const data = await res.json();
           if (data.ok) {
             set({ usersList: data.data });
@@ -198,7 +199,7 @@ export const useStore = create(
 
       fetchMessagesList: async (userId) => {
         try {
-          const res = await fetch(`http://localhost:3001/api/messages/${userId}`);
+          const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`);
           const data = await res.json();
           if (data.ok) {
             set({ messages: data.data });
@@ -285,7 +286,7 @@ export const useStore = create(
         }));
 
         try {
-          const res = await fetch('http://localhost:3001/api/users', {
+          const res = await fetch(`${API_BASE_URL}/api/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newUser)
@@ -338,7 +339,7 @@ export const useStore = create(
         });
 
         try {
-          const res = await fetch(`http://localhost:3001/api/users/${userId}`, {
+          const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(mergedData)
@@ -369,7 +370,7 @@ export const useStore = create(
         }));
 
         try {
-          const res = await fetch(`http://localhost:3001/api/users/${userId}`, {
+          const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
             method: 'DELETE'
           });
           const data = await res.json();
@@ -795,7 +796,7 @@ export const useStore = create(
         }));
         
         try {
-          const res = await fetch('http://localhost:3001/api/messages', {
+          const res = await fetch(`${API_BASE_URL}/api/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newMessage)
@@ -836,7 +837,7 @@ export const useStore = create(
         }));
 
         try {
-          await fetch('http://localhost:3001/api/messages/read', {
+          await fetch(`${API_BASE_URL}/api/messages/read`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ senderId, receiverId: user.id })
