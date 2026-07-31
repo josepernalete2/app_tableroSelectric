@@ -1,9 +1,9 @@
 import React from 'react';
 import { useSync } from '../utils/useSync';
-import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react';
 
 export default function SyncStatusBanner() {
-  const { isOnline, isSyncing, pendingCount, triggerSync } = useSync();
+  const { isOnline, isSyncing, pendingCount, failedCount, triggerSync, retryFailed } = useSync();
 
   if (!isOnline) {
     return (
@@ -24,6 +24,30 @@ export default function SyncStatusBanner() {
               {pendingCount} pendiente{pendingCount > 1 ? 's' : ''}
             </span>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Prioridad visual: fallidos > syncing > pendientes. Los fallidos se muestran
+  // también en modo offline (su reintento queda programado al recuperar red).
+  if (failedCount > 0 && !isSyncing) {
+    return (
+      <div className="bg-red-500/10 border-b border-red-500/20 text-red-500 px-4 py-2 flex items-center justify-between w-full text-xs font-bold shadow-sm no-print">
+        <div className="w-32 hidden sm:block" />
+        <div className="flex items-center justify-center gap-2 flex-1 text-center min-w-0">
+          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+          <span className="truncate">
+            {failedCount} registro{failedCount > 1 ? 's' : ''} no pud{failedCount > 1 ? 'ieron' : 'o'} sincronizar{failedCount > 1 ? '' : 'se'} con el servidor.
+          </span>
+        </div>
+        <div className="w-32 flex justify-end gap-1 shrink-0">
+          <button
+            onClick={retryFailed}
+            className="flex items-center gap-1.5 bg-red-500 hover:bg-red-400 active:scale-95 text-white px-3 py-1 rounded text-[10px] font-extrabold transition-all cursor-pointer shadow-sm shrink-0"
+          >
+            <RefreshCw className="w-3 h-3" /> Reintentar
+          </button>
         </div>
       </div>
     );

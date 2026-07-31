@@ -178,6 +178,7 @@ export const useStore = create(
       elementosLocales: [],
       subestacionesLocales: [],
       syncQueue: [],
+      syncFailures: [],
       socket: null,
       toast: { show: false, message: '', type: 'success' },
 
@@ -386,12 +387,20 @@ export const useStore = create(
 
       addCompany: (nombre) => {
         const newCompany = {
-          id: `company-${Date.now()}`,
+          id: crypto.randomUUID(),
           nombre,
-          proyectos: []
+          direccion: '',
+          proyectos: [],
+          createdAt: new Date().toISOString()
         };
         set((state) => ({
-          companies: [...state.companies, newCompany]
+          companies: [...state.companies, newCompany],
+          syncQueue: [...state.syncQueue, {
+            id: newCompany.id,
+            tipo: 'EMPRESA',
+            companyId: newCompany.id,
+            payload: newCompany
+          }]
         }));
       },
 
@@ -769,12 +778,39 @@ export const useStore = create(
         }));
       },
 
+      // SOLO limpia la cola de sincronización. NUNCA borra datos locales:
+      // esos se eliminan exclusivamente con las acciones deleteXxx correspondientes.
       removeFromQueue: (id) => {
         set((state) => ({
-          syncQueue: state.syncQueue.filter((item) => item.id !== id),
-          proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== id),
-          elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== id),
-          subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id)
+          syncQueue: state.syncQueue.filter((item) => item.id !== id)
+        }));
+      },
+
+      // Retira un elemento de la cola tras un error definitivo, pero conserva
+      // el registro local intacto y lo guarda en syncFailures para reintento manual.
+      marcarComoFallido: (item, error) => {
+        set((state) => ({
+          syncQueue: state.syncQueue.filter((q) => q.id !== item.id),
+          syncFailures: [...state.syncFailures, {
+            ...item,
+            error,
+            fallidoAt: new Date().toISOString()
+          }]
+        }));
+      },
+
+      // Devuelve todos los elementos fallidos a la cola para reintentar.
+      reintentarFallidos: () => {
+        set((state) => ({
+          syncQueue: [...state.syncQueue, ...state.syncFailures],
+          syncFailures: []
+        }));
+      },
+
+      // Descarta un elemento fallido del registro de fallos (no toca datos locales).
+      descartarFallido: (id) => {
+        set((state) => ({
+          syncFailures: state.syncFailures.filter((item) => item.id !== id)
         }));
       },
       messages: [],
@@ -858,7 +894,8 @@ export const useStore = create(
         proyectosLocales: state.proyectosLocales || [],
         elementosLocales: state.elementosLocales || [],
         subestacionesLocales: state.subestacionesLocales || [],
-        syncQueue: state.syncQueue
+        syncQueue: state.syncQueue,
+        syncFailures: state.syncFailures || []
       })
     }
   )

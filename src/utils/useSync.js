@@ -3,7 +3,7 @@ import useStore from '../store/useStore';
 import { API_BASE_URL } from './api';
 
 export function useSync() {
-  const { syncQueue, removeFromQueue } = useStore();
+  const { syncQueue, syncFailures, removeFromQueue, marcarComoFallido, reintentarFallidos } = useStore();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   
@@ -50,7 +50,9 @@ export function useSync() {
 
       let res = null;
 
-      if (item.tipo === 'PROYECTO') {
+      if (item.tipo === 'EMPRESA') {
+        res = await sincronizarEmpresa(item.companyId, item.payload);
+      } else if (item.tipo === 'PROYECTO') {
         res = await sincronizarProyecto(item.companyId, item.payload);
       } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') {
         res = await sincronizarElementoUnifilar(item.companyId, item.payload);
@@ -111,23 +113,24 @@ export function useSync() {
                   removeFromQueue(item.id);
                 } else {
                   console.error(`Fallo reintento de elemento tras crear proyecto padre (HTTP ${retryRes.status})`);
-                  removeFromQueue(item.id);
+                  marcarComoFallido(item, retryRes.status);
                 }
               } else {
                 console.error(`Fallo la creación del proyecto padre ${parentId}`);
-                removeFromQueue(item.id);
+                marcarComoFallido(item, `PROYECTO_PADRE:${parentRes.status}`);
               }
             } else {
               // El proyecto no existe localmente ni en cola
               console.error(`Error 422: El proyecto asociado con ID ${parentId} no existe.`);
-              alert(`Error de validación: El proyecto de destino no existe en la base de datos del servidor.\n\nDetalle: Se removió el elemento para evitar atascos.`);
-              removeFromQueue(item.id);
+              alert(`Error de validación: El proyecto de destino no existe en la base de datos del servidor.\n\nDetalle: Se movió a la lista de sincronización fallida; puedes reintentarlo cuando el proyecto esté registrado.`);
+              marcarComoFallido(item, `PROYECTO_INEXISTENTE:${parentId}`);
             }
           } else {
-            // Errores definitivos (400, 500, etc.): retirar y notificar
+            // Errores definitivos (400, 500, etc.): conservar los datos y
+            // registrarlo en fallidos para reintento manual sin pérdida de información
             console.error(`Error definitivo (HTTP ${res.status}) al sincronizar elemento con ID: ${item.id}`);
-            alert(`Error de validación al sincronizar con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
-            removeFromQueue(item.id);
+            alert(`Error de validación al sincronizar con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: El registro se conservó en la lista de sincronización fallida; puedes reintentarlo.`);
+            marcarComoFallido(item, res.status);
           }
         }
       } else {
@@ -138,6 +141,31 @@ export function useSync() {
 
     setIsSyncing(false);
     isSyncingRef.current = false;
+  };
+
+  const sincronizarEmpresa = async (empresaId, empresa) => {
+    try {
+      const payload = {
+        id: empresa.id,
+        nombre: empresa.nombre,
+        direccion: empresa.direccion || ''
+      };
+
+      const response = await fetch(`${API_BASE_URL}/api/empresas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error de red en sincronizarEmpresa:', error);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
   };
 
   const sincronizarProyecto = async (empresaId, proyecto) => {
@@ -251,7 +279,7 @@ export function useSync() {
     }
   };
 
-  return { isOnline, isSyncing, pendingCount: syncQueue.length, triggerSync: procesarColaSincronizacion };
+  return { isOnline, isSyncing, pendingCount: syncQueue.length, failedCount: syncFailures.length, triggerSync: procesarColaSincronizacion, retryFailed: reintentarFallidos };
 }
 
 export default useSync;
