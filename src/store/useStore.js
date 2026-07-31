@@ -386,12 +386,20 @@ export const useStore = create(
 
       addCompany: (nombre) => {
         const newCompany = {
-          id: `company-${Date.now()}`,
+          id: crypto.randomUUID(),
           nombre,
-          proyectos: []
+          direccion: '',
+          proyectos: [],
+          createdAt: new Date().toISOString()
         };
         set((state) => ({
-          companies: [...state.companies, newCompany]
+          companies: [...state.companies, newCompany],
+          syncQueue: [...state.syncQueue, {
+            id: newCompany.id,
+            tipo: 'EMPRESA',
+            companyId: newCompany.id,
+            payload: newCompany
+          }]
         }));
       },
 

@@ -50,7 +50,9 @@ export function useSync() {
 
       let res = null;
 
-      if (item.tipo === 'PROYECTO') {
+      if (item.tipo === 'EMPRESA') {
+        res = await sincronizarEmpresa(item.companyId, item.payload);
+      } else if (item.tipo === 'PROYECTO') {
         res = await sincronizarProyecto(item.companyId, item.payload);
       } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') {
         res = await sincronizarElementoUnifilar(item.companyId, item.payload);
@@ -138,6 +140,31 @@ export function useSync() {
 
     setIsSyncing(false);
     isSyncingRef.current = false;
+  };
+
+  const sincronizarEmpresa = async (empresaId, empresa) => {
+    try {
+      const payload = {
+        id: empresa.id,
+        nombre: empresa.nombre,
+        direccion: empresa.direccion || ''
+      };
+
+      const response = await fetch(`${API_BASE_URL}/api/empresas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error de red en sincronizarEmpresa:', error);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
   };
 
   const sincronizarProyecto = async (empresaId, proyecto) => {
