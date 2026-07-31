@@ -9,6 +9,7 @@ import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controller
 import { obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto } from '../controllers/proyectoController.js';
 import { obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
+import { obtenerEmpresas, crearEmpresa } from '../controllers/empresaController.js';
 
 // Asegurar directorio public/uploads
 const uploadDir = path.join(process.cwd(), 'public', 'uploads');
@@ -39,6 +40,8 @@ router.post('/tableros', crearTableroCompleto);
 router.post('/subestaciones', crearInspeccionSubestacion);
 
 // Rutas de Proyectos
+router.get('/empresas', obtenerEmpresas);
+router.post('/empresas', crearEmpresa);
 router.get('/empresas/:empresaId/proyectos', obtenerProyectosPorEmpresa);
 router.get('/proyectos/:proyectoId', obtenerProyectoCompleto);
 
