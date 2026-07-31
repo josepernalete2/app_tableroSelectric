@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
+import bcrypt from 'bcryptjs';
 import { API_BASE_URL } from '../utils/api';
 import { initialTablerosData } from '../data/mockTableros';
 
@@ -169,9 +170,10 @@ export const useStore = create(
   persist(
     (set, get) => ({
       user: null,
+      token: null,
       usersList: [
-        { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
-        { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
+        { id: 'u-1', username: 'admin1', password: '$2b$10$Jj1/hnFp8OxLVN3lqLR7CO9.vBtQpeUqmeboe6QsqF09/p31vq48u', role: 'ADMIN' },
+        { id: 'u-2', username: 'admin2', password: '$2b$10$PwEHHMmOS09COEcUVE4pdu99.JaAc4cExRH.FpEe0AdUm75e5sVxq', role: 'ADMIN' }
       ],
       companies: initialCompanies,
       proyectosLocales: [],
@@ -187,7 +189,10 @@ export const useStore = create(
 
       fetchUsersList: async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/users`);
+          const token = get().token;
+          const res = await fetch(`${API_BASE_URL}/api/users`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
           const data = await res.json();
           if (data.ok) {
             set({ usersList: data.data });
@@ -199,7 +204,10 @@ export const useStore = create(
 
       fetchMessagesList: async (userId) => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`);
+          const token = get().token;
+          const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
           const data = await res.json();
           if (data.ok) {
             set({ messages: data.data });
@@ -210,53 +218,88 @@ export const useStore = create(
       },
 
       login: async (username, password) => {
+        const inputKey = username.toLowerCase().trim();
+
+        // 1. Autenticación contra el servidor (devuelve token JWT)
         if (navigator.onLine) {
-          await get().fetchUsersList();
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: inputKey, password })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.ok && data.token) {
+              set({ user: data.data, token: data.token });
+              get().fetchUsersList();
+              get().fetchMessagesList(data.data.id);
+              return { success: true, user: data.data };
+            }
+
+            if (res.status === 401) {
+              return { success: false, error: data.error || 'Usuario o contraseña incorrectos.' };
+            }
+
+            console.warn(`Login en línea falló (HTTP ${res.status}), validando localmente...`);
+          } catch (e) {
+            console.warn('Servidor no disponible, validando localmente...', e);
+          }
         }
 
+        // 2. Validación local (modo offline) contra hashes bcrypt persistidos
         let list = get().usersList || [];
-        
-        // Garantizar que los administradores por defecto existan siempre en la lista
+
         const hasAdmin1 = list.some((u) => {
           const name = (u.username || u.email || '').toLowerCase().trim();
           return name === 'admin1' || name === 'admin1@selectric.com';
         });
-        
+
         if (!hasAdmin1) {
           const defaultAdmins = [
-            { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
-            { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
+            { id: 'u-1', username: 'admin1', password: '$2b$10$Jj1/hnFp8OxLVN3lqLR7CO9.vBtQpeUqmeboe6QsqF09/p31vq48u', role: 'ADMIN' },
+            { id: 'u-2', username: 'admin2', password: '$2b$10$PwEHHMmOS09COEcUVE4pdu99.JaAc4cExRH.FpEe0AdUm75e5sVxq', role: 'ADMIN' }
           ];
           list = [...defaultAdmins, ...list.filter(u => u.id !== 'u-1' && u.id !== 'u-2')];
           set({ usersList: list });
         }
 
-        const found = list.find((u) => {
+        let found = null;
+
+        for (const u of list) {
           const userKey = (u.username || u.email || '').toLowerCase().trim();
-          const inputKey = username.toLowerCase().trim();
-          
+
           const isUserMatch = userKey === inputKey ||
                               (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
                               (userKey === 'admin1@selectric.com' && inputKey === 'admin1') ||
                               (userKey === 'admin2' && inputKey === 'admin2@selectric.com') ||
                               (userKey === 'admin2@selectric.com' && inputKey === 'admin2');
-                              
-          return isUserMatch && u.password === password;
-        });
+
+          if (!isUserMatch) continue;
+
+          const stored = u.password || '';
+          let valid = false;
+          if (stored.startsWith('$2')) {
+            valid = bcrypt.compareSync(password, stored);
+          } else {
+            valid = stored === password; // compatibilidad con instalaciones antiguas
+          }
+
+          if (valid) {
+            found = u;
+            break;
+          }
+        }
 
         if (found) {
           set({ user: found });
-          if (navigator.onLine) {
-            get().fetchMessagesList(found.id);
-            get().fetchUsersList();
-          }
           return { success: true, user: found };
         }
         return { success: false, error: 'Usuario o contraseña incorrectos.' };
       },
 
       logout: () => {
-        set({ user: null });
+        set({ user: null, token: null });
       },
 
       addUser: async (userObj) => {
@@ -286,9 +329,10 @@ export const useStore = create(
         }));
 
         try {
+          const token = get().token;
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(newUser)
           });
           const data = await res.json();
@@ -339,9 +383,10 @@ export const useStore = create(
         });
 
         try {
+          const token = get().token;
           const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(mergedData)
           });
           const data = await res.json();
@@ -370,8 +415,10 @@ export const useStore = create(
         }));
 
         try {
+          const token = get().token;
           const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` }
           });
           const data = await res.json();
           if (data.ok) {
@@ -796,9 +843,10 @@ export const useStore = create(
         }));
         
         try {
+          const token = get().token;
           const res = await fetch(`${API_BASE_URL}/api/messages`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(newMessage)
           });
           const data = await res.json();
@@ -837,9 +885,10 @@ export const useStore = create(
         }));
 
         try {
+          const token = get().token;
           await fetch(`${API_BASE_URL}/api/messages/read`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ senderId, receiverId: user.id })
           });
         } catch (e) {
@@ -852,6 +901,7 @@ export const useStore = create(
       storage: localForageStorage,
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         usersList: state.usersList || [],
         messages: state.messages || [],
         companies: state.companies,

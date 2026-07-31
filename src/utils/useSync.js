@@ -63,8 +63,12 @@ export function useSync() {
           // Éxito: borrar inmediatamente de la cola en Zustand + IndexedDB
           removeFromQueue(item.id);
         } else {
-          if (res.status === 'NETWORK_ERROR') {
-            // Error de red física: pausar la cola para reintentar cuando regrese la conexión
+          if (res.status === 'NETWORK_ERROR' || res.status === 401) {
+            // Error de red física o token expirado: pausar la cola para reintentar
+            // cuando regrese la conexión o el usuario reingrese sesión.
+            if (res.status === 401) {
+              console.warn('[SYNC 401] Token JWT inválido o expirado. La cola queda pendiente.');
+            }
             break;
           } else if (res.status === 422) {
             // BLOQUEO POR DEPENDENCIA: El proyecto padre no existe en PostgreSQL aún
@@ -142,6 +146,7 @@ export function useSync() {
 
   const sincronizarProyecto = async (empresaId, proyecto) => {
     try {
+      const token = useStore.getState().token;
       const payload = {
         id: proyecto.id,
         nombre: proyecto.nombre,
@@ -151,7 +156,7 @@ export function useSync() {
 
       const response = await fetch(`${API_BASE_URL}/api/proyectos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
       });
 
@@ -168,6 +173,7 @@ export function useSync() {
 
   const sincronizarElementoUnifilar = async (empresaId, elemento) => {
     try {
+      const token = useStore.getState().token;
       const formData = new FormData();
       formData.append('id', elemento.id);
       formData.append('nombre', elemento.nombre);
@@ -191,6 +197,7 @@ export function useSync() {
 
       const response = await fetch(`${API_BASE_URL}/api/elementos-unifilares`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
@@ -215,6 +222,7 @@ export function useSync() {
 
   const sincronizarSubestacion = async (empresaId, subestacion) => {
     try {
+      const token = useStore.getState().token;
       const payload = {
         id: subestacion.id,
         nombre: subestacion.nombre,
@@ -236,7 +244,7 @@ export function useSync() {
 
       const response = await fetch(`${API_BASE_URL}/api/subestaciones`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
       });
 

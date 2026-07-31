@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import bcrypt from 'bcryptjs';
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:admin123@localhost:5432/inspecciones?schema=public';
 const pool = new pg.Pool({ connectionString });
@@ -41,7 +42,7 @@ async function main() {
     create: {
       id: 'u-1',
       username: 'admin1',
-      password: 'admin1',
+      password: await bcrypt.hash('admin1', 10),
       role: 'ADMIN'
     }
   });
@@ -52,7 +53,7 @@ async function main() {
     create: {
       id: 'u-2',
       username: 'admin2',
-      password: 'admin2',
+      password: await bcrypt.hash('admin2', 10),
       role: 'ADMIN'
     }
   });
