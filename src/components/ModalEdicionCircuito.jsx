@@ -35,6 +35,11 @@ export const ModalEdicionCircuito = ({
   const [descArtefacto, setDescArtefacto] = useState('');
   const [potenciaWatts, setPotenciaWatts] = useState('');
 
+  // Nuevos estados para parámetros físicos del Breaker/Circuito
+  const [numPolos, setNumPolos] = useState(1);
+  const [posicionPolo, setPosicionPolo] = useState(1);
+  const [estado, setEstado] = useState('ACTIVO');
+
   // Ruta NO: ¿Alimenta otro elemento?
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLink, setSelectedLink] = useState(null);
@@ -55,6 +60,10 @@ export const ModalEdicionCircuito = ({
       setPotenciaWatts(circuitData.ficha?.potenciaWatts || '');
       setRotulo(circuitData.equipo || '');
       setFotoUrl(circuitData.fotografia || null);
+
+      setNumPolos(circuitData.poles?.length || 1);
+      setPosicionPolo(circuitData.poles?.[0] || 1);
+      setEstado(circuitData.estado || 'ACTIVO');
 
       if (circuitData.tipoDestino === 'ARTEFACTO') {
         setStep('FORMULARIO_ARTEFACTO');
@@ -82,6 +91,14 @@ export const ModalEdicionCircuito = ({
     el.nombre.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const getPolesArray = (startPole, n) => {
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      arr.push(startPole + i * 2);
+    }
+    return arr;
+  };
+
   const handleSaveArtefacto = () => {
     if (!nombreArtefacto.trim()) return alert('Por favor, ingresa el nombre del artefacto.');
     onSave(circuitData.id, {
@@ -89,6 +106,10 @@ export const ModalEdicionCircuito = ({
       tipoDestino: 'ARTEFACTO',
       breaker: { amp: breakerAmp, marca: breakerMarca, tipo: breakerTipo },
       conductor: conductor,
+      poles: getPolesArray(posicionPolo, numPolos),
+      numPolos: numPolos,
+      posicionPolo: posicionPolo,
+      estado: estado,
       ficha: {
         descripcion: descArtefacto,
         potenciaWatts: potenciaWatts ? parseFloat(potenciaWatts) : null,
@@ -106,13 +127,17 @@ export const ModalEdicionCircuito = ({
       vinculadoId: el.id,
       breaker: circuitData.breaker,
       conductor: circuitData.conductor,
+      poles: getPolesArray(posicionPolo, numPolos),
+      numPolos: numPolos,
+      posicionPolo: posicionPolo,
+      estado: estado
     });
     onClose();
   };
 
   const handleSavePorCrear = () => {
-    // Label as RESERVA and add to creating queue
-    const pendingName = `Sub-Tablero en Polo ${circuitData.poles.join(', ')}`;
+    const calculatedPoles = getPolesArray(posicionPolo, numPolos);
+    const pendingName = `Sub-Tablero en Polo ${calculatedPoles.join(', ')}`;
     if (onAgregarPorCrear) {
       onAgregarPorCrear({
         nombre: pendingName,
@@ -124,6 +149,10 @@ export const ModalEdicionCircuito = ({
       tipoDestino: 'SUB_TABLERO_PENDIENTE',
       breaker: circuitData.breaker,
       conductor: circuitData.conductor,
+      poles: calculatedPoles,
+      numPolos: numPolos,
+      posicionPolo: posicionPolo,
+      estado: estado
     });
     onClose();
   };
@@ -135,6 +164,10 @@ export const ModalEdicionCircuito = ({
       fotografia: fotoUrl,
       breaker: circuitData.breaker,
       conductor: conductor || circuitData.conductor,
+      poles: getPolesArray(posicionPolo, numPolos),
+      numPolos: numPolos,
+      posicionPolo: posicionPolo,
+      estado: estado
     });
     onClose();
   };
@@ -199,6 +232,98 @@ export const ModalEdicionCircuito = ({
         {/* Contenido / Pantallas */}
         <div className="flex-1 overflow-y-auto p-6">
           
+          {/* Parámetros Físicos del Breaker / Circuito */}
+          <div className="bg-slate-50 dark:bg-slate-800/40 p-4 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 mb-6 font-sans text-xs">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-slate-500 font-bold uppercase tracking-wider text-[9px] mb-1">Polos</label>
+                <select
+                  value={numPolos}
+                  onChange={(e) => setNumPolos(parseInt(e.target.value, 10))}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-750 rounded-lg px-2 py-1.5 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  {[1, 2, 3].map(p => (
+                    <option key={p} value={p}>{p === 1 ? '1 Polo (1P)' : p === 2 ? '2 Polos (2P)' : '3 Polos (3P)'}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-500 font-bold uppercase tracking-wider text-[9px] mb-1">Polo Inicial</label>
+                <input
+                  type="number"
+                  value={posicionPolo}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    if (val > 0) setPosicionPolo(val);
+                  }}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-750 rounded-lg px-2 py-1 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 font-bold uppercase tracking-wider text-[9px] mb-1">Estado</label>
+                <select
+                  value={estado}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEstado(val);
+                    if (val === 'RESERVA') {
+                      setNombreArtefacto('RESERVA');
+                      setRotulo('RESERVA');
+                      setBreakerAmp('');
+                      setDescArtefacto('');
+                      setPotenciaWatts('');
+                    } else if (val === 'DISPONIBLE') {
+                      setNombreArtefacto('DISPONIBLE');
+                      setRotulo('DISPONIBLE');
+                      setBreakerAmp('');
+                      setDescArtefacto('');
+                      setPotenciaWatts('');
+                    }
+                  }}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-750 rounded-lg px-2 py-1 text-slate-800 dark:text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="ACTIVO">ACTIVO</option>
+                  <option value="RESERVA">RESERVA</option>
+                  <option value="DISPONIBLE">DISPONIBLE</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEstado('RESERVA');
+                  setNombreArtefacto('RESERVA');
+                  setRotulo('RESERVA');
+                  setBreakerAmp('');
+                  setDescArtefacto('');
+                  setPotenciaWatts('');
+                }}
+                className="flex-1 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-600 dark:text-amber-500 rounded font-bold text-[9px] transition-all cursor-pointer uppercase tracking-wider"
+              >
+                Set RESERVA
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEstado('DISPONIBLE');
+                  setNombreArtefacto('DISPONIBLE');
+                  setRotulo('DISPONIBLE');
+                  setBreakerAmp('');
+                  setDescArtefacto('');
+                  setPotenciaWatts('');
+                }}
+                className="flex-1 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-600 dark:text-sky-400 rounded font-bold text-[9px] transition-all cursor-pointer uppercase tracking-wider"
+              >
+                Set DISPONIBLE
+              </button>
+            </div>
+          </div>
+
           {/* 1. ¿Es un equipo o artefacto? */}
           {step === 'PREGUNTA_ES_ARTEFACTO' && (
             <div className="space-y-6">

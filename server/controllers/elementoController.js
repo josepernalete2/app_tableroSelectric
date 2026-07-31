@@ -95,6 +95,83 @@ export const crearElementoUnifilar = async (req, res, next) => {
       finalFoto = `/uploads/${req.file.filename}`;
     }
 
+    // SI ES TABLERO, APLICAR VALIDACIONES Y CREAR EN TABLAS INDEPENDIENTES
+    if (tipoElemento === 'TABLERO') {
+      const maxPolos = parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42;
+      const circuits = parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || [];
+
+      // Validar reglas de polos
+      for (const circ of circuits) {
+        const numPolos = circ.numPolos !== undefined ? parseInt(circ.numPolos, 10) : (circ.poles ? circ.poles.length : 1);
+        const posicionPolo = circ.posicionPolo !== undefined ? parseInt(circ.posicionPolo, 10) : (circ.poles ? circ.poles[0] : 1);
+
+        if (numPolos < 1 || numPolos > 3) {
+          return res.status(400).json({
+            ok: false,
+            error: `Validación fallida: numPolos (${numPolos}) debe estar entre 1 y 3.`
+          });
+        }
+
+        if (posicionPolo + (numPolos - 1) > maxPolos) {
+          return res.status(400).json({
+            ok: false,
+            error: `Validación fallida: El circuito en la posición ${posicionPolo} con ${numPolos} polos supera la capacidad máxima del gabinete de ${maxPolos} polos.`
+          });
+        }
+      }
+
+      // Upsert Tablero
+      const tension = parsedDatosTecnicos.tension || parsedDatosTecnicos.voltajeAcometida || null;
+      const fases = parsedDatosTecnicos.fases !== undefined ? parseInt(parsedDatosTecnicos.fases, 10) : 3;
+      const alimentadorId = parsedDatosTecnicos.alimentadorId || null;
+
+      await prisma.tablero.upsert({
+        where: { id: id || '' },
+        update: {
+          nombre,
+          ubicacion: ubicacion || null,
+          maxPolos,
+          tension,
+          fases,
+          alimentadorId,
+          proyectoId,
+          empresaId: empresaId || null,
+          circuitos: {
+            deleteMany: {},
+            create: circuits.map(c => ({
+              id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
+              posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
+              numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
+              amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
+              descripcion: c.descripcion || c.equipo || null,
+              estado: c.estado || 'ACTIVO'
+            }))
+          }
+        },
+        create: {
+          id: id || undefined,
+          nombre,
+          ubicacion: ubicacion || null,
+          maxPolos,
+          tension,
+          fases,
+          alimentadorId,
+          proyectoId,
+          empresaId: empresaId || null,
+          circuitos: {
+            create: circuits.map(c => ({
+              id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
+              posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
+              numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
+              amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
+              descripcion: c.descripcion || c.equipo || null,
+              estado: c.estado || 'ACTIVO'
+            }))
+          }
+        }
+      });
+    }
+
     // 4. Inserción relacional segura en PostgreSQL usando connect en camelCase
     const nuevoElemento = await prisma.elementoUnifilar.create({
       data: {

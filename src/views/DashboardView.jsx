@@ -15,14 +15,42 @@ export const DashboardView = () => {
   const { user, companies, addCompany, deleteCompany } = useStore();
   const [showModal, setShowModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
+  const [rif, setRif] = useState('');
+  const [direccionFiscal, setDireccionFiscal] = useState('');
+  const [gerente1Nombre, setGerente1Nombre] = useState('');
+  const [gerente1Telefono, setGerente1Telefono] = useState('');
+  const [gerente1Email, setGerente1Email] = useState('');
+  const [gerente2Nombre, setGerente2Nombre] = useState('');
+  const [gerente2Telefono, setGerente2Telefono] = useState('');
+  const [gerente2Email, setGerente2Email] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
-  const handleCreateCompany = (e) => {
+  const handleCreateCompany = async (e) => {
     e.preventDefault();
-    if (!newCompanyName.trim()) return;
-    addCompany(newCompanyName);
+    if (!newCompanyName.trim() || !rif.trim() || !direccionFiscal.trim()) return;
+
+    await addCompany({
+      nombre: newCompanyName.trim(),
+      rif: rif.trim(),
+      direccionFiscal: direccionFiscal.trim(),
+      gerente1Nombre: gerente1Nombre.trim() || null,
+      gerente1Telefono: gerente1Telefono.trim() || null,
+      gerente1Email: gerente1Email.trim() || null,
+      gerente2Nombre: gerente2Nombre.trim() || null,
+      gerente2Telefono: gerente2Telefono.trim() || null,
+      gerente2Email: gerente2Email.trim() || null
+    });
+
     setNewCompanyName('');
+    setRif('');
+    setDireccionFiscal('');
+    setGerente1Nombre('');
+    setGerente1Telefono('');
+    setGerente1Email('');
+    setGerente2Nombre('');
+    setGerente2Telefono('');
+    setGerente2Email('');
     setShowModal(false);
   };
 
@@ -151,7 +179,7 @@ export const DashboardView = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowModal(false)} />
           
-          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">
                 Registrar Nueva Empresa
@@ -164,7 +192,7 @@ export const DashboardView = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateCompany} className="mt-4 space-y-4">
+            <form onSubmit={handleCreateCompany} className="mt-4 space-y-4 max-h-[70vh] overflow-y-auto pr-1 text-xs">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nombre de la Empresa / Cliente
@@ -175,21 +203,122 @@ export const DashboardView = () => {
                   value={newCompanyName}
                   onChange={(e) => setNewCompanyName(e.target.value)}
                   placeholder="Ej. Farmatodo Sucursal Chacao"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-10"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9"
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                    RIF
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={rif}
+                    onChange={(e) => setRif(e.target.value)}
+                    placeholder="Ej. J-12345678-9"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                    Dirección Fiscal
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={direccionFiscal}
+                    onChange={(e) => setDireccionFiscal(e.target.value)}
+                    placeholder="Ej. Av. Araure, San Román..."
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 mt-3">
+                <span className="text-[10px] text-sky-400 font-bold uppercase tracking-wider block mb-2">Contacto Gerente Principal</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Nombre</label>
+                    <input
+                      type="text"
+                      value={gerente1Nombre}
+                      onChange={(e) => setGerente1Nombre(e.target.value)}
+                      placeholder="Nombre"
+                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Teléfono</label>
+                    <input
+                      type="text"
+                      value={gerente1Telefono}
+                      onChange={(e) => setGerente1Telefono(e.target.value)}
+                      placeholder="Teléfono"
+                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email</label>
+                    <input
+                      type="email"
+                      value={gerente1Email}
+                      onChange={(e) => setGerente1Email(e.target.value)}
+                      placeholder="Email"
+                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 mt-3">
+                <span className="text-[10px] text-sky-400 font-bold uppercase tracking-wider block mb-2">Contacto Gerente Secundario</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Nombre</label>
+                    <input
+                      type="text"
+                      value={gerente2Nombre}
+                      onChange={(e) => setGerente2Nombre(e.target.value)}
+                      placeholder="Nombre"
+                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Teléfono</label>
+                    <input
+                      type="text"
+                      value={gerente2Telefono}
+                      onChange={(e) => setGerente2Telefono(e.target.value)}
+                      placeholder="Teléfono"
+                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email</label>
+                    <input
+                      type="email"
+                      value={gerente2Email}
+                      onChange={(e) => setGerente2Email(e.target.value)}
+                      placeholder="Email"
+                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 cursor-pointer"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-350 cursor-pointer h-9"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-md"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-md h-9"
                 >
                   Registrar
                 </button>

@@ -29,6 +29,7 @@ export const SidebarLayout = () => {
   const isChatEnabled = false;
   const { 
     user, 
+    token,
     logout, 
     companies, 
     importCompanies,
@@ -144,7 +145,11 @@ export const SidebarLayout = () => {
   // Exportar DB PostgreSQL
   const handleExportDb = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/backup/export');
+      const res = await fetch('http://localhost:3001/api/backup/export', {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       const result = await res.json();
       if (result.ok) {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
@@ -179,7 +184,10 @@ export const SidebarLayout = () => {
         const parsed = JSON.parse(reader.result);
         const res = await fetch('http://localhost:3001/api/backup/import', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
           body: JSON.stringify({ data: parsed })
         });
         const result = await res.json();
@@ -213,7 +221,10 @@ export const SidebarLayout = () => {
     try {
       const res = await fetch('http://localhost:3001/api/backup/gdrive-sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           email: gdriveEmail.trim()
         })
@@ -249,7 +260,10 @@ export const SidebarLayout = () => {
         try {
           const res = await fetch('http://localhost:3001/api/backup/gdrive-sync', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({
               email: email.trim()
             })

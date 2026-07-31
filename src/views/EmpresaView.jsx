@@ -53,11 +53,41 @@ export const EmpresaView = () => {
     addProyecto, 
     addElementoUnifilar,
     deleteElementoUnifilar,
+    updateEmpresa,
     showToast
   } = useStore();
   
   const company = companies.find((c) => c.id === companyId);
   
+  // Estados para Edición de Empresa
+  const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
+  const [editNombre, setEditNombre] = useState('');
+  const [editRif, setEditRif] = useState('');
+  const [editDireccionFiscal, setEditDireccionFiscal] = useState('');
+  const [editGerente1Nombre, setEditGerente1Nombre] = useState('');
+  const [editGerente1Telefono, setEditGerente1Telefono] = useState('');
+  const [editGerente1Email, setEditGerente1Email] = useState('');
+  const [editGerente2Nombre, setEditGerente2Nombre] = useState('');
+  const [editGerente2Telefono, setEditGerente2Telefono] = useState('');
+  const [editGerente2Email, setEditGerente2Email] = useState('');
+
+  const handleUpdateEmpresaSubmit = async (e) => {
+    e.preventDefault();
+    await updateEmpresa(companyId, {
+      nombre: editNombre,
+      rif: editRif,
+      direccionFiscal: editDireccionFiscal,
+      gerente1Nombre: editGerente1Nombre || null,
+      gerente1Telefono: editGerente1Telefono || null,
+      gerente1Email: editGerente1Email || null,
+      gerente2Nombre: editGerente2Nombre || null,
+      gerente2Telefono: editGerente2Telefono || null,
+      gerente2Email: editGerente2Email || null
+    });
+    showToast("Datos de la empresa actualizados correctamente.", "success");
+    setShowEditEmpresaModal(false);
+  };
+
   // Modales y búsqueda
   const [showModal, setShowModal] = useState(false); // Modal Proyecto
   const [showElementoModal, setShowElementoModal] = useState(false); // Modal Elemento
@@ -328,6 +358,84 @@ export const EmpresaView = () => {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-8">
+        
+        {/* CARD INFORMACION DE LA EMPRESA */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+          <div className="flex justify-between items-start gap-4">
+            <div>
+              <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider block mb-1">Ficha Técnica</span>
+              <h2 className="text-xl font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
+                <Building className="w-5 h-5 text-amber-500" /> {company.nombre}
+              </h2>
+            </div>
+            {user?.role === 'ADMIN' && (
+              <button
+                onClick={() => {
+                  setEditNombre(company.nombre);
+                  setEditRif(company.rif || '');
+                  setEditDireccionFiscal(company.direccionFiscal || '');
+                  setEditGerente1Nombre(company.gerente1Nombre || '');
+                  setEditGerente1Telefono(company.gerente1Telefono || '');
+                  setEditGerente1Email(company.gerente1Email || '');
+                  setEditGerente2Nombre(company.gerente2Nombre || '');
+                  setEditGerente2Telefono(company.gerente2Telefono || '');
+                  setEditGerente2Email(company.gerente2Email || '');
+                  setShowEditEmpresaModal(true);
+                }}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold rounded-lg text-slate-200 hover:text-slate-100 flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+              >
+                Editar Empresa
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-900">
+            <div>
+              <span className="text-[10px] text-slate-500 font-bold uppercase block">RIF</span>
+              <span className="text-sm font-semibold text-slate-200">{company.rif || 'J-N/D'}</span>
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-[10px] text-slate-500 font-bold uppercase block">Dirección Fiscal</span>
+              <span className="text-sm font-semibold text-slate-200">{company.direccionFiscal || 'N/D'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-bold uppercase block">Registro</span>
+              <div className="text-[10px] text-slate-400 font-mono mt-1 space-y-0.5">
+                <div>Creado: {company.createdAt ? new Date(company.createdAt).toLocaleString('es-ES') : 'N/D'}</div>
+                <div>Actualizado: {company.updatedAt ? new Date(company.updatedAt).toLocaleString('es-ES') : 'N/D'}</div>
+              </div>
+            </div>
+          </div>
+
+          {user?.role === 'ADMIN' && (
+            <div className="mt-6 pt-6 border-t border-slate-900">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                <User className="w-4 h-4 text-sky-400" /> Contacto Gerencial (Solo Visible para Administradores)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Gerente 1 */}
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-900">
+                  <span className="text-[10px] text-sky-400 font-bold uppercase block mb-2">Gerente Principal</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div><strong className="text-slate-450">Nombre:</strong> <span className="text-slate-255 font-semibold">{company.gerente1Nombre || 'N/D'}</span></div>
+                    <div><strong className="text-slate-450">Teléfono:</strong> <span className="text-slate-255 font-semibold">{company.gerente1Telefono || 'N/D'}</span></div>
+                    <div><strong className="text-slate-450">Email:</strong> <span className="text-slate-255 font-semibold">{company.gerente1Email || 'N/D'}</span></div>
+                  </div>
+                </div>
+
+                {/* Gerente 2 */}
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-900">
+                  <span className="text-[10px] text-sky-400 font-bold uppercase block mb-2">Gerente Secundario</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div><strong className="text-slate-450">Nombre:</strong> <span className="text-slate-255 font-semibold">{company.gerente2Nombre || 'N/D'}</span></div>
+                    <div><strong className="text-slate-450">Teléfono:</strong> <span className="text-slate-255 font-semibold">{company.gerente2Telefono || 'N/D'}</span></div>
+                    <div><strong className="text-slate-450">Email:</strong> <span className="text-slate-255 font-semibold">{company.gerente2Email || 'N/D'}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         
         {/* Actions panel */}
         <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 pb-6 border-b border-slate-800/80">
@@ -1064,6 +1172,143 @@ export const EmpresaView = () => {
                 </button>
               </div>
 
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edición de Empresa */}
+      {showEditEmpresaModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-6">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Building className="w-5 h-5 text-amber-500" /> Editar Empresa
+              </h3>
+              <button 
+                onClick={() => setShowEditEmpresaModal(false)}
+                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateEmpresaSubmit} className="space-y-4 font-sans text-xs">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Nombre Comercial</label>
+                <input 
+                  type="text" 
+                  value={editNombre} 
+                  onChange={(e) => setEditNombre(e.target.value)} 
+                  required 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">RIF</label>
+                  <input 
+                    type="text" 
+                    value={editRif} 
+                    onChange={(e) => setEditRif(e.target.value)} 
+                    required 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-semibold mb-1">Dirección Fiscal</label>
+                  <input 
+                    type="text" 
+                    value={editDireccionFiscal} 
+                    onChange={(e) => setEditDireccionFiscal(e.target.value)} 
+                    required 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-4 mt-4 space-y-4">
+                <h4 className="font-bold text-sky-400 uppercase tracking-wider text-[10px]">Gerente Principal</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-1">
+                    <label className="block text-slate-500 font-medium mb-1">Nombre</label>
+                    <input 
+                      type="text" 
+                      value={editGerente1Nombre} 
+                      onChange={(e) => setEditGerente1Nombre(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="block text-slate-500 font-medium mb-1">Teléfono</label>
+                    <input 
+                      type="text" 
+                      value={editGerente1Telefono} 
+                      onChange={(e) => setEditGerente1Telefono(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="block text-slate-500 font-medium mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      value={editGerente1Email} 
+                      onChange={(e) => setEditGerente1Email(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-4 mt-4 space-y-4">
+                <h4 className="font-bold text-sky-400 uppercase tracking-wider text-[10px]">Gerente Secundario</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-1">
+                    <label className="block text-slate-500 font-medium mb-1">Nombre</label>
+                    <input 
+                      type="text" 
+                      value={editGerente2Nombre} 
+                      onChange={(e) => setEditGerente2Nombre(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="block text-slate-500 font-medium mb-1">Teléfono</label>
+                    <input 
+                      type="text" 
+                      value={editGerente2Telefono} 
+                      onChange={(e) => setEditGerente2Telefono(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="block text-slate-500 font-medium mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      value={editGerente2Email} 
+                      onChange={(e) => setEditGerente2Email(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEditEmpresaModal(false)}
+                  className="px-4 py-2 border border-slate-700 text-slate-350 hover:bg-slate-800 hover:text-slate-200 rounded-lg font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-98 rounded-lg font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
             </form>
           </div>
         </div>

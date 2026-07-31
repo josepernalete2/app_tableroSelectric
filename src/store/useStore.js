@@ -169,6 +169,7 @@ export const useStore = create(
   persist(
     (set, get) => ({
       user: null,
+      token: null,
       usersList: [
         { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
         { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
@@ -187,7 +188,12 @@ export const useStore = create(
 
       fetchUsersList: async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/users`);
+          const { token } = get();
+          const res = await fetch(`${API_BASE_URL}/api/users`, {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          });
           const data = await res.json();
           if (data.ok) {
             set({ usersList: data.data });
@@ -199,7 +205,12 @@ export const useStore = create(
 
       fetchMessagesList: async (userId) => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`);
+          const { token } = get();
+          const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`, {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          });
           const data = await res.json();
           if (data.ok) {
             set({ messages: data.data });
@@ -211,12 +222,28 @@ export const useStore = create(
 
       login: async (username, password) => {
         if (navigator.onLine) {
-          await get().fetchUsersList();
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (data.ok) {
+              set({ user: data.user, token: data.token });
+              get().fetchMessagesList(data.user.id);
+              get().fetchUsersList();
+              return { success: true, user: data.user };
+            } else {
+              return { success: false, error: data.error || 'Usuario o contraseña incorrectos.' };
+            }
+          } catch (e) {
+            console.error('Error de red al iniciar sesión:', e);
+          }
         }
 
+        // Fallback offline
         let list = get().usersList || [];
-        
-        // Garantizar que los administradores por defecto existan siempre en la lista
         const hasAdmin1 = list.some((u) => {
           const name = (u.username || u.email || '').toLowerCase().trim();
           return name === 'admin1' || name === 'admin1@selectric.com';
@@ -234,7 +261,6 @@ export const useStore = create(
         const found = list.find((u) => {
           const userKey = (u.username || u.email || '').toLowerCase().trim();
           const inputKey = username.toLowerCase().trim();
-          
           const isUserMatch = userKey === inputKey ||
                               (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
                               (userKey === 'admin1@selectric.com' && inputKey === 'admin1') ||
@@ -245,18 +271,14 @@ export const useStore = create(
         });
 
         if (found) {
-          set({ user: found });
-          if (navigator.onLine) {
-            get().fetchMessagesList(found.id);
-            get().fetchUsersList();
-          }
+          set({ user: found, token: 'mock-offline-token' });
           return { success: true, user: found };
         }
         return { success: false, error: 'Usuario o contraseña incorrectos.' };
       },
 
       logout: () => {
-        set({ user: null });
+        set({ user: null, token: null });
       },
 
       addUser: async (userObj) => {
@@ -286,9 +308,13 @@ export const useStore = create(
         }));
 
         try {
+          const { token } = get();
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify(newUser)
           });
           const data = await res.json();
@@ -324,8 +350,7 @@ export const useStore = create(
         set((state) => {
           const updatedList = (state.usersList || []).map((u) => {
             if (u.id === userId) {
-              const updatedUser = { ...u, ...mergedData };
-              return updatedUser;
+              return { ...u, ...mergedData };
             }
             return u;
           });
@@ -339,9 +364,13 @@ export const useStore = create(
         });
 
         try {
+          const { token } = get();
           const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify(mergedData)
           });
           const data = await res.json();
@@ -370,8 +399,12 @@ export const useStore = create(
         }));
 
         try {
+          const { token } = get();
           const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
           });
           const data = await res.json();
           if (data.ok) {
@@ -384,15 +417,257 @@ export const useStore = create(
         return { success: true };
       },
 
-      addCompany: (nombre) => {
+      updateEmpresa: async (companyId, updatedData) => {
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              return { ...c, ...updatedData };
+            }
+            return c;
+          })
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/empresas/${companyId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(updatedData)
+            });
+          } catch (e) {
+            console.error('Error al actualizar empresa en el servidor:', e);
+          }
+        }
+      },
+
+      updateProyecto: async (companyId, proyectoId, updatedData) => {
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              return {
+                ...c,
+                proyectos: (c.proyectos || []).map((p) => {
+                  if (p.id === proyectoId) {
+                    return { ...p, ...updatedData };
+                  }
+                  return p;
+                })
+              };
+            }
+            return c;
+          })
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/proyectos/${proyectoId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(updatedData)
+            });
+          } catch (e) {
+            console.error('Error al actualizar proyecto en el servidor:', e);
+          }
+        }
+      },
+
+      fetchAlimentadores: async (proyectoId) => {
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            const res = await fetch(`${API_BASE_URL}/api/alimentadores?proyectoId=${proyectoId}`, {
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+            const data = await res.json();
+            if (data.ok) {
+              set((state) => ({
+                companies: state.companies.map((c) => ({
+                  ...c,
+                  proyectos: (c.proyectos || []).map((p) => {
+                    if (p.id === proyectoId) {
+                      return { ...p, alimentadores: data.data };
+                    }
+                    return p;
+                  })
+                }))
+              }));
+            }
+          } catch (e) {
+            console.error('Error al obtener alimentadores:', e);
+          }
+        }
+      },
+
+      addAlimentador: async (alimentadorData) => {
+        const { proyectoId } = alimentadorData;
+        const newAlimentador = {
+          id: alimentadorData.id || crypto.randomUUID(),
+          ...alimentadorData
+        };
+
+        set((state) => ({
+          companies: state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const currentAlims = p.alimentadores || [];
+                return { ...p, alimentadores: [...currentAlims, newAlimentador] };
+              }
+              return p;
+            })
+          }))
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/alimentadores`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(newAlimentador)
+            });
+          } catch (e) {
+            console.error('Error al guardar alimentador:', e);
+          }
+        }
+      },
+
+      deleteAlimentador: async (proyectoId, alimentadorId) => {
+        set((state) => ({
+          companies: state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const currentAlims = p.alimentadores || [];
+                return { ...p, alimentadores: currentAlims.filter(a => a.id !== alimentadorId) };
+              }
+              return p;
+            })
+          }))
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/alimentadores/${alimentadorId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar alimentador:', e);
+          }
+        }
+      },
+
+      updateTableroAlimentador: (proyectoId, tableroId, alimentadorId) => {
+        set((state) => {
+          const updateElement = (e) => {
+            if (e.id === tableroId) {
+              return {
+                ...e,
+                datosTecnicos: {
+                  ...e.datosTecnicos,
+                  alimentadorId
+                }
+              };
+            }
+            return e;
+          };
+
+          const updatedCompanies = state.companies.map((c) => {
+            if (!proyectoId) {
+              const list = c.elementosUnifilares || [];
+              return { ...c, elementosUnifilares: list.map(updateElement) };
+            }
+            return {
+              ...c,
+              proyectos: (c.proyectos || []).map((p) => {
+                if (p.id === proyectoId) {
+                  const list = p.elementosUnifilares || p.tableros || [];
+                  return { ...p, elementosUnifilares: list.map(updateElement) };
+                }
+                return p;
+              })
+            };
+          });
+
+          // Obtener el elemento locales para encolar
+          const allElements = state.elementosLocales || [];
+          const updatedElement = allElements.find(e => e.id === tableroId);
+          let payload = null;
+          if (updatedElement) {
+            payload = {
+              ...updatedElement,
+              datosTecnicos: {
+                ...updatedElement.datosTecnicos,
+                alimentadorId
+              }
+            };
+          }
+
+          return {
+            companies: updatedCompanies,
+            elementosLocales: (state.elementosLocales || []).map(updateElement),
+            syncQueue: payload ? [...state.syncQueue, {
+              id: tableroId,
+              tipo: 'ELEMENTO_UNIFILAR',
+              companyId: updatedElement ? (updatedElement.companyId || updatedElement.empresaId) : null,
+              payload
+            }] : state.syncQueue
+          };
+        });
+      },
+
+      addCompany: async (companyData) => {
         const newCompany = {
-          id: `company-${Date.now()}`,
-          nombre,
+          id: companyData.id || `company-${Date.now()}`,
+          nombre: companyData.nombre,
+          rif: companyData.rif,
+          direccionFiscal: companyData.direccionFiscal,
+          direccion: companyData.direccion || companyData.direccionFiscal || '',
+          gerente1Nombre: companyData.gerente1Nombre || null,
+          gerente1Telefono: companyData.gerente1Telefono || null,
+          gerente1Email: companyData.gerente1Email || null,
+          gerente2Nombre: companyData.gerente2Nombre || null,
+          gerente2Telefono: companyData.gerente2Telefono || null,
+          gerente2Email: companyData.gerente2Email || null,
           proyectos: []
         };
+
         set((state) => ({
           companies: [...state.companies, newCompany]
         }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/empresas`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(newCompany)
+            });
+          } catch (e) {
+            console.error('Error al registrar empresa en el servidor:', e);
+          }
+        }
       },
 
       deleteCompany: (companyId) => {
@@ -852,6 +1127,7 @@ export const useStore = create(
       storage: localForageStorage,
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         usersList: state.usersList || [],
         messages: state.messages || [],
         companies: state.companies,

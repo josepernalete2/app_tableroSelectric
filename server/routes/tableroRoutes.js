@@ -2,12 +2,19 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { crearTableroCompleto, obtenerTablerosPorEmpresa } from '../controllers/tableroController.js';
+
+// Middlewares
+import { verificarToken } from '../middleware/authMiddleware.js';
+
+// Controladores
+import { loginUsuario, obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
+import { obtenerEmpresas, obtenerEmpresaPorId, actualizarEmpresa, crearEmpresa } from '../controllers/empresaController.js';
+import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto, actualizarProyecto } from '../controllers/proyectoController.js';
+import { obtenerAlimentadores, crearAlimentador, actualizarAlimentador, eliminarAlimentador } from '../controllers/alimentadorController.js';
+import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito } from '../controllers/tableroController.js';
 import { crearInspeccionSubestacion } from '../controllers/subestacionController.js';
 import { crearElementoUnifilar } from '../controllers/elementoController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
-import { obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto } from '../controllers/proyectoController.js';
-import { obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 
 // Asegurar directorio public/uploads
@@ -32,19 +39,47 @@ const upload = multer({ storage });
 
 const router = Router();
 
-// Endpoints para registrar elementos (cola de sincronización universal)
-router.post('/proyectos', crearProyecto);
-router.post('/elementos-unifilares', upload.single('foto'), crearElementoUnifilar);
-router.post('/tableros', crearTableroCompleto);
-router.post('/subestaciones', crearInspeccionSubestacion);
+// Endpoint de Autenticación (PÚBLICO)
+router.post('/login', loginUsuario);
+
+// A partir de aquí todas las rutas requieren autenticación JWT
+router.use(verificarToken);
+
+// Rutas de Empresas
+router.get('/empresas', obtenerEmpresas);
+router.post('/empresas', crearEmpresa);
+router.get('/empresas/:id', obtenerEmpresaPorId);
+router.put('/empresas/:id', actualizarEmpresa);
 
 // Rutas de Proyectos
-router.get('/empresas/:empresaId/proyectos', obtenerProyectosPorEmpresa);
+router.get('/proyectos', obtenerProyectos);
+router.post('/proyectos', crearProyecto);
 router.get('/proyectos/:proyectoId', obtenerProyectoCompleto);
+router.put('/proyectos/:id', actualizarProyecto);
+router.get('/empresas/:empresaId/proyectos', obtenerProyectosPorEmpresa);
 
-// Rutas originales con compatibilidad
+// Rutas de Alimentadores (NUEVAS)
+router.get('/alimentadores', obtenerAlimentadores);
+router.post('/alimentadores', crearAlimentador);
+router.put('/alimentadores/:id', actualizarAlimentador);
+router.delete('/alimentadores/:id', eliminarAlimentador);
+
+// Rutas de Tableros
+router.post('/tableros', crearTableroCompleto);
+router.get('/tableros/:id', obtenerTableroPorId);
+router.put('/tableros/:id', actualizarTablero);
+router.delete('/tableros/:id', eliminarTablero);
 router.post('/empresas/:empresaId/tableros', crearTableroCompleto);
 router.get('/empresas/:empresaId/tableros', obtenerTablerosPorEmpresa);
+
+// Rutas de Circuitos (NUEVAS)
+router.post('/tableros/:tableroId/circuitos', crearCircuito);
+router.put('/circuitos/:id', actualizarCircuito);
+router.delete('/circuitos/:id', eliminarCircuito);
+
+// Rutas de Elementos Genéricos y Subestaciones
+router.post('/elementos-unifilares', upload.single('foto'), crearElementoUnifilar);
+router.post('/subestaciones', crearInspeccionSubestacion);
 
 // Endpoints de Respaldo e Importación/Exportación
 router.get('/backup/export', exportDatabase);

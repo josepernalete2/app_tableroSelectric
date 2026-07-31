@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
 import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer } from 'lucide-react';
+import useStore from '../store/useStore';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -35,6 +36,25 @@ const TIPO_OPTIONS = ['TQ', 'TQD', 'M35', 'A2C', 'NS', 'TED32', 'M51', 'TM250', 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
   const [editingCircuit, setEditingCircuit] = useState(null);
   const [elementosPorCrear, setElementosPorCrear] = useState([]);
+
+  const { companies, updateTableroAlimentador } = useStore();
+
+  const project = React.useMemo(() => {
+    if (!tableroData?.id) return null;
+    for (const c of companies) {
+      if (c.proyectos) {
+        for (const p of c.proyectos) {
+          const tableros = p.elementosUnifilares || p.tableros || [];
+          if (tableros.some(t => t.id === tableroData.id)) {
+            return p;
+          }
+        }
+      }
+    }
+    return null;
+  }, [companies, tableroData?.id]);
+
+  const alimentadores = project?.alimentadores || [];
 
   // Normalize circuits: ensure all poles from 1 to maxPoles are represented exactly once
   const maxPoles = tableroData?.maxPoles || 30;
@@ -275,13 +295,99 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             <td className="w-24 p-2 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase">
               Alimentado Por:
             </td>
-            <td colSpan={6} className="p-0 font-medium">
-              <EditableCell
-                value={alimentadoPor}
-                onSave={(val) => updateField('alimentadoPor', val)}
-                placeholder="Indique procedencia de la alimentación, interruptor y calibre..."
-                className="px-3"
-              />
+            <td colSpan={6} className="p-2 font-medium">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="flex-1">
+                  <EditableCell
+                    value={alimentadoPor}
+                    onSave={(val) => updateField('alimentadoPor', val)}
+                    placeholder="Indique procedencia de la alimentación, interruptor y calibre..."
+                    className="px-1"
+                  />
+                </div>
+                {alimentadores.length > 0 && (
+                  <div className="flex items-center gap-1.5 shrink-0 bg-slate-105 border border-slate-800/20 dark:bg-slate-900/40 dark:border-slate-750 px-2 py-1 rounded">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Vincular Alimentador:</span>
+                    <select
+                      value={tableroData.datosTecnicos?.alimentadorId || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const selectedAlim = alimentadores.find(a => a.id === val);
+                        updateField('datosTecnicos.alimentadorId', val || null);
+                        if (selectedAlim) {
+                          updateField('alimentadoPor', `${selectedAlim.nombre} (${selectedAlim.capacidadAmperios ? selectedAlim.capacidadAmperios + 'A' : 'N/D'})`);
+                        }
+                        updateTableroAlimentador(project?.id, tableroData.id, val || null);
+                      }}
+                      className="bg-transparent text-slate-900 dark:text-slate-100 font-bold border-none text-[11px] focus:outline-none cursor-pointer"
+                    >
+                      <option value="" className="bg-slate-900 text-slate-100">-- Ninguno --</option>
+                      {alimentadores.map(a => (
+                        <option key={a.id} value={a.id} className="bg-slate-900 text-slate-100">
+                          {a.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </td>
+          </tr>
+
+          {/* Fila Opcional: Capacidad, Fases y Tensión */}
+          <tr className="border-b border-slate-800 dark:border-slate-700">
+            <td className="w-24 p-2 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase">
+              Parámetros Panel:
+            </td>
+            <td colSpan={6} className="p-2 font-medium">
+              <div className="flex flex-wrap items-center gap-6 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Capacidad Gabinete:</span>
+                  <select
+                    value={maxPoles}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      const maxCircPosition = circuits.reduce((acc, c) => {
+                        const maxVal = Math.max(...c.poles);
+                        return maxVal > acc ? maxVal : acc;
+                      }, 0);
+                      if (val < maxCircPosition) {
+                        alert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
+                        return;
+                      }
+                      updateField('maxPoles', val);
+                    }}
+                    className="bg-transparent text-slate-900 dark:text-slate-100 font-bold border-none text-[11px] focus:outline-none cursor-pointer"
+                  >
+                    {[12, 24, 30, 42, 48, 60, 72, 84, 96].map(opt => (
+                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt} Polos</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Fases:</span>
+                  <select
+                    value={tableroData.fases !== undefined ? tableroData.fases : 3}
+                    onChange={(e) => updateField('fases', parseInt(e.target.value, 10))}
+                    className="bg-transparent text-slate-900 dark:text-slate-100 font-bold border-none text-[11px] focus:outline-none cursor-pointer"
+                  >
+                    {[1, 2, 3].map(opt => (
+                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt} Fase(s)</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Tensión Nominal:</span>
+                  <EditableCell
+                    value={tableroData.tension || ''}
+                    onSave={(val) => updateField('tension', val)}
+                    placeholder="Ej: 208/120V"
+                    className="font-bold inline-block w-24 px-1"
+                  />
+                </div>
+              </div>
             </td>
           </tr>
 

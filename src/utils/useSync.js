@@ -149,9 +149,13 @@ export function useSync() {
         empresaId
       };
 
+      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/proyectos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload)
       });
 
@@ -189,8 +193,12 @@ export function useSync() {
         formData.append('fotoUrl', elemento.foto);
       }
 
+      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/elementos-unifilares`, {
         method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: formData
       });
 
@@ -234,9 +242,13 @@ export function useSync() {
         empresaId
       };
 
+      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/subestaciones`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload)
       });
 

@@ -20,32 +20,43 @@ enum TipoElemento {
 }
 
 model Empresa {
-  id                      String                  @id @default(uuid())
-  nombre                  String
-  direccion               String
-  proyectos               Proyecto[]
-  elementosUnifilares     ElementoUnifilar[]
-  inspeccionesSubestacion InspeccionSubestacion[]
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
+  id                  String             @id @default(uuid())
+  nombre              String
+  rif                 String             @unique
+  direccionFiscal     String
+  direccion           String?
+  gerente1Nombre      String?
+  gerente1Telefono    String?
+  gerente1Email       String?
+  gerente2Nombre      String?
+  gerente2Telefono    String?
+  gerente2Email       String?
+  proyectos           Proyecto[]
+  elementosUnifilares ElementoUnifilar[]
+  subestaciones       Subestacion[]
+  tableros            Tablero[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   @@map("empresas")
 }
 
 model Proyecto {
-  id                      String                  @id
-  nombre                  String
-  descripcion             String?
-  fechaCreacion           DateTime                @default(now())
-
-  // Relaciones
-  empresaId               String
-  empresa                 Empresa                 @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  elementosUnifilares     ElementoUnifilar[]
-  inspeccionesSubestacion InspeccionSubestacion[]
-
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
+  id                  String             @id @default(uuid())
+  nombre              String
+  direccion           String
+  descripcion         String?
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  responsableNombre   String?
+  responsableTelefono String?
+  responsableEmail    String?
+  subestaciones       Subestacion[]
+  alimentadores       Alimentador[]
+  tableros            Tablero[]
+  elementosUnifilares ElementoUnifilar[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   @@map("proyectos")
 }
@@ -74,8 +85,8 @@ model ElementoUnifilar {
   @@map("elementos_unifilares")
 }
 
-model InspeccionSubestacion {
-  id                 String   @id // UUID v4 del cliente
+model Subestacion {
+  id                 String   @id
   nombre             String   // Nombre o código de la subestación
   ubicacion          String   // Ubicación física
   fecha              String
@@ -105,6 +116,55 @@ model InspeccionSubestacion {
 
   @@index([empresaId])
   @@map("inspecciones_subestacion")
+}
+
+model Alimentador {
+  id               String    @id @default(uuid())
+  nombre           String
+  origen           String?
+  capacidadAmperios Float?
+  proyectoId       String
+  proyecto         Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  tableros         Tablero[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@map("alimentadores")
+}
+
+model Tablero {
+  id            String     @id @default(uuid())
+  nombre        String
+  ubicacion     String?
+  maxPolos      Int        @default(42)
+  tension       String?
+  fases         Int        @default(3)
+  alimentadorId String?
+  alimentador   Alimentador? @relation(fields: [alimentadorId], references: [id], onDelete: SetNull)
+  circuitos     Circuito[]
+  proyectoId    String
+  proyecto      Proyecto   @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  empresaId     String?
+  empresa       Empresa?   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("tableros")
+}
+
+model Circuito {
+  id           String   @id @default(uuid())
+  tableroId    String
+  tablero      Tablero  @relation(fields: [tableroId], references: [id], onDelete: Cascade)
+  posicionPolo Int
+  numPolos     Int      @default(1)
+  amperaje     Float?
+  descripcion  String?
+  estado       String   @default("ACTIVO") // "ACTIVO", "RESERVA", "DISPONIBLE"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("circuitos")
 }
 
 model User {

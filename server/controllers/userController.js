@@ -1,4 +1,49 @@
 import prisma from '../db.js';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secretKeyTableroSelectric';
+
+export const loginUsuario = async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ ok: false, error: 'Usuario y contraseña son requeridos.' });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        username: {
+          equals: username.trim(),
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos.' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, companyId: user.companyId },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    return res.status(200).json({
+      ok: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        companyId: user.companyId
+      }
+    });
+  } catch (error) {
+    console.error('Error en loginUsuario:', error);
+    next(error);
+  }
+};
 
 export const obtenerUsuarios = async (req, res, next) => {
   try {

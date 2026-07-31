@@ -53,11 +53,68 @@ export const ProyectoView = () => {
     deleteElementoUnifilar,
     addInspeccionSubestacion,
     deleteSubestacion,
+    updateProyecto,
+    addAlimentador,
+    deleteAlimentador,
     showToast
   } = useStore();
 
   const company = companies.find((c) => c.id === companyId);
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
+
+  // Cargar alimentadores al montar
+  useEffect(() => {
+    if (proyectoId) {
+      useStore.getState().fetchAlimentadores(proyectoId);
+    }
+  }, [proyectoId]);
+
+  // Estados para Edición de Proyecto
+  const [showEditProyectoModal, setShowEditProyectoModal] = useState(false);
+  const [editProyectoNombre, setEditProyectoNombre] = useState('');
+  const [editProyectoDescripcion, setEditProyectoDescripcion] = useState('');
+  const [editProyectoDireccion, setEditProyectoDireccion] = useState('');
+  const [editResponsableNombre, setEditResponsableNombre] = useState('');
+  const [editResponsableTelefono, setEditResponsableTelefono] = useState('');
+  const [editResponsableEmail, setEditResponsableEmail] = useState('');
+
+  // Estados para Alimentadores
+  const [showAddAlimModal, setShowAddAlimModal] = useState(false);
+  const [alimNombre, setAlimNombre] = useState('');
+  const [alimOrigen, setAlimOrigen] = useState('');
+  const [alimCapacidad, setAlimCapacidad] = useState('');
+
+  const handleUpdateProyectoSubmit = async (e) => {
+    e.preventDefault();
+    await updateProyecto(companyId, proyectoId, {
+      nombre: editProyectoNombre,
+      descripcion: editProyectoDescripcion,
+      direccion: editProyectoDireccion,
+      responsableNombre: editResponsableNombre || null,
+      responsableTelefono: editResponsableTelefono || null,
+      responsableEmail: editResponsableEmail || null
+    });
+    showToast("Proyecto actualizado correctamente.", "success");
+    setShowEditProyectoModal(false);
+  };
+
+  const handleAddAlimentadorSubmit = async (e) => {
+    e.preventDefault();
+    if (!alimNombre.trim()) return;
+
+    await addAlimentador({
+      nombre: alimNombre.trim(),
+      origen: alimOrigen.trim() || null,
+      capacidadAmperios: alimCapacidad ? parseFloat(alimCapacidad) : null,
+      proyectoId
+    });
+
+    setAlimNombre('');
+    setAlimOrigen('');
+    setAlimCapacidad('');
+    setShowAddAlimModal(false);
+    showToast("Alimentador agregado correctamente.", "success");
+  };
 
   // Estados de pestaña activa
   const [activeTab, setActiveTab] = useState('UNIFILAR'); // 'UNIFILAR' | 'ESTRUCTURAL'
@@ -362,6 +419,114 @@ export const ProyectoView = () => {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
         
+        {/* CARD INFORMACION DEL PROYECTO */}
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+          <div className="flex justify-between items-start gap-4">
+            <div>
+              <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider block mb-1">Proyecto Técnico</span>
+              <h2 className="text-xl font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
+                <Building className="w-5 h-5 text-amber-500" /> {proyecto.nombre}
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl">{proyecto.descripcion || 'Sin descripción.'}</p>
+            </div>
+            {user?.role === 'ADMIN' && (
+              <button
+                onClick={() => {
+                  setEditProyectoNombre(proyecto.nombre);
+                  setEditProyectoDescripcion(proyecto.descripcion || '');
+                  setEditProyectoDireccion(proyecto.direccion || '');
+                  setEditResponsableNombre(proyecto.responsableNombre || '');
+                  setEditResponsableTelefono(proyecto.responsableTelefono || '');
+                  setEditResponsableEmail(proyecto.responsableEmail || '');
+                  setShowEditProyectoModal(true);
+                }}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold rounded-lg text-slate-200 hover:text-slate-100 flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+              >
+                Editar Proyecto
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-900">
+            <div className="md:col-span-2">
+              <span className="text-[10px] text-slate-500 font-bold uppercase block">Ubicación / Dirección</span>
+              <span className="text-sm font-semibold text-slate-200">{proyecto.direccion || 'No definida'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-bold uppercase block">Empresa</span>
+              <span className="text-sm font-semibold text-slate-200">{company?.nombre}</span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-bold uppercase block">Registro</span>
+              <div className="text-[10px] text-slate-400 font-mono mt-1 space-y-0.5">
+                <div>Creado: {proyecto.createdAt ? new Date(proyecto.createdAt).toLocaleString('es-ES') : 'N/D'}</div>
+                <div>Actualizado: {proyecto.updatedAt ? new Date(proyecto.updatedAt).toLocaleString('es-ES') : 'N/D'}</div>
+              </div>
+            </div>
+          </div>
+
+          {user?.role === 'ADMIN' && (
+            <div className="mt-6 pt-6 border-t border-slate-900">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                <User className="w-4 h-4 text-sky-400" /> Responsable del Proyecto (Solo Visible para Administradores)
+              </h3>
+              <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-900 max-w-md">
+                <div className="space-y-1.5 text-xs">
+                  <div><strong className="text-slate-450">Nombre:</strong> <span className="text-slate-255 font-semibold">{proyecto.responsableNombre || 'N/D'}</span></div>
+                  <div><strong className="text-slate-450">Teléfono:</strong> <span className="text-slate-255 font-semibold">{proyecto.responsableTelefono || 'N/D'}</span></div>
+                  <div><strong className="text-slate-450">Email:</strong> <span className="text-slate-255 font-semibold">{proyecto.responsableEmail || 'N/D'}</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* LISTADO DE ALIMENTADORES */}
+          <div className="mt-6 pt-6 border-t border-slate-900">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-amber-500" /> Alimentadores del Proyecto ({proyecto.alimentadores?.length || 0})
+              </h3>
+              {user?.role === 'ADMIN' && (
+                <button
+                  onClick={() => setShowAddAlimModal(true)}
+                  className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold rounded text-amber-500 hover:text-amber-400 transition-all cursor-pointer"
+                >
+                  + Nuevo Alimentador
+                </button>
+              )}
+            </div>
+            {proyecto.alimentadores && proyecto.alimentadores.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {proyecto.alimentadores.map(alim => (
+                  <div key={alim.id} className="bg-slate-900/40 border border-slate-850 rounded-xl p-3 flex justify-between items-center text-xs">
+                    <div>
+                      <div className="font-bold text-slate-200">{alim.nombre}</div>
+                      <div className="text-[10px] text-slate-450 mt-0.5">
+                        Origen: {alim.origen || 'No definido'} | {alim.capacidadAmperios ? `${alim.capacidadAmperios}A` : 'Amp N/D'}
+                      </div>
+                    </div>
+                    {user?.role === 'ADMIN' && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`¿Estás seguro de que deseas eliminar el alimentador "${alim.nombre}"?`)) {
+                            deleteAlimentador(proyectoId, alim.id);
+                          }
+                        }}
+                        className="p-1 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded transition-colors cursor-pointer"
+                        title="Eliminar alimentador"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 italic">No se han registrado alimentadores para este proyecto.</p>
+            )}
+          </div>
+        </div>
+
         {/* Navigation & Control Panel */}
         <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 pb-6 border-b border-slate-800/80">
           
@@ -1204,7 +1369,176 @@ export const ProyectoView = () => {
         </div>
       )}
 
+      {/* Modal de Edición de Proyecto */}
+      {showEditProyectoModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn font-sans text-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-6">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Building className="w-5 h-5 text-amber-500" /> Editar Proyecto
+              </h3>
+              <button 
+                onClick={() => setShowEditProyectoModal(false)}
+                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
+            <form onSubmit={handleUpdateProyectoSubmit} className="space-y-4">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Nombre del Proyecto</label>
+                <input 
+                  type="text" 
+                  value={editProyectoNombre} 
+                  onChange={(e) => setEditProyectoNombre(e.target.value)} 
+                  required 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Descripción del Proyecto</label>
+                <textarea 
+                  value={editProyectoDescripcion} 
+                  onChange={(e) => setEditProyectoDescripcion(e.target.value)} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm h-20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Dirección / Ubicación Física</label>
+                <input 
+                  type="text" 
+                  value={editProyectoDireccion} 
+                  onChange={(e) => setEditProyectoDireccion(e.target.value)} 
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div className="border-t border-slate-800 pt-4 mt-4 space-y-4">
+                <h4 className="font-bold text-sky-400 uppercase tracking-wider text-[10px]">Responsable del Proyecto</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-slate-500 font-medium mb-1">Nombre</label>
+                    <input 
+                      type="text" 
+                      value={editResponsableNombre} 
+                      onChange={(e) => setEditResponsableNombre(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-medium mb-1">Teléfono</label>
+                    <input 
+                      type="text" 
+                      value={editResponsableTelefono} 
+                      onChange={(e) => setEditResponsableTelefono(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 font-medium mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      value={editResponsableEmail} 
+                      onChange={(e) => setEditResponsableEmail(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEditProyectoModal(false)}
+                  className="px-4 py-2 border border-slate-700 text-slate-350 hover:bg-slate-800 hover:text-slate-200 rounded-lg font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-98 rounded-lg font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Agregar Alimentador */}
+      {showAddAlimModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn font-sans text-xs">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full shadow-2xl p-6 space-y-6">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-500" /> Nuevo Alimentador
+              </h3>
+              <button 
+                onClick={() => setShowAddAlimModal(false)}
+                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddAlimentadorSubmit} className="space-y-4">
+              <div>
+                <label className="block text-slate-450 font-semibold mb-1">Nombre / Identificador</label>
+                <input 
+                  type="text" 
+                  value={alimNombre} 
+                  onChange={(e) => setAlimNombre(e.target.value)} 
+                  required 
+                  placeholder="Ej. Alimentador Principal A"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-450 font-semibold mb-1">Origen</label>
+                <input 
+                  type="text" 
+                  value={alimOrigen} 
+                  onChange={(e) => setAlimOrigen(e.target.value)} 
+                  placeholder="Ej. Subestación Principal"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-450 font-semibold mb-1">Capacidad (Amperios)</label>
+                <input 
+                  type="number" 
+                  value={alimCapacidad} 
+                  onChange={(e) => setAlimCapacidad(e.target.value)} 
+                  placeholder="Ej. 800"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-800">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddAlimModal(false)}
+                  className="px-4 py-2 border border-slate-700 text-slate-350 hover:bg-slate-800 hover:text-slate-200 rounded-lg font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-98 rounded-lg font-bold transition-all shadow-md cursor-pointer"
+                >
+                  Agregar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

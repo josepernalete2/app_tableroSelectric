@@ -1,5 +1,38 @@
 import prisma from '../db.js';
 
+// Sanitizar un proyecto
+const sanitizarProyecto = (proyecto, role) => {
+  if (!proyecto) return null;
+  if (role !== 'ADMIN') {
+    const {
+      responsableNombre,
+      responsableTelefono,
+      responsableEmail,
+      ...resto
+    } = proyecto;
+    return resto;
+  }
+  return proyecto;
+};
+
+/**
+ * GET /api/proyectos
+ * Lista todos los proyectos.
+ */
+export const obtenerProyectos = async (req, res, next) => {
+  try {
+    const proyectos = await prisma.proyecto.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const sanitizados = proyectos.map(p => sanitizarProyecto(p, req.user.role));
+    return res.status(200).json({ ok: true, data: sanitizados });
+  } catch (error) {
+    console.error('Error en obtenerProyectos:', error);
+    next(error);
+  }
+};
+
 /**
  * GET /api/empresas/:empresaId/proyectos
  * Lista todos los proyectos que pertenecen a una empresa específica.
@@ -25,13 +58,14 @@ export const obtenerProyectosPorEmpresa = async (req, res, next) => {
         empresaId
       },
       orderBy: {
-        fechaCreacion: 'desc'
+        createdAt: 'desc'
       }
     });
 
+    const sanitizados = proyectos.map(p => sanitizarProyecto(p, req.user.role));
     return res.status(200).json({
       ok: true,
-      data: proyectos
+      data: sanitizados
     });
   } catch (error) {
     console.error('Error en obtenerProyectosPorEmpresa:', error);
@@ -45,7 +79,7 @@ export const obtenerProyectosPorEmpresa = async (req, res, next) => {
  */
 export const crearProyecto = async (req, res, next) => {
   try {
-    const { id, nombre, descripcion, empresaId } = req.body;
+    const { id, nombre, descripcion, direccion, empresaId, responsableNombre, responsableTelefono, responsableEmail } = req.body;
 
     // Validación de campos requeridos
     if (!id || !nombre || !empresaId) {
@@ -60,19 +94,29 @@ export const crearProyecto = async (req, res, next) => {
       where: { id },
       update: {
         nombre,
-        descripcion: descripcion || null
+        descripcion: descripcion || null,
+        direccion: direccion || '',
+        responsableNombre: responsableNombre || null,
+        responsableTelefono: responsableTelefono || null,
+        responsableEmail: responsableEmail || null
       },
       create: {
         id,
         nombre,
         descripcion: descripcion || null,
+        direccion: direccion || '',
+        responsableNombre: responsableNombre || null,
+        responsableTelefono: responsableTelefono || null,
+        responsableEmail: responsableEmail || null,
         empresa: {
           connectOrCreate: {
             where: { id: empresaId },
             create: {
               id: empresaId,
               nombre: 'Empresa ' + empresaId,
-              direccion: 'Registrada por Sincronización'
+              direccion: 'Registrada por Sincronización',
+              direccionFiscal: 'Registrada por Sincronización',
+              rif: 'J-AUTO-' + empresaId.slice(0, 8)
             }
           }
         }
@@ -82,10 +126,42 @@ export const crearProyecto = async (req, res, next) => {
     return res.status(201).json({
       ok: true,
       message: 'Proyecto registrado con éxito en el servidor.',
-      data: nuevoProyecto
+      data: sanitizarProyecto(nuevoProyecto, req.user.role)
     });
   } catch (error) {
     console.error('Error en crearProyecto:', error);
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/proyectos/:id
+ * Actualiza un proyecto.
+ */
+export const actualizarProyecto = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { nombre, descripcion, direccion, responsableNombre, responsableTelefono, responsableEmail } = req.body;
+
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    }
+
+    const updated = await prisma.proyecto.update({
+      where: { id },
+      data: {
+        nombre,
+        descripcion: descripcion || null,
+        direccion: direccion || '',
+        responsableNombre: responsableNombre || null,
+        responsableTelefono: responsableTelefono || null,
+        responsableEmail: responsableEmail || null
+      }
+    });
+
+    return res.status(200).json({ ok: true, data: updated });
+  } catch (error) {
+    console.error('Error en actualizarProyecto:', error);
     next(error);
   }
 };
@@ -102,7 +178,15 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
       where: { id: proyectoId },
       include: {
         elementosUnifilares: true,
-        inspeccionesSubestacion: true
+        subestaciones: true,
+        alimentadores: true,
+        tableros: {
+          include: {
+            circuitos: {
+              orderBy: { posicionPolo: 'asc' }
+            }
+          }
+        }
       }
     });
 
@@ -115,7 +199,7 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
 
     return res.status(200).json({
       ok: true,
-      data: proyecto
+      data: sanitizarProyecto(proyecto, req.user.role)
     });
   } catch (error) {
     console.error('Error en obtenerProyectoCompleto:', error);

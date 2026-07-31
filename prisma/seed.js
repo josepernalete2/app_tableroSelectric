@@ -15,21 +15,29 @@ async function main() {
   console.log('Poblando empresas iniciales...');
   await prisma.empresa.upsert({
     where: { id: 'c-1' },
-    update: {},
+    update: {
+      rif: 'J-12345678-9',
+      direccionFiscal: 'Av. Araure, Urb. San Román, Caracas'
+    },
     create: {
       id: 'c-1',
       nombre: 'Clínica Metropolitana de Caracas',
-      direccion: 'Av. Araure, Urb. San Román, Caracas'
+      rif: 'J-12345678-9',
+      direccionFiscal: 'Av. Araure, Urb. San Román, Caracas'
     }
   });
 
   await prisma.empresa.upsert({
     where: { id: 'c-2' },
-    update: {},
+    update: {
+      rif: 'J-98765432-1',
+      direccionFiscal: 'Carretera Nacional Turmero, Aragua'
+    },
     create: {
       id: 'c-2',
       nombre: 'Alimentos Polar Planta Turmero',
-      direccion: 'Carretera Nacional Turmero, Aragua'
+      rif: 'J-98765432-1',
+      direccionFiscal: 'Carretera Nacional Turmero, Aragua'
     }
   });
   console.log('Empresas c-1 y c-2 pobladas con éxito.');
