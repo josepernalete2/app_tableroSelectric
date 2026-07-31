@@ -1,5 +1,11 @@
 import prisma from '../db.js';
+import bcrypt from 'bcryptjs';
 
+const SALT_ROUNDS = 10;
+
+// La lista de usuarios se usa también para el login offline de la tableta
+// (persiste los hashes bcrypt localmente y los compara en el navegador),
+// por lo que se devuelve el campo password (hash). El endpoint exige autenticación.
 export const obtenerUsuarios = async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
@@ -26,17 +32,20 @@ export const crearUsuario = async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'Ya existe un usuario con este nombre de usuario.' });
     }
 
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
     const newUser = await prisma.user.create({
       data: {
         id: id || undefined,
         username: username.trim(),
-        password,
+        password: passwordHash,
         role: role || 'WORKER',
         companyId: role === 'CLIENT' ? companyId : null
       }
     });
 
-    return res.status(201).json({ ok: true, data: newUser });
+    const { password: _password, ...userData } = newUser;
+    return res.status(201).json({ ok: true, data: userData });
   } catch (error) {
     console.error('Error en crearUsuario:', error);
     next(error);
@@ -60,17 +69,20 @@ export const actualizarUsuario = async (req, res, next) => {
       }
     }
 
+    const passwordHash = password ? await bcrypt.hash(password, SALT_ROUNDS) : undefined;
+
     const updated = await prisma.user.update({
       where: { id },
       data: {
         username: username ? username.trim() : undefined,
-        password: password || undefined,
+        password: passwordHash,
         role: role || undefined,
         companyId: role === 'CLIENT' ? companyId : null
       }
     });
 
-    return res.status(200).json({ ok: true, data: updated });
+    const { password: _password, ...userData } = updated;
+    return res.status(200).json({ ok: true, data: userData });
   } catch (error) {
     console.error('Error en actualizarUsuario:', error);
     next(error);

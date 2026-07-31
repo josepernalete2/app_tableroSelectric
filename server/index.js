@@ -50,7 +50,19 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    // Permitir peticiones sin origen (mismo servidor, curl, apps nativas) y orígenes configurados
+    if (!origin || allowedOrigins.includes(origin) || origin === `http://localhost:${PORT}`) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origen no permitido por CORS.'));
+  }
+}));
 app.use(express.json());
 
 // Servir archivos de uploads

@@ -144,7 +144,10 @@ export const SidebarLayout = () => {
   // Exportar DB PostgreSQL
   const handleExportDb = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/backup/export');
+      const token = useStore.getState().token;
+      const res = await fetch(`${API_BASE_URL}/api/backup/export`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       const result = await res.json();
       if (result.ok) {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
@@ -177,9 +180,10 @@ export const SidebarLayout = () => {
     reader.onload = async () => {
       try {
         const parsed = JSON.parse(reader.result);
-        const res = await fetch('http://localhost:3001/api/backup/import', {
+        const token = useStore.getState().token;
+        const res = await fetch(`${API_BASE_URL}/api/backup/import`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ data: parsed })
         });
         const result = await res.json();
@@ -211,9 +215,10 @@ export const SidebarLayout = () => {
     setIsSyncing(true);
     setSyncStatus('Sincronizando...');
     try {
-      const res = await fetch('http://localhost:3001/api/backup/gdrive-sync', {
+      const token = useStore.getState().token;
+      const res = await fetch(`${API_BASE_URL}/api/backup/gdrive-sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           email: gdriveEmail.trim()
         })
@@ -247,9 +252,10 @@ export const SidebarLayout = () => {
     if (isAutoOn && email) {
       const doAutoSync = async () => {
         try {
-          const res = await fetch('http://localhost:3001/api/backup/gdrive-sync', {
+          const token = useStore.getState().token;
+          const res = await fetch(`${API_BASE_URL}/api/backup/gdrive-sync`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({
               email: email.trim()
             })
@@ -305,20 +311,25 @@ export const SidebarLayout = () => {
 
   // Guardar edición
   const handleSaveUserEdit = async (userId) => {
-    if (!editingEmail.trim() || !editingPassword.trim()) {
-      showToast("Por favor, rellene todos los campos.", "warning");
+    if (!editingEmail.trim()) {
+      showToast("Por favor, rellene el nombre de usuario.", "warning");
       return;
     }
-    const result = await updateUser(userId, {
+    const updatedData = {
       username: editingEmail.trim(),
       email: editingEmail.trim(),
-      password: editingPassword.trim(),
       role: editingRole,
       companyId: editingRole === 'CLIENT' ? editingCompanyId : null
-    });
+    };
+    // Solo se re-hashea la contraseña si el usuario la cambió (campo no vacío)
+    if (editingPassword.trim()) {
+      updatedData.password = editingPassword.trim();
+    }
+    const result = await updateUser(userId, updatedData);
     if (result.success) {
       setEditingUserId(null);
       setEditingCompanyId('');
+      setEditingPassword('');
       showToast("Usuario actualizado con éxito.", "success");
     } else {
       showToast(result.error || "Error al actualizar usuario.", "error");
@@ -328,7 +339,7 @@ export const SidebarLayout = () => {
   const handleStartEditUser = (u) => {
     setEditingUserId(u.id);
     setEditingEmail(u.username || u.email || '');
-    setEditingPassword(u.password);
+    setEditingPassword('');
     setEditingRole(u.role);
     setEditingCompanyId(u.companyId || '');
   };
