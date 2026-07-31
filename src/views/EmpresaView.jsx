@@ -17,7 +17,8 @@ import {
   User,
   Cpu,
   ShieldAlert,
-  RefreshCw
+  RefreshCw,
+  CheckSquare
 } from 'lucide-react';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
@@ -51,7 +52,8 @@ export const EmpresaView = () => {
     companies, 
     addProyecto, 
     addElementoUnifilar,
-    deleteElementoUnifilar
+    deleteElementoUnifilar,
+    showToast
   } = useStore();
   
   const company = companies.find((c) => c.id === companyId);
@@ -60,6 +62,50 @@ export const EmpresaView = () => {
   const [showModal, setShowModal] = useState(false); // Modal Proyecto
   const [showElementoModal, setShowElementoModal] = useState(false); // Modal Elemento
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Estados de selección múltiple
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // Limpiar selección cuando cambia la búsqueda
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [searchQuery]);
+
+  const handleToggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const ids = filteredElementosGenerales.map(e => e.id);
+    setSelectedIds(new Set(ids));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleDeleteSelected = () => {
+    const selectedCount = selectedIds.size;
+    if (selectedCount === 0) return;
+
+    if (window.confirm(`¿Estás seguro de que deseas eliminar los ${selectedCount} equipos seleccionados?`)) {
+      selectedIds.forEach((id) => {
+        deleteElementoUnifilar(null, id);
+      });
+      showToast?.(`Se eliminaron ${selectedCount} equipos correctamente`, 'success');
+      setSelectedIds(new Set());
+      setIsMultiSelectMode(false);
+    }
+  };
 
   // Form states de Proyectos
   const [proyectoNombre, setProyectoNombre] = useState('');
@@ -300,6 +346,21 @@ export const EmpresaView = () => {
 
           {user?.role !== 'CLIENT' && (
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
+              {/* Botón Selección Múltiple */}
+              <button
+                onClick={() => {
+                  setIsMultiSelectMode(!isMultiSelectMode);
+                  setSelectedIds(new Set());
+                }}
+                className={`border font-semibold transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs ${
+                  isMultiSelectMode 
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' 
+                    : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <CheckSquare className="w-4 h-4" /> {isMultiSelectMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
+              </button>
+
               {/* Botón Principal: + Crear Elemento fuera de proyectos */}
               <button
                 onClick={handleOpenTableroModal}
@@ -319,6 +380,48 @@ export const EmpresaView = () => {
           )}
           </div>
         </div>
+
+        {isMultiSelectMode && (
+          <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fadeIn shadow-lg shadow-amber-500/5">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-xs text-slate-300 font-medium">
+                Modo Selección Múltiple: <strong className="text-amber-500 font-bold">{selectedIds.size}</strong> {selectedIds.size === 1 ? 'equipo seleccionado' : 'equipos seleccionados'}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                onClick={handleSelectAll}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-[11px] font-semibold text-slate-300 transition-all cursor-pointer hover:text-slate-100"
+              >
+                Seleccionar Todo
+              </button>
+              <button
+                onClick={handleDeselectAll}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-[11px] font-semibold text-slate-300 transition-all cursor-pointer hover:text-slate-100"
+              >
+                Deseleccionar Todo
+              </button>
+              {selectedIds.size > 0 && user?.role !== 'CLIENT' && (
+                <button
+                  onClick={handleDeleteSelected}
+                  className="px-3.5 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 rounded-xl text-[11px] font-bold text-red-400 hover:text-red-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Eliminar ({selectedIds.size})
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setIsMultiSelectMode(false);
+                  setSelectedIds(new Set());
+                }}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* LISTADO DE PROYECTOS */}
         <div>
@@ -406,12 +509,23 @@ export const EmpresaView = () => {
                 const isGen = item.tipoElemento === 'GENERADOR';
                 const isPuestaTierra = item.tipoElemento === 'PUESTA_TIERRA';
                 const isTransfer = item.tipoElemento === 'TRANSFER';
+                const isSelected = selectedIds.has(item.id);
 
                 return (
                   <div
                     key={item.id}
-                    onClick={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
-                    className="bg-slate-950 border border-slate-800/80 hover:border-slate-700/60 rounded-2xl shadow-md hover:shadow-xl flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group"
+                    onClick={() => {
+                      if (isMultiSelectMode) {
+                        handleToggleSelect(item.id);
+                      } else {
+                        navigate(`/empresa/${companyId}/tablero/${item.id}`);
+                      }
+                    }}
+                    className={`bg-slate-950 border flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group rounded-2xl shadow-md hover:shadow-xl ${
+                      isMultiSelectMode && isSelected 
+                        ? 'border-amber-500 shadow-amber-500/5 ring-1 ring-amber-500/20' 
+                        : 'border-slate-800/80 hover:border-slate-700/60'
+                    }`}
                   >
                     {/* Cabecera de Tarjeta */}
                     <div className="h-32 w-full bg-slate-900 relative overflow-hidden flex items-center justify-center border-b border-slate-900/50">
@@ -463,7 +577,24 @@ export const EmpresaView = () => {
                         )}
                       </div>
 
-                      {user?.role !== 'CLIENT' && (
+                      {/* Indicador de casilla de verificación para Selección Múltiple */}
+                      {isMultiSelectMode && (
+                        <div className="absolute top-3 right-3 z-10">
+                          <span className={`p-1.5 rounded-lg flex items-center justify-center border transition-all ${
+                            isSelected 
+                              ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-md shadow-amber-500/20' 
+                              : 'bg-slate-950/90 border-slate-700 text-slate-500'
+                          }`}>
+                            {isSelected ? (
+                              <CheckSquare className="w-3.5 h-3.5" />
+                            ) : (
+                              <div className="w-3.5 h-3.5 border border-slate-600 rounded-sm" />
+                            )}
+                          </span>
+                        </div>
+                      )}
+
+                      {user?.role !== 'CLIENT' && !isMultiSelectMode && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -471,7 +602,7 @@ export const EmpresaView = () => {
                               deleteElementoUnifilar(null, item.id);
                             }
                           }}
-                          className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-950/80 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                          className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                           title="Eliminar Equipo"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
