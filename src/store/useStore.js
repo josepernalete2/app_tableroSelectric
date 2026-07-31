@@ -461,6 +461,7 @@ export const useStore = create(
         const { companies } = get();
         let parentCompanyId = companyId;
         let targetProyecto = null;
+        let nuevoProyectoDefault = null;
 
         if (proyectoId) {
           for (const company of companies) {
@@ -472,13 +473,32 @@ export const useStore = create(
             }
           }
         } else {
-          // If no proyectoId is given, default to the companyId provided
-          if (!parentCompanyId && companies.length > 0) {
-            parentCompanyId = companies[0].id;
+          // Si no viene proyectoId, auto-resolver a un proyecto por defecto de la empresa.
+          // La base de datos exige proyectoId obligatorio, por lo que un elemento sin
+          // proyecto nunca podría sincronizarse (se descartaba de la cola con pérdida de datos).
+          const company = companies.find((c) => c.id === parentCompanyId) || companies[0];
+          if (company) {
+            parentCompanyId = company.id;
+            const proyectos = company.proyectos || [];
+            targetProyecto = proyectos.find((p) => p.nombre === 'Proyecto General') || proyectos[0] || null;
+
+            if (!targetProyecto) {
+              nuevoProyectoDefault = {
+                id: crypto.randomUUID(),
+                nombre: 'Proyecto General',
+                descripcion: 'Proyecto por defecto creado automáticamente para equipos sin carpeta asignada.',
+                empresaId: company.id,
+                elementosUnifilares: [],
+                inspeccionesSubestacion: [],
+                createdAt: new Date().toISOString()
+              };
+              targetProyecto = nuevoProyectoDefault;
+            }
           }
         }
 
         if (proyectoId && !targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
+        if (!parentCompanyId) return { success: false, error: 'No se encontró ninguna empresa a la cual asociar el elemento.' };
 
         const uuidId = elementoData.id || crypto.randomUUID();
 
@@ -492,46 +512,61 @@ export const useStore = create(
           fotoBlob: elementoData.fotoBlob || null,
           observacionesGenerales: elementoData.observacionesGenerales || '',
           datosTecnicos: elementoData.datosTecnicos || {},
-          proyectoId: proyectoId || null,
+          proyectoId: targetProyecto ? targetProyecto.id : (proyectoId || null),
           empresaId: parentCompanyId,
           createdAt: new Date().toISOString()
         };
 
-        set((state) => ({
-          companies: state.companies.map((c) => {
-            if (c.id === parentCompanyId) {
-              if (proyectoId) {
-                return {
-                  ...c,
-                  proyectos: c.proyectos.map((p) => {
-                    if (p.id === proyectoId) {
-                      const elementos = p.elementosUnifilares || p.tableros || [];
-                      return {
-                        ...p,
-                        elementosUnifilares: [...elementos, nuevoElemento]
-                      };
-                    }
-                    return p;
-                  })
-                };
-              } else {
-                const elementosComp = c.elementosUnifilares || [];
-                return {
-                  ...c,
-                  elementosUnifilares: [...elementosComp, nuevoElemento]
-                };
-              }
-            }
-            return c;
-          }),
-          elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
-          syncQueue: [...state.syncQueue, {
-            id: uuidId,
-            tipo: 'ELEMENTO_UNIFILAR',
+        // Si se creó el "Proyecto General", encolar primero su sincronización (FIFO)
+        // para que el elemento encuentre su proyecto padre en PostgreSQL.
+        const syncQueueItems = [];
+        if (nuevoProyectoDefault) {
+          syncQueueItems.push({
+            id: nuevoProyectoDefault.id,
+            tipo: 'PROYECTO',
             companyId: parentCompanyId,
-            payload: nuevoElemento
-          }]
-        }));
+            payload: nuevoProyectoDefault
+          });
+        }
+        syncQueueItems.push({
+          id: uuidId,
+          tipo: 'ELEMENTO_UNIFILAR',
+          companyId: parentCompanyId,
+          payload: nuevoElemento
+        });
+
+        set((state) => {
+          let nextCompanies = state.companies.map((c) => {
+            if (c.id !== parentCompanyId) return c;
+
+            let proyectos = c.proyectos || [];
+            if (nuevoProyectoDefault) {
+              proyectos = [nuevoProyectoDefault, ...proyectos];
+            }
+
+            // Guardar el elemento dentro de su proyecto (ubicación canónica en BD)
+            if (targetProyecto) {
+              proyectos = proyectos.map((p) => {
+                if (p.id === targetProyecto.id) {
+                  const elementos = p.elementosUnifilares || p.tableros || [];
+                  return {
+                    ...p,
+                    elementosUnifilares: [...elementos, nuevoElemento]
+                  };
+                }
+                return p;
+              });
+            }
+
+            return { ...c, proyectos };
+          });
+
+          return {
+            companies: nextCompanies,
+            elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
+            syncQueue: [...state.syncQueue, ...syncQueueItems]
+          };
+        });
 
         return { success: true, elemento: nuevoElemento };
       },
