@@ -51,6 +51,7 @@ export const ProyectoView = () => {
     companies, 
     addElementoUnifilar, 
     deleteElementoUnifilar,
+    updateElementoUnifilar,
     addInspeccionSubestacion,
     deleteSubestacion,
     updateProyecto,
@@ -181,6 +182,56 @@ export const ProyectoView = () => {
   const [showElementoModal, setShowElementoModal] = useState(false);
   const [showInspeccionModal, setShowInspeccionModal] = useState(false);
 
+  // Estado para edición de elementos
+  const [editingElemento, setEditingElemento] = useState(null);
+
+  // Efecto para rellenar campos en caso de edición
+  useEffect(() => {
+    if (editingElemento) {
+      setNombre(editingElemento.nombre || '');
+      setUbicacion(editingElemento.ubicacion || '');
+      setAlimentadoPor(editingElemento.alimentadoPor || '');
+      setObservacionesGenerales(editingElemento.observacionesGenerales || '');
+      setTipoElemento(editingElemento.tipoElemento || 'TABLERO');
+      
+      const tech = editingElemento.datosTecnicos || {};
+      if (editingElemento.tipoElemento === 'TABLERO') {
+        setMaxPoles(tech.maxPoles || 24);
+      } else if (editingElemento.tipoElemento === 'TRANSFORMADOR') {
+        setKvaTrafo(tech.kva || '500 KVA');
+        setMarcaTrafo(tech.marca || '');
+        setTipoTrafo(tech.tipoTransformador || 'Pedestal');
+        setConexionTrafo(tech.conexion || '');
+        setVoltajePrimario(tech.voltajePrimario || '13.8 kV');
+        setVoltajeSecundario(tech.voltajeSecundario || '208 / 120 V');
+      } else if (editingElemento.tipoElemento === 'GENERADOR') {
+        setKvaGen(tech.kva || '580 kVA');
+        setCombustibleGen(tech.combustible || 'DIESEL');
+        setVoltajeGen(tech.voltajeGeneracion || '208 / 120 V');
+        setPotenciaKwGen(tech.potenciaKw || '464 kW');
+        setAmperajeGen(tech.amperaje || '1600 A');
+      } else if (editingElemento.tipoElemento === 'PUESTA_TIERRA') {
+        setResistenciaOhmios(tech.resistenciaOhmios || '0.5 Ω');
+        setCorrienteFuga(tech.corrienteFugaAmperios || '6.4 A');
+        setTipoMalla(tech.tipoMalla || '');
+        setCableAcometidaTierra(tech.cableAcometida || '');
+      } else if (editingElemento.tipoElemento === 'TRANSFER') {
+        setCapacidadAmperios(tech.capacidadAmperios || '3200 A');
+        setTipoTransferencia(tech.tipoTransferencia || 'AUTOMATICA');
+        setTensionOperativa(tech.tensionOperativa || '208 V');
+      } else {
+        setDescripcionOtro(tech.descripcionEspecificaciones || '');
+      }
+    } else {
+      setNombre('');
+      setUbicacion('');
+      setAlimentadoPor('');
+      setObservacionesGenerales('');
+      setTipoElemento('TABLERO');
+      setMaxPoles(24);
+    }
+  }, [editingElemento]);
+
   // Selector de plantilla / tipo de elemento
   const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
 
@@ -261,7 +312,7 @@ export const ProyectoView = () => {
   );
 
   const nombreElementoDuplicado = elementos.some(
-    (e) => e.nombre.toLowerCase().trim() === nombre.toLowerCase().trim()
+    (e) => e.nombre.toLowerCase().trim() === nombre.toLowerCase().trim() && e.id !== editingElemento?.id
   );
 
   const nombreInspeccionDuplicado = inspecciones.some(
@@ -294,13 +345,13 @@ export const ProyectoView = () => {
     if (tipoElemento === 'TABLERO') {
       datosTecnicos = {
         maxPoles: parseInt(maxPoles, 10),
-        barrasPrincipales: { ia: '0', ib: '0', ic: '0' },
-        breakerPrincipal: { marca: '', tipo: '', amp: '' },
-        voltaje: { va: '208', vb: '205', vc: '205' },
-        acometida: '',
-        circuits: [],
-        neutroLlegada: { calibre: '', observaciones: '' },
-        puestaTierra: { calibre: '', observaciones: '' }
+        barrasPrincipales: editingElemento?.datosTecnicos?.barrasPrincipales || { ia: '0', ib: '0', ic: '0' },
+        breakerPrincipal: editingElemento?.datosTecnicos?.breakerPrincipal || { marca: '', tipo: '', amp: '' },
+        voltaje: editingElemento?.datosTecnicos?.voltaje || { va: '208', vb: '205', vc: '205' },
+        acometida: editingElemento?.datosTecnicos?.acometida || '',
+        circuits: editingElemento?.datosTecnicos?.circuits || [],
+        neutroLlegada: editingElemento?.datosTecnicos?.neutroLlegada || { calibre: '', observaciones: '' },
+        puestaTierra: editingElemento?.datosTecnicos?.puestaTierra || { calibre: '', observaciones: '' }
       };
     } else if (tipoElemento === 'TRANSFORMADOR') {
       datosTecnicos = {
@@ -338,27 +389,42 @@ export const ProyectoView = () => {
       };
     }
 
-    const result = addElementoUnifilar(proyectoId, {
-      nombre: nombre.trim(),
-      tipoElemento,
-      ubicacion: ubicacion.trim() || 'Sin ubicación',
-      alimentadoPor: alimentadoPor.trim() || 'No definido',
-      fotoBlob,
-      observacionesGenerales: observacionesGenerales.trim(),
-      datosTecnicos
-    });
-
-    if (result.success) {
-      setNombre('');
-      setUbicacion('');
-      setAlimentadoPor('');
-      setObservacionesGenerales('');
-      setFotoBlob(null);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
+    if (editingElemento) {
+      updateElementoUnifilar(proyectoId, editingElemento.id, {
+        nombre: nombre.trim(),
+        tipoElemento,
+        ubicacion: ubicacion.trim() || 'Sin ubicación',
+        alimentadoPor: alimentadoPor.trim() || 'No definido',
+        observacionesGenerales: observacionesGenerales.trim(),
+        datosTecnicos
+      });
+      showToast?.("Elemento actualizado correctamente.", "success");
+      setEditingElemento(null);
       setShowElementoModal(false);
     } else {
-      alert(result.error);
+      const result = addElementoUnifilar(proyectoId, {
+        nombre: nombre.trim(),
+        tipoElemento,
+        ubicacion: ubicacion.trim() || 'Sin ubicación',
+        alimentadoPor: alimentadoPor.trim() || 'No definido',
+        fotoBlob,
+        observacionesGenerales: observacionesGenerales.trim(),
+        datosTecnicos
+      });
+
+      if (result.success) {
+        setNombre('');
+        setUbicacion('');
+        setAlimentadoPor('');
+        setObservacionesGenerales('');
+        setFotoBlob(null);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+        setShowElementoModal(false);
+        showToast?.("Elemento registrado correctamente.", "success");
+      } else {
+        alert(result.error);
+      }
     }
   };
 
@@ -867,18 +933,31 @@ export const ProyectoView = () => {
                         )}
 
                         {user?.role !== 'CLIENT' && !isMultiSelectMode && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
-                                deleteElementoUnifilar(proyectoId, item.id);
-                              }
-                            }}
-                            className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                            title="Eliminar Elemento"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingElemento(item);
+                                setShowElementoModal(true);
+                              }}
+                              className="p-1.5 bg-slate-950/80 hover:bg-slate-900 text-slate-400 hover:text-amber-500 rounded-lg transition-all cursor-pointer shadow-md"
+                              title="Editar Elemento"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
+                                  deleteElementoUnifilar(proyectoId, item.id);
+                                }
+                              }}
+                              className="p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-400 hover:text-red-400 rounded-lg transition-all cursor-pointer shadow-md"
+                              title="Eliminar Elemento"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -960,15 +1039,15 @@ export const ProyectoView = () => {
       {/* MODAL MULTI-PLANTILLA DE ELEMENTOS UNIFILARES */}
       {showElementoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowElementoModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setShowElementoModal(false); setEditingElemento(null); }} />
           
           <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" /> Registrar Plantilla Técnica
+                <Zap className="w-4 h-4 text-amber-500" /> {editingElemento ? `Editar Plantilla: ${editingElemento.nombre}` : 'Registrar Plantilla Técnica'}
               </h3>
               <button 
-                onClick={() => setShowElementoModal(false)}
+                onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
                 className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1045,15 +1124,40 @@ export const ProyectoView = () => {
               {/* Alimentación */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Alimentado Por (Procedencia)
+                  Alimentado Por (Procedencia / Jerarquía)
                 </label>
-                <input
-                  type="text"
-                  value={alimentadoPor}
-                  onChange={(e) => setAlimentadoPor(e.target.value)}
-                  placeholder="Ej. Transformador 500 KVA o CORPOELEC"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
-                />
+                <div className="space-y-2">
+                  <select
+                    value={elementos.some(el => el.nombre === alimentadoPor) ? alimentadoPor : (alimentadoPor ? 'OTRO' : '')}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'OTRO') {
+                        setAlimentadoPor('');
+                      } else {
+                        setAlimentadoPor(val);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 focus:outline-none h-11 cursor-pointer"
+                  >
+                    <option value="">-- No definido / Ninguno --</option>
+                    {elementos.filter(el => el.id !== editingElemento?.id).map(el => (
+                      <option key={el.id} value={el.nombre}>
+                        {el.nombre} ({el.tipoElemento === 'TABLERO' ? 'PANEL ELÉCTRICO' : el.tipoElemento})
+                      </option>
+                    ))}
+                    <option value="OTRO">Especificar otro (texto libre)...</option>
+                  </select>
+
+                  {(!elementos.some(el => el.nombre === alimentadoPor) || alimentadoPor === '') && (
+                    <input
+                      type="text"
+                      value={alimentadoPor}
+                      onChange={(e) => setAlimentadoPor(e.target.value)}
+                      placeholder="Ej. Transformador 500 KVA o CORPOELEC"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
+                    />
+                  )}
+                </div>
               </div>
 
               {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}
@@ -1246,7 +1350,7 @@ export const ProyectoView = () => {
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-900 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowElementoModal(false)}
+                  onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
                   className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 transition-colors cursor-pointer"
                 >
                   Cancelar
@@ -1256,7 +1360,7 @@ export const ProyectoView = () => {
                   disabled={!isElementoFormValid}
                   className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
-                  Guardar Plantilla
+                  {editingElemento ? 'Guardar Cambios' : 'Guardar Plantilla'}
                 </button>
               </div>
 

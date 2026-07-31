@@ -41,12 +41,15 @@ export const crearElementoUnifilar = async (req, res, next) => {
             id: proyectoId,
             nombre: 'Proyecto ' + proyectoId.slice(0, 8),
             descripcion: 'Registrado automáticamente desde sincronización de elemento',
+            direccion: 'Registrado por Sincronización',
             empresa: {
               connectOrCreate: {
                 where: { id: empresaId },
                 create: {
                   id: empresaId,
                   nombre: 'Empresa ' + empresaId,
+                  rif: 'J-AUTO-' + empresaId.slice(0, 8),
+                  direccionFiscal: 'Registrada por Sincronización',
                   direccion: 'Registrada por Sincronización'
                 }
               }

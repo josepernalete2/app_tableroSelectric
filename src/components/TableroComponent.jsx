@@ -142,96 +142,109 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const saveCircuitFromModal = (circuitId, updatedFields) => {
     if (readOnly) return;
     const newData = { ...tableroData };
-    newData.circuits = normalizedCircuits.map(c => {
-      if (c.id === circuitId) {
-        return {
-          ...c,
+    let currentCircuits = [...(tableroData.circuits || [])];
+
+    if (updatedFields === null) {
+      // Remove from custom circuits list so it falls back to auto-generated RESERVA
+      currentCircuits = currentCircuits.filter(c => c.id !== circuitId && !c.id.startsWith('auto_'));
+    } else {
+      const isAuto = circuitId.startsWith('auto_');
+      if (isAuto) {
+        // Create new custom circuit
+        currentCircuits.push({
+          id: `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           ...updatedFields
-        };
+        });
+      } else {
+        // Update existing custom circuit
+        currentCircuits = currentCircuits.map(c => {
+          if (c.id === circuitId) {
+            return { ...c, ...updatedFields };
+          }
+          return c;
+        });
       }
-      return c;
+    }
+
+    // Filter out completely empty default circuits to prevent database bloat
+    newData.circuits = currentCircuits.filter(c => {
+      const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
+      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D';
+      const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
+      return hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino;
     });
+
     onUpdateTablero(newData);
   };
 
-  // Group a pole with the next pole on the same side
+  // Group a pole with the next pole on the same side (maximum 3 poles)
   const groupWithNext = (circuitId) => {
     if (readOnly) return;
-    const circuitIndex = normalizedCircuits.findIndex(c => c.id === circuitId);
-    if (circuitIndex === -1) return;
+    const circuit = normalizedCircuits.find(c => c.id === circuitId);
+    if (!circuit) return;
 
-    const circuit = normalizedCircuits[circuitIndex];
-    const side = circuit.side;
-    
-    // Find next available single-pole circuit on the same side
-    const nextCircuitIndex = normalizedCircuits.findIndex((c, idx) => 
-      idx > circuitIndex && 
-      c.side === side && 
-      c.poles.length === 1 &&
-      !c.id.startsWith('auto_')
-    );
-
-    const nextCircuit = nextCircuitIndex !== -1 ? normalizedCircuits[nextCircuitIndex] : null;
-
-    if (!nextCircuit) {
-      // Find the auto fill next pole on the same side
-      const currentMaxPole = Math.max(...circuit.poles);
-      const targetPole = currentMaxPole + 2; // next on same side (odd/even)
-      if (targetPole > maxPoles) return;
-
-      const newData = { ...tableroData };
-      newData.circuits = normalizedCircuits
-        .map(c => {
-          if (c.id === circuitId) {
-            return {
-              ...c,
-              poles: [...c.poles, targetPole].sort((a, b) => a - b)
-            };
-          }
-          return c;
-        })
-        .filter(c => !c.poles.includes(targetPole) || c.id === circuitId);
-
-      onUpdateTablero(newData);
+    if (circuit.poles.length >= 3) {
+      alert("El número máximo de polos agrupados es 3.");
       return;
     }
 
+    const currentMaxPole = Math.max(...circuit.poles);
+    const targetPole = currentMaxPole + 2; // Next pole on the same side
+    if (targetPole > maxPoles) return;
+
+    const targetOccupied = (tableroData.circuits || []).find(c => c.id !== circuitId && c.poles.includes(targetPole));
+    if (targetOccupied) {
+      if (targetOccupied.poles.length > 1) {
+        alert(`El polo ${targetPole} ya forma parte de otro interruptor agrupado.`);
+        return;
+      }
+      const isReal = targetOccupied.equipo && targetOccupied.equipo !== 'RESERVA' && targetOccupied.equipo !== 'DISPONIBLE';
+      if (isReal) {
+        alert(`El polo ${targetPole} ya está ocupado por el circuito "${targetOccupied.equipo}".`);
+        return;
+      }
+    }
+
     const newData = { ...tableroData };
-    newData.circuits = normalizedCircuits
-      .map(c => {
+    let existingCircuits = [...(tableroData.circuits || [])];
+    
+    // Remove the target occupied circuit if it exists, since it will be absorbed
+    if (targetOccupied) {
+      existingCircuits = existingCircuits.filter(c => c.id !== targetOccupied.id);
+    }
+
+    const targetCircuit = existingCircuits.find(c => c.id === circuitId);
+    const newPoles = [...circuit.poles, targetPole].sort((a, b) => a - b);
+
+    if (targetCircuit) {
+      newData.circuits = existingCircuits.map(c => {
         if (c.id === circuitId) {
-          return {
-            ...c,
-            poles: [...c.poles, ...nextCircuit.poles].sort((a, b) => a - b)
-          };
+          return { ...c, poles: newPoles };
         }
         return c;
-      })
-      .filter(c => c.id !== nextCircuit.id);
+      });
+    } else {
+      newData.circuits = [
+        ...existingCircuits,
+        {
+          id: `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          side: circuit.side,
+          poles: newPoles,
+          equipo: 'RESERVA',
+          breaker: { marca: '', tipo: '', amp: '' },
+          conductor: '',
+        }
+      ];
+    }
 
     onUpdateTablero(newData);
   };
 
-  // Split a multi-pole circuit into individual single-pole circuits
+  // Split a multi-pole circuit: simply deleting it restores individual single poles
   const splitCircuit = (circuitId) => {
     if (readOnly) return;
-    const circuit = normalizedCircuits.find(c => c.id === circuitId);
-    if (!circuit || circuit.poles.length <= 1) return;
-
     const newData = { ...tableroData };
-    
-    // Remove the grouped circuit, and add single pole circuits for each pole in group
-    const baseCircuits = normalizedCircuits.filter(c => c.id !== circuitId);
-    const splitPoles = circuit.poles.map(pole => ({
-      id: `split_${pole}_${Date.now()}`,
-      side: circuit.side,
-      poles: [pole],
-      equipo: circuit.equipo || 'RESERVA',
-      breaker: { ...circuit.breaker },
-      conductor: circuit.conductor,
-    }));
-
-    newData.circuits = [...baseCircuits, ...splitPoles].sort((a, b) => Math.min(...a.poles) - Math.min(...b.poles));
+    newData.circuits = (tableroData.circuits || []).filter(c => c.id !== circuitId);
     onUpdateTablero(newData);
   };
 
