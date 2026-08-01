@@ -192,23 +192,24 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     const targetPole = currentMaxPole + 2; // Next pole on the same side
     if (targetPole > maxPoles) return;
 
+    // Helper to determine if a circuit is actually occupied by customized data
+    const isOccupiedByRealCircuit = (c) => {
+      const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
+      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
+      const hasRealName = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE' && !c.equipo.startsWith('RESERVA') && !c.equipo.startsWith('DISPONIBLE');
+      return hasBreaker || hasConductor || hasRealName || c.fotografia || c.tipoDestino;
+    };
+
     const targetOccupied = (tableroData.circuits || []).find(c => c.id !== circuitId && c.poles.includes(targetPole));
-    if (targetOccupied) {
-      if (targetOccupied.poles.length > 1) {
-        alert(`El polo ${targetPole} ya forma parte de otro interruptor agrupado.`);
-        return;
-      }
-      const isReal = targetOccupied.equipo && targetOccupied.equipo !== 'RESERVA' && targetOccupied.equipo !== 'DISPONIBLE';
-      if (isReal) {
-        alert(`El polo ${targetPole} ya está ocupado por el circuito "${targetOccupied.equipo}".`);
-        return;
-      }
+    if (targetOccupied && isOccupiedByRealCircuit(targetOccupied)) {
+      alert(`El polo ${targetPole} ya está ocupado por el circuito "${targetOccupied.equipo}".`);
+      return;
     }
 
     const newData = { ...tableroData };
     let existingCircuits = [...(tableroData.circuits || [])];
     
-    // Remove the target occupied circuit if it exists, since it will be absorbed
+    // If the target pole was occupied by an empty custom circuit, filter it out to absorb it
     if (targetOccupied) {
       existingCircuits = existingCircuits.filter(c => c.id !== targetOccupied.id);
     }
