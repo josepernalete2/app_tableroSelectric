@@ -495,7 +495,7 @@ export const ProyectoView = () => {
               </h2>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl">{proyecto.descripcion || 'Sin descripción.'}</p>
             </div>
-            {user?.role === 'ADMIN' && (
+            {user?.role === 'ADMIN' && activeTab !== 'ESTRUCTURAL' && (
               <button
                 onClick={() => {
                   setEditProyectoNombre(proyecto.nombre);
@@ -635,49 +635,70 @@ export const ProyectoView = () => {
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
             </div>
 
-            {/* BOTONES DE CREACIÓN */}
-            <div className="flex flex-wrap md:flex-nowrap items-center gap-2.5 w-full md:w-auto justify-end">
+            {/* BOTONES DE ACCIÓN AGRUPADOS POR JERARQUÍA */}
+            <div className="flex flex-wrap md:flex-nowrap items-center gap-3 w-full md:w-auto justify-end">
+              
+              {/* Grupo 1: Generar Informes */}
+              <div className="flex items-center bg-slate-950 border border-slate-800 p-1.5 rounded-xl gap-1">
+                <button
+                  onClick={() => navigate(`/empresa/${companyId}/proyecto/${proyectoId}/informe`)}
+                  className="bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold transition-all px-3 py-2 rounded-lg flex items-center gap-1.5 h-9 text-xs cursor-pointer shadow-md"
+                  title="Generar Informe Técnico PDF completo"
+                >
+                  <FileText className="w-3.5 h-3.5" /> Informe PDF
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  title="Exportar a Excel (Próximamente)"
+                  className="opacity-40 text-slate-400 font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 h-9 text-xs cursor-not-allowed bg-slate-900 border border-slate-800"
+                >
+                  <FileText className="w-3.5 h-3.5 text-slate-500" /> Excel (Futuro)
+                </button>
+              </div>
 
-              <button
-                onClick={() => navigate(`/empresa/${companyId}/proyecto/${proyectoId}/informe`)}
-                className="bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 font-bold transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs shadow-md"
-              >
-                <FileText className="w-4 h-4" /> Generar Informe PDF
-              </button>
-
+              {/* Grupo 2: Controles específicos según Pestaña Activa */}
               {user?.role !== 'CLIENT' && (
-                <>
-                  <button
-                    onClick={() => {
-                      setIsMultiSelectMode(!isMultiSelectMode);
-                      setSelectedIds(new Set());
-                    }}
-                    className={`border font-semibold transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs ${
-                      isMultiSelectMode 
-                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' 
-                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
-                    }`}
-                  >
-                    <CheckSquare className="w-4 h-4" /> {isMultiSelectMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
-                  </button>
+                <div className="flex items-center gap-2">
+                  {/* Controles para Diagrama Unifilar */}
+                  {activeTab === 'UNIFILAR' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setIsMultiSelectMode(!isMultiSelectMode);
+                          setSelectedIds(new Set());
+                        }}
+                        className={`border font-semibold transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs ${
+                          isMultiSelectMode 
+                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' 
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850'
+                        }`}
+                      >
+                        <CheckSquare className="w-4 h-4" /> {isMultiSelectMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
+                      </button>
 
-                  <button
-                    onClick={() => {
-                      setTipoElemento('TABLERO');
-                      setShowElementoModal(true);
-                    }}
-                    className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
-                  >
-                    <Zap className="w-4 h-4 text-amber-500" /> + Crear Elemento
-                  </button>
+                      <button
+                        onClick={() => {
+                          setTipoElemento('TABLERO');
+                          setShowElementoModal(true);
+                        }}
+                        className="bg-slate-900 border border-slate-800 text-slate-100 font-semibold hover:bg-slate-850 active:scale-95 transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs"
+                      >
+                        <Zap className="w-4 h-4 text-amber-500" /> + Crear Elemento
+                      </button>
+                    </>
+                  )}
 
-                  <button
-                    onClick={() => setShowInspeccionModal(true)}
-                    className="bg-slate-900/50 border border-slate-700 text-slate-100 font-medium hover:bg-slate-800 active:scale-98 transition-all px-3.5 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full md:w-auto cursor-pointer text-xs"
-                  >
-                    <Building className="w-4 h-4" /> + Crear Inspección
-                  </button>
-                </>
+                  {/* Controles para Inspección Estructural */}
+                  {activeTab === 'ESTRUCTURAL' && (
+                    <button
+                      onClick={() => setShowInspeccionModal(true)}
+                      className="bg-slate-900 border border-slate-800 text-slate-100 font-bold hover:bg-slate-850 active:scale-95 transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs"
+                    >
+                      <Building className="w-4 h-4 text-amber-500" /> + Crear Inspección
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
