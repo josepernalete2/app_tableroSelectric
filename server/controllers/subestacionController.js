@@ -56,7 +56,7 @@ export const crearInspeccionSubestacion = async (req, res, next) => {
     }
 
     // Inserción de inspección visual de subestación en PostgreSQL
-    const nuevaInspeccion = await prisma.inspeccionSubestacion.create({
+    const nuevaInspeccion = await prisma.subestacion.create({
       data: {
         id,
         nombre,
