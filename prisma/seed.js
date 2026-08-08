@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import bcrypt from 'bcrypt'; // Importación añadida para encriptar contraseñas
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:admin123@localhost:5432/inspecciones?schema=public';
 const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
@@ -48,28 +49,37 @@ async function main() {
   console.log('Empresas c-1 y c-2 pobladas con éxito.');
 
   console.log('Poblando usuarios iniciales...');
+
+  // Generamos los hashes de las contraseñas antes de guardarlas
+  const hashedPassword1 = await bcrypt.hash('admin1', 10);
+  const hashedPassword2 = await bcrypt.hash('admin2', 10);
+
   await prisma.user.upsert({
     where: { username: 'admin1' },
-    update: {},
+    update: {
+      password: hashedPassword1 // Asegura que si el usuario ya existe, se actualice con la contraseña encriptada
+    },
     create: {
       id: 'u-1',
       username: 'admin1',
-      password: 'admin1',
+      password: hashedPassword1, // Guarda la contraseña encriptada
       role: 'ADMIN'
     }
   });
 
   await prisma.user.upsert({
     where: { username: 'admin2' },
-    update: {},
+    update: {
+      password: hashedPassword2 // Asegura que si el usuario ya existe, se actualice con la contraseña encriptada
+    },
     create: {
       id: 'u-2',
       username: 'admin2',
-      password: 'admin2',
+      password: hashedPassword2, // Guarda la contraseña encriptada
       role: 'ADMIN'
     }
   });
-  console.log('Usuarios admin1 y admin2 poblados con éxito.');
+  console.log('Usuarios admin1 y admin2 poblados con éxito (contraseñas encriptadas).');
 
   console.log('--- Seeding completado con éxito ---');
 }
