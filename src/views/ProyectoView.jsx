@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   RefreshCw,
   FileText,
-  CheckSquare
+  CheckSquare,
+  Settings
 } from 'lucide-react';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria

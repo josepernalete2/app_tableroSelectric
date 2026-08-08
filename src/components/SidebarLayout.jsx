@@ -145,7 +145,7 @@ export const SidebarLayout = () => {
   // Exportar DB PostgreSQL
   const handleExportDb = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/backup/export', {
+      const res = await fetch(`${API_BASE_URL}/api/backup/export`, {
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
@@ -182,7 +182,7 @@ export const SidebarLayout = () => {
     reader.onload = async () => {
       try {
         const parsed = JSON.parse(reader.result);
-        const res = await fetch('http://localhost:3001/api/backup/import', {
+        const res = await fetch(`${API_BASE_URL}/api/backup/import`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -219,7 +219,7 @@ export const SidebarLayout = () => {
     setIsSyncing(true);
     setSyncStatus('Sincronizando...');
     try {
-      const res = await fetch('http://localhost:3001/api/backup/gdrive-sync', {
+      const res = await fetch(`${API_BASE_URL}/api/backup/gdrive-sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -258,7 +258,7 @@ export const SidebarLayout = () => {
     if (isAutoOn && email) {
       const doAutoSync = async () => {
         try {
-          const res = await fetch('http://localhost:3001/api/backup/gdrive-sync', {
+          const res = await fetch(`${API_BASE_URL}/api/backup/gdrive-sync`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
