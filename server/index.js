@@ -59,6 +59,11 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')
 // Endpoints Principales de la Inspección Eléctrica (Bajo el prefijo /api)
 app.use('/api', tableroRoutes);
 
+// Manejo fallback para endpoints de API no encontrados (evita retornar HTML para endpoints /api)
+app.use('/api', (req, res) => {
+  res.status(404).json({ ok: false, error: `Endpoint de API no encontrado: ${req.method} ${req.originalUrl}` });
+});
+
 // Endpoint de Health Check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', uptime: process.uptime(), date: new Date() });
