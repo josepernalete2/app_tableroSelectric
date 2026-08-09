@@ -776,6 +776,7 @@ export const useStore = create(
             GENERADOR: 'GEN',
             TRANSFER: 'ATS',
             PUESTA_TIERRA: 'PAT',
+            BANCO_CONDENSADOR: 'BC',
             OTRO: 'OTR',
             SUBESTACION: 'SUB'
           };

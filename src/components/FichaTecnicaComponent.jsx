@@ -130,6 +130,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         return <span className="px-3 py-1 bg-amber-950/90 text-amber-400 border border-amber-800/40 rounded-full text-xs font-bold font-mono">⚡ GENERADOR DE EMERGENCIA</span>;
       case 'TRANSFER':
         return <span className="px-3 py-1 bg-emerald-950/90 text-emerald-400 border border-emerald-800/40 rounded-full text-xs font-bold font-mono">🔄 TRANSFERENCIA (ATS / MTS)</span>;
+      case 'BANCO_CONDENSADOR':
+        return <span className="px-3 py-1 bg-cyan-950/90 text-cyan-400 border border-cyan-800/40 rounded-full text-xs font-bold font-mono">⚡ BANCO DE CONDENSADORES</span>;
       case 'TABLERO':
       default:
         return <span className="px-3 py-1 bg-sky-950/90 text-sky-400 border border-sky-800/40 rounded-full text-xs font-bold font-mono">⚡ PANEL ELÉCTRICO / TABLERO</span>;
@@ -1326,6 +1328,754 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 />
               </div>
             )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. PLANTILLA: BANCO DE CONDENSADORES (COMPENSACIÓN DE POTENCIA REACTIVA) */}
+      {/* ========================================================================= */}
+      {tipoElemento === 'BANCO_CONDENSADOR' && (
+        <div className="bg-slate-950 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl print:border-black print:bg-white print:text-black">
+          
+          {/* Título Principal */}
+          <div className="bg-slate-900 border-b-2 border-slate-700 p-3.5 text-center print:bg-gray-200 print:border-black">
+            <h2 className="text-base md:text-lg font-black tracking-wide text-slate-100 uppercase font-mono print:text-black">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold"
+                />
+              ) : (
+                `FICHA TÉCNICA - BANCO DE COMPENSACIÓN DE POTENCIA REACTIVA: ${nombre || 'BC-1'}`
+              )}
+            </h2>
+          </div>
+
+          <div className="p-4 md:p-6 space-y-6">
+
+            {/* SECCIÓN 1: DATOS GENERALES */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                1. Datos Generales
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Código / Tag:</span>
+                  <span className="font-mono text-slate-300 font-bold bg-slate-900 border border-slate-850 px-2.5 py-1.5 rounded-lg block print:bg-white print:border-gray-300 print:text-slate-900">
+                    {elementoData.id}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Ubicación / Planta:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={ubicacion}
+                      onChange={(e) => setUbicacion(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {ubicacion || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Alimentador:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.alimentador || ''}
+                      onChange={(e) => handleDtChange('alimentador', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.alimentador || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Calibre del Conductor:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.calibreConductor || ''}
+                      onChange={(e) => handleDtChange('calibreConductor', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.calibreConductor || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Marca / Modelo:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.marca || ''}
+                      onChange={(e) => handleDtChange('marca', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-950/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.marca || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Fabricante:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.fabricante || ''}
+                      onChange={(e) => handleDtChange('fabricante', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.fabricante || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Año de Fabricación:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.anioFabricacion || ''}
+                      onChange={(e) => handleDtChange('anioFabricacion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.anioFabricacion || '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: PARÁMETROS ELÉCTRICOS NOMINALES DE LA RED */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                2. Parámetros Eléctricos Nominales de la Red
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tensión Nominal (V / kV):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.tensionNominal || ''}
+                      onChange={(e) => handleDtChange('tensionNominal', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tensionNominal || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tensión Registrada (V / kV):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.tensionRegistrada || ''}
+                      onChange={(e) => handleDtChange('tensionRegistrada', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tensionRegistrada || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Frecuencia:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.frecuencia || '60 Hz'}
+                      onChange={(e) => handleDtChange('frecuencia', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="50 Hz">50 Hz</option>
+                      <option value="60 Hz">60 Hz</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.frecuencia || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Potencia Reactiva Total (kVAR):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.potenciaReactivaTotal || ''}
+                      onChange={(e) => handleDtChange('potenciaReactivaTotal', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.potenciaReactivaTotal || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Corriente Nominal Total (A):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.corrienteNominalTotal || ''}
+                      onChange={(e) => handleDtChange('corrienteNominalTotal', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.corrienteNominalTotal || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Nro. Fases:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.numFases || 'Trifásico'}
+                      onChange={(e) => handleDtChange('numFases', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Monofásico">Monofásico</option>
+                      <option value="Bifásico">Bifásico</option>
+                      <option value="Trifásico">Trifásico</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.numFases || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Conexión:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.conexion || 'Estrella'}
+                      onChange={(e) => handleDtChange('conexion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Delta">Delta</option>
+                      <option value="Estrella">Estrella</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.conexion || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Nivel de Aislamiento BIL (kV):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.nivelAislamientoBIL || ''}
+                      onChange={(e) => handleDtChange('nivelAislamientoBIL', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.nivelAislamientoBIL || '—'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 3: CONFIGURACIÓN Y PASOS */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                3. Configuración y Pasos de Compensación
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tipo de Compensación:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoCompensacion || 'Automática (Pasos)'}
+                      onChange={(e) => handleDtChange('tipoCompensacion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Fija">Fija</option>
+                      <option value="Automática (Pasos)">Automática (Pasos)</option>
+                      <option value="Dinámica (Tiristores/SVG)">Dinámica (Tiristores/SVG)</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tipoCompensacion || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Nro. Total de Pasos:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.numPasos || ''}
+                      onChange={(e) => handleDtChange('numPasos', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.numPasos || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Secuencia de Pasos (kVAR):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.secuenciaPasosKvar || ''}
+                      onChange={(e) => handleDtChange('secuenciaPasosKvar', e.target.value)}
+                      placeholder="Ej. 50+50+100+100 kVAR"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white font-mono">{dt.secuenciaPasosKvar || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tipo de Conmutación:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoConmutacion || 'Contactores dedicados'}
+                      onChange={(e) => handleDtChange('tipoConmutacion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Contactores dedicados">Contactores dedicados</option>
+                      <option value="Interruptores estáticos">Interruptores estáticos</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tipoConmutacion || '—'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 4: UNIDADES DE CONDENSADORES (MÓDULOS) */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                4. Unidades de Condensadores (Módulos)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Potencia Individual (kVAR):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.potenciaIndividual || ''}
+                      onChange={(e) => handleDtChange('potenciaIndividual', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.potenciaIndividual || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Capacitancia (µF):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.capacitanciaMuf || ''}
+                      onChange={(e) => handleDtChange('capacitanciaMuf', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.capacitanciaMuf || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tensión del Condensador (V):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.tensionCondensador || ''}
+                      onChange={(e) => handleDtChange('tensionCondensador', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tensionCondensador || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tecnología Dieléctrica:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.tecnologiaDielectrica || 'Polipropileno metalizado'}
+                      onChange={(e) => handleDtChange('tecnologiaDielectrica', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tecnologiaDielectrica || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Resistencia de Descarga:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.resistenciaDescarga || 'Sí'}
+                      onChange={(e) => handleDtChange('resistenciaDescarga', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Sí">Sí (&lt;50V en &lt;60s)</option>
+                      <option value="No">No</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.resistenciaDescarga || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Seguridad:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.seguridad || 'Desconectador por sobrepresión'}
+                      onChange={(e) => handleDtChange('seguridad', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.seguridad || '—'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 5: REACTANCIAS ANTIHARMÓNICAS / FILTROS */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                5. Reactancias Antiharmónicas / Filtros
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Factor de Desintonización (p%):</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.factorDesintonizacion || 'N/A'}
+                      onChange={(e) => handleDtChange('factorDesintonizacion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="7% (189 Hz)">7% (189 Hz)</option>
+                      <option value="14% (134 Hz)">14% (134 Hz)</option>
+                      <option value="N/A">N/A</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.factorDesintonizacion || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tipo de Núcleo:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoNucleo || 'Núcleo de Hierro con Entrehierro'}
+                      onChange={(e) => handleDtChange('tipoNucleo', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Núcleo de Hierro con Entrehierro">Núcleo de Hierro con Entrehierro</option>
+                      <option value="Aire">Aire</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tipoNucleo || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Aislamiento Térmico:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.claseAislamientoTermico || 'Clase H (180°C)'}
+                      onChange={(e) => handleDtChange('claseAislamientoTermico', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.claseAislamientoTermico || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Protección Térmica:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.proteccionTermica || 'Sensor Bimetálico / PT100 integrado'}
+                      onChange={(e) => handleDtChange('proteccionTermica', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.proteccionTermica || '—'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 6: REGULADOR Y PROTECCIONES */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                6. Regulador y Protecciones
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+                <div className="lg:col-span-2">
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Regulador de FP (Marca / Modelo / Rango):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.reguladorMarcaModelo || ''}
+                      onChange={(e) => handleDtChange('reguladorMarcaModelo', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.reguladorMarcaModelo || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Relación de TC Requerida:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.relacionTc || ''}
+                      onChange={(e) => handleDtChange('relacionTc', e.target.value)}
+                      placeholder="Ej. 1600/5A"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white font-mono">{dt.relacionTc || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Puerto de Comunicación:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.puertoComunicacion || 'RS-485 (Modbus RTU)'}
+                      onChange={(e) => handleDtChange('puertoComunicacion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="RS-485 (Modbus RTU)">RS-485 (Modbus RTU)</option>
+                      <option value="Ethernet (Modbus TCP)">Ethernet (Modbus TCP)</option>
+                      <option value="Ninguno">Ninguno</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.puertoComunicacion || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Interruptor Principal (A):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.interruptorPrincipalAmp || ''}
+                      onChange={(e) => handleDtChange('interruptorPrincipalAmp', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.interruptorPrincipalAmp ? dt.interruptorPrincipalAmp + ' A' : '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Protección de Pasos:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.proteccionPasos || 'Fusibles'}
+                      onChange={(e) => handleDtChange('proteccionPasos', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Fusibles">Fusibles</option>
+                      <option value="Breakers">Breakers</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.proteccionPasos || '—'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 7: GABINETE Y ENTORNO DE OPERACIÓN */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                7. Gabinete y Entorno de Operación
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Grado de Protección Envolvente:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.gradoProteccionEnvolvente || 'IP54'}
+                      onChange={(e) => handleDtChange('gradoProteccionEnvolvente', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="IP41">IP41</option>
+                      <option value="IP54">IP54</option>
+                      <option value="NEMA 3R">NEMA 3R</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.gradoProteccionEnvolvente || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Dimensiones (Al x An x Pr):</span>
+                  {isEditing ? (
+                    <div className="flex gap-1.5 items-center">
+                      <input
+                        type="text"
+                        value={dt.dimensionesAlto || ''}
+                        onChange={(e) => handleDtChange('dimensionesAlto', e.target.value)}
+                        placeholder="Al"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-100 focus:border-amber-500 text-center"
+                      />
+                      <span>x</span>
+                      <input
+                        type="text"
+                        value={dt.dimensionesAncho || ''}
+                        onChange={(e) => handleDtChange('dimensionesAncho', e.target.value)}
+                        placeholder="An"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 text-center"
+                      />
+                      <span>x</span>
+                      <input
+                        type="text"
+                        value={dt.dimensionesProf || ''}
+                        onChange={(e) => handleDtChange('dimensionesProf', e.target.value)}
+                        placeholder="Pr"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 text-center"
+                      />
+                      <span className="text-[10px]">mm</span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white font-mono">
+                      {dt.dimensionesAlto || '—'} x {dt.dimensionesAncho || '—'} x {dt.dimensionesProf || '—'} mm
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Sistema de Enfriamiento:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.sistemaEnfriamiento || 'Ventilación Forzada'}
+                      onChange={(e) => handleDtChange('sistemaEnfriamiento', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Ventilación Natural">Ventilación Natural</option>
+                      <option value="Ventilación Forzada">Ventilación Forzada</option>
+                      <option value="Extractores y Filtros">Extractores y Filtros</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.sistemaEnfriamiento || '—'}</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Temperatura / Humedad:</span>
+                  {isEditing ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={dt.temperaturaC || ''}
+                        onChange={(e) => handleDtChange('temperaturaC', e.target.value)}
+                        placeholder="°C"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 text-center"
+                      />
+                      <input
+                        type="text"
+                        value={dt.humedadPct || ''}
+                        onChange={(e) => handleDtChange('humedadPct', e.target.value)}
+                        placeholder="%"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 text-center"
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white font-mono">
+                      {dt.temperaturaC ? dt.temperaturaC + ' °C' : '—'} / {dt.humedadPct ? dt.humedadPct + ' %' : '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN DE OBSERVACIONES PARTICULARES */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-700">Observaciones Generales y Recomendaciones</span>
+              {isEditing ? (
+                <textarea
+                  value={observacionesGenerales}
+                  onChange={(e) => setObservacionesGenerales(e.target.value)}
+                  rows={4}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-sans resize-none"
+                  placeholder="Escriba las condiciones del banco de compensación, problemas en celdas, desbalance en corriente de condensadores, estado de contactores..."
+                />
+              ) : (
+                <p className="text-xs leading-relaxed text-slate-300 font-sans italic bg-slate-900/40 p-4 rounded-xl border border-slate-900 print:text-black print:bg-white print:border-gray-300">
+                  {observacionesGenerales || 'No se han registrado observaciones específicas para este banco de condensadores.'}
+                </p>
+              )}
+            </div>
+
+            {/* SECCIÓN FOTOGRÁFICA */}
+            <div className="pt-4 border-t border-slate-900/60 flex flex-col items-center gap-4">
+              {(fotoBlob || fotoSrc || previewUrl) ? (
+                <div className="relative group rounded-xl overflow-hidden border border-slate-800 shadow-lg max-w-sm">
+                  <SafeImage
+                    blob={fotoBlob}
+                    src={fotoSrc}
+                    alt={nombre}
+                    className="object-contain w-full rounded-xl"
+                    style={{ maxHeight: `${dt.fotoScale || 280}px` }}
+                  />
+                </div>
+              ) : (
+                <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
+                  <Camera className="w-8 h-8 text-slate-600 mx-auto" />
+                  <span className="text-xs text-slate-500 font-mono block">Sin fotografía adjunta del banco de condensadores</span>
+                  <label className="inline-block px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-bold rounded-lg cursor-pointer transition-colors">
+                    Adjuntar Foto
+                    <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                  </label>
+                </div>
+              )}
+
+              {/* Ajuste de escala fotográfica */}
+              {(fotoBlob || fotoSrc || previewUrl) && (
+                <div className="no-print mt-3 max-w-xs mx-auto space-y-1.5">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
+                    <span>Ajustar tamaño en PDF</span>
+                    <span className="text-cyan-400 font-mono">{dt.fotoScale || 280}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="120"
+                    max="380"
+                    value={dt.fotoScale || 280}
+                    onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value))}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                  />
+                </div>
+              )}
+            </div>
+
           </div>
 
         </div>

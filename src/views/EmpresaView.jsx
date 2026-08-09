@@ -329,6 +329,22 @@ export const EmpresaView = () => {
         potenciaKw: potenciaKwGen,
         amperaje: amperajeGen
       };
+    } else if (tipoElemento === 'BANCO_CONDENSADOR') {
+      datosTecnicos = {
+        marca: '', modelo: '', alimentador: '', calibreConductor: '', fabricante: '', anioFabricacion: '',
+        tensionNominal: '', tensionRegistrada: '', frecuencia: '60 Hz', potenciaReactivaTotal: '',
+        corrienteNominalTotal: '', numFases: 'Trifásico', conexion: 'Estrella', nivelAislamientoBIL: '',
+        tipoCompensacion: 'Automática (Pasos)', numPasos: '', secuenciaPasosKvar: '',
+        tipoConmutacion: 'Contactores dedicados', potenciaIndividual: '', capacitanciaMuf: '',
+        tensionCondensador: '', tecnologiaDielectrica: 'Polipropileno metalizado',
+        resistenciaDescarga: 'Sí', seguridad: 'Desconectador por sobrepresión',
+        factorDesintonizacion: 'N/A', tipoNucleo: 'Núcleo de Hierro con Entrehierro',
+        claseAislamientoTermico: 'Clase H (180°C)', proteccionTermica: 'Sensor Bimetálico / PT100 integrado',
+        reguladorMarcaModelo: '', relacionTc: '', puertoComunicacion: 'RS-485 (Modbus RTU)',
+        interruptorPrincipalAmp: '', proteccionPasos: 'Fusibles', gradoProteccionEnvolvente: 'IP54',
+        dimensionesAlto: '', dimensionesAncho: '', dimensionesProf: '',
+        sistemaEnfriamiento: 'Ventilación Forzada', temperaturaC: '', humedadPct: ''
+      };
     } else if (tipoElemento === 'PUESTA_TIERRA') {
       datosTecnicos = {
         resistenciaOhmios,
@@ -947,18 +963,19 @@ export const EmpresaView = () => {
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Tipo de Plantilla de Elemento
                 </label>
-                <div className="grid grid-cols-4 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[10px]">
+                <div className="flex flex-wrap gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
                   {[
                     { id: 'TABLERO', label: 'PANEL ELÉCTRICO' },
                     { id: 'TRANSFER', label: 'TRANSFERENCIA' },
                     { id: 'GENERADOR', label: 'GENERADOR' },
-                    { id: 'TRANSFORMADOR', label: 'TRANSFORMADOR' }
+                    { id: 'TRANSFORMADOR', label: 'TRANSFORMADOR' },
+                    { id: 'BANCO_CONDENSADOR', label: 'BANCO CONDENSADOR' }
                   ].map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setTipoElemento(t.id)}
-                      className={`py-2 px-2 font-black rounded-lg transition-all text-center truncate cursor-pointer ${
+                      className={`py-2 px-2.5 font-black rounded-lg transition-all text-center cursor-pointer ${
                         tipoElemento === t.id 
                           ? 'bg-amber-500 text-slate-950 shadow-md' 
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'

@@ -161,6 +161,16 @@ export default function ModalDiagramaUnifilar({ isOpen, onClose, elementos, comp
             <line x1={x - 4} y1={y + 18} x2={x + 4} y2={y + 18} stroke="#10b981" strokeWidth="2.5" />
           </g>
         );
+      case 'BANCO_CONDENSADOR':
+        return (
+          <g>
+            <circle cx={x} cy={y} r="22" fill="#083344" stroke="#06b6d4" strokeWidth="2.5" className="filter drop-shadow-[0_0_8px_rgba(6,182,212,0.2)]" />
+            <line x1={x - 6} y1={y - 10} x2={x - 6} y2={y + 10} stroke="#06b6d4" strokeWidth="2.5" />
+            <line x1={x + 6} y1={y - 10} x2={x + 6} y2={y + 10} stroke="#06b6d4" strokeWidth="2.5" />
+            <line x1={x - 14} y1={y} x2={x - 6} y2={y} stroke="#06b6d4" strokeWidth="1.5" />
+            <line x1={x + 6} y1={y} x2={x + 14} y2={y} stroke="#06b6d4" strokeWidth="1.5" />
+          </g>
+        );
       case 'TABLERO':
       default:
         return (
