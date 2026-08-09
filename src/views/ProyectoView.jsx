@@ -1246,17 +1246,34 @@ export const ProyectoView = () => {
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                     Número Máximo de Polos
                   </label>
-                  <select
-                    value={maxPoles}
-                    onChange={(e) => setMaxPoles(parseInt(e.target.value, 10))}
-                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11"
-                  >
-                    <option value={12}>12 Polos</option>
-                    <option value={24}>24 Polos</option>
-                    <option value={30}>30 Polos</option>
-                    <option value={42}>42 Polos</option>
-                    <option value={60}>60 Polos</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={maxPoles}
+                      onChange={(e) => setMaxPoles(parseInt(e.target.value, 10) || 0)}
+                      placeholder="Escribe el nro. de polos"
+                      className="w-2/3 px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all"
+                    />
+                    <select
+                      value={maxPoles}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (val) setMaxPoles(val);
+                      }}
+                      className="w-1/3 px-3 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11"
+                    >
+                      <option value="">-- Estándar --</option>
+                      <option value={12}>12 Polos</option>
+                      <option value={24}>24 Polos</option>
+                      <option value={30}>30 Polos</option>
+                      <option value={42}>42 Polos</option>
+                      <option value={48}>48 Polos</option>
+                      <option value={60}>60 Polos</option>
+                      <option value={72}>72 Polos</option>
+                      <option value={84}>84 Polos</option>
+                      <option value={96}>96 Polos</option>
+                    </select>
+                  </div>
                 </div>
               )}
 

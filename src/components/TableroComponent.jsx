@@ -355,12 +355,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             </td>
             <td colSpan={6} className="p-2 font-medium">
               <div className="flex flex-wrap items-center gap-6 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Capacidad Gabinete:</span>
-                  <select
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold shrink-0">Capacidad Gabinete:</span>
+                  <input
+                    type="number"
                     value={maxPoles}
+                    disabled={readOnly}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
+                      const val = parseInt(e.target.value, 10) || 0;
                       const maxCircPosition = circuits.reduce((acc, c) => {
                         const maxVal = Math.max(...c.poles);
                         return maxVal > acc ? maxVal : acc;
@@ -371,8 +373,27 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       }
                       updateField('maxPoles', val);
                     }}
-                    className="bg-transparent text-slate-900 dark:text-slate-100 font-bold border-none text-[11px] focus:outline-none cursor-pointer"
+                    className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border-none text-[11px] focus:outline-none w-10 text-center"
+                  />
+                  <select
+                    value={maxPoles}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!val) return;
+                      const maxCircPosition = circuits.reduce((acc, c) => {
+                        const maxVal = Math.max(...c.poles);
+                        return maxVal > acc ? maxVal : acc;
+                      }, 0);
+                      if (val < maxCircPosition) {
+                        alert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
+                        return;
+                      }
+                      updateField('maxPoles', val);
+                    }}
+                    className="bg-transparent text-slate-500 dark:text-slate-400 font-medium border-none text-[10px] focus:outline-none cursor-pointer"
                   >
+                    <option value="" className="bg-slate-900 text-slate-100">-- Estándar --</option>
                     {[12, 24, 30, 42, 48, 60, 72, 84, 96].map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt} Polos</option>
                     ))}

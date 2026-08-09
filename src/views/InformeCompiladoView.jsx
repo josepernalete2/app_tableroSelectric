@@ -4,6 +4,7 @@ import useStore from '../store/useStore';
 import TableroComponent from '../components/TableroComponent';
 import FichaTecnicaComponent from '../components/FichaTecnicaComponent';
 import SubestacionComponent from '../components/SubestacionComponent';
+import DiagramaUnifilarBlueprint from '../components/DiagramaUnifilarBlueprint';
 import { 
   ArrowLeft, 
   Printer, 
@@ -415,15 +416,24 @@ export default function InformeCompiladoView() {
         <div className="page-break py-12 px-6 space-y-6 print:text-black">
           <div className="border-b border-slate-800 pb-3 print:border-gray-300">
             <h2 className="text-xl font-bold uppercase tracking-wider text-amber-500 print:text-slate-950">
-              3. Jerarquía y Flujo Eléctrico
+              3. Jerarquía y Diagrama Unifilar Gráfico
             </h2>
           </div>
           
           <p className="text-sm text-slate-350 print:text-slate-800 mb-6">
-            A continuación se presenta de forma jerárquica las relaciones de alimentación entre los equipos registrados en el sistema, mostrando el flujo de potencia aguas abajo:
+            A continuación se presenta de forma jerárquica las relaciones de alimentación entre los equipos registrados en el sistema, mostrando el flujo de potencia aguas abajo y el plano CAD unifilar correspondiente:
           </p>
 
-          <div className="bg-slate-950 p-6 rounded-2xl border border-slate-850 space-y-4 print:bg-slate-50 print:border-gray-300">
+          <div className="w-full bg-white text-black rounded-2xl shadow-inner border border-slate-200 print:border-none p-4 overflow-x-auto">
+            <DiagramaUnifilarBlueprint
+              elementos={elementos}
+              companyName={company.nombre}
+              projectName={proyecto.nombre}
+              interactive={false}
+            />
+          </div>
+
+          <div className="bg-slate-950 p-6 rounded-2xl border border-slate-850 space-y-4 print:bg-slate-50 print:border-gray-300 no-print">
             {elementos.length > 0 ? (
               <div className="space-y-4">
                 {/* Find elements that are fed by nothing or general feed */}

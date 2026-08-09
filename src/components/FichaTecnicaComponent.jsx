@@ -5,6 +5,7 @@ import {
   Camera, 
   Printer
 } from 'lucide-react';
+import useStore from '../store/useStore';
 
 // Componente para renderizar Blobs de imagen de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -30,6 +31,38 @@ const SafeImage = ({ blob, src, alt, className }) => {
 
 export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly }) {
   const [isEditing, setIsEditing] = useState(false);
+  const companies = useStore((state) => state.companies || []);
+
+  const allFeeders = React.useMemo(() => {
+    const list = [];
+    const compId = elementoData?.empresaId || elementoData?.companyId;
+    const company = companies.find(c => c.id === compId);
+    if (!company) {
+      companies.forEach(c => {
+        if (c.elementosUnifilares) {
+          list.push(...c.elementosUnifilares);
+        }
+        if (c.proyectos) {
+          c.proyectos.forEach(p => {
+            const elList = p.elementosUnifilares || p.tableros || [];
+            list.push(...elList);
+          });
+        }
+      });
+      return list.filter(e => e.id !== elementoData?.id);
+    }
+
+    if (company.elementosUnifilares) {
+      list.push(...company.elementosUnifilares);
+    }
+    if (company.proyectos) {
+      company.proyectos.forEach(p => {
+        const elList = p.elementosUnifilares || p.tableros || [];
+        list.push(...elList);
+      });
+    }
+    return list.filter(e => e.id !== elementoData?.id);
+  }, [companies, elementoData]);
 
   // Campos principales
   const [nombre, setNombre] = useState(elementoData?.nombre || '');
@@ -220,12 +253,33 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           <div className="border-b border-slate-700 p-3 bg-slate-900/40 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black">
             <span className="font-bold uppercase text-slate-400 print:text-black mr-2">TABLERO ALIMENTADO POR:</span>
             {isEditing ? (
-              <input
-                type="text"
-                value={alimentadoPor}
-                onChange={(e) => setAlimentadoPor(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-3/4"
-              />
+              <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center w-full sm:w-3/4 inline-flex">
+                <input
+                  type="text"
+                  value={alimentadoPor}
+                  onChange={(e) => setAlimentadoPor(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 flex-1 w-full"
+                  placeholder="Escriba el origen de la alimentación o seleccione de la lista..."
+                />
+                {allFeeders.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setAlimentadoPor(e.target.value);
+                      }
+                    }}
+                    value={allFeeders.some(f => f.nombre === alimentadoPor) ? alimentadoPor : ''}
+                    className="bg-slate-900 border border-slate-700 text-slate-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-500 w-full sm:w-auto min-w-[200px]"
+                  >
+                    <option value="">-- Seleccionar Equipo --</option>
+                    {allFeeders.map((f) => (
+                      <option key={f.id} value={f.nombre}>
+                        [{f.id}] {f.nombre}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             ) : (
               <span className="font-semibold">{alimentadoPor || 'ATS SOTANO (TRANSFERENCIA AUTOMATICA) transferencia 580'}</span>
             )}
