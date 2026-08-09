@@ -356,12 +356,38 @@ export const ProyectoView = () => {
       };
     } else if (tipoElemento === 'TRANSFORMADOR') {
       datosTecnicos = {
-        kva: kvaTrafo,
-        marca: marcaTrafo,
-        tipoTransformador: tipoTrafo,
-        conexion: conexionTrafo,
-        voltajePrimario,
-        voltajeSecundario
+        marca: marcaTrafo || editingElemento?.datosTecnicos?.marca || '',
+        fases: editingElemento?.datosTecnicos?.fases || '3',
+        potenciaKva: kvaTrafo || editingElemento?.datosTecnicos?.potenciaKva || '',
+        kva: kvaTrafo || editingElemento?.datosTecnicos?.kva || '',
+        tipoTransformador: tipoTrafo || editingElemento?.datosTecnicos?.tipoTransformador || 'Pedestal',
+        conexion: conexionTrafo || editingElemento?.datosTecnicos?.conexion || '',
+        voltajePrimario: voltajePrimario || editingElemento?.datosTecnicos?.voltajePrimario || '',
+        voltajeSecundario: voltajeSecundario || editingElemento?.datosTecnicos?.voltajeSecundario || '',
+        impedanciaPct: editingElemento?.datosTecnicos?.impedanciaPct || '',
+        impedanciaAmp: editingElemento?.datosTecnicos?.impedanciaAmp || '',
+        impedanciaTemp: editingElemento?.datosTecnicos?.impedanciaTemp || '',
+        tensionPrimaria: editingElemento?.datosTecnicos?.tensionPrimaria || voltajePrimario || '',
+        amperiosPrimaria: editingElemento?.datosTecnicos?.amperiosPrimaria || '',
+        tensionSecundaria: editingElemento?.datosTecnicos?.tensionSecundaria || voltajeSecundario || '',
+        amperiosSecundaria: editingElemento?.datosTecnicos?.amperiosSecundaria || '',
+        aislamiento: editingElemento?.datosTecnicos?.aislamiento || '',
+        aceite: editingElemento?.datosTecnicos?.aceite || '',
+        seco: editingElemento?.datosTecnicos?.seco || '',
+        acometidas: editingElemento?.datosTecnicos?.acometidas || {
+          primaria: { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' },
+          secundaria: { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' },
+          neutro: { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' }
+        },
+        spt: editingElemento?.datosTecnicos?.spt || {
+          barillaCalibre: '',
+          barillaCantidad: '',
+          barillaConfiguracion: '',
+          conductorCalibre: '',
+          conductorTipoSold: '',
+          resistencia: '',
+          fechaMedicion: ''
+        }
       };
     } else if (tipoElemento === 'GENERADOR') {
       datosTecnicos = {
@@ -1083,11 +1109,12 @@ export const ProyectoView = () => {
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Tipo de Plantilla de Elemento
                 </label>
-                <div className="grid grid-cols-3 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[10px]">
+                <div className="grid grid-cols-4 gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[10px]">
                   {[
                     { id: 'TABLERO', label: 'PANEL ELÉCTRICO' },
                     { id: 'TRANSFER', label: 'TRANSFERENCIA' },
-                    { id: 'GENERADOR', label: 'GENERADOR' }
+                    { id: 'GENERADOR', label: 'GENERADOR' },
+                    { id: 'TRANSFORMADOR', label: 'TRANSFORMADOR' }
                   ].map((t) => (
                     <button
                       key={t.id}

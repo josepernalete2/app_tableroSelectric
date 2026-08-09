@@ -43,7 +43,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   // datosTecnicos JSON
   const [dt, setDt] = useState(elementoData?.datosTecnicos || {});
 
-  // Restringir a las 3 opciones permitidas: TABLERO, TRANSFER, GENERADOR
+  // Restringir a las opciones permitidas: TABLERO, TRANSFER, GENERADOR, TRANSFORMADOR
   const tipoElemento = elementoData?.tipoElemento || 'TABLERO';
 
   if (!elementoData) {
@@ -62,6 +62,31 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       [parentKey]: {
         ...(prev[parentKey] || {}),
         [key]: value
+      }
+    }));
+  };
+
+  const handleSptChange = (key, value) => {
+    if (readOnly) return;
+    setDt((prev) => ({
+      ...prev,
+      spt: {
+        ...(prev.spt || {}),
+        [key]: value
+      }
+    }));
+  };
+
+  const handleAcometidaChange = (seccion, key, value) => {
+    if (readOnly) return;
+    setDt((prev) => ({
+      ...prev,
+      acometidas: {
+        ...(prev.acometidas || {}),
+        [seccion]: {
+          ...((prev.acometidas && prev.acometidas[seccion]) || {}),
+          [key]: value
+        }
       }
     }));
   };
@@ -99,6 +124,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
   const renderBadge = () => {
     switch (tipoElemento) {
+      case 'TRANSFORMADOR':
+        return <span className="px-3 py-1 bg-violet-950/90 text-violet-400 border border-violet-800/40 rounded-full text-xs font-bold font-mono">⚡ TRANSFORMADOR ELÉCTRICO</span>;
       case 'GENERADOR':
         return <span className="px-3 py-1 bg-amber-950/90 text-amber-400 border border-amber-800/40 rounded-full text-xs font-bold font-mono">⚡ GENERADOR DE EMERGENCIA</span>;
       case 'TRANSFER':
@@ -708,6 +735,594 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   value={dt.fotoScale || 280}
                   onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value))}
                   className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                />
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. PLANTILLA: TRANSFORMADOR ("INFORMACIÓN GENERAL DE TRANSFORMADOR No. X") */}
+      {/* ========================================================================= */}
+      {tipoElemento === 'TRANSFORMADOR' && (
+        <div className="bg-slate-950 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl print:border-black print:bg-white print:text-black">
+          
+          {/* Título Principal */}
+          <div className="bg-slate-900 border-b-2 border-slate-700 p-3.5 text-center print:bg-gray-200 print:border-black">
+            <h2 className="text-base md:text-lg font-black tracking-wide text-slate-100 uppercase font-mono print:text-black">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-violet-500 text-slate-100 font-bold"
+                />
+              ) : (
+                `INFORMACIÓN GENERAL DE TRANSFORMADOR No. ${nombre || '—'}`
+              )}
+            </h2>
+          </div>
+
+          {/* Fila 1: Ubicación */}
+          <div className="border-b border-slate-700 p-3 bg-slate-900/60 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black">
+            <span className="font-bold uppercase text-slate-400 print:text-black mr-2">UBICACIÓN:</span>
+            {isEditing ? (
+              <input
+                type="text"
+                value={ubicacion}
+                onChange={(e) => setUbicacion(e.target.value)}
+                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-3/4 focus:outline-none focus:border-violet-500"
+              />
+            ) : (
+              <span className="font-semibold">{ubicacion || '—'}</span>
+            )}
+          </div>
+
+          {/* Tabla de Especificaciones */}
+          <table className="w-full text-xs text-left border-collapse border-b border-slate-700 font-mono print:border-black">
+            <tbody>
+              <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="w-1/3 bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">MARCA</td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.marca || ''}
+                      onChange={(e) => handleDtChange('marca', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.marca || '—'
+                  )}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">FASES</td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.fases || ''}
+                      onChange={(e) => handleDtChange('fases', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.fases || '—'
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Cuadro de Datos de Placa */}
+          <table className="w-full text-xs text-left border-collapse border-b-2 border-slate-700 font-mono print:border-black">
+            <thead>
+              <tr className="bg-slate-900/50 border-b border-slate-800 font-bold text-slate-400 uppercase print:bg-gray-100 print:text-black print:border-gray-300">
+                <th className="p-2.5 border-r border-slate-800 w-1/3 print:border-gray-300">PARÁMETRO</th>
+                <th className="p-2.5 border-r border-slate-800 w-1/3 text-center print:border-gray-300">VALOR</th>
+                <th className="p-2.5 w-1/3 text-center">UNIDAD</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 print:divide-gray-300">
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">POTENCIA</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-extrabold text-violet-400 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.potenciaKva || dt.kva || ''}
+                      onChange={(e) => {
+                        handleDtChange('potenciaKva', e.target.value);
+                        handleDtChange('kva', e.target.value);
+                      }}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-violet-400 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.potenciaKva || dt.kva || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">KVA</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">IMPEDANCIA</td>
+                <td className="p-2.5 border-r border-slate-800 print:border-gray-300" colSpan="2">
+                  <div className="grid grid-cols-3 gap-2 text-center items-center">
+                    <div className="flex items-center gap-1 justify-center">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={dt.impedanciaPct || ''}
+                          onChange={(e) => handleDtChange('impedanciaPct', e.target.value)}
+                          placeholder="%"
+                          className="w-16 bg-slate-900 border border-slate-700 rounded text-slate-100 text-center text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        <span className="font-bold text-slate-100 print:text-black">{dt.impedanciaPct || '—'}</span>
+                      )}
+                      <span className="text-[10px] text-slate-500 font-bold">%</span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-center border-l border-slate-850 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={dt.impedanciaAmp || ''}
+                          onChange={(e) => handleDtChange('impedanciaAmp', e.target.value)}
+                          placeholder="A"
+                          className="w-16 bg-slate-900 border border-slate-700 rounded text-slate-100 text-center text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        <span className="font-bold text-slate-100 print:text-black">{dt.impedanciaAmp || '—'}</span>
+                      )}
+                      <span className="text-[10px] text-slate-500 font-bold">A</span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-center border-l border-slate-850 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={dt.impedanciaTemp || ''}
+                          onChange={(e) => handleDtChange('impedanciaTemp', e.target.value)}
+                          placeholder="°C"
+                          className="w-16 bg-slate-900 border border-slate-700 rounded text-slate-100 text-center text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        <span className="font-bold text-slate-100 print:text-black">{dt.impedanciaTemp || '—'}</span>
+                      )}
+                      <span className="text-[10px] text-slate-500 font-bold">°C</span>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TENSIÓN PRIMARIA</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.tensionPrimaria || dt.voltajePrimario || ''}
+                      onChange={(e) => {
+                        handleDtChange('tensionPrimaria', e.target.value);
+                        handleDtChange('voltajePrimario', e.target.value);
+                      }}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.tensionPrimaria || dt.voltajePrimario || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">VOL</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS PRIM.</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.amperiosPrimaria || ''}
+                      onChange={(e) => handleDtChange('amperiosPrimaria', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.amperiosPrimaria || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TENSIÓN SECUNDARIA</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.tensionSecundaria || dt.voltajeSecundario || ''}
+                      onChange={(e) => {
+                        handleDtChange('tensionSecundaria', e.target.value);
+                        handleDtChange('voltajeSecundario', e.target.value);
+                      }}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.tensionSecundaria || dt.voltajeSecundario || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">VOL</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS SEC.</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.amperiosSecundaria || ''}
+                      onChange={(e) => handleDtChange('amperiosSecundaria', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.amperiosSecundaria || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AISLAMIENTO</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.aislamiento || ''}
+                      onChange={(e) => handleDtChange('aislamiento', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.aislamiento || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">KV</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">ACEITE</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.aceite || ''}
+                      onChange={(e) => handleDtChange('aceite', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.aceite || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">GALONES</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">SECO</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.seco || ''}
+                      onChange={(e) => handleDtChange('seco', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.seco || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">—</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Sub-Header: Acometidas */}
+          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-violet-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+            ACOMETIDAS
+          </div>
+
+          <table className="w-full text-[10px] md:text-xs text-center border-collapse border-b-2 border-slate-700 font-mono print:border-black">
+            <thead>
+              <tr className="bg-slate-900/50 border-b border-slate-800 font-bold text-slate-400 uppercase print:bg-gray-100 print:text-black print:border-gray-300">
+                <th className="p-2 border-r border-slate-800 print:border-gray-300 w-20" rowSpan="2">ACOMETIDAS</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300 w-24" colSpan="2">TIPO</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="3">CONDUCTOR</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="2">PROTECCIONES</th>
+                <th className="p-2 print:text-black" rowSpan="2">OBSERVACIONES</th>
+              </tr>
+              <tr className="bg-slate-900/30 border-b border-slate-800 font-bold text-slate-500 uppercase print:bg-gray-50 print:text-black print:border-gray-300">
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">AEREA</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">SUB-TERR</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">CALIB</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">TIPO</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">TERMINAL</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">FUSIBLE</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">PARARRAYO</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 print:divide-gray-300">
+              {['primaria', 'secundaria', 'neutro'].map((seccion) => {
+                const ac = dt.acometidas?.[seccion] || { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' };
+                return (
+                  <tr key={seccion} className="print:text-black">
+                    <td className="p-2 font-bold bg-slate-900/40 border-r border-slate-800 uppercase print:bg-gray-50 print:border-gray-300 text-slate-350 print:text-black">
+                      {seccion}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300 text-center">
+                      {isEditing ? (
+                        <input
+                          type="checkbox"
+                          checked={ac.aerea || false}
+                          onChange={(e) => handleAcometidaChange(seccion, 'aerea', e.target.checked)}
+                          className="w-4 h-4 cursor-pointer accent-violet-500"
+                        />
+                      ) : (
+                        ac.aerea ? '[ X ]' : '[   ]'
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300 text-center">
+                      {isEditing ? (
+                        <input
+                          type="checkbox"
+                          checked={ac.subterranea || false}
+                          onChange={(e) => handleAcometidaChange(seccion, 'subterranea', e.target.checked)}
+                          className="w-4 h-4 cursor-pointer accent-violet-500"
+                        />
+                      ) : (
+                        ac.subterranea ? '[ X ]' : '[   ]'
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={ac.calibre || ''}
+                          onChange={(e) => handleAcometidaChange(seccion, 'calibre', e.target.value)}
+                          className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        ac.calibre || '—'
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={ac.tipo || ''}
+                          onChange={(e) => handleAcometidaChange(seccion, 'tipo', e.target.value)}
+                          className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        ac.tipo || '—'
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={ac.terminal || ''}
+                          onChange={(e) => handleAcometidaChange(seccion, 'terminal', e.target.value)}
+                          className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        ac.terminal || '—'
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={ac.fusible || ''}
+                          onChange={(e) => handleAcometidaChange(seccion, 'fusible', e.target.value)}
+                          className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        ac.fusible || '—'
+                      )}
+                    </td>
+                    <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={ac.pararrayo || ''}
+                          onChange={(e) => handleAcometidaChange(seccion, 'pararrayo', e.target.value)}
+                          className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        ac.pararrayo || '—'
+                      )}
+                    </td>
+                    <td className="p-2 text-left">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={ac.observaciones || ''}
+                          onChange={(e) => handleAcometidaChange(seccion, 'observaciones', e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                        />
+                      ) : (
+                        ac.observaciones || '—'
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* Sub-Header: SPT */}
+          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-violet-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+            SISTEMA DE PUESTA A TIERRA (SPT)
+          </div>
+
+          <table className="w-full text-[10px] md:text-xs text-center border-collapse border-b-2 border-slate-700 font-mono print:border-black">
+            <thead>
+              <tr className="bg-slate-900/50 border-b border-slate-800 font-bold text-slate-400 uppercase print:bg-gray-100 print:text-black print:border-gray-300">
+                <th className="p-2 border-r border-slate-800 print:border-gray-300 w-20" rowSpan="2">SPT</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="3">BARILLA (VARILLA)</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="2">CONDUCTOR</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300 w-24" rowSpan="2">RESISTENCIA</th>
+                <th className="p-2 print:text-black" rowSpan="2">FECHA DE MEDICIÓN</th>
+              </tr>
+              <tr className="bg-slate-900/30 border-b border-slate-800 font-bold text-slate-500 uppercase print:bg-gray-50 print:text-black print:border-gray-300">
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">CALIBRE</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">CANTIDAD</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">CONFIGURACIÓN</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">CALIBRE</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">TIPO SOLD</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 print:divide-gray-300">
+              <tr className="print:text-black">
+                <td className="p-3 font-bold bg-slate-900/40 border-r border-slate-800 print:bg-gray-50 print:border-gray-300 text-slate-350 print:text-black">
+                  MEDIDA
+                </td>
+                <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.barillaCalibre || ''}
+                      onChange={(e) => handleSptChange('barillaCalibre', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.barillaCalibre || '—'
+                  )}
+                </td>
+                <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.barillaCantidad || ''}
+                      onChange={(e) => handleSptChange('barillaCantidad', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.barillaCantidad || '—'
+                  )}
+                </td>
+                <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.barillaConfiguracion || ''}
+                      onChange={(e) => handleSptChange('barillaConfiguracion', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.barillaConfiguracion || '—'
+                  )}
+                </td>
+                <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.conductorCalibre || ''}
+                      onChange={(e) => handleSptChange('conductorCalibre', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.conductorCalibre || '—'
+                  )}
+                </td>
+                <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.conductorTipoSold || ''}
+                      onChange={(e) => handleSptChange('conductorTipoSold', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.conductorTipoSold || '—'
+                  )}
+                </td>
+                <td className="p-2 border-r border-slate-800 print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.resistencia || ''}
+                      onChange={(e) => handleSptChange('resistencia', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.resistencia || '—'
+                  )}
+                </td>
+                <td className="p-2">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.fechaMedicion || ''}
+                      onChange={(e) => handleSptChange('fechaMedicion', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                    />
+                  ) : (
+                    dt.spt?.fechaMedicion || '—'
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Caja de Observaciones Generales */}
+          <div className="bg-slate-900/60 border-b border-slate-700 p-4 font-mono text-xs text-slate-200 print:bg-white print:text-black print:border-black">
+            <span className="font-black uppercase text-slate-400 block mb-1 print:text-black">OBSERVACIONES:</span>
+            {isEditing ? (
+              <textarea
+                value={observacionesGenerales}
+                onChange={(e) => setObservacionesGenerales(e.target.value)}
+                rows={3}
+                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 text-xs resize-none focus:outline-none focus:border-violet-500"
+              />
+            ) : (
+              <p className="leading-relaxed font-medium text-slate-350 print:text-black">
+                {observacionesGenerales || 'Sin observaciones registradas.'}
+              </p>
+            )}
+          </div>
+
+          {/* Leyenda */}
+          <div className="p-4 bg-slate-950 text-[10px] text-slate-500 font-mono leading-relaxed border-b border-slate-700 print:bg-white print:text-black print:border-black print:text-[8px]">
+            <p><strong>LEYENDA:</strong> <strong>BB</strong> BARRA EN BUEN ESTADO, <strong>BD</strong> BARRA DEFECTUOSA, <strong>SB</strong> SIN BARRA, <strong>CB</strong> CONDUCTOR EN BUEN ESTADO, <strong>CS</strong> CONDUCTOR SULFATADO, <strong>SC</strong> SIN CONDUCTOR, <strong>IB</strong> INTERRUPTOR EN BUEN ESTADO, <strong>ID</strong> INTERRUPTOR DEFECTUOSO, <strong>IS</strong> INTERRUPTOR SULFATADO, <strong>AT</strong> ALTA TEMPERATURA, <strong>CTB</strong> COPA TERMINAL BUEN ESTADO, <strong>CTD</strong> COPA TERMINAL DEFECTUOSA, <strong>SCT</strong> SIN COPA, <strong>FB</strong> FUSIBLE EN BUEN ESTADO, <strong>FD</strong> FUSIBLE DEFECTUOSO, <strong>SF</strong> SIN FUSIBLE, <strong>PB</strong> PARARRAYO EN BUEN ESTADO, <strong>PD</strong> PARARRAYO DEFECTUOSO, <strong>SP</strong> SIN PARARRAYO. <strong>SE</strong> SOLDADURA EXOTÉRMICA, <strong>KS</strong> CONECTORES EN BARRA DE TIERRA.</p>
+          </div>
+
+          {/* Imagen del Transformador (Parte inferior del cuadro) */}
+          <div className="p-4 bg-slate-900/30 text-center print:bg-white">
+            {fotoBlob || fotoSrc || previewUrl ? (
+              <div className="max-w-md mx-auto rounded-xl overflow-hidden border border-slate-700 shadow-lg print:border-black">
+                <SafeImage 
+                  blob={fotoBlob} 
+                  src={previewUrl || fotoSrc} 
+                  alt="Transformador Eléctrico" 
+                  className="w-full object-cover" 
+                  style={{ maxHeight: `${dt.fotoScale || 280}px` }}
+                />
+              </div>
+            ) : (
+              <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
+                <Camera className="w-8 h-8 text-slate-600 mx-auto" />
+                <span className="text-xs text-slate-500 font-mono block">Sin fotografía adjunta del transformador</span>
+                <label className="inline-block px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-violet-400 text-xs font-bold rounded-lg cursor-pointer transition-colors">
+                  Adjuntar Foto
+                  <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                </label>
+              </div>
+            )}
+
+            {/* Slider de ajuste de tamaño (solo en pantalla si hay imagen) */}
+            {(fotoBlob || fotoSrc || previewUrl) && (
+              <div className="no-print mt-3 max-w-xs mx-auto space-y-1.5">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
+                  <span>Ajustar tamaño en PDF</span>
+                  <span className="text-violet-400 font-mono">{dt.fotoScale || 280}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="120"
+                  max="380"
+                  value={dt.fotoScale || 280}
+                  onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value))}
+                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-500"
                 />
               </div>
             )}
