@@ -52,6 +52,7 @@ export const EmpresaView = () => {
     user,
     companies, 
     addProyecto, 
+    deleteProyecto,
     addElementoUnifilar,
     deleteElementoUnifilar,
     updateEmpresa,
@@ -135,6 +136,13 @@ export const EmpresaView = () => {
       showToast?.(`Se eliminaron ${selectedCount} equipos correctamente`, 'success');
       setSelectedIds(new Set());
       setIsMultiSelectMode(false);
+    }
+  };
+
+  const handleDeleteProyecto = (proyectoId, name) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar el proyecto "${name}"? Se eliminarán todas sus subestaciones, tableros y elementos unifilares en cascada.`)) {
+      deleteProyecto(companyId, proyectoId);
+      showToast?.('Proyecto eliminado correctamente', 'success');
     }
   };
 
@@ -617,8 +625,21 @@ export const EmpresaView = () => {
                 <div
                   key={proj.id}
                   onClick={() => navigate(`/empresa/${companyId}/proyecto/${proj.id}`)}
-                  className="bg-slate-950 border border-slate-800/80 hover:border-slate-700/60 rounded-2xl shadow-md hover:shadow-xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:translate-y-[-2px] group"
+                  className="bg-slate-950 border border-slate-800/80 hover:border-slate-700/60 rounded-2xl shadow-md hover:shadow-xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:translate-y-[-2px] group relative"
                 >
+                  {user?.role !== 'CLIENT' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProyecto(proj.id, proj.nombre);
+                      }}
+                      className="absolute top-4 right-4 p-2 bg-slate-900 hover:bg-red-950 border border-slate-850 hover:border-red-900/60 text-slate-500 hover:text-red-400 rounded-xl transition-all shadow-md z-10 cursor-pointer"
+                      title="Eliminar Proyecto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <div className="space-y-4">
                     <div className="p-3 bg-slate-900 border border-slate-850 rounded-xl w-max shadow-inner text-amber-500 group-hover:scale-105 transition-transform">
                       <FolderOpen className="w-6 h-6" />

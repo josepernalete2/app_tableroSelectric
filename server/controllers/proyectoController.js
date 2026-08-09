@@ -206,3 +206,31 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * DELETE /api/proyectos/:id
+ * Elimina un proyecto de la base de datos (con cascada para dependencias).
+ */
+export const eliminarProyecto = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id }
+    });
+
+    if (!proyecto) {
+      return res.status(404).json({ ok: false, error: 'Proyecto no encontrado.' });
+    }
+
+    await prisma.proyecto.delete({
+      where: { id }
+    });
+
+    return res.status(200).json({ ok: true, message: 'Proyecto eliminado con éxito.' });
+  } catch (error) {
+    console.error('Error en eliminarProyecto:', error);
+    next(error);
+  }
+};
+

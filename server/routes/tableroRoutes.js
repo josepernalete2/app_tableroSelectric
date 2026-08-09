@@ -9,7 +9,7 @@ import { verificarToken } from '../middleware/authMiddleware.js';
 // Controladores
 import { loginUsuario, obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
 import { obtenerEmpresas, obtenerEmpresaPorId, actualizarEmpresa, crearEmpresa } from '../controllers/empresaController.js';
-import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto, actualizarProyecto } from '../controllers/proyectoController.js';
+import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto, actualizarProyecto, eliminarProyecto } from '../controllers/proyectoController.js';
 import { obtenerAlimentadores, crearAlimentador, actualizarAlimentador, eliminarAlimentador } from '../controllers/alimentadorController.js';
 import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito } from '../controllers/tableroController.js';
 import { crearInspeccionSubestacion, eliminarInspeccionSubestacion } from '../controllers/subestacionController.js';
@@ -56,6 +56,7 @@ router.get('/proyectos', obtenerProyectos);
 router.post('/proyectos', crearProyecto);
 router.get('/proyectos/:proyectoId', obtenerProyectoCompleto);
 router.put('/proyectos/:id', actualizarProyecto);
+router.delete('/proyectos/:id', eliminarProyecto);
 router.get('/empresas/:empresaId/proyectos', obtenerProyectosPorEmpresa);
 
 // Rutas de Alimentadores (NUEVAS)

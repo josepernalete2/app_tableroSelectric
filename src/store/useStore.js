@@ -676,6 +676,36 @@ export const useStore = create(
         }));
       },
 
+      deleteProyecto: async (companyId, proyectoId) => {
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              return {
+                ...c,
+                proyectos: (c.proyectos || []).filter((p) => p.id !== proyectoId)
+              };
+            }
+            return c;
+          }),
+          proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== proyectoId),
+          syncQueue: state.syncQueue.filter((item) => item.id !== proyectoId)
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/proyectos/${proyectoId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar proyecto del servidor:', e);
+          }
+        }
+      },
+
       importCompanies: (companiesList) => {
         const enrichedList = companiesList.map((c) => ({
           ...c,
