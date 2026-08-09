@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
+import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import { 
   ArrowLeft, 
   Plus, 
@@ -181,6 +182,23 @@ export const EmpresaView = () => {
 
   // Campos de Otro
   const [descripcionOtro, setDescripcionOtro] = useState('');
+
+  const [showDiagramModal, setShowDiagramModal] = useState(false);
+
+  const companyElementos = useMemo(() => {
+    if (!company) return [];
+    const list = [];
+    if (company.elementosUnifilares) {
+      list.push(...company.elementosUnifilares);
+    }
+    if (company.proyectos) {
+      company.proyectos.forEach((p) => {
+        const pList = p.elementosUnifilares || p.tableros || [];
+        list.push(...pList);
+      });
+    }
+    return list;
+  }, [company]);
 
   if (!company) {
     return (
@@ -477,6 +495,15 @@ export const EmpresaView = () => {
           </div>
 
           <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
+
+            {/* Botón de Diagrama Unifilar Gráfico */}
+            <button
+              type="button"
+              onClick={() => setShowDiagramModal(true)}
+              className="bg-violet-600 hover:bg-violet-500 text-slate-100 font-bold active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs shadow-md"
+            >
+              <Zap className="w-4 h-4 fill-slate-100" /> Ver Diagrama Gráfico
+            </button>
 
           {user?.role !== 'CLIENT' && (
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
@@ -1340,6 +1367,14 @@ export const EmpresaView = () => {
           </div>
         </div>
       )}
+
+      {/* Modal del Diagrama Unifilar Gráfico */}
+      <ModalDiagramaUnifilar
+        isOpen={showDiagramModal}
+        onClose={() => setShowDiagramModal(false)}
+        elementos={companyElementos}
+        companyName={company?.nombre}
+      />
 
     </div>
   );

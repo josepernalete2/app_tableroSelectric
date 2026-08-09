@@ -755,7 +755,43 @@ export const useStore = create(
 
         if (proyectoId && !targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
 
-        const uuidId = elementoData.id || crypto.randomUUID();
+        let uuidId = elementoData.id;
+        if (!uuidId) {
+          const allElements = [];
+          get().companies.forEach(c => {
+            if (c.elementosUnifilares) {
+              allElements.push(...c.elementosUnifilares);
+            }
+            if (c.proyectos) {
+              c.proyectos.forEach(p => {
+                const list = p.elementosUnifilares || p.tableros || [];
+                allElements.push(...list);
+              });
+            }
+          });
+
+          const prefixMap = {
+            TABLERO: 'TAB',
+            TRANSFORMADOR: 'TRAFO',
+            GENERADOR: 'GEN',
+            TRANSFER: 'ATS',
+            PUESTA_TIERRA: 'PAT',
+            OTRO: 'OTR',
+            SUBESTACION: 'SUB'
+          };
+          const prefix = prefixMap[elementoData.tipoElemento || 'TABLERO'] || 'ELM';
+          const matchingElements = allElements.filter(e => e.id && e.id.startsWith(`${prefix}-`));
+          let nextNum = 1;
+          if (matchingElements.length > 0) {
+            const nums = matchingElements.map(e => {
+              const parts = e.id.split('-');
+              const num = parseInt(parts[parts.length - 1], 10);
+              return isNaN(num) ? 0 : num;
+            });
+            nextNum = Math.max(...nums) + 1;
+          }
+          uuidId = `${prefix}-${nextNum}`;
+        }
 
         const nuevoElemento = {
           id: uuidId,

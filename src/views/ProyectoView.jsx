@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
+import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import { 
   ArrowLeft, 
   Layers, 
@@ -232,6 +233,8 @@ export const ProyectoView = () => {
       setMaxPoles(24);
     }
   }, [editingElemento]);
+
+  const [showDiagramModal, setShowDiagramModal] = useState(false);
 
   // Selector de plantilla / tipo de elemento
   const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
@@ -883,9 +886,18 @@ export const ProyectoView = () => {
         {/* CONTENIDO DE PESTAÑA B: DIAGRAMA UNIFILAR */}
         {activeTab === 'UNIFILAR' && (
           <div>
-            <div className="mb-4">
-              <h2 className="text-md font-bold text-slate-200">Equipos Registrados en el Diagrama Unifilar</h2>
-              <p className="text-xs text-slate-500">Tableros, Transformadores, Generadores, Malla de Puesta a Tierra y Unidades de Transferencia.</p>
+            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-md font-bold text-slate-200">Equipos Registrados en el Diagrama Unifilar</h2>
+                <p className="text-xs text-slate-500">Tableros, Transformadores, Generadores, Malla de Puesta a Tierra y Unidades de Transferencia.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiagramModal(true)}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4.5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98 cursor-pointer self-start md:self-auto"
+              >
+                <Zap className="w-4 h-4 fill-slate-950" /> Ver Diagrama Gráfico
+              </button>
             </div>
 
             {filteredElementos.length > 0 ? (
@@ -1692,6 +1704,14 @@ export const ProyectoView = () => {
           </div>
         </div>
       )}
+
+      {/* Modal del Diagrama Unifilar Gráfico */}
+      <ModalDiagramaUnifilar
+        isOpen={showDiagramModal}
+        onClose={() => setShowDiagramModal(false)}
+        elementos={elementos}
+        companyName={company?.nombre}
+      />
 
     </div>
   );
