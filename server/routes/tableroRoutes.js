@@ -12,8 +12,8 @@ import { obtenerEmpresas, obtenerEmpresaPorId, actualizarEmpresa, crearEmpresa }
 import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto, actualizarProyecto } from '../controllers/proyectoController.js';
 import { obtenerAlimentadores, crearAlimentador, actualizarAlimentador, eliminarAlimentador } from '../controllers/alimentadorController.js';
 import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito } from '../controllers/tableroController.js';
-import { crearInspeccionSubestacion } from '../controllers/subestacionController.js';
-import { crearElementoUnifilar } from '../controllers/elementoController.js';
+import { crearInspeccionSubestacion, eliminarInspeccionSubestacion } from '../controllers/subestacionController.js';
+import { crearElementoUnifilar, eliminarElementoUnifilar } from '../controllers/elementoController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 
@@ -79,7 +79,10 @@ router.delete('/circuitos/:id', eliminarCircuito);
 
 // Rutas de Elementos Genéricos y Subestaciones
 router.post('/elementos-unifilares', upload.single('foto'), crearElementoUnifilar);
+router.delete('/elementos-unifilares/:id', eliminarElementoUnifilar);
 router.post('/subestaciones', crearInspeccionSubestacion);
+router.delete('/subestaciones/:id', eliminarInspeccionSubestacion);
+
 
 // Endpoints de Respaldo e Importación/Exportación
 router.get('/backup/export', exportDatabase);

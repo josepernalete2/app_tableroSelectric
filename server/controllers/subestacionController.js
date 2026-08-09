@@ -90,3 +90,33 @@ export const crearInspeccionSubestacion = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * DELETE /api/subestaciones/:id
+ * Elimina una inspección de subestación de la base de datos.
+ */
+export const eliminarInspeccionSubestacion = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verificar si existe
+    const subestacion = await prisma.subestacion.findUnique({
+      where: { id }
+    });
+
+    if (!subestacion) {
+      return res.status(404).json({ ok: false, error: 'Inspección de subestación no encontrada.' });
+    }
+
+    // Eliminar la inspección de subestación
+    await prisma.subestacion.delete({
+      where: { id }
+    });
+
+    return res.status(200).json({ ok: true, message: 'Inspección de subestación eliminada con éxito.' });
+  } catch (error) {
+    console.error('Error en eliminarInspeccionSubestacion:', error);
+    next(error);
+  }
+};
+

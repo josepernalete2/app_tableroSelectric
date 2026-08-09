@@ -204,3 +204,45 @@ export const crearElementoUnifilar = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * DELETE /api/elementos-unifilares/:id
+ * Elimina un elemento unifilar (y su tablero/circuitos si es de tipo TABLERO).
+ */
+export const eliminarElementoUnifilar = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Verificar si existe
+    const elemento = await prisma.elementoUnifilar.findUnique({
+      where: { id }
+    });
+
+    if (!elemento) {
+      return res.status(404).json({ ok: false, error: 'Elemento unifilar no encontrado.' });
+    }
+
+    // Si es tablero, eliminarlo de la tabla de tableros (se eliminan sus circuitos en cascada)
+    if (elemento.tipoElemento === 'TABLERO') {
+      try {
+        const tableroExiste = await prisma.tablero.findUnique({ where: { id } });
+        if (tableroExiste) {
+          await prisma.tablero.delete({ where: { id } });
+        }
+      } catch (err) {
+        console.warn('Error al intentar eliminar tablero asociado:', err.message);
+      }
+    }
+
+    // Eliminar el elemento unifilar
+    await prisma.elementoUnifilar.delete({
+      where: { id }
+    });
+
+    return res.status(200).json({ ok: true, message: 'Elemento unifilar eliminado con éxito.' });
+  } catch (error) {
+    console.error('Error en eliminarElementoUnifilar:', error);
+    next(error);
+  }
+};
+

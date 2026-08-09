@@ -905,7 +905,7 @@ export const useStore = create(
         });
       },
 
-      deleteElementoUnifilar: (proyectoId, elementoId) => {
+      deleteElementoUnifilar: async (proyectoId, elementoId) => {
         set((state) => ({
           companies: state.companies.map((c) => {
             if (!proyectoId) {
@@ -932,6 +932,20 @@ export const useStore = create(
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== elementoId),
           syncQueue: state.syncQueue.filter((item) => item.id !== elementoId)
         }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/elementos-unifilares/${elementoId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar elemento unifilar del servidor:', e);
+          }
+        }
       },
 
       addTablero: (proyectoId, tableroData) => {
@@ -1061,7 +1075,7 @@ export const useStore = create(
         });
       },
 
-      deleteSubestacion: (proyectoId, subestacionId) => {
+      deleteSubestacion: async (proyectoId, subestacionId) => {
         set((state) => ({
           companies: state.companies.map((c) => ({
             ...c,
@@ -1079,6 +1093,20 @@ export const useStore = create(
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== subestacionId),
           syncQueue: state.syncQueue.filter((item) => item.id !== subestacionId)
         }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/subestaciones/${subestacionId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar inspección de subestación del servidor:', e);
+          }
+        }
       },
 
       removeFromQueue: (id) => {
