@@ -7,7 +7,7 @@
     "dev": "vite",
     "server": "node server/index.js",
     "build": "npx prisma generate && vite build",
-    "start": "npx prisma db push && npx prisma db semilla && vite preview",
+    "start": "npx prisma db push && npx prisma db seed && vite preview",
     "lint": "oxlint",
     "preview": "vite preview"
   },
