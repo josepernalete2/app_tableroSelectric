@@ -175,9 +175,23 @@ export const crearElementoUnifilar = async (req, res, next) => {
       });
     }
 
-    // 4. Inserción relacional segura en PostgreSQL usando connect en camelCase
-    const nuevoElemento = await prisma.elementoUnifilar.create({
-      data: {
+    // 4. Inserción o actualización relacional segura en PostgreSQL
+    const nuevoElemento = await prisma.elementoUnifilar.upsert({
+      where: { id: id || '' },
+      update: {
+        nombre,
+        tipoElemento,
+        ubicacion: ubicacion || null,
+        alimentadoPor: alimentadoPor || null,
+        foto: finalFoto,
+        observacionesGenerales: observacionesGenerales || null,
+        datosTecnicos: parsedDatosTecnicos,
+        proyecto: {
+          connect: { id: proyectoId }
+        },
+        ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
+      },
+      create: {
         id: id || undefined,
         nombre,
         tipoElemento,
@@ -195,7 +209,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
     return res.status(201).json({
       ok: true,
-      message: 'Elemento unifilar registrado exitosamente en el servidor.',
+      message: 'Elemento unifilar registrado/actualizado exitosamente en el servidor.',
       data: nuevoElemento
     });
 

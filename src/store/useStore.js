@@ -920,12 +920,38 @@ export const useStore = create(
             return e;
           });
 
+          let inQueue = false;
           const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === elementoId && item.tipo === 'ELEMENTO_UNIFILAR') {
+            if (item.id === elementoId && (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO')) {
+              inQueue = true;
               return { ...item, payload: { ...item.payload, ...updatedData } };
             }
             return item;
           });
+
+          if (!inQueue) {
+            let updatedElement = updatedElementosLocales.find(e => e.id === elementoId);
+            if (!updatedElement) {
+              for (const c of updatedCompanies) {
+                const list = proyectoId 
+                  ? (c.proyectos?.find(p => p.id === proyectoId)?.elementosUnifilares || []) 
+                  : (c.elementosUnifilares || []);
+                const found = list.find(e => e.id === elementoId);
+                if (found) {
+                  updatedElement = found;
+                  break;
+                }
+              }
+            }
+            if (updatedElement) {
+              updatedSyncQueue.push({
+                id: elementoId,
+                tipo: 'ELEMENTO_UNIFILAR',
+                companyId: updatedElement.empresaId || updatedElement.companyId || (state.companies[0]?.id || null),
+                payload: updatedElement
+              });
+            }
+          }
 
           return {
             companies: updatedCompanies,

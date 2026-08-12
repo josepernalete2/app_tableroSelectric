@@ -1429,6 +1429,7 @@ export const EmpresaView = () => {
         onClose={() => setShowDiagramModal(false)}
         elementos={companyElementos}
         companyName={company?.nombre}
+        companyId={companyId}
       />
 
     </div>

@@ -57,20 +57,13 @@ export const ProyectoView = () => {
     addInspeccionSubestacion,
     deleteSubestacion,
     updateProyecto,
-    addAlimentador,
-    deleteAlimentador,
     showToast
   } = useStore();
 
   const company = companies.find((c) => c.id === companyId);
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
 
-  // Cargar alimentadores al montar
-  useEffect(() => {
-    if (proyectoId) {
-      useStore.getState().fetchAlimentadores(proyectoId);
-    }
-  }, [proyectoId]);
+
 
   // Estados para Edición de Proyecto
   const [showEditProyectoModal, setShowEditProyectoModal] = useState(false);
@@ -80,12 +73,6 @@ export const ProyectoView = () => {
   const [editResponsableNombre, setEditResponsableNombre] = useState('');
   const [editResponsableTelefono, setEditResponsableTelefono] = useState('');
   const [editResponsableEmail, setEditResponsableEmail] = useState('');
-
-  // Estados para Alimentadores
-  const [showAddAlimModal, setShowAddAlimModal] = useState(false);
-  const [alimNombre, setAlimNombre] = useState('');
-  const [alimOrigen, setAlimOrigen] = useState('');
-  const [alimCapacidad, setAlimCapacidad] = useState('');
 
   const handleUpdateProyectoSubmit = async (e) => {
     e.preventDefault();
@@ -99,24 +86,6 @@ export const ProyectoView = () => {
     });
     showToast("Proyecto actualizado correctamente.", "success");
     setShowEditProyectoModal(false);
-  };
-
-  const handleAddAlimentadorSubmit = async (e) => {
-    e.preventDefault();
-    if (!alimNombre.trim()) return;
-
-    await addAlimentador({
-      nombre: alimNombre.trim(),
-      origen: alimOrigen.trim() || null,
-      capacidadAmperios: alimCapacidad ? parseFloat(alimCapacidad) : null,
-      proyectoId
-    });
-
-    setAlimNombre('');
-    setAlimOrigen('');
-    setAlimCapacidad('');
-    setShowAddAlimModal(false);
-    showToast("Alimentador agregado correctamente.", "success");
   };
 
   // Estados de pestaña activa
@@ -592,51 +561,7 @@ export const ProyectoView = () => {
             </div>
           )}
 
-          {/* LISTADO DE ALIMENTADORES */}
-          <div className="mt-6 pt-6 border-t border-slate-900">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-amber-500" /> Alimentadores del Proyecto ({proyecto.alimentadores?.length || 0})
-              </h3>
-              {user?.role === 'ADMIN' && (
-                <button
-                  onClick={() => setShowAddAlimModal(true)}
-                  className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold rounded text-amber-500 hover:text-amber-400 transition-all cursor-pointer"
-                >
-                  + Nuevo Alimentador
-                </button>
-              )}
-            </div>
-            {proyecto.alimentadores && proyecto.alimentadores.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {proyecto.alimentadores.map(alim => (
-                  <div key={alim.id} className="bg-slate-900/40 border border-slate-850 rounded-xl p-3 flex justify-between items-center text-xs">
-                    <div>
-                      <div className="font-bold text-slate-200">{alim.nombre}</div>
-                      <div className="text-[10px] text-slate-450 mt-0.5">
-                        Origen: {alim.origen || 'No definido'} | {alim.capacidadAmperios ? `${alim.capacidadAmperios}A` : 'Amp N/D'}
-                      </div>
-                    </div>
-                    {user?.role === 'ADMIN' && (
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`¿Estás seguro de que deseas eliminar el alimentador "${alim.nombre}"?`)) {
-                            deleteAlimentador(proyectoId, alim.id);
-                          }
-                        }}
-                        className="p-1 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded transition-colors cursor-pointer"
-                        title="Eliminar alimentador"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[11px] text-slate-500 italic">No se han registrado alimentadores para este proyecto.</p>
-            )}
-          </div>
+
         </div>
 
         {/* Navigation & Control Panel */}
@@ -1668,76 +1593,7 @@ export const ProyectoView = () => {
         </div>
       )}
 
-      {/* Modal de Agregar Alimentador */}
-      {showAddAlimModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn font-sans text-xs">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full shadow-2xl p-6 space-y-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-500" /> Nuevo Alimentador
-              </h3>
-              <button 
-                onClick={() => setShowAddAlimModal(false)}
-                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleAddAlimentadorSubmit} className="space-y-4">
-              <div>
-                <label className="block text-slate-450 font-semibold mb-1">Nombre / Identificador</label>
-                <input 
-                  type="text" 
-                  value={alimNombre} 
-                  onChange={(e) => setAlimNombre(e.target.value)} 
-                  required 
-                  placeholder="Ej. Alimentador Principal A"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-450 font-semibold mb-1">Origen</label>
-                <input 
-                  type="text" 
-                  value={alimOrigen} 
-                  onChange={(e) => setAlimOrigen(e.target.value)} 
-                  placeholder="Ej. Subestación Principal"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-450 font-semibold mb-1">Capacidad (Amperios)</label>
-                <input 
-                  type="number" 
-                  value={alimCapacidad} 
-                  onChange={(e) => setAlimCapacidad(e.target.value)} 
-                  placeholder="Ej. 800"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t border-slate-800">
-                <button 
-                  type="button" 
-                  onClick={() => setShowAddAlimModal(false)}
-                  className="px-4 py-2 border border-slate-700 text-slate-350 hover:bg-slate-800 hover:text-slate-200 rounded-lg font-bold transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-98 rounded-lg font-bold transition-all shadow-md cursor-pointer"
-                >
-                  Agregar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal del Diagrama Unifilar Gráfico */}
       <ModalDiagramaUnifilar
@@ -1745,6 +1601,8 @@ export const ProyectoView = () => {
         onClose={() => setShowDiagramModal(false)}
         elementos={elementos}
         companyName={company?.nombre}
+        proyectoId={proyectoId}
+        companyId={companyId}
       />
 
     </div>
