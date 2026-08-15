@@ -990,7 +990,9 @@ export const EmpresaView = () => {
                     { id: 'TRANSFER', label: 'TRANSFERENCIA' },
                     { id: 'GENERADOR', label: 'GENERADOR' },
                     { id: 'TRANSFORMADOR', label: 'TRANSFORMADOR' },
-                    { id: 'BANCO_CONDENSADOR', label: 'BANCO CONDENSADOR' }
+                    { id: 'BANCO_CONDENSADOR', label: 'BANCO CONDENSADOR' },
+                    { id: 'PUNTO_MEDICION', label: 'PUNTO DE MEDICIÓN' },
+                    { id: 'CCM', label: 'CCM (MOTORES)' }
                   ].map((t) => (
                     <button
                       key={t.id}

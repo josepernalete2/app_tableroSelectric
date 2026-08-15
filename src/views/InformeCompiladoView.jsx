@@ -4,6 +4,8 @@ import useStore from '../store/useStore';
 import TableroComponent from '../components/TableroComponent';
 import FichaTecnicaComponent from '../components/FichaTecnicaComponent';
 import SubestacionComponent from '../components/SubestacionComponent';
+import PuntoMedicionComponent from '../components/PuntoMedicionComponent';
+import CcmComponent from '../components/CcmComponent';
 import DiagramaUnifilarBlueprint from '../components/DiagramaUnifilarBlueprint';
 import { 
   ArrowLeft, 
@@ -12,6 +14,7 @@ import {
   FileText, 
   Zap, 
   Building, 
+  Gauge,
   Award, 
   User, 
   Calendar,
@@ -26,7 +29,7 @@ import {
 export default function InformeCompiladoView() {
   const { companyId, proyectoId } = useParams();
   const navigate = useNavigate();
-  const { companies, updateElementoUnifilar, updateSubestacion } = useStore();
+  const { companies, updateElementoUnifilar, updateSubestacion, updatePuntoMedicion, updateCcm } = useStore();
 
   const company = companies.find((c) => c.id === companyId);
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
@@ -67,6 +70,8 @@ export default function InformeCompiladoView() {
 
   const elementos = proyecto.elementosUnifilares || proyecto.tableros || [];
   const subestaciones = proyecto.inspeccionesSubestacion || proyecto.subestaciones || [];
+  const puntosMedicion = proyecto.puntosMedicion || [];
+  const ccmList = proyecto.ccmList || [];
 
   const transformadores = elementos.filter(e => e.tipoElemento === 'TRANSFORMADOR');
   const generadores = elementos.filter(e => e.tipoElemento === 'GENERADOR');
@@ -540,6 +545,44 @@ export default function InformeCompiladoView() {
                 <SubestacionComponent
                   subestacionData={sub}
                   onUpdate={(updatedData) => handleUpdateSubestacion(sub.id, updatedData)}
+                />
+              </div>
+            </div>
+          ))}
+
+          {/* Puntos de Medición y Suministro */}
+          {puntosMedicion.map((pm, idx) => (
+            <div key={pm.id} className="page-break pt-8 space-y-6">
+              <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
+                <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
+                  Punto de Medición #{idx + 1}: {pm.nombre}
+                </h2>
+                <span className="text-xs text-slate-500 font-mono">REGISTRO: {pm.id.slice(0, 8)}...</span>
+              </div>
+
+              <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
+                <PuntoMedicionComponent
+                  puntoData={pm}
+                  onUpdate={(updatedData) => updatePuntoMedicion(proyectoId, pm.id, updatedData)}
+                />
+              </div>
+            </div>
+          ))}
+
+          {/* Centros de Control de Motores (CCM) */}
+          {ccmList.map((ccm, idx) => (
+            <div key={ccm.id} className="page-break pt-8 space-y-6">
+              <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
+                <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
+                  CCM #{idx + 1}: {ccm.nombre}
+                </h2>
+                <span className="text-xs text-slate-500 font-mono">REGISTRO: {ccm.id.slice(0, 8)}...</span>
+              </div>
+
+              <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
+                <CcmComponent
+                  ccmData={ccm}
+                  onUpdate={(updatedData) => updateCcm(proyectoId, ccm.id, updatedData)}
                 />
               </div>
             </div>

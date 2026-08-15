@@ -712,7 +712,9 @@ export const useStore = create(
           proyectos: (c.proyectos || []).map((p) => ({
             ...p,
             elementosUnifilares: p.elementosUnifilares || p.tableros || [],
-            inspeccionesSubestacion: p.inspeccionesSubestacion || p.subestaciones || []
+            inspeccionesSubestacion: p.inspeccionesSubestacion || p.subestaciones || [],
+            puntosMedicion: p.puntosMedicion || [],
+            ccmList: p.ccmList || []
           }))
         }));
         set({ companies: enrichedList });
@@ -732,6 +734,8 @@ export const useStore = create(
           empresaId: companyId,
           elementosUnifilares: [],
           inspeccionesSubestacion: [],
+          puntosMedicion: [],
+          ccmList: [],
           createdAt: new Date().toISOString()
         };
 
@@ -1161,6 +1165,278 @@ export const useStore = create(
             });
           } catch (e) {
             console.error('Error al eliminar inspección de subestación del servidor:', e);
+          }
+        }
+      },
+
+      addPuntoMedicion: (proyectoId, payload) => {
+        const { companies } = get();
+
+        let parentCompanyId = null;
+        let targetProyecto = null;
+
+        for (const company of companies) {
+          const proj = (company.proyectos || []).find((p) => p.id === proyectoId);
+          if (proj) {
+            parentCompanyId = company.id;
+            targetProyecto = proj;
+            break;
+          }
+        }
+
+        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
+
+        const uuidId = payload.id || crypto.randomUUID();
+
+        const nuevoPunto = {
+          ...payload,
+          id: uuidId,
+          proyectoId,
+          empresaId: parentCompanyId,
+          tipoPlantilla: 'PUNTO_MEDICION',
+          createdAt: new Date().toISOString()
+        };
+
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === parentCompanyId) {
+              return {
+                ...c,
+                proyectos: c.proyectos.map((p) => {
+                  if (p.id === proyectoId) {
+                    const puntos = p.puntosMedicion || [];
+                    return {
+                      ...p,
+                      puntosMedicion: [...puntos, nuevoPunto]
+                    };
+                  }
+                  return p;
+                })
+              };
+            }
+            return c;
+          }),
+          puntosMedicionLocales: [...(state.puntosMedicionLocales || []), nuevoPunto],
+          syncQueue: [...state.syncQueue, {
+            id: uuidId,
+            tipo: 'PUNTO_MEDICION',
+            companyId: parentCompanyId,
+            payload: nuevoPunto
+          }]
+        }));
+
+        return { success: true, puntoMedicion: nuevoPunto };
+      },
+
+      updatePuntoMedicion: (proyectoId, puntoId, updatedData) => {
+        set((state) => {
+          const updatedCompanies = state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const puntos = p.puntosMedicion || [];
+                return {
+                  ...p,
+                  puntosMedicion: puntos.map((item) => {
+                    if (item.id === puntoId) {
+                      return { ...item, ...updatedData };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return p;
+            })
+          }));
+
+          const updatedPuntosLocales = (state.puntosMedicionLocales || []).map((item) => {
+            if (item.id === puntoId) {
+              return { ...item, ...updatedData };
+            }
+            return item;
+          });
+
+          const updatedSyncQueue = state.syncQueue.map((item) => {
+            if (item.id === puntoId && item.tipo === 'PUNTO_MEDICION') {
+              return { ...item, payload: { ...item.payload, ...updatedData } };
+            }
+            return item;
+          });
+
+          return {
+            companies: updatedCompanies,
+            puntosMedicionLocales: updatedPuntosLocales,
+            syncQueue: updatedSyncQueue
+          };
+        });
+      },
+
+      deletePuntoMedicion: async (proyectoId, puntoId) => {
+        set((state) => ({
+          companies: state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const puntos = p.puntosMedicion || [];
+                return {
+                  ...p,
+                  puntosMedicion: puntos.filter((item) => item.id !== puntoId)
+                };
+              }
+              return p;
+            })
+          })),
+          puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((item) => item.id !== puntoId),
+          syncQueue: state.syncQueue.filter((item) => item.id !== puntoId)
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/puntos-medicion/${puntoId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar punto de medición del servidor:', e);
+          }
+        }
+      },
+
+      addCcm: (proyectoId, payload) => {
+        const { companies } = get();
+
+        let parentCompanyId = null;
+        let targetProyecto = null;
+
+        for (const company of companies) {
+          const proj = (company.proyectos || []).find((p) => p.id === proyectoId);
+          if (proj) {
+            parentCompanyId = company.id;
+            targetProyecto = proj;
+            break;
+          }
+        }
+
+        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
+
+        const uuidId = payload.id || crypto.randomUUID();
+
+        const nuevoCcm = {
+          ...payload,
+          id: uuidId,
+          proyectoId,
+          empresaId: parentCompanyId,
+          tipoPlantilla: 'CCM',
+          createdAt: new Date().toISOString()
+        };
+
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === parentCompanyId) {
+              return {
+                ...c,
+                proyectos: c.proyectos.map((p) => {
+                  if (p.id === proyectoId) {
+                    const ccmItems = p.ccmList || [];
+                    return {
+                      ...p,
+                      ccmList: [...ccmItems, nuevoCcm]
+                    };
+                  }
+                  return p;
+                })
+              };
+            }
+            return c;
+          }),
+          ccmLocales: [...(state.ccmLocales || []), nuevoCcm],
+          syncQueue: [...state.syncQueue, {
+            id: uuidId,
+            tipo: 'CCM',
+            companyId: parentCompanyId,
+            payload: nuevoCcm
+          }]
+        }));
+
+        return { success: true, ccm: nuevoCcm };
+      },
+
+      updateCcm: (proyectoId, ccmId, updatedData) => {
+        set((state) => {
+          const updatedCompanies = state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const ccmItems = p.ccmList || [];
+                return {
+                  ...p,
+                  ccmList: ccmItems.map((item) => {
+                    if (item.id === ccmId) {
+                      return { ...item, ...updatedData };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return p;
+            })
+          }));
+
+          const updatedCcmLocales = (state.ccmLocales || []).map((item) => {
+            if (item.id === ccmId) {
+              return { ...item, ...updatedData };
+            }
+            return item;
+          });
+
+          const updatedSyncQueue = state.syncQueue.map((item) => {
+            if (item.id === ccmId && item.tipo === 'CCM') {
+              return { ...item, payload: { ...item.payload, ...updatedData } };
+            }
+            return item;
+          });
+
+          return {
+            companies: updatedCompanies,
+            ccmLocales: updatedCcmLocales,
+            syncQueue: updatedSyncQueue
+          };
+        });
+      },
+
+      deleteCcm: async (proyectoId, ccmId) => {
+        set((state) => ({
+          companies: state.companies.map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id === proyectoId) {
+                const ccmItems = p.ccmList || [];
+                return {
+                  ...p,
+                  ccmList: ccmItems.filter((item) => item.id !== ccmId)
+                };
+              }
+              return p;
+            })
+          })),
+          ccmLocales: (state.ccmLocales || []).filter((item) => item.id !== ccmId),
+          syncQueue: state.syncQueue.filter((item) => item.id !== ccmId)
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/ccm/${ccmId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar CCM del servidor:', e);
           }
         }
       },

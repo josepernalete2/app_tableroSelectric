@@ -16,6 +16,8 @@ enum TipoElemento {
   GENERADOR
   PUESTA_TIERRA
   TRANSFER
+  PUNTO_MEDICION
+  CCM
   OTRO
 }
 
@@ -34,6 +36,8 @@ model Empresa {
   proyectos           Proyecto[]
   elementosUnifilares ElementoUnifilar[]
   subestaciones       Subestacion[]
+  puntosMedicion      PuntoMedicion[]
+  ccmList             Ccm[]
   tableros            Tablero[]
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -52,6 +56,8 @@ model Proyecto {
   responsableTelefono String?
   responsableEmail    String?
   subestaciones       Subestacion[]
+  puntosMedicion      PuntoMedicion[]
+  ccmList             Ccm[]
   alimentadores       Alimentador[]
   tableros            Tablero[]
   elementosUnifilares ElementoUnifilar[]
@@ -189,4 +195,96 @@ model Message {
   createdAt      DateTime @default(now())
 
   @@map("messages")
+}
+
+model PuntoMedicion {
+  id                      String   @id @default(uuid())
+  nombre                  String
+  fecha                   String?
+  hora                    String?
+  inspector               String?
+
+  // 1. Datos Generales de la Acometida y Suministro
+  nombreUsuario           String?
+  numeroContrato          String?
+  empresaDistribuidora    String?
+  nivelTensionContrato    String?  // Alta Tensión, Media Tensión, Baja Tensión
+  tensionNominal          String?
+  potenciaContratada      String?
+  tarifaAplicable         String?
+  codigoElementoPrincipal String?
+
+  // 2. Punto de Acometida e Infraestructura de Entrada
+  tipoAcometida           String?  // Aérea, Subterránea, Mixta
+  puntoConexionPCC        String?
+  conductorAcometida      String?
+  longitudAcometida       String?
+  elementoManiobra        String?  // Breaker, Cortacircuito Fusible, Seccionador, Interruptor en Vacío/SF6
+  capacidadInterrupcion   String?
+
+  // 3. Sistema de Transformación (Si aplica)
+  ubicacionTransformador  String?  // Intemperie (Poste/Padmounted), Subestación Interior / Caseta
+  propiedadTransformador  String?  // Empresa Distribuidora, Cliente Privado
+  usoTransformador        String?  // Exclusivo, Compartido
+
+  // 4. Especificaciones del Sistema de Medición
+  ubicacionMedidor        String?  // Lado de Alta/Media Tensión, Lado de Baja Tensión
+  tipoMedicion            String?  // Directa, Indirecta
+  marcaModeloMedidor      String?
+  numeroSerieAno          String?
+
+  // 5. Anomalías u observaciones y Firmas
+  observaciones           String?
+  firmaInspector          String?
+  firmaSupervisor         String?
+
+  // Relaciones
+  proyectoId              String
+  proyecto                Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+
+  empresaId               String?
+  empresa                 Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([empresaId])
+  @@map("puntos_medicion")
+}
+
+model Ccm {
+  id                        String   @id @default(uuid())
+  nombre                    String   // Tag / Identificación CCM
+  plantaInstalacion         String?
+  areaProceso               String?
+  fabricanteMarca           String?
+  modeloSerie               String?
+  gradoNemaIp               String?
+  fecha                     String?
+  inspector                 String?
+  supervisor                String?
+  anoFabricacionInstalacion String?
+
+  // Bloques estructurados como JSON nativo de PostgreSQL
+  parametrosElectricos      Json?
+  gavetasBucketLog          Json?
+  inspeccionFisica          Json?
+  seguridadTermografia      Json?
+  hallazgosCriticos         Json?
+
+  firmaInspector            String?
+  firmaSupervisor           String?
+
+  // Relaciones
+  proyectoId                String
+  proyecto                  Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+
+  empresaId                 String?
+  empresa                   Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([empresaId])
+  @@map("centros_control_motores")
 }

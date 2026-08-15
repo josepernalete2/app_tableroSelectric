@@ -179,6 +179,8 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
       include: {
         elementosUnifilares: true,
         subestaciones: true,
+        puntosMedicion: true,
+        ccmList: true,
         alimentadores: true,
         tableros: {
           include: {

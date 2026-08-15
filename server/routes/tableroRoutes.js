@@ -13,6 +13,8 @@ import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerPro
 import { obtenerAlimentadores, crearAlimentador, actualizarAlimentador, eliminarAlimentador } from '../controllers/alimentadorController.js';
 import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito } from '../controllers/tableroController.js';
 import { crearInspeccionSubestacion, eliminarInspeccionSubestacion } from '../controllers/subestacionController.js';
+import { crearPuntoMedicion, eliminarPuntoMedicion } from '../controllers/puntoMedicionController.js';
+import { crearCcm, eliminarCcm } from '../controllers/ccmController.js';
 import { crearElementoUnifilar, eliminarElementoUnifilar } from '../controllers/elementoController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
@@ -78,11 +80,15 @@ router.post('/tableros/:tableroId/circuitos', crearCircuito);
 router.put('/circuitos/:id', actualizarCircuito);
 router.delete('/circuitos/:id', eliminarCircuito);
 
-// Rutas de Elementos Genéricos y Subestaciones
+// Rutas de Elementos Genéricos, Subestaciones, Puntos de Medición y CCM
 router.post('/elementos-unifilares', upload.single('foto'), crearElementoUnifilar);
 router.delete('/elementos-unifilares/:id', eliminarElementoUnifilar);
 router.post('/subestaciones', crearInspeccionSubestacion);
 router.delete('/subestaciones/:id', eliminarInspeccionSubestacion);
+router.post('/puntos-medicion', crearPuntoMedicion);
+router.delete('/puntos-medicion/:id', eliminarPuntoMedicion);
+router.post('/ccm', crearCcm);
+router.delete('/ccm/:id', eliminarCcm);
 
 
 // Endpoints de Respaldo e Importación/Exportación

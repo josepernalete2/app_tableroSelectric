@@ -56,6 +56,10 @@ export function useSync() {
         res = await sincronizarElementoUnifilar(item.companyId, item.payload);
       } else if (item.tipo === 'SUBESTACION') {
         res = await sincronizarSubestacion(item.companyId, item.payload);
+      } else if (item.tipo === 'PUNTO_MEDICION') {
+        res = await sincronizarPuntoMedicion(item.companyId, item.payload);
+      } else if (item.tipo === 'CCM') {
+        res = await sincronizarCcm(item.companyId, item.payload);
       }
 
       if (res) {
@@ -259,6 +263,62 @@ export function useSync() {
       return { success: true };
     } catch (error) {
       console.error('Error de red en sincronizarSubestacion:', error);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
+  };
+
+  const sincronizarPuntoMedicion = async (empresaId, punto) => {
+    try {
+      const payload = {
+        ...punto,
+        empresaId
+      };
+
+      const token = useStore.getState().token;
+      const response = await fetch(`${API_BASE_URL}/api/puntos-medicion`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error de red en sincronizarPuntoMedicion:', error);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
+  };
+
+  const sincronizarCcm = async (empresaId, ccmItem) => {
+    try {
+      const payload = {
+        ...ccmItem,
+        empresaId
+      };
+
+      const token = useStore.getState().token;
+      const response = await fetch(`${API_BASE_URL}/api/ccm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error de red en sincronizarCcm:', error);
       return { success: false, status: 'NETWORK_ERROR' };
     }
   };
