@@ -132,9 +132,9 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           >
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-1.5 font-mono text-[10px] text-amber-500 select-all print:bg-gray-100 print:border-gray-200 print:text-slate-600">
-            UUID: {id}
-          </div>
+          <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+            ID: {id}
+          </span>
         </div>
       </div>
 

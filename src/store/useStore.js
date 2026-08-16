@@ -10,6 +10,70 @@ localforage.config({
   storeName: 'inspecciones_store'
 });
 
+export const PREFIX_MAP = {
+  TABLERO: 'TAB',
+  SUBESTACION: 'SUB',
+  PUNTO_MEDICION: 'PM',
+  CCM: 'CCM',
+  TRANSFORMADOR: 'TRAFO',
+  GENERADOR: 'GEN',
+  TRANSFER: 'ATS',
+  PUESTA_TIERRA: 'PAT',
+  BANCO_CONDENSADOR: 'BC',
+  OTRO: 'OTR'
+};
+
+export const cleanElementName = (nombre, id) => {
+  if (!nombre) return id || '';
+  let cleanName = nombre.trim();
+  
+  if (id) {
+    if (cleanName.startsWith(`${id} - `)) {
+      cleanName = cleanName.substring(id.length + 3);
+    } else if (cleanName.startsWith(`${id}: `)) {
+      cleanName = cleanName.substring(id.length + 2);
+    }
+    const idPattern = new RegExp(`\\s*\\(ID:\\s*${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'gi');
+    cleanName = cleanName.replace(idPattern, '').trim();
+  }
+
+  return cleanName || id;
+};
+
+export const formatElementTitleWithId = (nombre, id) => {
+  return cleanElementName(nombre, id);
+};
+
+export const getNextElementId = (tipoElemento, state = {}) => {
+  const prefix = PREFIX_MAP[tipoElemento || 'TABLERO'] || 'ELM';
+  let maxNum = 0;
+
+  const checkItem = (item) => {
+    if (item && item.id && typeof item.id === 'string' && item.id.startsWith(`${prefix}-`)) {
+      const parts = item.id.split('-');
+      const num = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
+    }
+  };
+
+  (state.companies || []).forEach(c => {
+    (c.elementosUnifilares || []).forEach(checkItem);
+    (c.proyectos || []).forEach(p => {
+      (p.elementosUnifilares || p.tableros || []).forEach(checkItem);
+      (p.inspeccionesSubestacion || p.subestaciones || []).forEach(checkItem);
+      (p.puntosMedicion || []).forEach(checkItem);
+      (p.ccmList || []).forEach(checkItem);
+    });
+  });
+
+  (state.elementosLocales || []).forEach(checkItem);
+  (state.subestacionesLocales || []).forEach(checkItem);
+  (state.puntosMedicionLocales || []).forEach(checkItem);
+  (state.ccmLocales || []).forEach(checkItem);
+
+  return `${prefix}-${maxNum + 1}`;
+};
+
 // Almacenamiento personalizado para localforage (soporta objetos Blob binarios)
 const localForageStorage = {
   getItem: async (name) => {
@@ -35,8 +99,8 @@ const initialCompanies = [
         descripcion: 'Estudio de transformadores, generadores, tableros y malla de puesta a tierra.',
         elementosUnifilares: [
           {
-            id: '20',
-            nombre: 'Tablero Principal (No. 20)',
+            id: 'TAB-1',
+            nombre: 'TAB-1 - Tablero Principal (No. 20)',
             tipoElemento: 'TABLERO',
             ubicacion: 'SOTANO SALA DE TABLEROS',
             alimentadoPor: 'ATS SOTANO (TRANSFERENCIA AUTOMATICA) transferecia 580',
@@ -59,8 +123,8 @@ const initialCompanies = [
             createdAt: new Date().toISOString()
           },
           {
-            id: 'transf-est-580',
-            nombre: 'Transferencia 580 - Estacionamiento',
+            id: 'ATS-1',
+            nombre: 'ATS-1 - Transferencia 580 Estacionamiento',
             tipoElemento: 'TRANSFER',
             ubicacion: 'ESTACIONAMIENTO',
             alimentadoPor: 'GENERADOR 580 1 + GENERADOR 580 2',
@@ -83,8 +147,8 @@ const initialCompanies = [
             createdAt: new Date().toISOString()
           },
           {
-            id: 'transf-sotano-580',
-            nombre: 'Transferencia 580 - Sótano Sala Técnica',
+            id: 'ATS-2',
+            nombre: 'ATS-2 - Transferencia 580 Sótano Sala Técnica',
             tipoElemento: 'TRANSFER',
             ubicacion: 'SOTANO SALA TECNICA',
             alimentadoPor: 'TRANSFERENCIA DOMOSA + CORPOELEC',
@@ -107,8 +171,8 @@ const initialCompanies = [
             createdAt: new Date().toISOString()
           },
           {
-            id: 'gen-1',
-            nombre: 'Generador No. 1 DOMOSA 580 KVA',
+            id: 'GEN-1',
+            nombre: 'GEN-1 - Generador No. 1 DOMOSA 580 KVA',
             tipoElemento: 'GENERADOR',
             ubicacion: 'ESTACIONAMIENTO',
             alimentadoPor: 'TRANSFERENCIA DOMOSA EN ESTACIONAMIENTO',
@@ -130,8 +194,8 @@ const initialCompanies = [
             createdAt: new Date().toISOString()
           },
           {
-            id: 'gen-2',
-            nombre: 'Generador No. 2 DOMOSA 580 KVA',
+            id: 'GEN-2',
+            nombre: 'GEN-2 - Generador No. 2 DOMOSA 580 KVA',
             tipoElemento: 'GENERADOR',
             ubicacion: 'ESTACIONAMIENTO',
             alimentadoPor: 'TRANSFERENCIA DOMOSA EN ESTACIONAMIENTO',
@@ -790,47 +854,17 @@ export const useStore = create(
         if (proyectoId && !targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
 
         let uuidId = elementoData.id;
-        if (!uuidId) {
-          const allElements = [];
-          get().companies.forEach(c => {
-            if (c.elementosUnifilares) {
-              allElements.push(...c.elementosUnifilares);
-            }
-            if (c.proyectos) {
-              c.proyectos.forEach(p => {
-                const list = p.elementosUnifilares || p.tableros || [];
-                allElements.push(...list);
-              });
-            }
-          });
-
-          const prefixMap = {
-            TABLERO: 'TAB',
-            TRANSFORMADOR: 'TRAFO',
-            GENERADOR: 'GEN',
-            TRANSFER: 'ATS',
-            PUESTA_TIERRA: 'PAT',
-            BANCO_CONDENSADOR: 'BC',
-            OTRO: 'OTR',
-            SUBESTACION: 'SUB'
-          };
-          const prefix = prefixMap[elementoData.tipoElemento || 'TABLERO'] || 'ELM';
-          const matchingElements = allElements.filter(e => e.id && e.id.startsWith(`${prefix}-`));
-          let nextNum = 1;
-          if (matchingElements.length > 0) {
-            const nums = matchingElements.map(e => {
-              const parts = e.id.split('-');
-              const num = parseInt(parts[parts.length - 1], 10);
-              return isNaN(num) ? 0 : num;
-            });
-            nextNum = Math.max(...nums) + 1;
-          }
-          uuidId = `${prefix}-${nextNum}`;
+        if (!uuidId || !uuidId.includes('-')) {
+          uuidId = getNextElementId(elementoData.tipoElemento || 'TABLERO', get());
         }
+
+        const nombreFinal = (elementoData.nombre && elementoData.nombre.trim())
+          ? elementoData.nombre.trim()
+          : uuidId;
 
         const nuevoElemento = {
           id: uuidId,
-          nombre: elementoData.nombre,
+          nombre: nombreFinal,
           tipoElemento: elementoData.tipoElemento || 'TABLERO',
           ubicacion: elementoData.ubicacion || 'Sin ubicación',
           alimentadoPor: elementoData.alimentadoPor || '',
@@ -1050,11 +1084,19 @@ export const useStore = create(
 
         if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
 
-        const uuidId = payload.id || crypto.randomUUID();
+        let uuidId = payload.id;
+        if (!uuidId || !uuidId.includes('-')) {
+          uuidId = getNextElementId('SUBESTACION', get());
+        }
+
+        const nombreFinal = (payload.nombre && payload.nombre.trim()) 
+          ? payload.nombre.trim() 
+          : uuidId;
 
         const nuevaSubestacion = {
           ...payload,
           id: uuidId,
+          nombre: nombreFinal,
           proyectoId,
           empresaId: parentCompanyId,
           tipoPlantilla: 'INSPECCION_SUBESTACION',
@@ -1184,13 +1226,19 @@ export const useStore = create(
           }
         }
 
-        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
+        let uuidId = payload.id;
+        if (!uuidId || !uuidId.includes('-')) {
+          uuidId = getNextElementId('PUNTO_MEDICION', get());
+        }
 
-        const uuidId = payload.id || crypto.randomUUID();
+        const nombreFinal = (payload.nombre && payload.nombre.trim()) 
+          ? payload.nombre.trim() 
+          : uuidId;
 
         const nuevoPunto = {
           ...payload,
           id: uuidId,
+          nombre: nombreFinal,
           proyectoId,
           empresaId: parentCompanyId,
           tipoPlantilla: 'PUNTO_MEDICION',
@@ -1320,13 +1368,19 @@ export const useStore = create(
           }
         }
 
-        if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
+        let uuidId = payload.id;
+        if (!uuidId || !uuidId.includes('-')) {
+          uuidId = getNextElementId('CCM', get());
+        }
 
-        const uuidId = payload.id || crypto.randomUUID();
+        const nombreFinal = (payload.nombre && payload.nombre.trim()) 
+          ? payload.nombre.trim() 
+          : uuidId;
 
         const nuevoCcm = {
           ...payload,
           id: uuidId,
+          nombre: nombreFinal,
           proyectoId,
           empresaId: parentCompanyId,
           tipoPlantilla: 'CCM',

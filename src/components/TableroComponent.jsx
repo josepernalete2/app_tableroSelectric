@@ -272,18 +272,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
           {/* Fila 1: Título General */}
           <tr className="border-b border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80">
             <td colSpan={7} className="p-0 font-bold text-sm tracking-wide">
-              <div className="flex flex-row items-center justify-between gap-4 py-2 px-4 uppercase font-bold text-slate-800 dark:text-slate-200 w-full">
-                <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex flex-row items-center justify-between gap-4 py-2.5 px-4 uppercase font-bold text-slate-800 dark:text-slate-200 w-full">
+                <div className="flex items-center gap-2 min-w-0">
                   <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
-                  <span className="shrink-0">Información General de Tablero No.</span>
-                </div>
-                <div className="flex flex-row items-center gap-2 font-mono truncate text-ellipsis overflow-hidden whitespace-nowrap max-w-[180px] sm:max-w-xs md:max-w-md" title={id}>
-                  <EditableCell
-                    value={id}
-                    onSave={(val) => updateField('id', val)}
-                    placeholder="No."
-                    className="text-center font-bold text-slate-900 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 truncate overflow-hidden text-ellipsis whitespace-nowrap"
-                  />
+                  <span className="font-mono font-black tracking-wide text-xs sm:text-sm">INFORMACIÓN GENERAL DE PANEL ELÉCTRICO / TABLERO</span>
                 </div>
               </div>
             </td>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
-import useStore from './store/useStore';
+import useStore, { formatElementTitleWithId } from './store/useStore';
 
 // Vistas
 import LoginView from './views/LoginView';
@@ -442,9 +442,14 @@ const TableroWrapper = () => {
             <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
               Inspeccionando para: {company.nombre}
             </span>
-            <h1 className="text-base font-bold text-slate-100">
-              {element.nombre} (ID: {element.id})
-            </h1>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-base font-bold text-slate-100">
+                {formatElementTitleWithId(element.nombre, element.id)}
+              </h1>
+              <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                ID: {element.id}
+              </span>
+            </div>
           </div>
         </div>
 

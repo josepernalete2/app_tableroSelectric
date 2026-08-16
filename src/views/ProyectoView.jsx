@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore from '../store/useStore';
+import useStore, { getNextElementId, PREFIX_MAP, formatElementTitleWithId } from '../store/useStore';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import { 
   ArrowLeft, 
@@ -876,48 +876,38 @@ export const ProyectoView = () => {
                         <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">Inspección Visual</span>
                         
                         <div className="absolute top-3 left-3">
-                          <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-amber-950/90 text-amber-400 border border-amber-800/30 font-mono">
-                            🏢 SUBESTACIÓN
+                          <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                            🏢 INSPECCIÓN SUBESTACIÓN
                           </span>
                         </div>
 
-                        {/* Indicador de casilla de verificación para Selección Múltiple */}
-                        {isMultiSelectMode && (
-                          <div className="absolute top-3 right-3 z-10">
-                            <span className={`p-1.5 rounded-lg flex items-center justify-center border transition-all ${
-                              isSelected 
-                                ? 'bg-amber-500 border-amber-400 text-slate-950 shadow-md shadow-amber-500/20' 
-                                : 'bg-slate-950/90 border-slate-700 text-slate-500'
-                            }`}>
-                              {isSelected ? (
-                                <CheckSquare className="w-3.5 h-3.5" />
-                              ) : (
-                                <div className="w-3.5 h-3.5 border border-slate-600 rounded-sm" />
-                              )}
+                        {!isMultiSelectMode && (
+                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                            <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                              ID: {item.id}
                             </span>
+                            {user?.role !== 'CLIENT' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
+                                    deleteSubestacion(proyectoId, item.id);
+                                  }
+                                }}
+                                className="p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                title="Eliminar Inspección"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
-                        )}
-
-                        {user?.role !== 'CLIENT' && !isMultiSelectMode && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
-                                deleteSubestacion(proyectoId, item.id);
-                              }
-                            }}
-                            className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                            title="Eliminar Inspección"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         )}
                       </div>
 
                     <div className="p-5 flex-1 flex flex-col justify-between">
                       <div className="space-y-1">
                         <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
-                          {item.nombre}
+                          {formatElementTitleWithId(item.nombre, item.id)}
                         </h3>
                         <div className="space-y-1 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
                           <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
@@ -983,22 +973,22 @@ export const ProyectoView = () => {
                         <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">Punto de Medición</span>
                         
                         <div className="absolute top-3 left-3">
-                          <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-amber-950/90 text-amber-400 border border-amber-800/30 font-mono">
-                            ⚡ MEDICIÓN
+                          <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                            ⚡ PUNTO DE MEDICIÓN
                           </span>
                         </div>
 
-                        {item.nivelTensionContrato && (
-                          <span className="absolute top-3 right-3 px-2 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[9px] font-bold rounded-lg">
-                            {item.nivelTensionContrato}
+                        <div className="absolute top-3 right-3 flex items-center gap-2">
+                          <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                            ID: {item.id}
                           </span>
-                        )}
+                        </div>
                       </div>
 
                       <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                         <div>
                           <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-1">
-                            {item.nombre}
+                            {formatElementTitleWithId(item.nombre, item.id)}
                           </h3>
                           {item.nombreUsuario && (
                             <p className="text-xs text-slate-400 font-medium mt-0.5 line-clamp-1">
@@ -1100,22 +1090,22 @@ export const ProyectoView = () => {
                           <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">CCM Industrial</span>
                           
                           <div className="absolute top-3 left-3">
-                            <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-amber-950/90 text-amber-400 border border-amber-800/30 font-mono">
-                              ⚙️ CCM
+                            <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                              ⚙️ CCM INDUSTRIAL
                             </span>
                           </div>
 
-                          {item.gradoNemaIp && (
-                            <span className="absolute top-3 right-3 px-2 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono text-[9px] font-bold rounded-lg">
-                              {item.gradoNemaIp}
+                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                            <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                              ID: {item.id}
                             </span>
-                          )}
+                          </div>
                         </div>
 
                         <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                           <div>
                             <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-1">
-                              {item.nombre}
+                              {formatElementTitleWithId(item.nombre, item.id)}
                             </h3>
                             {item.plantaInstalacion && (
                               <p className="text-xs text-slate-400 font-medium mt-0.5 line-clamp-1">
@@ -1237,34 +1227,42 @@ export const ProyectoView = () => {
                           </div>
                         )}
                         
-                        {/* Badge por tipoElemento */}
+                        {/* Badges de tipo e ID */}
                         <div className="absolute top-3 left-3">
                           {isTablero && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-sky-950/95 text-sky-400 border border-sky-800/40 font-mono">
-                              ⚡ TABLERO
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                              ⚡ PANEL ELÉCTRICO
                             </span>
                           )}
                           {isTrafo && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-purple-950/95 text-purple-400 border border-purple-800/40 font-mono">
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
                               ⚡ TRANSFORMADOR
                             </span>
                           )}
                           {isGen && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-amber-950/95 text-amber-400 border border-amber-800/40 font-mono">
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
                               ⚡ GENERADOR
                             </span>
                           )}
                           {isPuestaTierra && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-teal-950/95 text-teal-400 border border-teal-800/40 font-mono">
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
                               🛡️ PUESTA A TIERRA
                             </span>
                           )}
                           {isTransfer && (
-                            <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-emerald-950/95 text-emerald-400 border border-emerald-800/40 font-mono">
-                              🔄 TRANSFER
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                              🔄 TRANSFERENCIA
                             </span>
                           )}
                         </div>
+
+                        {!isMultiSelectMode && (
+                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                            <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                              ID: {item.id}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Indicador de casilla de verificación para Selección Múltiple */}
                         {isMultiSelectMode && (
@@ -1316,7 +1314,7 @@ export const ProyectoView = () => {
                       <div className="p-5 flex-1 flex flex-col justify-between">
                         <div className="space-y-1">
                           <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
-                            {item.nombre}
+                            {formatElementTitleWithId(item.nombre, item.id)}
                           </h3>
                           
                           <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
@@ -1458,7 +1456,7 @@ export const ProyectoView = () => {
                   required
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  placeholder={`Ej. ${tipoElemento === 'TABLERO' ? 'Tablero Principal (TAB 20)' : tipoElemento === 'TRANSFORMADOR' ? 'Transformador GE 500 KVA' : tipoElemento === 'PUESTA_TIERRA' ? 'Malla Puesta a Tierra N° 1' : 'Generador DOMOSA 1'}`}
+                  placeholder={`Ej. ${PREFIX_MAP[tipoElemento] || 'TAB'}-1: Nombre Descriptivo`}
                   className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
                     nombreElementoDuplicado 
                       ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 

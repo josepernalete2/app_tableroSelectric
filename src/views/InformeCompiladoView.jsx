@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore from '../store/useStore';
+import useStore, { formatElementTitleWithId } from '../store/useStore';
 import TableroComponent from '../components/TableroComponent';
 import FichaTecnicaComponent from '../components/FichaTecnicaComponent';
 import SubestacionComponent from '../components/SubestacionComponent';
@@ -506,9 +506,9 @@ export default function InformeCompiladoView() {
               <div key={item.id} className="page-break pt-8 space-y-6">
                 <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
                   <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                    Inspección #{idx + 1}: {item.nombre} ({item.tipoElemento})
+                    Inspección #{idx + 1}: {formatElementTitleWithId(item.nombre, item.id)} ({item.tipoElemento})
                   </h2>
-                  <span className="text-xs text-slate-500 font-mono">REGISTRO: {item.id.slice(0, 8)}...</span>
+                  <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {item.id}</span>
                 </div>
 
                 {/* Renderizar según sea Tablero o Ficha Técnica */}
@@ -536,9 +536,9 @@ export default function InformeCompiladoView() {
             <div key={sub.id} className="page-break pt-8 space-y-6">
               <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
                 <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                  Subestación #{idx + 1}: {sub.nombre} (Obra Civil)
+                  Subestación #{idx + 1}: {formatElementTitleWithId(sub.nombre, sub.id)}
                 </h2>
-                <span className="text-xs text-slate-500 font-mono">REGISTRO: {sub.id.slice(0, 8)}...</span>
+                <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {sub.id}</span>
               </div>
 
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
@@ -555,9 +555,9 @@ export default function InformeCompiladoView() {
             <div key={pm.id} className="page-break pt-8 space-y-6">
               <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
                 <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                  Punto de Medición #{idx + 1}: {pm.nombre}
+                  Punto de Medición #{idx + 1}: {formatElementTitleWithId(pm.nombre, pm.id)}
                 </h2>
-                <span className="text-xs text-slate-500 font-mono">REGISTRO: {pm.id.slice(0, 8)}...</span>
+                <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {pm.id}</span>
               </div>
 
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
@@ -574,9 +574,9 @@ export default function InformeCompiladoView() {
             <div key={ccm.id} className="page-break pt-8 space-y-6">
               <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
                 <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                  CCM #{idx + 1}: {ccm.nombre}
+                  CCM #{idx + 1}: {formatElementTitleWithId(ccm.nombre, ccm.id)}
                 </h2>
-                <span className="text-xs text-slate-500 font-mono">REGISTRO: {ccm.id.slice(0, 8)}...</span>
+                <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {ccm.id}</span>
               </div>
 
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>

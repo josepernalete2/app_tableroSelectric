@@ -158,16 +158,18 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   const renderBadge = () => {
     switch (tipoElemento) {
       case 'TRANSFORMADOR':
-        return <span className="px-3 py-1 bg-violet-950/90 text-violet-400 border border-violet-800/40 rounded-full text-xs font-bold font-mono">⚡ TRANSFORMADOR ELÉCTRICO</span>;
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚡ TRANSFORMADOR ELÉCTRICO</span>;
       case 'GENERADOR':
-        return <span className="px-3 py-1 bg-amber-950/90 text-amber-400 border border-amber-800/40 rounded-full text-xs font-bold font-mono">⚡ GENERADOR DE EMERGENCIA</span>;
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚡ GENERADOR</span>;
       case 'TRANSFER':
-        return <span className="px-3 py-1 bg-emerald-950/90 text-emerald-400 border border-emerald-800/40 rounded-full text-xs font-bold font-mono">🔄 TRANSFERENCIA (ATS / MTS)</span>;
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">🔄 TRANSFERENCIA (ATS / MTS)</span>;
       case 'BANCO_CONDENSADOR':
-        return <span className="px-3 py-1 bg-cyan-950/90 text-cyan-400 border border-cyan-800/40 rounded-full text-xs font-bold font-mono">⚡ BANCO DE CONDENSADORES</span>;
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚡ BANCO DE CONDENSADORES</span>;
+      case 'PUESTA_TIERRA':
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">🛡️ MALLA PUESTA A TIERRA</span>;
       case 'TABLERO':
       default:
-        return <span className="px-3 py-1 bg-sky-950/90 text-sky-400 border border-sky-800/40 rounded-full text-xs font-bold font-mono">⚡ PANEL ELÉCTRICO / TABLERO</span>;
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚡ PANEL ELÉCTRICO</span>;
     }
   };
 
@@ -178,7 +180,9 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       <div className="flex justify-between items-center no-print">
         <div className="flex items-center gap-2">
           {renderBadge()}
-          <span className="text-xs text-slate-500 font-mono">ID: {elementoData.id}</span>
+          <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+            ID: {elementoData.id}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
