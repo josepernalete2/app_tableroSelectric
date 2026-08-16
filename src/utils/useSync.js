@@ -70,6 +70,11 @@ export function useSync() {
           if (res.status === 'NETWORK_ERROR') {
             // Error de red física: pausar la cola para reintentar cuando regrese la conexión
             break;
+          } else if (res.status === 401 || res.status === 403) {
+            // Error de Autenticación / Sesión Expirada: NO borrar de la cola local
+            console.warn(`[SYNC AUTH] Error HTTP ${res.status}: Sesión expirada o no autorizada. Pausando cola para conservar datos locales.`);
+            alert(`Su sesión de usuario ha expirado o requiere autenticación (Código HTTP ${res.status}).\n\nLos datos permanecerán guardados de forma segura localmente. Por favor, vuelva a iniciar sesión para sincronizar con el servidor.`);
+            break;
           } else if (res.status === 422) {
             // BLOQUEO POR DEPENDENCIA: El proyecto padre no existe en PostgreSQL aún
             const parentId = item.payload?.proyectoId;
