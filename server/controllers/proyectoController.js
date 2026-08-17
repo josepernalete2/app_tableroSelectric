@@ -116,7 +116,7 @@ export const crearProyecto = async (req, res, next) => {
               nombre: 'Empresa ' + empresaId,
               direccion: 'Registrada por Sincronización',
               direccionFiscal: 'Registrada por Sincronización',
-              rif: 'J-AUTO-' + empresaId.slice(0, 8)
+              rif: 'J-AUTO-' + String(empresaId || '').slice(0, 8)
             }
           }
         }

@@ -121,9 +121,10 @@ export const ProyectoView = () => {
   };
 
   const handleSelectAll = () => {
-    const ids = activeTab === 'UNIFILAR' 
-      ? filteredElementos.map(e => e.id)
-      : filteredInspecciones.map(s => s.id);
+    const listToSelect = activeTab === 'UNIFILAR' 
+      ? (typeof filteredElementos !== 'undefined' ? filteredElementos : [])
+      : (typeof filteredInspecciones !== 'undefined' ? filteredInspecciones : []);
+    const ids = listToSelect.map(e => e.id);
     setSelectedIds(new Set(ids));
   };
 

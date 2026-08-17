@@ -39,7 +39,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           update: {},
           create: {
             id: proyectoId,
-            nombre: 'Proyecto ' + proyectoId.slice(0, 8),
+            nombre: 'Proyecto ' + String(proyectoId || '').slice(0, 8),
             descripcion: 'Registrado automáticamente desde sincronización de elemento',
             direccion: 'Registrado por Sincronización',
             empresa: {
@@ -48,7 +48,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
                 create: {
                   id: empresaId,
                   nombre: 'Empresa ' + empresaId,
-                  rif: 'J-AUTO-' + empresaId.slice(0, 8),
+                  rif: 'J-AUTO-' + String(empresaId || '').slice(0, 8),
                   direccionFiscal: 'Registrada por Sincronización',
                   direccion: 'Registrada por Sincronización'
                 }

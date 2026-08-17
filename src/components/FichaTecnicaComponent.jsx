@@ -164,6 +164,29 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     setIsEditing(false);
   };
 
+  const renderElementWithId = (nombreText, fallbackId) => {
+    if (!nombreText) return <span className="opacity-40">—</span>;
+    let cleanName = nombreText;
+    let elementId = fallbackId || null;
+
+    const match = String(nombreText).match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
+    if (match) {
+      if (match[1]) cleanName = match[1].trim();
+      if (match[2] && !elementId) elementId = match[2].trim();
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-wrap">
+        <span className="font-semibold text-slate-100 print:text-black">{cleanName}</span>
+        {elementId && (
+          <span className="inline-flex items-center font-mono font-bold text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
+            ID: {elementId}
+          </span>
+        )}
+      </span>
+    );
+  };
+
   const renderBadge = () => {
     switch (tipoElemento) {
       case 'TRANSFORMADOR':
@@ -298,15 +321,20 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   <select
                     onChange={(e) => {
                       if (e.target.value) {
-                        setAlimentadoPor(e.target.value);
+                        const selectedFeeder = allFeeders.find(f => f.nombre === e.target.value || f.id === e.target.value);
+                        if (selectedFeeder) {
+                          setAlimentadoPor(`${selectedFeeder.nombre} (ID: ${selectedFeeder.id})`);
+                        } else {
+                          setAlimentadoPor(e.target.value);
+                        }
                       }
                     }}
-                    value={allFeeders.some(f => f.nombre === alimentadoPor) ? alimentadoPor : ''}
+                    value={allFeeders.some(f => f.nombre === alimentadoPor || `${f.nombre} (ID: ${f.id})` === alimentadoPor) ? alimentadoPor : ''}
                     className="bg-slate-900 border border-slate-700 text-slate-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-500 w-full sm:w-auto min-w-[200px]"
                   >
                     <option value="">-- Seleccionar Equipo --</option>
                     {allFeeders.map((f) => (
-                      <option key={f.id} value={f.nombre}>
+                      <option key={f.id} value={`${f.nombre} (ID: ${f.id})`}>
                         [{f.id}] {f.nombre}
                       </option>
                     ))}
@@ -314,7 +342,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 )}
               </div>
             ) : (
-              <span className="font-semibold">{alimentadoPor || 'ATS SOTANO (TRANSFERENCIA AUTOMATICA) transferencia 580'}</span>
+              renderElementWithId(alimentadoPor || 'ATS SOTANO (ID: ATS-1)', elementoData?.alimentadoPorId)
             )}
           </div>
 
@@ -490,7 +518,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
                     />
                   ) : (
-                    alimentadoPor || 'TRANSFERENCIA DOMOSA EN ESTACIONAMIENTO'
+                    renderElementWithId(alimentadoPor || 'TRANSFERENCIA DOMOSA (ID: ATS-1)')
                   )}
                 </td>
               </tr>
@@ -714,7 +742,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
                     />
                   ) : (
-                    alimentadoPor || 'GENERADOR 580 1 + GENERADOR 580 2'
+                    renderElementWithId(alimentadoPor || 'GENERADOR DOMOSA 1 (ID: GEN-1)')
                   )}
                 </td>
               </tr>

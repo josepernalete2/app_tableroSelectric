@@ -127,7 +127,7 @@ export const ModalEdicionCircuito = ({
     const el = linkElement || selectedLink;
     if (!el) return alert('Por favor, selecciona un elemento para vincular.');
     onSave(circuitData.id, {
-      equipo: normalizeText(el.nombre),
+      equipo: `${normalizeText(el.nombre)} (ID: ${el.id})`,
       tipoDestino: 'SUB_TABLERO',
       vinculadoId: el.id,
       breaker: {

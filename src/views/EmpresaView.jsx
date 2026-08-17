@@ -117,7 +117,8 @@ export const EmpresaView = () => {
   };
 
   const handleSelectAll = () => {
-    const ids = filteredElementosGenerales.map(e => e.id);
+    const listToSelect = typeof filteredElementosGenerales !== 'undefined' ? filteredElementosGenerales : [];
+    const ids = listToSelect.map(e => e.id);
     setSelectedIds(new Set(ids));
   };
 

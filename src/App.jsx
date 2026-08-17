@@ -398,15 +398,18 @@ const TableroWrapper = () => {
 
   // 3. Renderizar Ficha de Tablero Termográfico (TABLERO)
   const enrichedTablero = {
-    id: element.id,
-    nombre: element.nombre,
-    ubicacion: element.ubicacion,
-    alimentadoPor: element.alimentadoPor,
-    foto: element.foto,
-    fotoBlob: element.fotoBlob,
-    observacionesGenerales: element.observacionesGenerales,
-    ...element.datosTecnicos,
-    nombreEmpresa: company.nombre
+    id: element?.id || tableroId,
+    nombre: element?.nombre || 'Tablero Eléctrico',
+    ubicacion: element?.ubicacion || '',
+    alimentadoPor: element?.alimentadoPor || '',
+    foto: element?.foto || null,
+    fotoBlob: element?.fotoBlob || null,
+    observacionesGenerales: element?.observacionesGenerales || '',
+    ...(element?.datosTecnicos || {}),
+    circuits: Array.isArray(element?.datosTecnicos?.circuits)
+      ? element.datosTecnicos.circuits
+      : (Array.isArray(element?.circuits) ? element.circuits : []),
+    nombreEmpresa: company?.nombre || ''
   };
 
   const handleUpdateTablero = (updatedData) => {

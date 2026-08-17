@@ -54,7 +54,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     return null;
   }, [companies, tableroData?.id]);
 
-  const alimentadores = project?.alimentadores || [];
+  const alimentadores = React.useMemo(() => {
+    if (!project) return [];
+    return (project.elementosUnifilares || project.tableros || []).filter(e => e.id !== tableroData?.id);
+  }, [project, tableroData?.id]);
+
+  const renderCircuitEquipo = (equipoText, vinculadoId) => {
+    if (!equipoText || equipoText === 'RESERVA') {
+      return <span className="text-xs text-slate-400 dark:text-slate-600 italic font-mono">RESERVA</span>;
+    }
+
+    let cleanName = equipoText;
+    let elementId = vinculadoId || null;
+
+    const match = String(equipoText).match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
+    if (match) {
+      if (match[1]) cleanName = match[1].trim();
+      if (match[2] && !elementId) elementId = match[2].trim();
+    }
+
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{cleanName}</span>
+        {elementId && (
+          <span className="inline-flex items-center w-max px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/30">
+            ID: {elementId}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   // Normalize circuits: ensure all poles from 1 to maxPoles are represented exactly once
   const maxPoles = tableroData?.maxPoles || 30;
@@ -62,9 +91,18 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   const normalizedCircuits = React.useMemo(() => {
     if (!tableroData) return [];
-    const list = [...circuits];
+    const list = circuits.map(c => ({
+      ...c,
+      poles: Array.isArray(c.poles) && c.poles.length > 0 ? c.poles : [1],
+      breaker: c.breaker || { marca: '', tipo: '', amp: '' }
+    }));
+
     const coveredPoles = new Set();
-    list.forEach(c => c.poles.forEach(p => coveredPoles.add(p)));
+    list.forEach(c => {
+      if (Array.isArray(c.poles)) {
+        c.poles.forEach(p => coveredPoles.add(p));
+      }
+    });
 
     // Fill in missing poles
     for (let pole = 1; pole <= maxPoles; pole++) {
@@ -81,7 +119,11 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     }
 
     // Sort circuits by their first pole number
-    return list.sort((a, b) => Math.min(...a.poles) - Math.min(...b.poles));
+    return list.sort((a, b) => {
+      const minA = Array.isArray(a.poles) && a.poles.length > 0 ? Math.min(...a.poles) : 0;
+      const minB = Array.isArray(b.poles) && b.poles.length > 0 ? Math.min(...b.poles) : 0;
+      return minA - minB;
+    });
   }, [circuits, maxPoles, tableroData]);
 
 
@@ -729,13 +771,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       >
                         <div className="flex flex-col justify-center min-h-[2rem] pr-6">
                           <div className="flex items-center justify-between">
-                            <span className={`text-xs ${
-                              !cLeft.equipo || cLeft.equipo === 'RESERVA' 
-                                ? 'text-slate-400 dark:text-slate-600 italic' 
-                                : 'text-slate-900 dark:text-slate-100 font-bold'
-                            }`}>
-                              {cLeft.equipo || 'RESERVA'}
-                            </span>
+                            {renderCircuitEquipo(cLeft.equipo, cLeft.vinculadoId)}
                             {cLeft.fotografia && (
                               <Image className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
                             )}
@@ -939,13 +975,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       >
                         <div className="flex flex-col justify-center min-h-[2rem] pr-6">
                           <div className="flex items-center justify-between">
-                            <span className={`text-xs ${
-                              !cRight.equipo || cRight.equipo === 'RESERVA' 
-                                ? 'text-slate-400 dark:text-slate-600 italic' 
-                                : 'text-slate-900 dark:text-slate-100 font-bold'
-                            }`}>
-                              {cRight.equipo || 'RESERVA'}
-                            </span>
+                            {renderCircuitEquipo(cRight.equipo, cRight.vinculadoId)}
                             {cRight.fotografia && (
                               <Image className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
                             )}
