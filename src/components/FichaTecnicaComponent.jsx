@@ -3,9 +3,12 @@ import {
   Save, 
   Edit3, 
   Camera, 
-  Printer
+  Printer,
+  Settings,
+  Zap
 } from 'lucide-react';
 import useStore from '../store/useStore';
+import ModalEdicionCircuito from './ModalEdicionCircuito';
 
 // Componente para renderizar Blobs de imagen de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -75,6 +78,12 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
   // datosTecnicos JSON
   const [dt, setDt] = useState(elementoData?.datosTecnicos || {});
+
+  // Wizard Modal Jerarquía
+  const { crearElementoProvisional } = useStore();
+  const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
+  const [circuitDataWizard, setCircuitDataWizard] = useState(null);
+  const [wizardModo, setWizardModo] = useState('SALIDA');
 
   // Restringir a las opciones permitidas: TABLERO, TRANSFER, GENERADOR, TRANSFORMADOR
   const tipoElemento = elementoData?.tipoElemento || 'TABLERO';
@@ -254,8 +263,28 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           </div>
 
           {/* Fila 2: Alimentado Por */}
-          <div className="border-b border-slate-700 p-3 bg-slate-900/40 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black">
-            <span className="font-bold uppercase text-slate-400 print:text-black mr-2">TABLERO ALIMENTADO POR:</span>
+          <div className="border-b border-slate-700 p-3 bg-slate-900/40 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black flex items-center justify-between">
+            <div>
+              <span className="font-bold uppercase text-slate-400 print:text-black mr-2">TABLERO ALIMENTADO POR:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setWizardModo('ENTRADA');
+                  setCircuitDataWizard({
+                    id: 'ALIMENTACION_PRINCIPAL',
+                    nombre: 'Acometida / Fuente Principal',
+                    equipo: alimentadoPor || '',
+                    poles: [1],
+                    breaker: { amp: '', marca: '', tipo: '' }
+                  });
+                  setModalJerarquiaOpen(true);
+                }}
+                className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all"
+                title="Configurar Origen de Alimentación (Wizard)"
+              >
+                <Settings className="w-3 h-3 text-amber-400" /> Configurar Jerarquía
+              </button>
+            </div>
             {isEditing ? (
               <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center w-full sm:w-3/4 inline-flex">
                 <input
@@ -431,8 +460,26 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           <table className="w-full text-xs text-left border-collapse border-b border-slate-700 font-mono print:border-black">
             <tbody>
               <tr className="border-b border-slate-800 print:border-gray-300">
-                <td className="w-1/3 bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
-                  GENERADOR ALIMENTA A:
+                <td className="w-1/3 bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300 flex items-center justify-between">
+                  <span>GENERADOR ALIMENTA A:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWizardModo('SALIDA');
+                      setCircuitDataWizard({
+                        id: 'GENERADOR_SALIDA',
+                        nombre: 'Salida del Generador',
+                        equipo: alimentadoPor || '',
+                        poles: [3],
+                        breaker: { amp: dt.amperaje || '1600', marca: dt.marca || '', tipo: '' }
+                      });
+                      setModalJerarquiaOpen(true);
+                    }}
+                    className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all"
+                    title="Configurar Equipo Alimentado (Wizard)"
+                  >
+                    <Settings className="w-3 h-3 text-amber-400" /> Configurar Jerarquía
+                  </button>
                 </td>
                 <td className="p-3 text-slate-100 font-semibold print:text-black">
                   {isEditing ? (
@@ -637,8 +684,26 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
               </tr>
               <tr className="border-b border-slate-800 print:border-gray-300">
-                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
-                  TABLERO ALIMENTADO POR:
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300 flex items-center justify-between">
+                  <span>TABLERO ALIMENTADO POR:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWizardModo('ENTRADA');
+                      setCircuitDataWizard({
+                        id: 'ATS_ALIMENTACION',
+                        nombre: 'Fuente de Alimentación de Transferencia',
+                        equipo: alimentadoPor || '',
+                        poles: [3],
+                        breaker: { amp: dt.amperaje || '3200', marca: dt.modelo || '', tipo: '' }
+                      });
+                      setModalJerarquiaOpen(true);
+                    }}
+                    className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all"
+                    title="Configurar Origen de Alimentación (Wizard)"
+                  >
+                    <Settings className="w-3 h-3 text-amber-400" /> Configurar Jerarquía
+                  </button>
                 </td>
                 <td className="p-3 text-slate-100 font-semibold print:text-black">
                   {isEditing ? (
@@ -721,21 +786,87 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </thead>
             <tbody className="divide-y divide-slate-800 print:divide-gray-300">
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">ALIMENTACIÓN GENERADOR 1 / CORPOELEC</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">
+                  <div className="flex items-center justify-between gap-1">
+                    <span>ALIMENTACIÓN GENERADOR 1 / CORPOELEC</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWizardModo('ENTRADA');
+                        setCircuitDataWizard({
+                          id: 'ATS_GEN1',
+                          nombre: 'Fuente Normal (A) - Generador 1 / Corpoelec',
+                          equipo: dt.alimentacionGenerador1 || '',
+                          poles: [3],
+                          breaker: { amp: '', marca: '', tipo: '' }
+                        });
+                        setModalJerarquiaOpen(true);
+                      }}
+                      className="no-print p-1 hover:bg-emerald-500/20 text-emerald-400 rounded transition-all cursor-pointer"
+                      title="Configurar Fuente Normal (Wizard)"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
                   {isEditing ? <input type="text" value={dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || ''} onChange={(e) => handleDtChange('alimentacionGenerador1', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || '2(3X500)')}
                 </td>
                 <td className="p-2.5 text-slate-400 print:text-black">-</td>
               </tr>
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">ALIMENTACIÓN GENERADOR 2 / TRANSF DOMOSA</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">
+                  <div className="flex items-center justify-between gap-1">
+                    <span>ALIMENTACIÓN GENERADOR 2 / TRANSF DOMOSA</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWizardModo('ENTRADA');
+                        setCircuitDataWizard({
+                          id: 'ATS_GEN2',
+                          nombre: 'Fuente Emergencia (B) - Generador 2 / Transf',
+                          equipo: dt.alimentacionGenerador2 || '',
+                          poles: [3],
+                          breaker: { amp: '', marca: '', tipo: '' }
+                        });
+                        setModalJerarquiaOpen(true);
+                      }}
+                      className="no-print p-1 hover:bg-emerald-500/20 text-emerald-400 rounded transition-all cursor-pointer"
+                      title="Configurar Fuente Emergencia (Wizard)"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
                   {isEditing ? <input type="text" value={dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || ''} onChange={(e) => handleDtChange('alimentacionGenerador2', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || '2(3X500)')}
                 </td>
                 <td className="p-2.5 text-slate-400 print:text-black">-</td>
               </tr>
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">CARGA</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">
+                  <div className="flex items-center justify-between gap-1">
+                    <span>CARGA</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWizardModo('SALIDA');
+                        setCircuitDataWizard({
+                          id: 'ATS_CARGA',
+                          nombre: 'Salida a Carga (C)',
+                          equipo: dt.carga || '',
+                          poles: [3],
+                          breaker: { amp: dt.amperaje || '3200', marca: '', tipo: '' }
+                        });
+                        setModalJerarquiaOpen(true);
+                      }}
+                      className="no-print p-1 hover:bg-emerald-500/20 text-emerald-400 rounded transition-all cursor-pointer"
+                      title="Configurar Salida a Carga (Wizard)"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
                   {isEditing ? <input type="text" value={dt.carga || ''} onChange={(e) => handleDtChange('carga', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.carga || '2(3X500)')}
                 </td>
@@ -1105,7 +1236,28 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 return (
                   <tr key={seccion} className="print:text-black">
                     <td className="p-2 font-bold bg-slate-900/40 border-r border-slate-800 uppercase print:bg-gray-50 print:border-gray-300 text-slate-350 print:text-black">
-                      {seccion}
+                      <div className="flex items-center justify-between gap-1">
+                        <span>{seccion}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const isEntrada = seccion === 'primaria';
+                            setWizardModo(isEntrada ? 'ENTRADA' : 'SALIDA');
+                            setCircuitDataWizard({
+                              id: `TRANSFORMADOR_${seccion.toUpperCase()}`,
+                              nombre: `Transformador - Acometida ${seccion.toUpperCase()}`,
+                              equipo: isEntrada ? alimentadoPor : '',
+                              poles: [3],
+                              breaker: { amp: '', marca: '', tipo: '' }
+                            });
+                            setModalJerarquiaOpen(true);
+                          }}
+                          className="no-print p-1 hover:bg-violet-500/20 text-violet-400 rounded transition-all cursor-pointer"
+                          title={`Configurar Jerarquía (${seccion})`}
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                     <td className="p-2 border-r border-slate-800 print:border-gray-300 text-center">
                       {isEditing ? (
@@ -2191,6 +2343,27 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           </div>
         </div>
       </div>
+
+      <ModalEdicionCircuito
+        isOpen={modalJerarquiaOpen}
+        onClose={() => setModalJerarquiaOpen(false)}
+        circuitData={circuitDataWizard}
+        modo={wizardModo}
+        tipoOrigen={tipoElemento}
+        elementosCreados={allFeeders}
+        onSave={(idSalida, updated) => {
+          if (wizardModo === 'ENTRADA') {
+            setAlimentadoPor(updated.equipo || '');
+          }
+          if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && elementoData?.proyectoId) {
+            crearElementoProvisional(elementoData.proyectoId, {
+              nombre: updated.equipo,
+              tipoElemento: 'TABLERO',
+              circuitoOrigen: idSalida
+            });
+          }
+        }}
+      />
 
     </div>
   );

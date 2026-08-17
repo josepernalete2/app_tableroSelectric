@@ -1571,6 +1571,93 @@ export const useStore = create(
         } catch (e) {
           console.error('Error marcando mensajes como leídos:', e);
         }
+      },
+
+      vincularJerarquia: (proyectoId, padreId, hijoId, datosEnlace = {}) => {
+        set((state) => {
+          let nombrePadre = '';
+          const newCompanies = (state.companies || []).map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id !== proyectoId) return p;
+
+              // Buscar nombre del padre si existe
+              const list = p.elementosUnifilares || [];
+              const padre = list.find((e) => e.id === padreId);
+              if (padre) nombrePadre = padre.nombre;
+
+              return {
+                ...p,
+                elementosUnifilares: (p.elementosUnifilares || []).map((e) => {
+                  if (e.id === hijoId) {
+                    return {
+                      ...e,
+                      alimentadoPorId: padreId,
+                      alimentadoPor: nombrePadre ? `${nombrePadre} (${datosEnlace.circuitoOrigen || 'Salida'})` : e.alimentadoPor,
+                      circuitoOrigen: datosEnlace.circuitoOrigen || e.circuitoOrigen,
+                      calibreConductor: datosEnlace.calibreConductor || e.calibreConductor,
+                      breakerAmperaje: datosEnlace.breakerAmperaje || e.breakerAmperaje,
+                      breakerMarca: datosEnlace.breakerMarca || e.breakerMarca,
+                      breakerTipo: datosEnlace.breakerTipo || e.breakerTipo,
+                      estadoVinculo: 'ACTIVO'
+                    };
+                  }
+                  return e;
+                })
+              };
+            })
+          }));
+          return { companies: newCompanies };
+        });
+      },
+
+      desvincularJerarquia: (proyectoId, hijoId) => {
+        set((state) => {
+          const newCompanies = (state.companies || []).map((c) => ({
+            ...c,
+            proyectos: (c.proyectos || []).map((p) => {
+              if (p.id !== proyectoId) return p;
+              return {
+                ...p,
+                elementosUnifilares: (p.elementosUnifilares || []).map((e) => {
+                  if (e.id === hijoId) {
+                    return {
+                      ...e,
+                      alimentadoPorId: null,
+                      alimentadoPor: null,
+                      circuitoOrigen: null,
+                      estadoVinculo: 'ACTIVO'
+                    };
+                  }
+                  return e;
+                })
+              };
+            })
+          }));
+          return { companies: newCompanies };
+        });
+      },
+
+      crearElementoProvisional: (proyectoId, datosProvisional = {}) => {
+        const state = get();
+        const tipo = datosProvisional.tipoElemento || 'TABLERO';
+        const newId = datosProvisional.id || getNextElementId(tipo, state);
+
+        const provisionalObj = {
+          id: newId,
+          nombre: datosProvisional.nombre || `RESERVA (${newId})`,
+          tipoElemento: tipo,
+          ubicacion: 'RESERVA (Pendiente por Crear)',
+          alimentadoPor: datosProvisional.circuitoOrigen ? `Circuito ${datosProvisional.circuitoOrigen}` : null,
+          circuitoOrigen: datosProvisional.circuitoOrigen || null,
+          estadoVinculo: 'PENDIENTE_CREAR',
+          observacionesGenerales: 'Nodo registrado en estado provisional como Reserva activa.',
+          datosTecnicos: {},
+          proyectoId
+        };
+
+        get().addElementoUnifilar(proyectoId, provisionalObj);
+        return provisionalObj;
       }
     }),
     {

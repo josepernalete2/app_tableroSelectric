@@ -18,6 +18,7 @@ import { crearCcm, eliminarCcm } from '../controllers/ccmController.js';
 import { crearElementoUnifilar, eliminarElementoUnifilar } from '../controllers/elementoController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
+import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto } from '../controllers/jerarquiaController.js';
 
 // Asegurar directorio public/uploads
 const uploadDir = path.join(process.cwd(), 'public', 'uploads');
@@ -106,5 +107,11 @@ router.delete('/users/:id', eliminarUsuario);
 router.get('/messages/:userId', obtenerMensajesUsuario);
 router.post('/messages', guardarMensaje);
 router.post('/messages/read', marcarMensajesComoLeidos);
+
+// Rutas de Jerarquía Eléctrica
+router.post('/jerarquia/vincular', vincularElemento);
+router.post('/jerarquia/desvincular', desvincularElemento);
+router.post('/jerarquia/crear-provisional', crearProvisional);
+router.get('/jerarquia/arbol/:proyectoId', obtenerArbolProyecto);
 
 export default router;

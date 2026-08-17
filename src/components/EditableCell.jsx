@@ -34,10 +34,16 @@ export const EditableCell = ({
     }
   }, [isEditing, type]);
 
+  // Normalización de texto: recorta espacios y convierte a mayúsculas para evitar duplicados como "sql" y "SQL"
+  const normalizeText = (text) => {
+    if (typeof text !== 'string') return text;
+    return text.trim().replace(/\s+/g, ' ').toUpperCase();
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       setIsEditing(false);
-      onSave(editValue);
+      onSave(normalizeText(editValue));
     } else if (e.key === 'Escape') {
       setIsEditing(false);
       setEditValue(value); // revert changes
@@ -46,7 +52,7 @@ export const EditableCell = ({
 
   const handleBlur = () => {
     setIsEditing(false);
-    onSave(editValue);
+    onSave(normalizeText(editValue));
   };
 
   if (disabled) {
@@ -58,26 +64,6 @@ export const EditableCell = ({
   }
 
   if (isEditing) {
-    if (type === 'select') {
-      return (
-        <select
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          className={`w-full px-1 py-0.5 text-xs text-slate-900 bg-amber-50 dark:bg-slate-800 dark:text-slate-100 border border-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-500 rounded h-7 ${inputClassName}`}
-        >
-          <option value="">—</option>
-          {options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      );
-    }
-
     if (type === 'textarea') {
       return (
         <textarea
@@ -86,11 +72,10 @@ export const EditableCell = ({
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleBlur}
           onKeyDown={(e) => {
-            // Commit on Enter, unless Shift is pressed for newlines
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               setIsEditing(false);
-              onSave(editValue);
+              onSave(normalizeText(editValue));
             } else if (e.key === 'Escape') {
               setIsEditing(false);
               setEditValue(value);
@@ -105,13 +90,13 @@ export const EditableCell = ({
     return (
       <input
         ref={inputRef}
-        type={type === 'number' ? 'text' : type} // Use text for custom decimals/fractions if preferred
+        type={type === 'number' ? 'text' : type}
         value={editValue}
         onChange={(e) => setEditValue(e.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className={`w-full px-1.5 py-0.5 text-xs text-slate-900 bg-amber-50 dark:bg-slate-800 dark:text-slate-100 border border-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-500 rounded h-7 ${inputClassName}`}
+        className={`w-full px-1.5 py-0.5 text-xs text-slate-900 bg-amber-50 dark:bg-slate-800 dark:text-slate-100 border border-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-500 rounded h-7 font-sans ${inputClassName}`}
       />
     );
   }

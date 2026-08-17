@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Zap, 
   Building2, 
@@ -11,10 +11,17 @@ import {
   Calendar, 
   Clock, 
   CheckSquare,
-  Activity
+  Activity,
+  Settings
 } from 'lucide-react';
+import ModalEdicionCircuito from './ModalEdicionCircuito';
+import useStore from '../store/useStore';
 
 export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }) {
+  const { crearElementoProvisional } = useStore();
+  const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
+  const [circuitDataWizard, setCircuitDataWizard] = useState(null);
+  const [wizardModo, setWizardModo] = useState('ENTRADA');
   if (!puntoData) {
     return <div className="text-center p-8 text-slate-400">No hay datos de punto de medición seleccionados.</div>;
   }
@@ -260,8 +267,28 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
 
       {/* SECCIÓN 2: Punto de Acometida e Infraestructura de Entrada */}
       <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-white print:border-gray-300">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500 border-b border-slate-800 pb-2.5 flex items-center gap-2 print:text-slate-900 print:border-gray-300">
-          <Zap className="w-4 h-4 text-amber-500" /> 2. Punto de Acometida e Infraestructura de Entrada
+        <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500 border-b border-slate-800 pb-2.5 flex items-center justify-between print:text-slate-900 print:border-gray-300">
+          <span className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-500" /> 2. Punto de Acometida e Infraestructura de Entrada
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setWizardModo('ENTRADA');
+              setCircuitDataWizard({
+                id: 'PCC_ACOMETIDA',
+                nombre: 'Punto de Conexión PCC / Acometida Entrada',
+                equipo: puntoConexionPCC || '',
+                poles: [3],
+                breaker: { amp: '', marca: '', tipo: '' }
+              });
+              setModalJerarquiaOpen(true);
+            }}
+            className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all shadow-sm"
+            title="Configurar Conexión de Jerarquía (Wizard)"
+          >
+            <Settings className="w-3.5 h-3.5 text-amber-400" /> Configurar Jerarquía
+          </button>
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -589,6 +616,27 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
           </div>
         </div>
       </div>
+
+      <ModalEdicionCircuito
+        isOpen={modalJerarquiaOpen}
+        onClose={() => setModalJerarquiaOpen(false)}
+        circuitData={circuitDataWizard}
+        modo={wizardModo}
+        tipoOrigen="PUNTO_MEDICION"
+        elementosCreados={[]}
+        onSave={(circuitId, updated) => {
+          if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && puntoData?.proyectoId) {
+            crearElementoProvisional(puntoData.proyectoId, {
+              nombre: updated.equipo,
+              tipoElemento: 'TABLERO',
+              circuitoOrigen: circuitId
+            });
+          }
+          if (wizardModo === 'ENTRADA') {
+            updateField('puntoConexionPCC', updated.equipo);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Cpu, 
   Building2, 
@@ -15,10 +15,17 @@ import {
   Layers, 
   Thermometer, 
   CheckSquare, 
-  FileText
+  FileText,
+  Settings
 } from 'lucide-react';
+import ModalEdicionCircuito from './ModalEdicionCircuito';
+import useStore from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
+  const { companies, crearElementoProvisional } = useStore();
+  const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
+  const [circuitDataWizard, setCircuitDataWizard] = useState(null);
+  const [wizardModo, setWizardModo] = useState('SALIDA');
   if (!ccmData) {
     return <div className="text-center p-8 text-slate-400">No hay datos de CCM seleccionados.</div>;
   }
@@ -507,14 +514,34 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
                     />
                   </td>
                   <td className="py-2 px-1 text-center no-print">
-                    <button
-                      type="button"
-                      onClick={() => deleteGaveta(g.id)}
-                      className="p-1 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-all cursor-pointer"
-                      title="Eliminar Gaveta"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWizardModo('SALIDA');
+                          setCircuitDataWizard({
+                            id: g.id,
+                            nombre: `Gaveta ${g.gaveta} (${g.tagEquipo || 'Sin Tag'})`,
+                            equipo: g.tagEquipo || '',
+                            poles: [1],
+                            breaker: { amp: g.proteccion || '', marca: '', tipo: '' }
+                          });
+                          setModalJerarquiaOpen(true);
+                        }}
+                        className="p-1 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-all cursor-pointer"
+                        title="Configurar Conexión / Carga (Wizard)"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteGaveta(g.id)}
+                        className="p-1 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                        title="Eliminar Gaveta"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -738,6 +765,25 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
           </div>
         </div>
       </div>
+
+      <ModalEdicionCircuito
+        isOpen={modalJerarquiaOpen}
+        onClose={() => setModalJerarquiaOpen(false)}
+        circuitData={circuitDataWizard}
+        modo={wizardModo}
+        tipoOrigen="CCM"
+        elementosCreados={[]}
+        onSave={(circuitId, updated) => {
+          if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && ccmData.proyectoId) {
+            crearElementoProvisional(ccmData.proyectoId, {
+              nombre: updated.equipo,
+              tipoElemento: 'TABLERO',
+              circuitoOrigen: circuitId
+            });
+          }
+          updateGaveta(circuitId, 'tagEquipo', updated.equipo);
+        }}
+      />
 
     </div>
   );
