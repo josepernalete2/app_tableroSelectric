@@ -25,19 +25,15 @@ const SafeImage = ({ blob, src, alt, className }) => {
   return <img src={finalSrc} alt={alt} className={className} />;
 };
 import ModalEdicionCircuito from './ModalEdicionCircuito';
-
-
-// Common options for dropdowns
-const AMP_OPTIONS = ['N/A', '10', '15', '20', '30', '40', '50', '60', '70', '80', '90', '100', '125', '150', '175', '200', '225', '250', '300', '350', '400', '500'];
-const COND_OPTIONS = ['N/A', '14', '12', '10', '8', '6', '4', '2', '1/0', '2/0', '3/0', '4/0', '250', '350', '500 MCM', '2X12', '4X12', '3X8 TW', '1X500', 'SOLIDO # 4'];
-const MARCA_OPTIONS = ['GE', 'EATON', 'ABB', 'INESLA', 'MG', 'SQUARE D', 'SIEMENS', 'CUTLER-HAMMER', 'N/A'];
-const TIPO_OPTIONS = ['TQ', 'TQD', 'M35', 'A2C', 'NS', 'TED32', 'M51', 'TM250', 'QO', 'THQL', 'N/A'];
+import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
   const [editingCircuit, setEditingCircuit] = useState(null);
-  const [elementosPorCrear, setElementosPorCrear] = useState([]);
+  const [elementosPorCrear, setElementosPorCrear] = useState(
+    tableroData?.elementosPorCrear || tableroData?.datosTecnicos?.elementosPorCrear || []
+  );
 
-  const { companies, updateTableroAlimentador } = useStore();
+  const { companies, updateTableroAlimentador, crearElementoProvisional } = useStore();
 
   const project = React.useMemo(() => {
     if (!tableroData?.id) return null;
@@ -57,6 +53,31 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const alimentadores = React.useMemo(() => {
     if (!project) return [];
     return (project.elementosUnifilares || project.tableros || []).filter(e => e.id !== tableroData?.id);
+  }, [project, tableroData?.id]);
+
+  const todosElementosCreados = React.useMemo(() => {
+    if (!project) return [];
+    const tableros = (project.elementosUnifilares || project.tableros || []).map(e => ({
+      id: e.id,
+      nombre: e.nombre,
+      tipo: e.tipoElemento || 'TABLERO'
+    }));
+    const subestaciones = (project.subestaciones || project.inspeccionesSubestacion || []).map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      tipo: 'SUBESTACION'
+    }));
+    const puntos = (project.puntosMedicion || []).map(p => ({
+      id: p.id,
+      nombre: p.nombre,
+      tipo: 'PUNTO_MEDICION'
+    }));
+    const ccms = (project.ccmList || []).map(c => ({
+      id: c.id,
+      nombre: c.nombre,
+      tipo: 'CCM'
+    }));
+    return [...tableros, ...subestaciones, ...puntos, ...ccms].filter(e => e.id !== tableroData?.id);
   }, [project, tableroData?.id]);
 
   const renderCircuitEquipo = (equipoText, vinculadoId) => {
@@ -184,6 +205,22 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const saveCircuitFromModal = (circuitId, updatedFields) => {
     if (readOnly) return;
     const newData = { ...tableroData };
+
+    if (updatedFields && updatedFields.tipoDestino === 'SUB_TABLERO_PENDIENTE' && project?.id) {
+      const prov = crearElementoProvisional(project.id, {
+        nombre: updatedFields.equipo && updatedFields.equipo !== 'RESERVA (Pendiente por Crear)'
+          ? updatedFields.equipo
+          : `Sub-Tablero Alimentado (${circuitId})`,
+        tipoElemento: 'TABLERO',
+        circuitoOrigen: circuitId
+      });
+      if (prov) {
+        updatedFields.vinculadoId = prov.id;
+        updatedFields.equipo = `${prov.nombre} (ID: ${prov.id})`;
+        updatedFields.tipoDestino = 'SUB_TABLERO';
+      }
+    }
+
     let currentCircuits = [...(tableroData.circuits || [])];
 
     if (updatedFields === null) {
@@ -211,9 +248,11 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     // Filter out completely empty default circuits to prevent database bloat
     newData.circuits = currentCircuits.filter(c => {
       const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
-      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D';
+      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
       const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
-      return hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino;
+      const hasFicha = c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts);
+      const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
+      return hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino || c.vinculadoId || hasFicha || isMultiPole;
     });
 
     onUpdateTablero(newData);
@@ -1126,8 +1165,29 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         onClose={() => setEditingCircuit(null)}
         circuitData={editingCircuit}
         onSave={saveCircuitFromModal}
+        elementosCreados={todosElementosCreados}
         onAgregarPorCrear={(item) => {
-          setElementosPorCrear((prev) => [...prev, item]);
+          if (project?.id) {
+            const prov = crearElementoProvisional(project.id, {
+              nombre: item.nombre,
+              tipoElemento: 'TABLERO',
+              circuitoOrigen: item.circuitoId
+            });
+            const newItem = prov ? { ...item, id: prov.id, nombre: prov.nombre } : item;
+            const updatedList = [...elementosPorCrear, newItem];
+            setElementosPorCrear(updatedList);
+            onUpdateTablero({
+              ...tableroData,
+              elementosPorCrear: updatedList
+            });
+          } else {
+            const updatedList = [...elementosPorCrear, item];
+            setElementosPorCrear(updatedList);
+            onUpdateTablero({
+              ...tableroData,
+              elementosPorCrear: updatedList
+            });
+          }
         }}
       />
 

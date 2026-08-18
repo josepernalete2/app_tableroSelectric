@@ -2380,9 +2380,80 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         tipoOrigen={tipoElemento}
         elementosCreados={allFeeders}
         onSave={(idSalida, updated) => {
-          if (wizardModo === 'ENTRADA') {
-            setAlimentadoPor(updated.equipo || '');
+          const isEntradaOrPrimaria = wizardModo === 'ENTRADA' || wizardModo === 'PRIMARIA' || idSalida.includes('PRIMARIA');
+
+          let newAlimentadoPor = alimentadoPor;
+          if (isEntradaOrPrimaria && updated.equipo) {
+            newAlimentadoPor = updated.equipo;
+            setAlimentadoPor(updated.equipo);
           }
+
+          let newDt = { ...dt };
+
+          // 1. Transformador Acometidas y tensiones
+          if (tipoElemento === 'TRANSFORMADOR') {
+            const seccionKey = isEntradaOrPrimaria ? 'primaria' : 'secundaria';
+            const prevAc = dt.acometidas?.[seccionKey] || {};
+
+            newDt = {
+              ...newDt,
+              acometidas: {
+                ...(newDt.acometidas || {}),
+                [seccionKey]: {
+                  ...prevAc,
+                  calibre: updated.conductor || prevAc.calibre || '',
+                  fusible: updated.detallesTecnicos?.fusibleMT || prevAc.fusible || '',
+                  pararrayo: updated.detallesTecnicos?.pararrayos || prevAc.pararrayo || '',
+                  observaciones: updated.equipo || prevAc.observaciones || '',
+                  ...(isEntradaOrPrimaria && updated.equipo?.includes('POSTE') ? { aerea: true } : {})
+                }
+              }
+            };
+
+            if (updated.detallesTecnicos?.nivelMT) {
+              newDt.tensionPrimaria = updated.detallesTecnicos.nivelMT;
+              newDt.voltajePrimario = updated.detallesTecnicos.nivelMT;
+            }
+            if (updated.detallesTecnicos?.tensionSecundaria) {
+              newDt.tensionSecundaria = updated.detallesTecnicos.tensionSecundaria;
+              newDt.voltajeSecundario = updated.detallesTecnicos.tensionSecundaria;
+            }
+          }
+
+          // 2. Generador / Planta Eléctrica
+          if (tipoElemento === 'GENERADOR') {
+            if (updated.breaker?.amp) newDt.amperaje = updated.breaker.amp;
+            if (updated.detallesTecnicos?.potenciaKvaKw) newDt.potenciaKva = updated.detallesTecnicos.potenciaKvaKw;
+          }
+
+          // 3. Transfer (ATS)
+          if (tipoElemento === 'TRANSFER') {
+            if (idSalida.includes('ATS_GEN1')) {
+              newDt.alimentacionGenerador1 = updated.conductor || updated.equipo || newDt.alimentacionGenerador1;
+            } else if (idSalida.includes('ATS_GEN2')) {
+              newDt.alimentacionGenerador2 = updated.conductor || updated.equipo || newDt.alimentacionGenerador2;
+            } else if (idSalida.includes('ATS_CARGA')) {
+              newDt.carga = updated.conductor || updated.equipo || newDt.carga;
+            }
+          }
+
+          // Merge additional technical details
+          if (updated.detallesTecnicos) {
+            newDt = { ...newDt, ...updated.detallesTecnicos };
+          }
+
+          setDt(newDt);
+
+          // Persistir inmediatamente en el Store
+          if (onUpdate) {
+            onUpdate({
+              ...elementoData,
+              alimentadoPor: newAlimentadoPor,
+              datosTecnicos: newDt
+            });
+          }
+
+          // Elemento provisional pendiente
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && elementoData?.proyectoId) {
             crearElementoProvisional(elementoData.proyectoId, {
               nombre: updated.equipo,

@@ -781,7 +781,11 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
               circuitoOrigen: circuitId
             });
           }
-          updateGaveta(circuitId, 'tagEquipo', updated.equipo);
+          if (updated.equipo) updateGaveta(circuitId, 'tagEquipo', updated.equipo);
+          if (updated.detallesTecnicos?.esquemaArranque) updateGaveta(circuitId, 'tipoArranque', updated.detallesTecnicos.esquemaArranque);
+          if (updated.detallesTecnicos?.hpKw) updateGaveta(circuitId, 'hpKw', updated.detallesTecnicos.hpKw);
+          if (updated.detallesTecnicos?.proteccion || updated.breaker?.amp) updateGaveta(circuitId, 'proteccion', updated.detallesTecnicos?.proteccion || updated.breaker?.amp);
+          if (updated.detallesTecnicos?.redComms) updateGaveta(circuitId, 'redComms', updated.detallesTecnicos.redComms);
         }}
       />
 
