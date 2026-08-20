@@ -984,19 +984,43 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </h2>
           </div>
 
-          {/* Fila 1: Ubicación */}
-          <div className="border-b border-slate-700 p-3 bg-slate-900/60 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black">
-            <span className="font-bold uppercase text-slate-400 print:text-black mr-2">UBICACIÓN:</span>
-            {isEditing ? (
-              <input
-                type="text"
-                value={ubicacion}
-                onChange={(e) => setUbicacion(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-3/4 focus:outline-none focus:border-violet-500"
-              />
-            ) : (
-              <span className="font-semibold">{ubicacion || '—'}</span>
-            )}
+          {/* Fila 1: ID Elemento, Alimentado Por y Ubicación */}
+          <div className="border-b border-slate-700 p-3 bg-slate-900/60 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <span className="font-bold uppercase text-slate-400 print:text-black mr-1.5">ID ELEMENTO:</span>
+                <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 print:text-black print:border-black">
+                  {elementoData.id || '—'}
+                </span>
+              </div>
+              <div>
+                <span className="font-bold uppercase text-slate-400 print:text-black mr-1.5">ALIMENTADO POR:</span>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={alimentadoPor}
+                    onChange={(e) => setAlimentadoPor(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
+                    placeholder="Ej. PCC / Acometida 1"
+                  />
+                ) : (
+                  <span className="font-semibold">{alimentadoPor || '—'}</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <span className="font-bold uppercase text-slate-400 print:text-black mr-1.5">UBICACIÓN:</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={ubicacion}
+                  onChange={(e) => setUbicacion(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
+                />
+              ) : (
+                <span className="font-semibold">{ubicacion || '—'}</span>
+              )}
+            </div>
           </div>
 
           {/* Tabla de Especificaciones */}
@@ -1051,18 +1075,34 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   {isEditing ? (
                     <input
                       type="text"
+                      maxLength={4}
                       value={dt.potenciaKva || dt.kva || ''}
                       onChange={(e) => {
-                        handleDtChange('potenciaKva', e.target.value);
-                        handleDtChange('kva', e.target.value);
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        handleDtChange('potenciaKva', val);
+                        handleDtChange('kva', val);
                       }}
+                      placeholder="Ej. 500"
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-violet-400 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
                     dt.potenciaKva || dt.kva || '—'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">KVA</td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">
+                  {isEditing ? (
+                    <select
+                      value={dt.unidadPotencia || 'kVA'}
+                      onChange={(e) => handleDtChange('unidadPotencia', e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500 text-center"
+                    >
+                      <option value="kVA">kVA</option>
+                      <option value="MVA">MVA</option>
+                    </select>
+                  ) : (
+                    dt.unidadPotencia || 'kVA'
+                  )}
+                </td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">IMPEDANCIA</td>
@@ -1121,32 +1161,31 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       type="text"
                       value={dt.tensionPrimaria || dt.voltajePrimario || ''}
                       onChange={(e) => {
-                        handleDtChange('tensionPrimaria', e.target.value);
-                        handleDtChange('voltajePrimario', e.target.value);
+                        const val = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+                        handleDtChange('tensionPrimaria', val);
+                        handleDtChange('voltajePrimario', val);
                       }}
+                      placeholder="Ej. 13.8"
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
                     dt.tensionPrimaria || dt.voltajePrimario || '—'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">VOL</td>
-              </tr>
-              <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS PRIM.</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                <td className="p-2.5 text-center text-slate-400 print:text-black">
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.amperiosPrimaria || ''}
-                      onChange={(e) => handleDtChange('amperiosPrimaria', e.target.value)}
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
-                    />
+                    <select
+                      value={dt.unidadTensionPrimaria || 'kV'}
+                      onChange={(e) => handleDtChange('unidadTensionPrimaria', e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500 text-center"
+                    >
+                      <option value="kV">kV</option>
+                      <option value="V">V</option>
+                    </select>
                   ) : (
-                    dt.amperiosPrimaria || '—'
+                    dt.unidadTensionPrimaria || 'kV'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TENSIÓN SECUNDARIA</td>
@@ -1156,16 +1195,18 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       type="text"
                       value={dt.tensionSecundaria || dt.voltajeSecundario || ''}
                       onChange={(e) => {
-                        handleDtChange('tensionSecundaria', e.target.value);
-                        handleDtChange('voltajeSecundario', e.target.value);
+                        const val = e.target.value.replace(/[^0-9/]/g, '');
+                        handleDtChange('tensionSecundaria', val);
+                        handleDtChange('voltajeSecundario', val);
                       }}
+                      placeholder="Ej. 208/120"
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
                     dt.tensionSecundaria || dt.voltajeSecundario || '—'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">VOL</td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">V</td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS SEC.</td>
@@ -1182,54 +1223,6 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   )}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
-              </tr>
-              <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AISLAMIENTO</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.aislamiento || ''}
-                      onChange={(e) => handleDtChange('aislamiento', e.target.value)}
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
-                    />
-                  ) : (
-                    dt.aislamiento || '—'
-                  )}
-                </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">KV</td>
-              </tr>
-              <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">ACEITE</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.aceite || ''}
-                      onChange={(e) => handleDtChange('aceite', e.target.value)}
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
-                    />
-                  ) : (
-                    dt.aceite || '—'
-                  )}
-                </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">GALONES</td>
-              </tr>
-              <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">SECO</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.seco || ''}
-                      onChange={(e) => handleDtChange('seco', e.target.value)}
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
-                    />
-                  ) : (
-                    dt.seco || '—'
-                  )}
-                </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">—</td>
               </tr>
             </tbody>
           </table>
@@ -1259,7 +1252,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 print:divide-gray-300">
-              {['primaria', 'secundaria', 'neutro'].map((seccion) => {
+              {['primaria', 'secundaria'].map((seccion) => {
                 const ac = dt.acometidas?.[seccion] || { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' };
                 return (
                   <tr key={seccion} className="print:text-black">
@@ -1270,11 +1263,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                           type="button"
                           onClick={() => {
                             const isEntrada = seccion === 'primaria';
-                            setWizardModo(isEntrada ? 'ENTRADA' : 'SALIDA');
+                            setWizardModo(isEntrada ? 'ENTRADA' : 'SECUNDARIA');
                             setCircuitDataWizard({
                               id: `TRANSFORMADOR_${seccion.toUpperCase()}`,
                               nombre: `Transformador - Acometida ${seccion.toUpperCase()}`,
-                              equipo: isEntrada ? alimentadoPor : '',
+                              equipo: isEntrada ? alimentadoPor : (ac.observaciones || ''),
                               poles: [3],
                               breaker: { amp: '', marca: '', tipo: '' }
                             });

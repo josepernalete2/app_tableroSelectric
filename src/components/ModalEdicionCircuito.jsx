@@ -63,6 +63,9 @@ export const ModalEdicionCircuito = ({
   // Búsqueda y vinculación
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLink, setSelectedLink] = useState(null);
+  const [selectedLinks, setSelectedLinks] = useState([]);
+
+  const isMultiSelect = tipoOrigen === 'TRANSFORMADOR' && (modo === 'SECUNDARIA' || modo === 'SALIDA');
 
   // Rótulo y foto
   const [rotulo, setRotulo] = useState('');
@@ -70,7 +73,7 @@ export const ModalEdicionCircuito = ({
 
   // Campos Equipos de Potencia / Trafo / Gen / ATS / CCM / Punto Medicion / Puesta Tierra
   const [nivelMT, setNivelMT] = useState('13.8 kV');
-  const [fusibleMT, setFusibleMT] = useState('15A Curva K');
+  const [fusibleMT, setFusibleMT] = useState('');
   const [pararrayos, setPararrayos] = useState('Sí');
   const [canalizacion, setCanalizacion] = useState('Bandeja Portacables');
   const [esquemaArranque, setEsquemaArranque] = useState('Directo (DOL)');
@@ -98,15 +101,13 @@ export const ModalEdicionCircuito = ({
       setDescArtefacto(circuitData.ficha?.descripcion || '');
       setPotenciaWatts(circuitData.ficha?.potenciaWatts || '');
       setRotulo(circuitData.equipo || circuitData.nombre || '');
-      setFotoUrl(circuitData.fotografia || null);
+      setSelectedLinks([]);
+      setSelectedLink(null);
 
-      setNumPolos(circuitData.poles?.length || circuitData.numPolos || 1);
-      setPosicionPolo(circuitData.poles?.[0] || circuitData.posicionPolo || 1);
-      setEstado(circuitData.estado || 'ACTIVO');
-
+      // Cargar otros campos técnicos si existen
       const dt = circuitData.detallesTecnicos || {};
       if (dt.nivelMT) setNivelMT(dt.nivelMT);
-      if (dt.fusibleMT) setFusibleMT(dt.fusibleMT);
+      if (dt.fusibleMT !== undefined) setFusibleMT(dt.fusibleMT);
       if (dt.pararrayos) setPararrayos(dt.pararrayos);
       if (dt.canalizacion) setCanalizacion(dt.canalizacion);
       if (dt.esquemaArranque) setEsquemaArranque(dt.esquemaArranque);
@@ -144,7 +145,7 @@ export const ModalEdicionCircuito = ({
       } else {
         if (tipoOrigen === 'TRANSFORMADOR') {
           if (modo === 'ENTRADA' || modo === 'PRIMARIA') setStep('PREGUNTA_ORIGEN_MT');
-          else setStep('PREGUNTA_DESTINO_BT');
+          else setStep('VINCULAR_EXISTENTE');
         } else if (tipoOrigen === 'GENERADOR') {
           setStep('PREGUNTA_DESTINO_GEN');
         } else if (tipoOrigen === 'TRANSFER') {
@@ -259,6 +260,13 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveVinculo = (linkElement) => {
+    if (isMultiSelect) {
+      if (selectedLinks.length === 0) return alert('Por favor, selecciona al menos un elemento para vincular.');
+      const names = selectedLinks.map(el => `${el.nombre} (ID: ${el.id})`).join(', ');
+      const ids = selectedLinks.map(el => el.id).join(', ');
+      handleSaveEquipment(names, 'SUB_TABLERO', { vinculadoId: ids, vinculados: selectedLinks });
+      return;
+    }
     const el = linkElement || selectedLink;
     if (!el) return alert('Por favor, selecciona un elemento para vincular.');
     handleSaveEquipment(`${el.nombre} (ID: ${el.id})`, 'SUB_TABLERO', { vinculadoId: el.id });
@@ -1411,15 +1419,20 @@ export const ModalEdicionCircuito = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Buscar Elemento Creado en el Proyecto
+                  {isMultiSelect ? 'Seleccionar Elemento(s) Creado(s) en el Proyecto' : 'Buscar Elemento Creado en el Proyecto'}
                 </label>
+                {isMultiSelect && (
+                  <p className="text-[11px] text-amber-400 font-semibold mb-2">
+                    ✓ Puedes seleccionar varios elementos alimentados por esta acometida secundaria.
+                  </p>
+                )}
                 <div className="relative">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
-                      setSelectedLink(null);
+                      if (!isMultiSelect) setSelectedLink(null);
                     }}
                     placeholder="Escribe el nombre o ID del elemento..."
                     className="w-full pl-10 pr-4 py-2 border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
@@ -1430,24 +1443,49 @@ export const ModalEdicionCircuito = ({
 
               <div className="border border-slate-800 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-800 bg-slate-950">
                 {filteredElements.length > 0 ? (
-                  filteredElements.map((el) => (
-                    <button
-                      key={el.id}
-                      onClick={() => {
-                        setSelectedLink(el);
-                        setSearchQuery(el.nombre);
-                      }}
-                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-900 flex justify-between items-center transition-colors cursor-pointer ${
-                        selectedLink?.id === el.id ? 'bg-amber-500/10 hover:bg-amber-500/15' : ''
-                      }`}
-                    >
-                      <div>
-                        <p className="font-semibold text-slate-200">{el.nombre}</p>
-                        <p className="text-[10px] text-amber-500 font-mono">ID: {el.id} {el.tipo ? `• [${el.tipo}]` : ''}</p>
-                      </div>
-                      {selectedLink?.id === el.id && <Check className="w-4 h-4 text-amber-500" />}
-                    </button>
-                  ))
+                  filteredElements.map((el) => {
+                    const isSelected = isMultiSelect
+                      ? selectedLinks.some(item => item.id === el.id)
+                      : selectedLink?.id === el.id;
+
+                    return (
+                      <button
+                        key={el.id}
+                        type="button"
+                        onClick={() => {
+                          if (isMultiSelect) {
+                            if (selectedLinks.some(item => item.id === el.id)) {
+                              setSelectedLinks(selectedLinks.filter(item => item.id !== el.id));
+                            } else {
+                              setSelectedLinks([...selectedLinks, el]);
+                            }
+                          } else {
+                            setSelectedLink(el);
+                            setSearchQuery(el.nombre);
+                          }
+                        }}
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-900 flex justify-between items-center transition-colors cursor-pointer ${
+                          isSelected ? 'bg-amber-500/10 hover:bg-amber-500/15' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {isMultiSelect && (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                            />
+                          )}
+                          <div>
+                            <p className="font-semibold text-slate-200">{el.nombre}</p>
+                            <p className="text-[10px] text-amber-500 font-mono">ID: {el.id} {el.tipo ? `• [${el.tipo}]` : ''}</p>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-amber-500" />}
+                      </button>
+                    );
+                  })
                 ) : (
                   <div className="p-4 text-center text-xs text-slate-400">
                     No se encontraron elementos con ese nombre.
@@ -1458,10 +1496,12 @@ export const ModalEdicionCircuito = ({
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
                   onClick={() => handleSaveVinculo()}
-                  disabled={!selectedLink}
+                  disabled={isMultiSelect ? selectedLinks.length === 0 : !selectedLink}
                   className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
                 >
-                  Vincular y Guardar
+                  {isMultiSelect
+                    ? `Vincular ${selectedLinks.length} Elemento${selectedLinks.length === 1 ? '' : 's'} y Guardar`
+                    : 'Vincular y Guardar'}
                 </button>
               </div>
             </div>

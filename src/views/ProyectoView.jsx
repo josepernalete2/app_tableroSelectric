@@ -1580,9 +1580,10 @@ export const ProyectoView = () => {
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transformador</label>
                       <select value={tipoTrafo} onChange={(e) => setTipoTrafo(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                        <option value="Pedestal">Pedestal</option>
-                        <option value="Seco">Seco / Uso Interior</option>
-                        <option value="Poste">Montaje en Poste</option>
+                        <option value="Aceite">Aceite (Sumergido / Exterior)</option>
+                        <option value="Seco">Seco (Encapsulado / Interior)</option>
+                        <option value="Pedestal">Pedestal (Aceite)</option>
+                        <option value="Poste">Montaje en Poste (Aceite)</option>
                       </select>
                     </div>
                     <div>
