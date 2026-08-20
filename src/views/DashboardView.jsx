@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
+import NotificationButton from '../components/NotificationButton';
 import { 
   Folder, 
   FolderPlus, 
@@ -10,6 +11,7 @@ import {
   X, 
   Search 
 } from 'lucide-react';
+
 
 export const DashboardView = () => {
   const { user, companies, addCompany, deleteCompany } = useStore();
@@ -92,6 +94,10 @@ export const DashboardView = () => {
             )}
           </div>
         </div>
+
+        {/* Panel de Notificaciones Push Nativas PWA */}
+        <NotificationButton />
+
 
         {/* Empresas Folder Grid */}
         {(() => {

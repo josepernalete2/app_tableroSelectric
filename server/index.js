@@ -12,6 +12,7 @@ import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import tableroRoutes from './routes/tableroRoutes.js';
+import pushRoutes from './routes/pushRoutes.js';
 
 dotenv.config();
 
@@ -55,6 +56,9 @@ app.use(express.json());
 
 // Servir archivos de uploads
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+
+// Endpoints de Notificaciones Push
+app.use('/api/notifications', pushRoutes);
 
 // Endpoints Principales de la Inspección Eléctrica (Bajo el prefijo /api)
 app.use('/api', tableroRoutes);
