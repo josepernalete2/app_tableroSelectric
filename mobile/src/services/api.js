@@ -1,14 +1,21 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 /**
- * Base URL adaptable para entorno React Native / Expo:
- * - En Android Emulator: usa 'http://10.0.2.2:5000/api'
- * - En iOS Simulator / Web: usa 'http://localhost:5000/api'
- * - En Dispositivo Físico Expo Go: Reemplazar por IP Local de la red (ej: http://192.168.1.50:5000/api)
+ * Obtener la IP de la máquina local automáticamente desde Expo Go:
  */
-const DEFAULT_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${DEFAULT_HOST}:5000/api`;
+const getLocalHost = () => {
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    if (ip) return ip;
+  }
+  return Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.128';
+};
+
+const HOST_IP = getLocalHost();
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${HOST_IP}:5000/api`;
 
 const api = axios.create({
   baseURL: BASE_URL,

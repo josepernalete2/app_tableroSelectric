@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   FlatList,
   TextInput,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Alert,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import useStore from '../store/useStore';
 
 export default function DashboardScreen({ navigation }) {
