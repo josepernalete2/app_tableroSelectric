@@ -97,6 +97,10 @@ model ElementoUnifilar {
   estadoVinculo          EstadoVinculo     @default(ACTIVO)
   detallesFormato        Json?
 
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version                Int               @default(1)
+  deletedAt              DateTime?
+
   // Relaciones
   proyectoId             String
   proyecto               Proyecto          @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
@@ -107,6 +111,7 @@ model ElementoUnifilar {
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
+  @@index([proyectoId])
   @@index([empresaId])
   @@index([alimentadoPorId])
   @@map("elementos_unifilares")
@@ -131,6 +136,10 @@ model Subestacion {
   firmaInspector     String?
   firmaSupervisor    String?
 
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version            Int      @default(1)
+  deletedAt          DateTime?
+
   // Relaciones
   proyectoId         String
   proyecto           Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
@@ -141,6 +150,7 @@ model Subestacion {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  @@index([proyectoId])
   @@index([empresaId])
   @@map("inspecciones_subestacion")
 }
@@ -156,6 +166,7 @@ model Alimentador {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  @@index([proyectoId])
   @@map("alimentadores")
 }
 
@@ -173,9 +184,17 @@ model Tablero {
   proyecto      Proyecto   @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   empresaId     String?
   empresa       Empresa?   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version       Int        @default(1)
+  deletedAt     DateTime?
+
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
+  @@index([proyectoId])
+  @@index([empresaId])
+  @@index([alimentadorId])
   @@map("tableros")
 }
 
@@ -188,9 +207,16 @@ model Circuito {
   amperaje     Float?
   descripcion  String?
   estado       String   @default("ACTIVO") // "ACTIVO", "RESERVA", "DISPONIBLE"
+
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version      Int      @default(1)
+  deletedAt    DateTime?
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@index([tableroId])
+  @@index([tableroId, posicionPolo])
   @@map("circuitos")
 }
 
@@ -259,6 +285,10 @@ model PuntoMedicion {
   firmaInspector          String?
   firmaSupervisor         String?
 
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version                 Int      @default(1)
+  deletedAt               DateTime?
+
   // Relaciones
   proyectoId              String
   proyecto                Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
@@ -269,6 +299,7 @@ model PuntoMedicion {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
+  @@index([proyectoId])
   @@index([empresaId])
   @@map("puntos_medicion")
 }
@@ -296,6 +327,10 @@ model Ccm {
   firmaInspector            String?
   firmaSupervisor           String?
 
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version                   Int      @default(1)
+  deletedAt                 DateTime?
+
   // Relaciones
   proyectoId                String
   proyecto                  Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
@@ -306,6 +341,7 @@ model Ccm {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
+  @@index([proyectoId])
   @@index([empresaId])
   @@map("centros_control_motores")
 }

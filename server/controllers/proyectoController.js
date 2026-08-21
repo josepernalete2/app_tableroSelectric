@@ -90,8 +90,20 @@ export const crearProyecto = async (req, res, next) => {
     }
 
     // Inserción / Upsert del proyecto en PostgreSQL con autocreado de empresa si no existe
+    const empresaExiste = await prisma.empresa.findUnique({
+      where: { id: empresaId }
+    });
+
+    if (!empresaExiste) {
+      return res.status(422).json({
+        ok: false,
+        error: 'Dependencia inexistente',
+        detalle: 'La empresa padre debe existir previamente en el servidor'
+      });
+    }
+
     const nuevoProyecto = await prisma.proyecto.upsert({
-      where: { id },
+      where: { id: id || 'temp-id' },
       update: {
         nombre,
         descripcion: descripcion || null,
@@ -109,16 +121,7 @@ export const crearProyecto = async (req, res, next) => {
         responsableTelefono: responsableTelefono || null,
         responsableEmail: responsableEmail || null,
         empresa: {
-          connectOrCreate: {
-            where: { id: empresaId },
-            create: {
-              id: empresaId,
-              nombre: 'Empresa ' + empresaId,
-              direccion: 'Registrada por Sincronización',
-              direccionFiscal: 'Registrada por Sincronización',
-              rif: 'J-AUTO-' + String(empresaId || '').slice(0, 8)
-            }
-          }
+          connect: { id: empresaId }
         }
       }
     });

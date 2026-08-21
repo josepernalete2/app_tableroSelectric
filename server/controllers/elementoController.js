@@ -27,45 +27,16 @@ export const crearElementoUnifilar = async (req, res, next) => {
       });
     }
 
-    // 2. Comprobación de existencia del Proyecto en PostgreSQL (Auto-creado si viene empresaId)
     let proyectoExiste = await prisma.proyecto.findUnique({
       where: { id: proyectoId }
     });
 
-    if (!proyectoExiste && empresaId) {
-      try {
-        proyectoExiste = await prisma.proyecto.upsert({
-          where: { id: proyectoId },
-          update: {},
-          create: {
-            id: proyectoId,
-            nombre: 'Proyecto ' + String(proyectoId || '').slice(0, 8),
-            descripcion: 'Registrado automáticamente desde sincronización de elemento',
-            direccion: 'Registrado por Sincronización',
-            empresa: {
-              connectOrCreate: {
-                where: { id: empresaId },
-                create: {
-                  id: empresaId,
-                  nombre: 'Empresa ' + empresaId,
-                  rif: 'J-AUTO-' + String(empresaId || '').slice(0, 8),
-                  direccionFiscal: 'Registrada por Sincronización',
-                  direccion: 'Registrada por Sincronización'
-                }
-              }
-            }
-          }
-        });
-      } catch (err) {
-        console.error('Error al auto-crear el proyecto padre:', err);
-      }
-    }
-
     if (!proyectoExiste) {
-      console.warn(`[AF WARNING] El proyecto con ID '${proyectoId}' no existe en el servidor todavía.`);
+      console.warn(`[AF WARNING] El proyecto con ID '${proyectoId}' no existe en el servidor.`);
       return res.status(422).json({
-        error: 'Falta dependencia',
-        detalle: 'El proyecto asociado no existe en el servidor todavía'
+        ok: false,
+        error: 'Dependencia inexistente',
+        detalle: 'El proyecto padre debe existir previamente en el servidor'
       });
     }
 

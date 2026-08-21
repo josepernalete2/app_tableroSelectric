@@ -30,26 +30,111 @@ export function useSync() {
     }
   }, [isOnline, syncQueue]);
 
+  const sincronizarLote = async (mutaciones) => {
+    try {
+      const token = useStore.getState().token;
+      const response = await fetch(`${API_BASE_URL}/api/sync/batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ mutations: mutaciones })
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return { success: false, status: response.status };
+      }
+
+      if (!response.ok) {
+        return { success: false, status: response.status };
+      }
+
+      const json = await response.json();
+      return { success: true, data: json };
+    } catch (err) {
+      console.error('Error en sincronizarLote:', err);
+      return { success: false, status: 'NETWORK_ERROR' };
+    }
+  };
+
   const procesarColaSincronizacion = async () => {
     if (isSyncingRef.current) return;
 
     isSyncingRef.current = true;
     setIsSyncing(true);
 
-    // Iteración secuencial respetando el orden FIFO y la jerarquía relacional
+    const currentQueue = [...useStore.getState().syncQueue];
+    if (currentQueue.length === 0) {
+      setIsSyncing(false);
+      isSyncingRef.current = false;
+      return;
+    }
+
+    // Separar elementos sin archivos para sincronización en lote (batch) y elementos con archivos
+    const jsonMutations = [];
+    const queueItemsMap = new Map();
+
+    for (const item of currentQueue) {
+      if (!item) continue;
+      
+      // Si el elemento tiene un archivo de imagen fotoBlob, debe enviarse via FormData
+      if (item.payload && item.payload.fotoBlob) {
+        continue;
+      }
+
+      let entityName = 'Tablero';
+      if (item.tipo === 'PROYECTO') entityName = 'Proyecto';
+      else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') entityName = 'ElementoUnifilar';
+      else if (item.tipo === 'SUBESTACION') entityName = 'Subestacion';
+      else if (item.tipo === 'PUNTO_MEDICION') entityName = 'PuntoMedicion';
+      else if (item.tipo === 'CCM') entityName = 'Ccm';
+
+      jsonMutations.push({
+        entity: entityName,
+        id: item.payload?.id || item.id,
+        operation: item.operation || 'UPSERT',
+        baseVersion: item.payload?.version || 1,
+        data: item.payload
+      });
+      queueItemsMap.set(item.payload?.id || item.id, item.id);
+    }
+
+    if (jsonMutations.length > 0) {
+      const batchRes = await sincronizarLote(jsonMutations);
+
+      if (batchRes.success) {
+        // Remover del queue local los elementos procesados exitosamente
+        (batchRes.data.applied || []).forEach(appItem => {
+          const queueId = queueItemsMap.get(appItem.id);
+          if (queueId) removeFromQueue(queueId);
+        });
+
+        // Notificar en consola si hubo conflictos OCC
+        if (batchRes.data.conflicts && batchRes.data.conflicts.length > 0) {
+          console.warn('⚠️ Se detectaron conflictos OCC al sincronizar:', batchRes.data.conflicts);
+        }
+      } else if (batchRes.status === 401 || batchRes.status === 403) {
+        console.warn(`[SYNC AUTH] Error HTTP ${batchRes.status}: Sesión expirada. Pausando sincronización.`);
+        setIsSyncing(false);
+        isSyncingRef.current = false;
+        return;
+      }
+    }
+
+    // Procesar secuencialmente elementos restantes (ej. aquellos con fotos)
     while (useStore.getState().syncQueue.length > 0) {
       if (!navigator.onLine) {
         setIsOnline(false);
-        break; // Detener si la conexión se interrumpe físicamente durante la iteración
+        break;
       }
 
-      const currentQueue = useStore.getState().syncQueue;
-      const item = currentQueue[0];
-
+      const queueNow = useStore.getState().syncQueue;
+      const item = queueNow[0];
       if (!item) break;
 
       let res = null;
-
       if (item.tipo === 'PROYECTO') {
         res = await sincronizarProyecto(item.companyId, item.payload);
       } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') {
@@ -64,83 +149,13 @@ export function useSync() {
 
       if (res) {
         if (res.success) {
-          // Éxito: borrar inmediatamente de la cola en Zustand + IndexedDB
           removeFromQueue(item.id);
         } else {
-          if (res.status === 'NETWORK_ERROR') {
-            // Error de red física: pausar la cola para reintentar cuando regrese la conexión
-            break;
-          } else if (res.status === 401 || res.status === 403) {
-            // Error de Autenticación / Sesión Expirada: NO borrar de la cola local
-            console.warn(`[SYNC AUTH] Error HTTP ${res.status}: Sesión expirada o no autorizada. Pausando cola para conservar datos locales.`);
-            alert(`Su sesión de usuario ha expirado o requiere autenticación (Código HTTP ${res.status}).\n\nLos datos permanecerán guardados de forma segura localmente. Por favor, vuelva a iniciar sesión para sincronizar con el servidor.`);
-            break;
-          } else if (res.status === 422) {
-            // BLOQUEO POR DEPENDENCIA: El proyecto padre no existe en PostgreSQL aún
-            const parentId = item.payload?.proyectoId;
-            let parentCompanyId = item.companyId;
-            let parentTaskPayload = null;
-
-            // 1. Buscar si la tarea PROYECTO está en la cola local
-            const parentTaskInQueue = currentQueue.find(
-              (q) => q.tipo === 'PROYECTO' && q.id === parentId
-            );
-
-            if (parentTaskInQueue) {
-              parentCompanyId = parentTaskInQueue.companyId;
-              parentTaskPayload = parentTaskInQueue.payload;
-            } else {
-              // 2. Buscar si el proyecto existe en las empresas locales del store
-              const companies = useStore.getState().companies || [];
-              for (const comp of companies) {
-                const proj = (comp.proyectos || []).find((p) => p.id === parentId);
-                if (proj) {
-                  parentCompanyId = comp.id;
-                  parentTaskPayload = proj;
-                  break;
-                }
-              }
-            }
-
-            if (parentId && parentTaskPayload) {
-              console.warn(`[AUTO RESOLVER 422] Sincronizando proyecto padre ${parentId} de inmediato para desatascar hijo ${item.id}...`);
-              
-              const parentRes = await sincronizarProyecto(parentCompanyId, parentTaskPayload);
-
-              if (parentRes.success) {
-                if (parentTaskInQueue) {
-                  removeFromQueue(parentTaskInQueue.id);
-                }
-                // Reintentar inmediatamente la sincronización del hijo ahora que el padre fue creado en PostgreSQL
-                const retryRes = item.tipo === 'SUBESTACION' 
-                  ? await sincronizarSubestacion(item.companyId, item.payload)
-                  : await sincronizarElementoUnifilar(item.companyId, item.payload);
-
-                if (retryRes.success) {
-                  removeFromQueue(item.id);
-                } else {
-                  console.error(`Fallo reintento de elemento tras crear proyecto padre (HTTP ${retryRes.status})`);
-                  removeFromQueue(item.id);
-                }
-              } else {
-                console.error(`Fallo la creación del proyecto padre ${parentId}`);
-                removeFromQueue(item.id);
-              }
-            } else {
-              // El proyecto no existe localmente ni en cola
-              console.error(`Error 422: El proyecto asociado con ID ${parentId} no existe.`);
-              alert(`Error de validación: El proyecto de destino no existe en la base de datos del servidor.\n\nDetalle: Se removió el elemento para evitar atascos.`);
-              removeFromQueue(item.id);
-            }
-          } else {
-            // Errores definitivos (400, 500, etc.): retirar y notificar
-            console.error(`Error definitivo (HTTP ${res.status}) al sincronizar elemento con ID: ${item.id}`);
-            alert(`Error de validación al sincronizar con el servidor.\n\nCódigo de error: ${res.status}\n\nDetalle: Se removió de la cola para evitar atascos.`);
-            removeFromQueue(item.id);
-          }
+          if (res.status === 'NETWORK_ERROR') break;
+          if (res.status === 401 || res.status === 403) break;
+          removeFromQueue(item.id);
         }
       } else {
-        // Tipo no reconocido: limpiar de la cola
         removeFromQueue(item.id);
       }
     }

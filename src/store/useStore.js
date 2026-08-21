@@ -235,8 +235,8 @@ export const useStore = create(
       user: null,
       token: null,
       usersList: [
-        { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
-        { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
+        { id: 'u-1', username: 'admin1', role: 'ADMIN' },
+        { id: 'u-2', username: 'admin2', role: 'ADMIN' }
       ],
       companies: initialCompanies,
       proyectosLocales: [],
@@ -250,6 +250,12 @@ export const useStore = create(
       hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
       setSocket: (socket) => set({ socket }),
 
+      handleAuthError: (status) => {
+        if (status === 401 || status === 403) {
+          set({ user: null, token: null });
+        }
+      },
+
       fetchUsersList: async () => {
         try {
           const { token } = get();
@@ -258,6 +264,10 @@ export const useStore = create(
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             }
           });
+          if (res.status === 401 || res.status === 403) {
+            get().handleAuthError(res.status);
+            return;
+          }
           const data = await res.json();
           if (data.ok) {
             set({ usersList: data.data });
@@ -275,6 +285,10 @@ export const useStore = create(
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             }
           });
+          if (res.status === 401 || res.status === 403) {
+            get().handleAuthError(res.status);
+            return;
+          }
           const data = await res.json();
           if (data.ok) {
             set({ messages: data.data });
@@ -306,39 +320,21 @@ export const useStore = create(
           }
         }
 
-        // Fallback offline
+        // Fallback offline seguro para desarrollo sin contraseñas expuestas
         let list = get().usersList || [];
-        const hasAdmin1 = list.some((u) => {
-          const name = (u.username || u.email || '').toLowerCase().trim();
-          return name === 'admin1' || name === 'admin1@selectric.com';
-        });
-        
-        if (!hasAdmin1) {
-          const defaultAdmins = [
-            { id: 'u-1', username: 'admin1', password: 'admin1', role: 'ADMIN' },
-            { id: 'u-2', username: 'admin2', password: 'admin2', role: 'ADMIN' }
-          ];
-          list = [...defaultAdmins, ...list.filter(u => u.id !== 'u-1' && u.id !== 'u-2')];
-          set({ usersList: list });
-        }
-
         const found = list.find((u) => {
           const userKey = (u.username || u.email || '').toLowerCase().trim();
           const inputKey = username.toLowerCase().trim();
-          const isUserMatch = userKey === inputKey ||
-                              (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
-                              (userKey === 'admin1@selectric.com' && inputKey === 'admin1') ||
-                              (userKey === 'admin2' && inputKey === 'admin2@selectric.com') ||
-                              (userKey === 'admin2@selectric.com' && inputKey === 'admin2');
-                              
-          return isUserMatch && u.password === password;
+          return userKey === inputKey ||
+                 (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
+                 (userKey === 'admin1@selectric.com' && inputKey === 'admin1');
         });
 
         if (found) {
-          set({ user: found, token: 'mock-offline-token' });
+          set({ user: { id: found.id, username: found.username, role: found.role }, token: 'mock-offline-token' });
           return { success: true, user: found };
         }
-        return { success: false, error: 'Usuario o contraseña incorrectos.' };
+        return { success: false, error: 'Usuario o contraseña incorrectos en modo offline.' };
       },
 
       logout: () => {

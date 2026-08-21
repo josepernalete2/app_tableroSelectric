@@ -1,10 +1,8 @@
 import { Router } from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 
 // Middlewares
-import { verificarToken } from '../middleware/authMiddleware.js';
+import { verificarToken, requireRoles } from '../middleware/authMiddleware.js';
+import { uploadFotoInspeccion } from '../middleware/uploadMiddleware.js';
 
 // Controladores
 import { loginUsuario, obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
@@ -19,26 +17,7 @@ import { crearElementoUnifilar, eliminarElementoUnifilar } from '../controllers/
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto } from '../controllers/jerarquiaController.js';
-
-// Asegurar directorio public/uploads
-const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configuración de Multer para carga de archivos
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
-});
-
-const upload = multer({ storage });
+import { procesarSincronizacionBatch } from '../controllers/syncController.js';
 
 const router = Router();
 
@@ -48,70 +27,72 @@ router.post('/login', loginUsuario);
 // A partir de aquí todas las rutas requieren autenticación JWT
 router.use(verificarToken);
 
-// Rutas de Empresas
+// Rutas de Empresas (Lectura: Todos los autenticados; Escritura: ADMIN y WORKER)
 router.get('/empresas', obtenerEmpresas);
-router.post('/empresas', crearEmpresa);
 router.get('/empresas/:id', obtenerEmpresaPorId);
-router.put('/empresas/:id', actualizarEmpresa);
+router.post('/empresas', requireRoles('ADMIN', 'WORKER'), crearEmpresa);
+router.put('/empresas/:id', requireRoles('ADMIN', 'WORKER'), actualizarEmpresa);
 
 // Rutas de Proyectos
 router.get('/proyectos', obtenerProyectos);
-router.post('/proyectos', crearProyecto);
 router.get('/proyectos/:proyectoId', obtenerProyectoCompleto);
-router.put('/proyectos/:id', actualizarProyecto);
-router.delete('/proyectos/:id', eliminarProyecto);
 router.get('/empresas/:empresaId/proyectos', obtenerProyectosPorEmpresa);
+router.post('/proyectos', requireRoles('ADMIN', 'WORKER'), crearProyecto);
+router.put('/proyectos/:id', requireRoles('ADMIN', 'WORKER'), actualizarProyecto);
+router.delete('/proyectos/:id', requireRoles('ADMIN'), eliminarProyecto);
 
-// Rutas de Alimentadores (NUEVAS)
+// Rutas de Alimentadores
 router.get('/alimentadores', obtenerAlimentadores);
-router.post('/alimentadores', crearAlimentador);
-router.put('/alimentadores/:id', actualizarAlimentador);
-router.delete('/alimentadores/:id', eliminarAlimentador);
+router.post('/alimentadores', requireRoles('ADMIN', 'WORKER'), crearAlimentador);
+router.put('/alimentadores/:id', requireRoles('ADMIN', 'WORKER'), actualizarAlimentador);
+router.delete('/alimentadores/:id', requireRoles('ADMIN'), eliminarAlimentador);
 
 // Rutas de Tableros
-router.post('/tableros', crearTableroCompleto);
 router.get('/tableros/:id', obtenerTableroPorId);
-router.put('/tableros/:id', actualizarTablero);
-router.delete('/tableros/:id', eliminarTablero);
-router.post('/empresas/:empresaId/tableros', crearTableroCompleto);
 router.get('/empresas/:empresaId/tableros', obtenerTablerosPorEmpresa);
+router.post('/tableros', requireRoles('ADMIN', 'WORKER'), crearTableroCompleto);
+router.post('/empresas/:empresaId/tableros', requireRoles('ADMIN', 'WORKER'), crearTableroCompleto);
+router.put('/tableros/:id', requireRoles('ADMIN', 'WORKER'), actualizarTablero);
+router.delete('/tableros/:id', requireRoles('ADMIN'), eliminarTablero);
 
-// Rutas de Circuitos (NUEVAS)
-router.post('/tableros/:tableroId/circuitos', crearCircuito);
-router.put('/circuitos/:id', actualizarCircuito);
-router.delete('/circuitos/:id', eliminarCircuito);
+// Rutas de Circuitos
+router.post('/tableros/:tableroId/circuitos', requireRoles('ADMIN', 'WORKER'), crearCircuito);
+router.put('/circuitos/:id', requireRoles('ADMIN', 'WORKER'), actualizarCircuito);
+router.delete('/circuitos/:id', requireRoles('ADMIN', 'WORKER'), eliminarCircuito);
 
 // Rutas de Elementos Genéricos, Subestaciones, Puntos de Medición y CCM
-router.post('/elementos-unifilares', upload.single('foto'), crearElementoUnifilar);
-router.delete('/elementos-unifilares/:id', eliminarElementoUnifilar);
-router.post('/subestaciones', crearInspeccionSubestacion);
-router.delete('/subestaciones/:id', eliminarInspeccionSubestacion);
-router.post('/puntos-medicion', crearPuntoMedicion);
-router.delete('/puntos-medicion/:id', eliminarPuntoMedicion);
-router.post('/ccm', crearCcm);
-router.delete('/ccm/:id', eliminarCcm);
+router.post('/elementos-unifilares', requireRoles('ADMIN', 'WORKER'), uploadFotoInspeccion.single('foto'), crearElementoUnifilar);
+router.delete('/elementos-unifilares/:id', requireRoles('ADMIN'), eliminarElementoUnifilar);
+router.post('/subestaciones', requireRoles('ADMIN', 'WORKER'), crearInspeccionSubestacion);
+router.delete('/subestaciones/:id', requireRoles('ADMIN'), eliminarInspeccionSubestacion);
+router.post('/puntos-medicion', requireRoles('ADMIN', 'WORKER'), crearPuntoMedicion);
+router.delete('/puntos-medicion/:id', requireRoles('ADMIN'), eliminarPuntoMedicion);
+router.post('/ccm', requireRoles('ADMIN', 'WORKER'), crearCcm);
+router.delete('/ccm/:id', requireRoles('ADMIN'), eliminarCcm);
 
+// Endpoint de Sincronización Offline Batch
+router.post('/sync/batch', requireRoles('ADMIN', 'WORKER'), procesarSincronizacionBatch);
 
-// Endpoints de Respaldo e Importación/Exportación
-router.get('/backup/export', exportDatabase);
-router.post('/backup/import', importDatabase);
-router.post('/backup/gdrive-sync', syncToGoogleDrive);
+// Endpoints de Respaldo e Importación/Exportación (Solo ADMIN)
+router.get('/backup/export', requireRoles('ADMIN'), exportDatabase);
+router.post('/backup/import', requireRoles('ADMIN'), importDatabase);
+router.post('/backup/gdrive-sync', requireRoles('ADMIN'), syncToGoogleDrive);
 
-// Rutas de Gestión de Usuarios
-router.get('/users', obtenerUsuarios);
-router.post('/users', crearUsuario);
-router.put('/users/:id', actualizarUsuario);
-router.delete('/users/:id', eliminarUsuario);
+// Rutas de Gestión de Usuarios (Solo ADMIN)
+router.get('/users', requireRoles('ADMIN'), obtenerUsuarios);
+router.post('/users', requireRoles('ADMIN'), crearUsuario);
+router.put('/users/:id', requireRoles('ADMIN'), actualizarUsuario);
+router.delete('/users/:id', requireRoles('ADMIN'), eliminarUsuario);
 
-// Rutas de Mensajería / Chat
+// Rutas de Mensajería / Chat (Autenticado)
 router.get('/messages/:userId', obtenerMensajesUsuario);
 router.post('/messages', guardarMensaje);
 router.post('/messages/read', marcarMensajesComoLeidos);
 
 // Rutas de Jerarquía Eléctrica
-router.post('/jerarquia/vincular', vincularElemento);
-router.post('/jerarquia/desvincular', desvincularElemento);
-router.post('/jerarquia/crear-provisional', crearProvisional);
+router.post('/jerarquia/vincular', requireRoles('ADMIN', 'WORKER'), vincularElemento);
+router.post('/jerarquia/desvincular', requireRoles('ADMIN', 'WORKER'), desvincularElemento);
+router.post('/jerarquia/crear-provisional', requireRoles('ADMIN', 'WORKER'), crearProvisional);
 router.get('/jerarquia/arbol/:proyectoId', obtenerArbolProyecto);
 
 export default router;

@@ -7,6 +7,8 @@ process.on('uncaughtException', (error) => {
 
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { createServer } from 'http';
@@ -19,10 +21,61 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Configuración de CORS estricto
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5173'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+    } else {
+      callback(new Error('Acceso denegado por política de CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+};
+
+app.use(helmet({
+  contentSecurityPolicy: false, // Permitir cargas de recursos dinámicos en PWA y WebSockets
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' }));
+
+// Rate Limiters
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 15,
+  message: { ok: false, error: 'Demasiados intentos de inicio de sesión. Por favor, intente de nuevo en 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const backupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 5,
+  message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en una hora.' }
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 200,
+  message: { ok: false, error: 'Demasiadas solicitudes a la API. Intente de nuevo en un momento.' }
+});
+
+// Aplicar Rate Limiters específicos
+app.use('/api/login', authLimiter);
+app.use('/api/backup', backupLimiter);
+app.use('/api', apiLimiter);
+
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST']
   }
 });
@@ -51,11 +104,11 @@ io.on('connection', (socket) => {
   });
 });
 
-app.use(cors());
-app.use(express.json());
-
-// Servir archivos de uploads
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+// Servir archivos de uploads con encabezados de seguridad
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+}, express.static(path.join(process.cwd(), 'public', 'uploads')));
 
 // Endpoints de Notificaciones Push
 app.use('/api/notifications', pushRoutes);
@@ -63,7 +116,7 @@ app.use('/api/notifications', pushRoutes);
 // Endpoints Principales de la Inspección Eléctrica (Bajo el prefijo /api)
 app.use('/api', tableroRoutes);
 
-// Manejo fallback para endpoints de API no encontrados (evita retornar HTML para endpoints /api)
+// Manejo fallback para endpoints de API no encontrados
 app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: `Endpoint de API no encontrado: ${req.method} ${req.originalUrl}` });
 });
@@ -88,7 +141,7 @@ app.use((req, res, next) => {
 // Middleware Global de Manejo de Errores en Express
 app.use((err, req, res, next) => {
   console.error("❌ ERROR EN EL SERVIDOR:", err.stack);
-  res.status(500).json({ error: "Error interno", detalle: err.message });
+  res.status(500).json({ ok: false, error: "Error interno del servidor", detalle: err.message });
 });
 
 server.listen(PORT, () => {

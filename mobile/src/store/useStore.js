@@ -174,11 +174,18 @@ export const useStore = create(
 
         set({ isLoading: true });
         try {
-          await apiService.syncInspecciones(pendingSyncList);
+          const mutationsBatch = pendingSyncList.map(item => ({
+            entity: 'Tablero',
+            id: item.tableroId,
+            operation: 'UPDATE',
+            data: item.updateData
+          }));
+
+          await apiService.syncBatch(mutationsBatch);
           set({ pendingSyncList: [], isOnline: true });
           return { success: true, count: pendingSyncList.length };
         } catch (error) {
-          console.error('[useStore] Fallo al sincronizar:', error.message);
+          console.error('[useStore] Fallo al sincronizar datos móviles:', error.message);
           set({ isOnline: false });
           return { success: false, error: error.message };
         } finally {

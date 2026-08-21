@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
-import bcrypt from 'bcrypt'; // Importación añadida para encriptar contraseñas
+import bcrypt from 'bcryptjs'; // Encriptar contraseñas con bcryptjs
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:admin123@localhost:5432/inspecciones?schema=public';
 const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
