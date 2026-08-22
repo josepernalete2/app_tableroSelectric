@@ -21,6 +21,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// 1. Habilitar trust proxy para Railway
+app.set('trust proxy', 1);
+
 // Configuración de CORS tolerante y segura
 const allowedOrigins = [
   'https://apptableroselectric-production.up.railway.app',
@@ -54,25 +57,28 @@ app.use(helmet({
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 
-// Rate Limiters
+// Rate Limiters con validación de proxy desactivada
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // Aumentado para evitar bloqueos por reintentos durante pruebas
+  max: 30,
   message: { ok: false, error: 'Demasiados intentos de inicio de sesión. Por favor, intente de nuevo en 15 minutos.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false }
 });
 
 const backupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
-  message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en una hora.' }
+  message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en una hora.' },
+  validate: { xForwardedForHeader: false }
 });
 
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 200,
-  message: { ok: false, error: 'Demasiadas solicitudes a la API. Intente de nuevo en un momento.' }
+  message: { ok: false, error: 'Demasiadas solicitudes a la API. Intente de nuevo en un momento.' },
+  validate: { xForwardedForHeader: false }
 });
 
 // Aplicar Rate Limiters específicos
