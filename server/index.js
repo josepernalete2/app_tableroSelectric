@@ -21,25 +21,33 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Configuración de CORS estricto
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:5173'];
+// Configuración de CORS tolerante y segura
+const allowedOrigins = [
+  'https://apptableroselectric-production.up.railway.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:5173',
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [])
+].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.railway.app') || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
       callback(new Error('Acceso denegado por política de CORS'));
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(helmet({
-  contentSecurityPolicy: false, // Permitir cargas de recursos dinámicos en PWA y WebSockets
+  contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
@@ -48,21 +56,21 @@ app.use(express.json({ limit: '10mb' }));
 
 // Rate Limiters
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 15,
+  windowMs: 15 * 60 * 1000,
+  max: 30, // Aumentado para evitar bloqueos por reintentos durante pruebas
   message: { ok: false, error: 'Demasiados intentos de inicio de sesión. Por favor, intente de nuevo en 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
 const backupLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hora
+  windowMs: 60 * 60 * 1000,
   max: 5,
   message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en una hora.' }
 });
 
 const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minuto
+  windowMs: 1 * 60 * 1000,
   max: 200,
   message: { ok: false, error: 'Demasiadas solicitudes a la API. Intente de nuevo en un momento.' }
 });
@@ -75,12 +83,19 @@ app.use('/api', apiLimiter);
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST']
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.railway.app')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Acceso denegado en WebSockets por CORS'));
+      }
+    },
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
-const connectedUsers = new Map(); // userId -> socketId
+const connectedUsers = new Map();
 
 app.set('io', io);
 app.set('connectedUsers', connectedUsers);
@@ -113,7 +128,7 @@ app.use('/uploads', (req, res, next) => {
 // Endpoints de Notificaciones Push
 app.use('/api/notifications', pushRoutes);
 
-// Endpoints Principales de la Inspección Eléctrica (Bajo el prefijo /api)
+// Endpoints Principales de la Inspección Eléctrica
 app.use('/api', tableroRoutes);
 
 // Manejo fallback para endpoints de API no encontrados
@@ -130,7 +145,7 @@ app.get('/health', (req, res) => {
 const distPath = path.join(process.cwd(), 'dist');
 app.use(express.static(distPath));
 
-// Cualquier otra ruta no-API debe retornar index.html del frontend
+// Fallback SPA
 app.use((req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
     return next();
@@ -138,12 +153,12 @@ app.use((req, res, next) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Middleware Global de Manejo de Errores en Express
+// Middleware Global de Manejo de Errores
 app.use((err, req, res, next) => {
   console.error("❌ ERROR EN EL SERVIDOR:", err.stack);
   res.status(500).json({ ok: false, error: "Error interno del servidor", detalle: err.message });
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en el puerto ${PORT}`);
 });
