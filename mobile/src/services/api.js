@@ -1,10 +1,10 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * Obtener la IP de la máquina local automáticamente desde Expo Go:
+ * Obtener la IP de la máquina local automáticamente desde Expo Go / Dev Server
  */
 const getLocalHost = () => {
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
@@ -12,34 +12,31 @@ const getLocalHost = () => {
     const ip = hostUri.split(':')[0];
     if (ip) return ip;
   }
-  return Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.128';
+  return Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 };
 
 const HOST_IP = getLocalHost();
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${HOST_IP}:3001/api`;
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${HOST_IP}:3001/api`;
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: 12000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
-// Interceptor de Solicitudes (Request): Inyectar Token de Autenticación de SecureStore
+// Interceptor de Solicitudes (Request): Inyectar Token de Autenticación
 api.interceptors.request.use(
   async (config) => {
     try {
-      let token = null;
-      if (Platform.OS !== 'web') {
-        token = await SecureStore.getItemAsync('auth_token');
-      }
+      const token = await AsyncStorage.getItem('auth_token');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (err) {
-      console.warn('[SecureStore Error]:', err);
+      console.warn('[Storage Error Token]:', err);
     }
     return config;
   },
@@ -71,6 +68,7 @@ export const apiService = {
 
   // Empresas & Proyectos
   getEmpresas: () => api.get('/empresas'),
+  getProyectos: () => api.get('/proyectos'),
   getProyectoDetail: (id) => api.get(`/proyectos/${id}`),
 
   // Tableros & Inspecciones
@@ -78,6 +76,11 @@ export const apiService = {
   getTableroDetail: (id) => api.get(`/tableros/${id}`),
   createTablero: (data) => api.post('/tableros', data),
   updateTablero: (id, data) => api.put(`/tableros/${id}`, data),
+
+  // Circuitos
+  createCircuito: (tableroId, data) => api.post(`/tableros/${tableroId}/circuitos`, data),
+  updateCircuito: (id, data) => api.put(`/circuitos/${id}`, data),
+  deleteCircuito: (id) => api.delete(`/circuitos/${id}`),
 
   // Sincronización Offline por Lotes (Batch)
   syncBatch: (mutationsBatch) => api.post('/sync/batch', { mutations: mutationsBatch }),
