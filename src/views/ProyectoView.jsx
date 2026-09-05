@@ -8,6 +8,9 @@ import {
   Trash2, 
   Search, 
   AlertTriangle,
+  AlertCircle,
+  PlusCircle,
+  Lock,
   X,
   Camera,
   Calendar,
@@ -64,7 +67,8 @@ export const ProyectoView = () => {
     deleteCcm,
     updateCcm,
     updateProyecto,
-    showToast
+    showToast,
+    showConfirm
   } = useStore();
 
   const company = companies.find((c) => c.id === companyId);
@@ -140,21 +144,27 @@ export const ProyectoView = () => {
       ? `¿Estás seguro de que deseas eliminar los ${selectedCount} elementos seleccionados del Diagrama Unifilar?`
       : `¿Estás seguro de que deseas eliminar las ${selectedCount} fichas de inspección seleccionadas?`;
 
-    if (window.confirm(confirmMsg)) {
-      if (activeTab === 'UNIFILAR') {
-        selectedIds.forEach((id) => {
-          deleteElementoUnifilar(proyectoId, id);
-        });
-        showToast?.(`Se eliminaron ${selectedCount} elementos correctamente`, 'success');
-      } else {
-        selectedIds.forEach((id) => {
-          deleteSubestacion(proyectoId, id);
-        });
-        showToast?.(`Se eliminaron ${selectedCount} fichas de inspección correctamente`, 'success');
+    showConfirm({
+      title: 'Eliminar Elementos Seleccionados',
+      message: confirmMsg,
+      variant: 'danger',
+      confirmText: 'Eliminar',
+      onConfirm: () => {
+        if (activeTab === 'UNIFILAR') {
+          selectedIds.forEach((id) => {
+            deleteElementoUnifilar(proyectoId, id);
+          });
+          showToast?.(`Se eliminaron ${selectedCount} elementos correctamente`, 'success');
+        } else {
+          selectedIds.forEach((id) => {
+            deleteSubestacion(proyectoId, id);
+          });
+          showToast?.(`Se eliminaron ${selectedCount} fichas de inspección correctamente`, 'success');
+        }
+        setSelectedIds(new Set());
+        setIsMultiSelectMode(false);
       }
-      setSelectedIds(new Set());
-      setIsMultiSelectMode(false);
-    }
+    });
   };
 
   // Modales
@@ -473,9 +483,10 @@ export const ProyectoView = () => {
         ubicacion: ubicacion.trim() || 'Sin ubicación',
         alimentadoPor: alimentadoPor.trim() || 'No definido',
         observacionesGenerales: observacionesGenerales.trim(),
+        estadoVinculo: 'COMPLETO',
         datosTecnicos
       });
-      showToast?.("Elemento actualizado correctamente.", "success");
+      showToast?.("Elemento configurado y actualizado correctamente.", "success");
       setEditingElemento(null);
       setShowElementoModal(false);
     } else {
@@ -891,9 +902,16 @@ export const ProyectoView = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
-                                    deleteSubestacion(proyectoId, item.id);
-                                  }
+                                  showConfirm({
+                                    title: 'Eliminar Inspección',
+                                    message: `¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`,
+                                    variant: 'danger',
+                                    confirmText: 'Eliminar',
+                                    onConfirm: () => {
+                                      deleteSubestacion(proyectoId, item.id);
+                                      showToast?.('Inspección eliminada correctamente', 'info');
+                                    }
+                                  });
                                 }}
                                 className="p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                                 title="Eliminar Inspección"
@@ -1011,12 +1029,18 @@ export const ProyectoView = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`¿Eliminar el punto de medición "${item.nombre}"?`)) {
-                                  deletePuntoMedicion(proyectoId, item.id);
-                                  showToast?.('Punto de medición eliminado', 'info');
-                                }
+                                showConfirm({
+                                  title: 'Eliminar Punto de Medición',
+                                  message: `¿Estás seguro de que deseas eliminar el punto de medición "${item.nombre}"?`,
+                                  variant: 'danger',
+                                  confirmText: 'Eliminar',
+                                  onConfirm: () => {
+                                    deletePuntoMedicion(proyectoId, item.id);
+                                    showToast?.('Punto de medición eliminado', 'info');
+                                  }
+                                });
                               }}
-                              className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                              className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
                               title="Eliminar Punto de Medición"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1128,12 +1152,18 @@ export const ProyectoView = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (window.confirm(`¿Eliminar el CCM "${item.nombre}"?`)) {
-                                    deleteCcm(proyectoId, item.id);
-                                    showToast?.('CCM eliminado correctamente', 'info');
-                                  }
+                                  showConfirm({
+                                    title: 'Eliminar CCM',
+                                    message: `¿Estás seguro de que deseas eliminar el CCM "${item.nombre}"?`,
+                                    variant: 'danger',
+                                    confirmText: 'Eliminar',
+                                    onConfirm: () => {
+                                      deleteCcm(proyectoId, item.id);
+                                      showToast?.('CCM eliminado correctamente', 'info');
+                                    }
+                                  });
                                 }}
-                                className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                                className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
                                 title="Eliminar CCM"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1190,6 +1220,25 @@ export const ProyectoView = () => {
                   const isGen = item.tipoElemento === 'GENERADOR';
                   const isPuestaTierra = item.tipoElemento === 'PUESTA_TIERRA';
                   const isTransfer = item.tipoElemento === 'TRANSFER';
+                  const isPendingCreation = item.estadoVinculo === 'PENDIENTE_CREAR' || (typeof item.ubicacion === 'string' && item.ubicacion.includes('Pendiente por Crear'));
+                  
+                  const reservedPoles = (() => {
+                    if (Array.isArray(item.polosOrigen) && item.polosOrigen.length > 0) {
+                      return item.polosOrigen.join(', ');
+                    }
+                    const matchNombre = String(item.nombre || '').match(/Polo\s*([\d\s,]+)/i);
+                    if (matchNombre && matchNombre[1]) {
+                      return matchNombre[1].trim();
+                    }
+                    const matchAlimentado = String(item.alimentadoPor || '').match(/Polo\s*([\d\s,]+)/i);
+                    if (matchAlimentado && matchAlimentado[1]) {
+                      return matchAlimentado[1].trim();
+                    }
+                    if (item.circuitoOrigen) {
+                      return String(item.circuitoOrigen).replace('auto_', '');
+                    }
+                    return null;
+                  })();
 
                   return (
                     <div
@@ -1197,6 +1246,13 @@ export const ProyectoView = () => {
                       onClick={() => {
                         if (isMultiSelectMode) {
                           handleToggleSelect(item.id);
+                        } else if (isPendingCreation) {
+                          setEditingElemento(item);
+                          setNombre(item.nombre);
+                          setTipoElemento(item.tipoElemento || 'TABLERO');
+                          setUbicacion(item.ubicacion?.includes('Pendiente por Crear') ? '' : item.ubicacion);
+                          setAlimentadoPor(item.alimentadoPor || '');
+                          setShowElementoModal(true);
                         } else {
                           navigate(`/empresa/${companyId}/tablero/${item.id}`);
                         }
@@ -1229,31 +1285,40 @@ export const ProyectoView = () => {
                         )}
                         
                         {/* Badges de tipo e ID */}
-                        <div className="absolute top-3 left-3">
-                          {isTablero && (
-                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              ⚡ PANEL ELÉCTRICO
+                        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 items-center">
+                          {isPendingCreation ? (
+                            <span className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/50 rounded-full text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                              <Lock className="w-3 h-3 text-amber-400" />
+                              POLO {reservedPoles ? '#' + reservedPoles : ''} RESERVADO (POR CREAR)
                             </span>
-                          )}
-                          {isTrafo && (
-                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              ⚡ TRANSFORMADOR
-                            </span>
-                          )}
-                          {isGen && (
-                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              ⚡ GENERADOR
-                            </span>
-                          )}
-                          {isPuestaTierra && (
-                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              🛡️ PUESTA A TIERRA
-                            </span>
-                          )}
-                          {isTransfer && (
-                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              🔄 TRANSFERENCIA
-                            </span>
+                          ) : (
+                            <>
+                              {isTablero && (
+                                <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                                  ⚡ PANEL ELÉCTRICO
+                                </span>
+                              )}
+                              {isTrafo && (
+                                <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                                  ⚡ TRANSFORMADOR
+                                </span>
+                              )}
+                              {isGen && (
+                                <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                                  ⚡ GENERADOR
+                                </span>
+                              )}
+                              {isPuestaTierra && (
+                                <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                                  🛡️ PUESTA A TIERRA
+                                </span>
+                              )}
+                              {isTransfer && (
+                                <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                                  🔄 TRANSFERENCIA
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -1298,9 +1363,16 @@ export const ProyectoView = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
-                                  deleteElementoUnifilar(proyectoId, item.id);
-                                }
+                                showConfirm({
+                                  title: 'Eliminar Elemento',
+                                  message: `¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`,
+                                  variant: 'danger',
+                                  confirmText: 'Eliminar',
+                                  onConfirm: () => {
+                                    deleteElementoUnifilar(proyectoId, item.id);
+                                    showToast?.('Elemento eliminado correctamente', 'info');
+                                  }
+                                });
                               }}
                               className="p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-400 hover:text-red-400 rounded-lg transition-all cursor-pointer shadow-md"
                               title="Eliminar Elemento"
@@ -1321,6 +1393,21 @@ export const ProyectoView = () => {
                           <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
                             <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
                             <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {item.alimentadoPor || 'No definido'}</p>
+
+                            {/* Alerta de elemento pendiente y polos ocupados */}
+                            {isPendingCreation && (
+                              <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-2.5 text-xs text-amber-300 flex items-start gap-2 my-2 shadow-xs">
+                                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                <div className="space-y-0.5 leading-snug">
+                                  <p className="font-bold text-amber-400">
+                                    Polos Reservados: <span className="font-mono text-white underline decoration-amber-400">Polo #{reservedPoles || 'Asignado'}</span>
+                                  </p>
+                                  <p className="text-[10px] text-slate-300">
+                                    Elemento en espera de configuración definitiva. Sus polos de alimentación están ocupados y reservados en el tablero de origen.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Mostrar resúmenes enriquecidos de las fichas técnicas reales */}
                             {isTablero && (
@@ -1352,7 +1439,29 @@ export const ProyectoView = () => {
                         </div>
 
                         {/* Footer */}
-                        {isTablero ? (
+                        {isPendingCreation ? (
+                          <div className="mt-4 pt-3 border-t border-slate-900 flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-amber-400 font-mono font-bold">
+                              Estado: Pendiente
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingElemento(item);
+                                setNombre(item.nombre);
+                                setTipoElemento(item.tipoElemento || 'TABLERO');
+                                setUbicacion(item.ubicacion?.includes('Pendiente por Crear') ? '' : item.ubicacion);
+                                setAlimentadoPor(item.alimentadoPor || '');
+                                setShowElementoModal(true);
+                              }}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg font-bold text-[10px] flex items-center gap-1 shadow-sm transition-all cursor-pointer active:scale-95 uppercase tracking-wider"
+                            >
+                              <PlusCircle className="w-3 h-3" />
+                              Configurar / Elegir Tipo
+                            </button>
+                          </div>
+                        ) : isTablero ? (
                           <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
                             <span className="text-slate-400 font-medium">Circuitos Registrados:</span>
                             <span className="font-bold text-sky-400 font-mono">

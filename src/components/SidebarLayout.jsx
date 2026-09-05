@@ -45,7 +45,8 @@ export const SidebarLayout = () => {
     markMessagesAsRead,
     fetchUsersList,
     fetchMessagesList,
-    showToast
+    showToast,
+    showConfirm
   } = useStore();
   
   const navigate = useNavigate();
@@ -174,39 +175,43 @@ export const SidebarLayout = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!window.confirm("¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos PostgreSQL.")) {
-      return;
-    }
+    showConfirm({
+      title: 'Sobrescribir Base de Datos',
+      message: '¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos PostgreSQL.',
+      variant: 'danger',
+      confirmText: 'Importar y Sobrescribir',
+      onConfirm: () => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const parsed = JSON.parse(reader.result);
+            const res = await fetch(`${API_BASE_URL}/api/backup/import`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ data: parsed })
+            });
+            const result = await res.json();
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        const res = await fetch(`${API_BASE_URL}/api/backup/import`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-          body: JSON.stringify({ data: parsed })
-        });
-        const result = await res.json();
-
-        if (result.ok) {
-          showToast("Base de datos importada y restaurada con éxito.", "success");
-          importCompanies(parsed);
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
-        } else {
-          showToast("Fallo al importar datos: " + result.error, "error");
-        }
-      } catch (err) {
-        console.error(err);
-        showToast("El archivo seleccionado no contiene una estructura JSON de respaldo válida.", "error");
+            if (result.ok) {
+              showToast("Base de datos importada y restaurada con éxito.", "success");
+              importCompanies(parsed);
+              setTimeout(() => {
+                window.location.reload();
+              }, 1500);
+            } else {
+              showToast("Fallo al importar datos: " + result.error, "error");
+            }
+          } catch (err) {
+            console.error(err);
+            showToast("El archivo seleccionado no contiene una estructura JSON de respaldo válida.", "error");
+          }
+        };
+        reader.readAsText(file);
       }
-    };
-    reader.readAsText(file);
+    });
   };
 
   // Sincronizar a Google Drive
@@ -348,14 +353,20 @@ export const SidebarLayout = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm("¿Está seguro de que desea eliminar este usuario?")) {
-      const result = await deleteUser(userId);
-      if (result.success) {
-        showToast("Usuario eliminado con éxito.", "success");
-      } else {
-        showToast(result.error || "Error al eliminar usuario.", "error");
+    showConfirm({
+      title: 'Eliminar Usuario',
+      message: '¿Está seguro de que desea eliminar este usuario?',
+      variant: 'danger',
+      confirmText: 'Eliminar Usuario',
+      onConfirm: async () => {
+        const result = await deleteUser(userId);
+        if (result.success) {
+          showToast("Usuario eliminado con éxito.", "success");
+        } else {
+          showToast(result.error || "Error al eliminar usuario.", "error");
+        }
       }
-    }
+    });
   };
 
   // Métodos auxiliares de chat

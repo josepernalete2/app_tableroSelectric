@@ -14,7 +14,7 @@ import {
 
 
 export const DashboardView = () => {
-  const { user, companies, addCompany, deleteCompany } = useStore();
+  const { user, companies, addCompany, deleteCompany, showConfirm, showToast } = useStore();
   const [showModal, setShowModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [rif, setRif] = useState('');
@@ -136,9 +136,16 @@ export const DashboardView = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`¿Estás seguro de que deseas eliminar la empresa "${company.nombre}" y todos sus tableros?`)) {
-                              deleteCompany(company.id);
-                            }
+                            showConfirm({
+                              title: 'Eliminar Empresa',
+                              message: `¿Estás seguro de que deseas eliminar la empresa "${company.nombre}" y todos sus tableros?`,
+                              variant: 'danger',
+                              confirmText: 'Eliminar Empresa',
+                              onConfirm: () => {
+                                deleteCompany(company.id);
+                                showToast?.('Empresa eliminada correctamente', 'success');
+                              }
+                            });
                           }}
                           className="p-2 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer animate-in fade-in duration-200"
                           title="Eliminar Empresa"

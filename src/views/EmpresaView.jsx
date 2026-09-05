@@ -56,7 +56,8 @@ export const EmpresaView = () => {
     addElementoUnifilar,
     deleteElementoUnifilar,
     updateEmpresa,
-    showToast
+    showToast,
+    showConfirm
   } = useStore();
   
   const company = companies.find((c) => c.id === companyId);
@@ -130,21 +131,33 @@ export const EmpresaView = () => {
     const selectedCount = selectedIds.size;
     if (selectedCount === 0) return;
 
-    if (window.confirm(`¿Estás seguro de que deseas eliminar los ${selectedCount} equipos seleccionados?`)) {
-      selectedIds.forEach((id) => {
-        deleteElementoUnifilar(null, id);
-      });
-      showToast?.(`Se eliminaron ${selectedCount} equipos correctamente`, 'success');
-      setSelectedIds(new Set());
-      setIsMultiSelectMode(false);
-    }
+    showConfirm({
+      title: 'Eliminar Equipos',
+      message: `¿Estás seguro de que deseas eliminar los ${selectedCount} equipos seleccionados?`,
+      variant: 'danger',
+      confirmText: 'Eliminar',
+      onConfirm: () => {
+        selectedIds.forEach((id) => {
+          deleteElementoUnifilar(null, id);
+        });
+        showToast?.(`Se eliminaron ${selectedCount} equipos correctamente`, 'success');
+        setSelectedIds(new Set());
+        setIsMultiSelectMode(false);
+      }
+    });
   };
 
   const handleDeleteProyecto = (proyectoId, name) => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar el proyecto "${name}"? Se eliminarán todas sus subestaciones, tableros y elementos unifilares en cascada.`)) {
-      deleteProyecto(companyId, proyectoId);
-      showToast?.('Proyecto eliminado correctamente', 'success');
-    }
+    showConfirm({
+      title: 'Eliminar Proyecto',
+      message: `¿Estás seguro de que deseas eliminar el proyecto "${name}"? Se eliminarán todas sus subestaciones, tableros y elementos unifilares en cascada.`,
+      variant: 'danger',
+      confirmText: 'Eliminar Proyecto',
+      onConfirm: () => {
+        deleteProyecto(companyId, proyectoId);
+        showToast?.('Proyecto eliminado correctamente', 'success');
+      }
+    });
   };
 
   // Form states de Proyectos
@@ -797,9 +810,16 @@ export const EmpresaView = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`)) {
-                              deleteElementoUnifilar(null, item.id);
-                            }
+                            showConfirm({
+                              title: 'Eliminar Equipo',
+                              message: `¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`,
+                              variant: 'danger',
+                              confirmText: 'Eliminar',
+                              onConfirm: () => {
+                                deleteElementoUnifilar(null, item.id);
+                                showToast?.('Equipo eliminado correctamente', 'info');
+                              }
+                            });
                           }}
                           className="absolute top-3 right-3 p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-400 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
                           title="Eliminar Equipo"

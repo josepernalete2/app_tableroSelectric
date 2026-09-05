@@ -27,7 +27,7 @@ export default function ModalDiagramaUnifilar({
   companyId = null
 }) {
   const navigate = useNavigate();
-  const { addElementoUnifilar, updateElementoUnifilar, deleteElementoUnifilar, showToast } = useStore();
+  const { addElementoUnifilar, updateElementoUnifilar, deleteElementoUnifilar, showToast, showConfirm } = useStore();
 
   const [selectedNode, setSelectedNode] = useState(null);
   
@@ -219,20 +219,26 @@ export default function ModalDiagramaUnifilar({
   // Eliminar elemento del diagrama
   const handleDeleteElement = async () => {
     if (!selectedNode) return;
-    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" y desvincular todas sus conexiones?`)) {
-      const idToDelete = selectedNode.id;
-      
-      // Desconectar huérfanos antes de eliminar para mantener coherencia en cascada
-      elementos.forEach(async (el) => {
-        if (el.alimentadoPor === selectedNode.nombre || el.alimentadoPor === selectedNode.id) {
-          await updateElementoUnifilar(proyectoId || el.proyectoId, el.id, { alimentadoPor: '' });
-        }
-      });
+    showConfirm({
+      title: 'Eliminar Equipo del Diagrama',
+      message: `¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" y desvincular todas sus conexiones?`,
+      variant: 'danger',
+      confirmText: 'Eliminar Equipo',
+      onConfirm: async () => {
+        const idToDelete = selectedNode.id;
+        
+        // Desconectar huérfanos antes de eliminar para mantener coherencia en cascada
+        elementos.forEach(async (el) => {
+          if (el.alimentadoPor === selectedNode.nombre || el.alimentadoPor === selectedNode.id) {
+            await updateElementoUnifilar(proyectoId || el.proyectoId, el.id, { alimentadoPor: '' });
+          }
+        });
 
-      setSelectedNode(null);
-      await deleteElementoUnifilar(proyectoId || selectedNode.proyectoId, idToDelete);
-      showToast('Equipo eliminado del diagrama.', 'info');
-    }
+        setSelectedNode(null);
+        await deleteElementoUnifilar(proyectoId || selectedNode.proyectoId, idToDelete);
+        showToast('Equipo eliminado del diagrama.', 'info');
+      }
+    });
   };
 
   // Desconectar elemento seleccionado
