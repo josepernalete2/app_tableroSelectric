@@ -626,11 +626,14 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
         elementosCreados={[]}
         onSave={(circuitId, updated) => {
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && puntoData?.proyectoId) {
-            crearElementoProvisional(puntoData.proyectoId, {
-              nombre: updated.equipo,
-              tipoElemento: 'TABLERO',
-              circuitoOrigen: circuitId
-            });
+            const existingProvId = updated.elementoDestinoId || updated.vinculadoId;
+            if (!existingProvId) {
+              crearElementoProvisional(puntoData.proyectoId, {
+                nombre: updated.equipo && updated.equipo !== 'RESERVA (Pendiente por Crear)' ? updated.equipo : `Sub-Tablero Alimentado (${circuitId})`,
+                tipoElemento: 'TABLERO',
+                circuitoOrigen: circuitId
+              });
+            }
           }
           if (wizardModo === 'ENTRADA') {
             updateField('puntoConexionPCC', updated.equipo);

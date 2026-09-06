@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   ArrowLeft, 
@@ -19,6 +19,8 @@ import {
   Radio 
 } from 'lucide-react';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
+import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
+import { useConfirm } from '../context/ConfirmContext';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -38,10 +40,13 @@ export const ModalEdicionCircuito = ({
   circuitData,
   onSave,
   elementosCreados = MOCK_ELEMENTOS_CREADOS,
+  tableroCircuits = [],
+  maxPolos = 42,
   onAgregarPorCrear,
   tipoOrigen = 'TABLERO',
   modo = 'SALIDA'
 }) => {
+  const { alert: customAlert } = useConfirm();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
   const [step, setStep] = useState('PREGUNTA_ES_ARTEFACTO');
@@ -64,12 +69,141 @@ export const ModalEdicionCircuito = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLink, setSelectedLink] = useState(null);
   const [selectedLinks, setSelectedLinks] = useState([]);
+  const [selectedElementoDestinoId, setSelectedElementoDestinoId] = useState('');
+  const [selectedTipoElementoDestino, setSelectedTipoElementoDestino] = useState('');
+  const [selectorValue, setSelectorValue] = useState('');
+  const [isCreatingNewProvisional, setIsCreatingNewProvisional] = useState(false);
+  const [provisionalCustomName, setProvisionalCustomName] = useState('');
+  const [provisionalTipo, setProvisionalTipo] = useState('TABLERO');
 
   const isMultiSelect = tipoOrigen === 'TRANSFORMADOR' && (modo === 'SECUNDARIA' || modo === 'SALIDA');
 
   // Rótulo y foto
   const [rotulo, setRotulo] = useState('');
   const [fotoUrl, setFotoUrl] = useState(null);
+
+  // Agrupación universal de elementos creados
+  const groupedElements = useMemo(() => {
+    const groups = {
+      TABLERO: [],
+      TRANSFER: [],
+      CCM: [],
+      GENERADOR: [],
+      SUBESTACION: [],
+      TRANSFORMADOR: [],
+      PUNTO_MEDICION: [],
+      OTROS: []
+    };
+    (elementosCreados || []).forEach(el => {
+      const type = (el.tipo || el.tipoElemento || '').toUpperCase();
+      if (type.includes('TRANSFER') || type.includes('ATS') || type.includes('MTS')) {
+        groups.TRANSFER.push(el);
+      } else if (type.includes('GENERADOR') || type.includes('GEN') || type.includes('PLANTA')) {
+        groups.GENERADOR.push(el);
+      } else if (type.includes('CCM') || type.includes('MOTOR')) {
+        groups.CCM.push(el);
+      } else if (type.includes('SUBESTACION') || type.includes('SE')) {
+        groups.SUBESTACION.push(el);
+      } else if (type.includes('TRANSFO') || type.includes('TRAFO')) {
+        groups.TRANSFORMADOR.push(el);
+      } else if (type.includes('MEDICION') || type.includes('MEDIDA') || type.includes('PUNTO')) {
+        groups.PUNTO_MEDICION.push(el);
+      } else if (type.includes('TABLERO') || type === 'SUB_TABLERO' || type === 'PANEL') {
+        groups.TABLERO.push(el);
+      } else {
+        groups.OTROS.push(el);
+      }
+    });
+    return groups;
+  }, [elementosCreados]);
+
+  // Manejar cambio en el selector universal con autocompletado editable
+  const handleUniversalElementChange = (e) => {
+    const val = e.target.value;
+    setSelectorValue(val);
+
+    if (!val || val === 'DIRECTO' || val === 'NINGUNO') {
+      setSelectedElementoDestinoId('');
+      setSelectedTipoElementoDestino('');
+      setSelectedLink(null);
+      setIsCreatingNewProvisional(false);
+      setProvisionalCustomName('');
+      return;
+    }
+
+    if (val.startsWith('NEW_')) {
+      setIsCreatingNewProvisional(true);
+      setSelectedLink(null);
+      setSelectedElementoDestinoId('');
+
+      const requiredList = validation?.requiredPoles || getPolesArray(posicionPolo, numPolos);
+      const polesStr = requiredList.join(', ');
+      let mappedType = 'TABLERO';
+      let typeLabel = 'Sub-Tablero';
+
+      if (val === 'NEW_TRANSFER') {
+        mappedType = 'TRANSFER';
+        typeLabel = 'Transferencia Automática (ATS)';
+      } else if (val === 'NEW_CCM') {
+        mappedType = 'CCM';
+        typeLabel = 'Centro de Control de Motores (CCM)';
+      } else if (val === 'NEW_GENERADOR') {
+        mappedType = 'GENERADOR';
+        typeLabel = 'Generador / Planta de Emergencia';
+      } else if (val === 'NEW_TRANSFORMADOR') {
+        mappedType = 'TRANSFORMADOR';
+        typeLabel = 'Transformador de Potencia';
+      } else if (val === 'NEW_SUBESTACION') {
+        mappedType = 'SUBESTACION';
+        typeLabel = 'Subestación Eléctrica';
+      } else if (val === 'NEW_PUNTO_MEDICION') {
+        mappedType = 'PUNTO_MEDICION';
+        typeLabel = 'Punto de Medición / Analizador';
+      } else if (val === 'NEW_CARGA') {
+        mappedType = 'CARGA_DIRECTA';
+        typeLabel = 'Carga Directa';
+      }
+
+      setProvisionalTipo(mappedType);
+      setSelectedTipoElementoDestino(mappedType);
+
+      const defaultProvisionalName = `Nuevo ${typeLabel} (Polo ${polesStr})`;
+      setProvisionalCustomName(defaultProvisionalName);
+
+      const autoDesc = `Reserva para ${typeLabel}: ${defaultProvisionalName}`;
+      setNombreArtefacto(autoDesc);
+      setRotulo(autoDesc);
+      if (!descArtefacto) {
+        setDescArtefacto(`Reserva proyectada para alimentar ${typeLabel} desde Polo(s) [${polesStr}]`);
+      }
+      return;
+    }
+
+    // Elemento existente ya registrado
+    setIsCreatingNewProvisional(false);
+    setProvisionalCustomName('');
+    const found = (elementosCreados || []).find(el => String(el.id) === String(val));
+    if (found) {
+      setSelectedElementoDestinoId(found.id);
+      const t = found.tipo || found.tipoElemento || 'TABLERO';
+      setSelectedTipoElementoDestino(t);
+      setSelectedLink(found);
+
+      const tipoLabel = t === 'CCM' ? 'CCM' :
+                        t === 'TRANSFER' ? 'Transferencia ATS' :
+                        t === 'GENERADOR' ? 'Generador' :
+                        t === 'SUBESTACION' ? 'Subestación' :
+                        t === 'TRANSFORMADOR' ? 'Transformador' :
+                        t === 'PUNTO_MEDICION' ? 'Equipo de Medida' :
+                        t === 'TABLERO' ? 'Tablero' : (t || 'Elemento');
+      const autoDesc = `Alimentación a ${tipoLabel}: ${found.nombre}`;
+      setNombreArtefacto(autoDesc);
+      setRotulo(autoDesc);
+      if (!descArtefacto) {
+        setDescArtefacto(`Alimentación directa hacia ${found.nombre} (ID: ${found.id})`);
+      }
+    }
+  };
 
   // Campos Equipos de Potencia / Trafo / Gen / ATS / CCM / Punto Medicion / Puesta Tierra
   const [nivelMT, setNivelMT] = useState('13.8 kV');
@@ -102,7 +236,37 @@ export const ModalEdicionCircuito = ({
       setPotenciaWatts(circuitData.ficha?.potenciaWatts || '');
       setRotulo(circuitData.equipo || circuitData.nombre || '');
       setSelectedLinks([]);
-      setSelectedLink(null);
+      setIsCreatingNewProvisional(false);
+      setProvisionalCustomName('');
+
+      // Pre-inicializar elemento vinculado previamente
+      const prevDestinoId = circuitData.elementoDestinoId || circuitData.vinculadoId || '';
+      const prevTipoDestino = circuitData.tipoElementoDestino || circuitData.tipoDestino || '';
+      setSelectedElementoDestinoId(prevDestinoId);
+      setSelectedTipoElementoDestino(prevTipoDestino);
+
+      if (prevDestinoId) {
+        setSelectorValue(prevDestinoId);
+        const found = (elementosCreados || []).find(el => String(el.id) === String(prevDestinoId) || el.nombre === circuitData.equipo);
+        if (found) {
+          setSelectedLink(found);
+          setSearchQuery(found.nombre);
+        } else {
+          setSelectedLink(null);
+          setSearchQuery(circuitData.equipo || '');
+        }
+      } else {
+        setSelectorValue('');
+        setSelectedLink(null);
+        setSearchQuery('');
+      }
+
+      // Cargar parámetros físicos de polos para tableros
+      const initPolo = circuitData.posicionPolo !== undefined ? circuitData.posicionPolo : (circuitData.poles && circuitData.poles.length > 0 ? circuitData.poles[0] : 1);
+      const initNum = circuitData.numPolos !== undefined ? circuitData.numPolos : (circuitData.poles && circuitData.poles.length > 0 ? circuitData.poles.length : 1);
+      setPosicionPolo(parseInt(initPolo, 10) || 1);
+      setNumPolos(parseInt(initNum, 10) || 1);
+      setEstado(circuitData.estado || (circuitData.equipo === 'RESERVA' ? 'RESERVA' : 'ACTIVO'));
 
       // Cargar otros campos técnicos si existen
       const dt = circuitData.detallesTecnicos || {};
@@ -165,6 +329,26 @@ export const ModalEdicionCircuito = ({
     }
   }, [circuitData, isOpen, elementosCreados, isTablero, tipoOrigen, modo]);
 
+  // Validación de colisión y ocupación de polos en tiempo real
+  const validation = useMemo(() => {
+    if (!isOpen || !circuitData || !isTablero) {
+      return {
+        isValid: true,
+        requiredPoles: [1, 2, 3],
+        exceedsMax: false,
+        conflicts: [],
+        conflictMessages: []
+      };
+    }
+    return validatePoleOccupancy({
+      posicionPolo,
+      numPolos,
+      maxPolos,
+      circuits: tableroCircuits,
+      excludeCircuitId: circuitData?.id
+    });
+  }, [isOpen, circuitData?.id, isTablero, posicionPolo, numPolos, maxPolos, tableroCircuits]);
+
   if (!isOpen || !circuitData) return null;
 
   const filteredElements = (elementosCreados || []).filter((el) =>
@@ -210,20 +394,39 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveEquipment = (equipoName, tipoDestinoVal, extra = {}) => {
-    const finalEquipo = normalizeText(equipoName || extra.equipo || rotulo || 'EQUIPO DE POTENCIA');
+    if (isTablero && !validation.isValid) {
+      customAlert(validation.conflictMessages.join('\n') || 'No se puede guardar debido a un conflicto de colisión de polos.');
+      return;
+    }
+
+    let finalTipoDestino = tipoDestinoVal || selectedTipoElementoDestino || 'SUB_TABLERO';
+    let finalDestinoId = selectedElementoDestinoId || extra.elementoDestinoId || extra.vinculadoId || selectedLink?.id || null;
+
+    if (isCreatingNewProvisional) {
+      finalTipoDestino = 'SUB_TABLERO_PENDIENTE';
+    }
+
+    const finalEquipo = normalizeText(equipoName || extra.equipo || provisionalCustomName || rotulo || 'EQUIPO DE POTENCIA');
+
     onSave(circuitData.id, {
       equipo: finalEquipo,
-      tipoDestino: tipoDestinoVal || 'SUB_TABLERO',
-      vinculadoId: selectedLink?.id || extra.vinculadoId || null,
+      tipoDestino: finalTipoDestino,
+      vinculadoId: finalDestinoId,
+      elementoDestinoId: finalDestinoId,
+      tipoElementoDestino: isCreatingNewProvisional ? provisionalTipo : (selectedTipoElementoDestino || finalTipoDestino),
+      tipoElementoProvisional: isCreatingNewProvisional ? provisionalTipo : undefined,
+      nombreProvisional: isCreatingNewProvisional ? (provisionalCustomName || finalEquipo) : undefined,
       breaker: {
         amp: normalizeText(breakerAmp || extra.breakerAmp),
         marca: normalizeText(breakerMarca),
         tipo: normalizeText(breakerTipo)
       },
       conductor: normalizeText(conductor || extra.conductor),
-      poles: isTablero ? getPolesArray(posicionPolo, numPolos) : [1, 2, 3],
+      poles: isTablero ? validation.requiredPoles : [1, 2, 3],
       numPolos: isTablero ? numPolos : 3,
       posicionPolo: isTablero ? posicionPolo : 1,
+      codigoPolo: circuitData?.codigoPolo || circuitData?.polo_label || extra.codigoPolo || '',
+      polo_label: circuitData?.polo_label || circuitData?.codigoPolo || extra.polo_label || '',
       estado: estado,
       ficha: {
         descripcion: descArtefacto,
@@ -255,33 +458,31 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveArtefacto = () => {
-    if (!nombreArtefacto.trim()) return alert('Por favor, ingresa el nombre del artefacto.');
+    if (!nombreArtefacto.trim()) return customAlert('Por favor, ingresa el nombre del artefacto.');
     handleSaveEquipment(nombreArtefacto, 'ARTEFACTO');
   };
 
   const handleSaveVinculo = (linkElement) => {
     if (isMultiSelect) {
-      if (selectedLinks.length === 0) return alert('Por favor, selecciona al menos un elemento para vincular.');
+      if (selectedLinks.length === 0) return customAlert('Por favor, selecciona al menos un elemento para vincular.');
       const names = selectedLinks.map(el => `${el.nombre} (ID: ${el.id})`).join(', ');
       const ids = selectedLinks.map(el => el.id).join(', ');
-      handleSaveEquipment(names, 'SUB_TABLERO', { vinculadoId: ids, vinculados: selectedLinks });
+      handleSaveEquipment(names, 'SUB_TABLERO', { vinculadoId: ids, elementoDestinoId: ids, tipoElementoDestino: 'SUB_TABLERO', vinculados: selectedLinks });
       return;
     }
     const el = linkElement || selectedLink;
-    if (!el) return alert('Por favor, selecciona un elemento para vincular.');
-    handleSaveEquipment(`${el.nombre} (ID: ${el.id})`, 'SUB_TABLERO', { vinculadoId: el.id });
+    if (!el) return customAlert('Por favor, selecciona un elemento para vincular.');
+    handleSaveEquipment(`${el.nombre} (ID: ${el.id})`, el.tipo || 'SUB_TABLERO', { vinculadoId: el.id, elementoDestinoId: el.id, tipoElementoDestino: el.tipo || 'SUB_TABLERO' });
   };
 
   const handleSavePorCrear = () => {
-    const calculatedPoles = getPolesArray(posicionPolo, numPolos);
+    const calculatedPoles = validation?.requiredPoles || getPolesArray(posicionPolo, numPolos);
     const pendingName = `Equipo / Sub-Elemento (${isTablero ? `Polo ${calculatedPoles.join(', ')}` : 'Provisional'})`;
-    if (onAgregarPorCrear) {
-      onAgregarPorCrear({
-        nombre: pendingName,
-        circuitoId: circuitData.id,
-      });
-    }
-    handleSaveEquipment('RESERVA (Pendiente por Crear)', 'SUB_TABLERO_PENDIENTE');
+    handleSaveEquipment(pendingName, 'SUB_TABLERO_PENDIENTE', {
+      nombreProvisional: pendingName,
+      tipoElementoProvisional: provisionalTipo || 'TABLERO',
+      poles: isTablero ? (validation?.requiredPoles || calculatedPoles) : [1, 2, 3]
+    });
   };
 
   const handleSaveRotuloFoto = () => {
@@ -296,6 +497,144 @@ export const ModalEdicionCircuito = ({
     const randomPhoto = mockPhotos[Math.floor(Math.random() * mockPhotos.length)];
     setFotoUrl(randomPhoto);
   };
+
+  const renderUniversalElementSelector = () => (
+    <div className="bg-slate-950/80 p-3.5 border border-slate-800 rounded-xl space-y-2.5 text-xs font-sans">
+      <div className="flex items-center justify-between">
+        <label className="text-slate-300 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+          <Zap className="w-3.5 h-3.5 text-amber-500" />
+          Destino / Vinculación de la Reserva o Salida:
+        </label>
+        {selectedElementoDestinoId ? (
+          <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+            ID: {selectedElementoDestinoId}
+          </span>
+        ) : isCreatingNewProvisional ? (
+          <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+            NUEVO ({provisionalTipo})
+          </span>
+        ) : null}
+      </div>
+
+      <select
+        value={selectorValue}
+        onChange={handleUniversalElementChange}
+        className="w-full bg-slate-900 border border-slate-750 hover:border-slate-600 rounded-lg px-3 py-2 text-slate-100 text-xs font-medium focus:outline-none focus:border-amber-500 cursor-pointer transition-colors"
+      >
+        <option value="">-- Carga directa / Sin vinculación específica --</option>
+        
+        {/* SECCIÓN 1: NUEVO ELEMENTO POR CREAR (RESERVA FUTURA) */}
+        <optgroup label="➕ NUEVO ELEMENTO POR CREAR (RESERVA FUTURA)">
+          <option value="NEW_TABLERO">➕ Crear Nuevo Sub-Tablero / Panel</option>
+          <option value="NEW_TRANSFER">➕ Crear Nueva Transferencia Automática (ATS/MTS)</option>
+          <option value="NEW_CCM">➕ Crear Nuevo Centro de Control de Motores (CCM)</option>
+          <option value="NEW_GENERADOR">➕ Crear Nuevo Generador / Planta Eléctrica</option>
+          <option value="NEW_TRANSFORMADOR">➕ Crear Nuevo Transformador de Potencia</option>
+          <option value="NEW_SUBESTACION">➕ Crear Nueva Subestación Eléctrica</option>
+          <option value="NEW_PUNTO_MEDICION">➕ Crear Nuevo Punto de Medición / Analizador</option>
+          <option value="NEW_CARGA">➕ Crear Carga Directa (Bomba, Motor, etc.)</option>
+        </optgroup>
+
+        {/* SECCIÓN 2: ELEMENTOS EXISTENTES REGISTRADOS EN EL PROYECTO */}
+        {groupedElements.TABLERO.length > 0 && (
+          <optgroup label="🏢 Tableros y Subtableros Existentes">
+            {groupedElements.TABLERO.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.TRANSFER.length > 0 && (
+          <optgroup label="🔄 Transferencias (ATS/MTS) Existentes">
+            {groupedElements.TRANSFER.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.CCM.length > 0 && (
+          <optgroup label="⚙️ Centros de Control de Motores (CCM) Existentes">
+            {groupedElements.CCM.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.GENERADOR.length > 0 && (
+          <optgroup label="⚡ Generadores y Plantas Existentes">
+            {groupedElements.GENERADOR.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.SUBESTACION.length > 0 && (
+          <optgroup label="🏛️ Subestaciones Eléctricas Existentes">
+            {groupedElements.SUBESTACION.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.TRANSFORMADOR.length > 0 && (
+          <optgroup label="🔌 Transformadores Existentes">
+            {groupedElements.TRANSFORMADOR.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.PUNTO_MEDICION.length > 0 && (
+          <optgroup label="📊 Equipos / Puntos de Medida Existentes">
+            {groupedElements.PUNTO_MEDICION.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {groupedElements.OTROS.length > 0 && (
+          <optgroup label="📦 Otros Elementos Registrados">
+            {groupedElements.OTROS.map(el => (
+              <option key={el.id} value={el.id}>
+                {el.nombre} ({el.id})
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+
+      {/* Input contextual si se elige crear un elemento nuevo como reserva futura */}
+      {isCreatingNewProvisional && (
+        <div className="pt-2 border-t border-slate-800/80 space-y-1.5 animate-in fade-in duration-200">
+          <label className="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+            <span>📝</span> Nombre / Rótulo provisional para el nuevo elemento ({provisionalTipo}):
+          </label>
+          <input
+            type="text"
+            value={provisionalCustomName}
+            onChange={(e) => {
+              const v = e.target.value;
+              setProvisionalCustomName(v);
+              setNombreArtefacto(v);
+              setRotulo(v);
+            }}
+            placeholder={`Ej. ${provisionalTipo}-01 (Planta Principal)`}
+            className="w-full bg-slate-900 border border-emerald-500/40 rounded-lg px-3 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-emerald-400 font-medium"
+          />
+          <p className="text-[10px] text-slate-400">
+            Se registrará un elemento provisional de tipo <strong className="text-emerald-300">{provisionalTipo}</strong> en el proyecto y quedará vinculado a este interruptor.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -354,36 +693,56 @@ export const ModalEdicionCircuito = ({
           
           {/* Parámetros Físicos del Breaker (SOLO PARA TABLEROS) */}
           {isTablero && (
-            <div className="bg-slate-950/60 p-4 border border-slate-800 rounded-xl space-y-4 font-sans text-xs">
+            <div className="bg-slate-950/70 p-4 border border-slate-800 rounded-2xl space-y-3.5 font-sans text-xs shadow-inner">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-500" /> Disposición de Polos y Fase
+                </span>
+                <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800">
+                  {posicionPolo % 2 !== 0 ? 'Columna Izq (Impares)' : 'Columna Der (Pares)'}
+                </span>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Polos</label>
+                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">
+                    Cantidad de Polos
+                  </label>
                   <select
                     value={numPolos}
                     onChange={(e) => setNumPolos(parseInt(e.target.value, 10))}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg px-2 py-1.5 text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-2.5 py-2 text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
-                    {[1, 2, 3].map(p => (
-                      <option key={p} value={p}>{p === 1 ? '1 Polo (1P)' : p === 2 ? '2 Polos (2P)' : '3 Polos (3P)'}</option>
+                    {[1, 2, 3].map((p) => (
+                      <option key={p} value={p}>
+                        {p === 1 ? '1P (Monofásico)' : p === 2 ? '2P (Bifásico)' : '3P (Trifásico)'}
+                      </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Polo Inicial</label>
+                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">
+                    Polo Inicial
+                  </label>
                   <input
                     type="number"
+                    min="1"
+                    max={maxPolos}
                     value={posicionPolo}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
-                      if (val > 0) setPosicionPolo(val);
+                      if (!isNaN(val) && val > 0) setPosicionPolo(val);
+                      else if (e.target.value === '') setPosicionPolo('');
                     }}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg px-2 py-1 text-slate-100 font-semibold focus:outline-none focus:border-amber-500"
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-2.5 py-2 text-slate-100 font-semibold focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Estado</label>
+                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">
+                    Estado del Polo
+                  </label>
                   <select
                     value={estado}
                     onChange={(e) => {
@@ -397,16 +756,68 @@ export const ModalEdicionCircuito = ({
                         setPotenciaWatts('');
                       }
                     }}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg px-2 py-1 text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-2.5 py-2 text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
-                    <option value="ACTIVO">ACTIVO</option>
-                    <option value="RESERVA">RESERVA</option>
-                    <option value="DISPONIBLE">DISPONIBLE</option>
+                    <option value="ACTIVO">🟢 ACTIVO (Con Carga)</option>
+                    <option value="RESERVA">🟡 RESERVA (Bloqueado)</option>
+                    <option value="DISPONIBLE">⚪ DISPONIBLE (Libre)</option>
                   </select>
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              {/* HUELLA DE POLOS CALCULADOS */}
+              <div className="flex items-center justify-between flex-wrap gap-2 text-[11px] bg-slate-900/90 px-3 py-2 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-medium">Polos Requeridos:</span>
+                  <span className="font-mono font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded">
+                    [{validation.requiredPoles.join(', ')}]
+                  </span>
+                  <span className="text-slate-500 text-[10px]">
+                    ({numPolos === 1 ? '1 Polo' : `${numPolos} Polos`})
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">
+                  Capacidad Total: <span className="text-slate-200 font-bold">{maxPolos} Polos</span>
+                </div>
+              </div>
+
+              {/* ALERTA VISUAL EN TIEMPO REAL: COLISIÓN O DISPONIBLE */}
+              {!validation.isValid ? (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl space-y-1 text-rose-200 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 font-bold text-xs text-rose-300">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Conflicto de Ocupación / Capacidad de Polos</span>
+                  </div>
+                  <div className="space-y-0.5 pl-6">
+                    {validation.conflictMessages.map((msg, idx) => (
+                      <p key={idx} className="text-[11px] leading-relaxed text-rose-200">
+                        • {msg}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/25 rounded-xl text-[11px] text-emerald-400 font-semibold animate-in fade-in">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Polos [{validation.requiredPoles.join(', ')}] libres y disponibles sin colisión.</span>
+                </div>
+              )}
+
+              {/* BOTONES DE ACCESO RÁPIDO PARA ESTADO */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEstado('ACTIVO');
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg font-bold text-[9px] transition-all cursor-pointer uppercase tracking-wider border ${
+                    estado === 'ACTIVO'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-slate-900 hover:bg-slate-850 text-slate-400 border-slate-800'
+                  }`}
+                >
+                  Activo
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -417,23 +828,13 @@ export const ModalEdicionCircuito = ({
                     setDescArtefacto('');
                     setPotenciaWatts('');
                   }}
-                  className="flex-1 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 rounded font-bold text-[9px] transition-all cursor-pointer uppercase tracking-wider"
+                  className={`flex-1 py-1.5 rounded-lg font-bold text-[9px] transition-all cursor-pointer uppercase tracking-wider border ${
+                    estado === 'RESERVA'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-900 hover:bg-slate-850 text-slate-400 border-slate-800'
+                  }`}
                 >
-                  Set RESERVA
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEstado('DISPONIBLE');
-                    setNombreArtefacto('DISPONIBLE');
-                    setRotulo('DISPONIBLE');
-                    setBreakerAmp('');
-                    setDescArtefacto('');
-                    setPotenciaWatts('');
-                  }}
-                  className="flex-1 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 rounded font-bold text-[9px] transition-all cursor-pointer uppercase tracking-wider"
-                >
-                  Set DISPONIBLE
+                  Marcar como Reserva
                 </button>
               </div>
             </div>
@@ -478,8 +879,9 @@ export const ModalEdicionCircuito = ({
             <div className="space-y-5">
               <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-lg flex gap-3 items-center mb-2">
                 <ClipboardList className="w-5 h-5 text-amber-400" />
-                <span className="text-xs text-amber-300 font-bold">Llenar Ficha del Artefacto Final</span>
+                <span className="text-xs text-amber-300 font-bold">Llenar Ficha del Artefacto / Circuito</span>
               </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
@@ -594,9 +996,10 @@ export const ModalEdicionCircuito = ({
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
                   onClick={handleSaveArtefacto}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
+                  disabled={isTablero && !validation.isValid}
+                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
                 >
-                  Guardar Ficha
+                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos para Guardar' : 'Guardar Ficha'}
                 </button>
               </div>
             </div>
@@ -1417,9 +1820,11 @@ export const ModalEdicionCircuito = ({
           {/* ============================================================== */}
           {step === 'VINCULAR_EXISTENTE' && (
             <div className="space-y-4">
+              {renderUniversalElementSelector()}
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {isMultiSelect ? 'Seleccionar Elemento(s) Creado(s) en el Proyecto' : 'Buscar Elemento Creado en el Proyecto'}
+                  {isMultiSelect ? 'O Buscar Elemento(s) en el Proyecto' : 'O Buscar por Texto / ID en el Proyecto'}
                 </label>
                 {isMultiSelect && (
                   <p className="text-[11px] text-amber-400 font-semibold mb-2">
@@ -1446,7 +1851,7 @@ export const ModalEdicionCircuito = ({
                   filteredElements.map((el) => {
                     const isSelected = isMultiSelect
                       ? selectedLinks.some(item => item.id === el.id)
-                      : selectedLink?.id === el.id;
+                      : selectedLink?.id === el.id || selectedElementoDestinoId === el.id;
 
                     return (
                       <button
@@ -1461,6 +1866,8 @@ export const ModalEdicionCircuito = ({
                             }
                           } else {
                             setSelectedLink(el);
+                            setSelectedElementoDestinoId(el.id);
+                            setSelectedTipoElementoDestino(el.tipo || el.tipoElemento || 'TABLERO');
                             setSearchQuery(el.nombre);
                           }
                         }}
@@ -1496,10 +1903,12 @@ export const ModalEdicionCircuito = ({
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
                   onClick={() => handleSaveVinculo()}
-                  disabled={isMultiSelect ? selectedLinks.length === 0 : !selectedLink}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
+                  disabled={(isMultiSelect ? selectedLinks.length === 0 : (!selectedLink && !selectedElementoDestinoId)) || (isTablero && !validation.isValid)}
+                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
                 >
-                  {isMultiSelect
+                  {isTablero && !validation.isValid
+                    ? 'Resolver Conflicto de Polos para Guardar'
+                    : isMultiSelect
                     ? `Vincular ${selectedLinks.length} Elemento${selectedLinks.length === 1 ? '' : 's'} y Guardar`
                     : 'Vincular y Guardar'}
                 </button>
@@ -1526,9 +1935,10 @@ export const ModalEdicionCircuito = ({
               <div className="pt-4 border-t border-slate-800">
                 <button
                   onClick={handleSavePorCrear}
-                  className="px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer active:scale-[0.98]"
+                  disabled={isTablero && !validation.isValid}
+                  className="px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer active:scale-[0.98]"
                 >
-                  Agregar a la Lista de Pendientes
+                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos' : 'Agregar a la Lista de Pendientes'}
                 </button>
               </div>
             </div>
@@ -1539,15 +1949,18 @@ export const ModalEdicionCircuito = ({
           {/* ============================================================== */}
           {isTablero && step === 'ROTULAR_Y_FOTO' && (
             <div className="space-y-5">
+              {/* Selector Universal de Elementos */}
+              {renderUniversalElementSelector()}
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Rótulo del Circuito
+                  Rótulo del Circuito / Descripción
                 </label>
                 <input
                   type="text"
                   value={rotulo}
                   onChange={(e) => setRotulo(e.target.value)}
-                  placeholder="Ej. RESERVA, VACÍO, SIN USAR"
+                  placeholder="Ej. RESERVA, VACÍO, ALIMENTACIÓN A CCM-01"
                   className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -1599,9 +2012,10 @@ export const ModalEdicionCircuito = ({
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
                   onClick={handleSaveRotuloFoto}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
+                  disabled={isTablero && !validation.isValid}
+                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
                 >
-                  Guardar Cambios
+                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos para Guardar' : 'Guardar Cambios'}
                 </button>
               </div>
             </div>

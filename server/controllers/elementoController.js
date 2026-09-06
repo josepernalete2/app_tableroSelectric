@@ -74,7 +74,8 @@ export const crearElementoUnifilar = async (req, res, next) => {
       const maxPolos = parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42;
       const circuits = parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || [];
 
-      // Validar reglas de polos
+      // Validar reglas de polos y colisiones internas
+      const polosOcupadosMap = new Map();
       for (const circ of circuits) {
         const numPolos = circ.numPolos !== undefined ? parseInt(circ.numPolos, 10) : (circ.poles ? circ.poles.length : 1);
         const posicionPolo = circ.posicionPolo !== undefined ? parseInt(circ.posicionPolo, 10) : (circ.poles ? circ.poles[0] : 1);
@@ -86,11 +87,31 @@ export const crearElementoUnifilar = async (req, res, next) => {
           });
         }
 
-        if (posicionPolo + (numPolos - 1) > maxPolos) {
-          return res.status(400).json({
+        const requiredPoles = [];
+        for (let i = 0; i < numPolos; i++) {
+          requiredPoles.push(posicionPolo + i * 2);
+        }
+
+        const highestPole = Math.max(...requiredPoles);
+        if (highestPole > maxPolos) {
+          return res.status(409).json({
             ok: false,
-            error: `Validación fallida: El circuito en la posición ${posicionPolo} con ${numPolos} polos supera la capacidad máxima del gabinete de ${maxPolos} polos.`
+            error: 'Capacidad de polos excedida',
+            detalle: `El circuito en la posición ${posicionPolo} con ${numPolos} polos ocupa los polos [${requiredPoles.join(', ')}], superando el límite del tablero (${maxPolos} polos).`
           });
+        }
+
+        for (const p of requiredPoles) {
+          if (polosOcupadosMap.has(p)) {
+            const occ = polosOcupadosMap.get(p);
+            return res.status(409).json({
+              ok: false,
+              error: 'Conflicto de colisión de polos',
+              detalle: `El polo ${p} está duplicado entre el circuito "${circ.descripcion || circ.equipo || `Polo ${posicionPolo}`}" y el circuito "${occ.descripcion || occ.equipo || `Polo ${occ.posicionPolo}`}".`,
+              poloEnConflicto: p
+            });
+          }
+          polosOcupadosMap.set(p, { posicionPolo, descripcion: circ.descripcion || circ.equipo });
         }
       }
 
@@ -118,7 +139,9 @@ export const crearElementoUnifilar = async (req, res, next) => {
               numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
               amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
               descripcion: c.descripcion || c.equipo || null,
-              estado: c.estado || 'ACTIVO'
+              estado: c.estado || 'ACTIVO',
+              elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
+              tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null
             }))
           }
         },
@@ -139,7 +162,9 @@ export const crearElementoUnifilar = async (req, res, next) => {
               numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
               amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
               descripcion: c.descripcion || c.equipo || null,
-              estado: c.estado || 'ACTIVO'
+              estado: c.estado || 'ACTIVO',
+              elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
+              tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null
             }))
           }
         }

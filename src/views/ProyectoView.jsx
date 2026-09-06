@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore, { getNextElementId, PREFIX_MAP, formatElementTitleWithId } from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
+import SelectorAlimentadorJerarquico from '../components/SelectorAlimentadorJerarquico';
 import { 
   ArrowLeft, 
   Layers, 
@@ -70,7 +72,7 @@ export const ProyectoView = () => {
   const company = companies.find((c) => c.id === companyId);
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
 
-
+  const { confirm, alert: customAlert } = useConfirm();
 
   // Estados para Edición de Proyecto
   const [showEditProyectoModal, setShowEditProyectoModal] = useState(false);
@@ -83,16 +85,31 @@ export const ProyectoView = () => {
 
   const handleUpdateProyectoSubmit = async (e) => {
     e.preventDefault();
-    await updateProyecto(companyId, proyectoId, {
-      nombre: editProyectoNombre,
-      descripcion: editProyectoDescripcion,
-      direccion: editProyectoDireccion,
-      responsableNombre: editResponsableNombre || null,
-      responsableTelefono: editResponsableTelefono || null,
-      responsableEmail: editResponsableEmail || null
+    if (!editProyectoNombre.trim()) return;
+
+    updateProyecto(companyId, proyectoId, {
+      nombre: editProyectoNombre.trim(),
+      descripcion: editProyectoDescripcion.trim(),
+      direccion: editProyectoDireccion.trim(),
+      responsable: {
+        nombre: editResponsableNombre.trim(),
+        telefono: editResponsableTelefono.trim(),
+        email: editResponsableEmail.trim()
+      }
     });
-    showToast("Proyecto actualizado correctamente.", "success");
+
     setShowEditProyectoModal(false);
+    showToast?.("Información del proyecto actualizada.", "success");
+  };
+
+  const handleOpenEditModal = () => {
+    setEditProyectoNombre(proyecto?.nombre || '');
+    setEditProyectoDescripcion(proyecto?.descripcion || '');
+    setEditProyectoDireccion(proyecto?.direccion || '');
+    setEditResponsableNombre(proyecto?.responsable?.nombre || '');
+    setEditResponsableTelefono(proyecto?.responsable?.telefono || '');
+    setEditResponsableEmail(proyecto?.responsable?.email || '');
+    setShowEditProyectoModal(true);
   };
 
   // Estados de pestaña activa
@@ -120,19 +137,15 @@ export const ProyectoView = () => {
     });
   };
 
-  const handleSelectAll = () => {
-    const listToSelect = activeTab === 'UNIFILAR' 
-      ? (typeof filteredElementos !== 'undefined' ? filteredElementos : [])
-      : (typeof filteredInspecciones !== 'undefined' ? filteredInspecciones : []);
-    const ids = listToSelect.map(e => e.id);
-    setSelectedIds(new Set(ids));
+  const handleSelectAll = (items) => {
+    setSelectedIds(new Set(items.map((i) => i.id)));
   };
 
   const handleDeselectAll = () => {
     setSelectedIds(new Set());
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     const selectedCount = selectedIds.size;
     if (selectedCount === 0) return;
 
@@ -140,7 +153,14 @@ export const ProyectoView = () => {
       ? `¿Estás seguro de que deseas eliminar los ${selectedCount} elementos seleccionados del Diagrama Unifilar?`
       : `¿Estás seguro de que deseas eliminar las ${selectedCount} fichas de inspección seleccionadas?`;
 
-    if (window.confirm(confirmMsg)) {
+    const ok = await confirm({
+      title: 'Eliminar elementos seleccionados',
+      message: confirmMsg,
+      type: 'danger',
+      confirmText: 'Eliminar seleccionados'
+    });
+
+    if (ok) {
       if (activeTab === 'UNIFILAR') {
         selectedIds.forEach((id) => {
           deleteElementoUnifilar(proyectoId, id);
@@ -362,7 +382,7 @@ export const ProyectoView = () => {
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-      alert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
+      customAlert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
       return;
     }
 
@@ -500,7 +520,7 @@ export const ProyectoView = () => {
         setShowElementoModal(false);
         showToast?.("Elemento registrado correctamente.", "success");
       } else {
-        alert(result.error);
+        customAlert(result.error);
       }
     }
   };
@@ -530,7 +550,7 @@ export const ProyectoView = () => {
       setInspectorName('');
       setShowInspeccionModal(false);
     } else {
-      alert(result.error);
+      customAlert(result.error);
     }
   };
 
@@ -555,7 +575,7 @@ export const ProyectoView = () => {
       setShowPuntoMedicionModal(false);
       showToast?.('Punto de Medición registrado con éxito', 'success');
     } else {
-      alert(result.error);
+      customAlert(result.error);
     }
   };
 
@@ -889,9 +909,15 @@ export const ProyectoView = () => {
                             </span>
                             {user?.role !== 'CLIENT' && (
                               <button
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (window.confirm(`¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`)) {
+                                  const ok = await confirm({
+                                    title: 'Eliminar Inspección',
+                                    message: `¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`,
+                                    type: 'danger',
+                                    confirmText: 'Eliminar'
+                                  });
+                                  if (ok) {
                                     deleteSubestacion(proyectoId, item.id);
                                   }
                                 }}
@@ -1009,14 +1035,20 @@ export const ProyectoView = () => {
                           </span>
                           {user?.role !== 'CLIENT' && (
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`¿Eliminar el punto de medición "${item.nombre}"?`)) {
+                                const ok = await confirm({
+                                  title: 'Eliminar Punto de Medición',
+                                  message: `¿Eliminar el punto de medición "${item.nombre}"?`,
+                                  type: 'danger',
+                                  confirmText: 'Eliminar'
+                                });
+                                if (ok) {
                                   deletePuntoMedicion(proyectoId, item.id);
                                   showToast?.('Punto de medición eliminado', 'info');
                                 }
                               }}
-                              className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                              className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
                               title="Eliminar Punto de Medición"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1126,14 +1158,20 @@ export const ProyectoView = () => {
                             </span>
                             {user?.role !== 'CLIENT' && (
                               <button
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (window.confirm(`¿Eliminar el CCM "${item.nombre}"?`)) {
+                                  const ok = await confirm({
+                                    title: 'Eliminar CCM',
+                                    message: `¿Eliminar el CCM "${item.nombre}"?`,
+                                    type: 'danger',
+                                    confirmText: 'Eliminar'
+                                  });
+                                  if (ok) {
                                     deleteCcm(proyectoId, item.id);
                                     showToast?.('CCM eliminado correctamente', 'info');
                                   }
                                 }}
-                                className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
+                                className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
                                 title="Eliminar CCM"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1296,9 +1334,15 @@ export const ProyectoView = () => {
                               <Settings className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`)) {
+                                const ok = await confirm({
+                                  title: 'Eliminar Elemento',
+                                  message: `¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`,
+                                  type: 'danger',
+                                  confirmText: 'Eliminar'
+                                });
+                                if (ok) {
                                   deleteElementoUnifilar(proyectoId, item.id);
                                 }
                               }}
@@ -1485,43 +1529,17 @@ export const ProyectoView = () => {
                 />
               </div>
 
-              {/* Alimentación */}
+              {/* Alimentación Jerárquica Dinámica */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Alimentado Por (Procedencia / Jerarquía)
-                </label>
-                <div className="space-y-2">
-                  <select
-                    value={elementos.some(el => el.nombre === alimentadoPor) ? alimentadoPor : (alimentadoPor ? 'OTRO' : '')}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === 'OTRO') {
-                        setAlimentadoPor('');
-                      } else {
-                        setAlimentadoPor(val);
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 focus:outline-none h-11 cursor-pointer"
-                  >
-                    <option value="">-- No definido / Ninguno --</option>
-                    {elementos.filter(el => el.id !== editingElemento?.id).map(el => (
-                      <option key={el.id} value={el.nombre}>
-                        {el.nombre} ({el.tipoElemento === 'TABLERO' ? 'PANEL ELÉCTRICO' : el.tipoElemento})
-                      </option>
-                    ))}
-                    <option value="OTRO">Especificar otro (texto libre)...</option>
-                  </select>
-
-                  {(!elementos.some(el => el.nombre === alimentadoPor) || alimentadoPor === '') && (
-                    <input
-                      type="text"
-                      value={alimentadoPor}
-                      onChange={(e) => setAlimentadoPor(e.target.value)}
-                      placeholder="Ej. Transformador 500 KVA o CORPOELEC"
-                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
-                    />
-                  )}
-                </div>
+                <SelectorAlimentadorJerarquico
+                  proyectoId={proyectoId}
+                  tableroActualId={editingElemento?.id}
+                  elementosList={elementos}
+                  value={alimentadoPor}
+                  onChange={(val) => setAlimentadoPor(val)}
+                  label="Alimentado Por (Procedencia / Jerarquía)"
+                  placeholder="Seleccionar Subestación, Trafo, CCM o Tablero..."
+                />
               </div>
 
               {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil } from 'lucide-react';
 import useStore from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -25,6 +26,7 @@ const SafeImage = ({ blob, src, alt, className }) => {
   return <img src={finalSrc} alt={alt} className={className} />;
 };
 import ModalEdicionCircuito from './ModalEdicionCircuito';
+import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
@@ -34,6 +36,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   );
 
   const { companies, updateTableroAlimentador, crearElementoProvisional } = useStore();
+  const { alert: customAlert } = useConfirm();
 
   const project = React.useMemo(() => {
     if (!tableroData?.id) return null;
@@ -57,7 +60,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   const todosElementosCreados = React.useMemo(() => {
     if (!project) return [];
-    const tableros = (project.elementosUnifilares || project.tableros || []).map(e => ({
+    const unifilares = (project.elementosUnifilares || project.tableros || []).map(e => ({
       id: e.id,
       nombre: e.nombre,
       tipo: e.tipoElemento || 'TABLERO'
@@ -77,16 +80,17 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       nombre: c.nombre,
       tipo: 'CCM'
     }));
-    return [...tableros, ...subestaciones, ...puntos, ...ccms].filter(e => e.id !== tableroData?.id);
+    return [...unifilares, ...subestaciones, ...puntos, ...ccms].filter(e => e.id !== tableroData?.id);
   }, [project, tableroData?.id]);
 
-  const renderCircuitEquipo = (equipoText, vinculadoId) => {
+  const renderCircuitEquipo = (equipoText, vinculadoId, elementoDestinoId, tipoDestino, tipoElementoDestino) => {
     if (!equipoText || equipoText === 'RESERVA') {
       return <span className="text-xs text-slate-400 dark:text-slate-600 italic font-mono">RESERVA</span>;
     }
 
     let cleanName = equipoText;
-    let elementId = vinculadoId || null;
+    let elementId = elementoDestinoId || vinculadoId || null;
+    let elementType = tipoElementoDestino || tipoDestino || null;
 
     const match = String(equipoText).match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
     if (match) {
@@ -99,10 +103,84 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{cleanName}</span>
         {elementId && (
           <span className="inline-flex items-center w-max px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/30">
-            ID: {elementId}
+            {elementType && elementType !== 'SUB_TABLERO' && elementType !== 'TABLERO' ? `${elementType}: ` : ''}{elementId}
           </span>
         )}
       </div>
+    );
+  };
+
+  const renderTipoDestinoBadge = (tipoDestino, tipoElementoDestino) => {
+    const t = (tipoElementoDestino || tipoDestino || '').toUpperCase();
+    if (!t) return null;
+
+    if (t === 'ARTEFACTO' || t === 'CARGA_DIRECTA') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 mt-1">
+          🔌 ARTEFACTO
+        </span>
+      );
+    }
+    if (t === 'TRANSFER' || t === 'ATS' || t === 'MTS') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 mt-1">
+          🔄 TRANSFERENCIA (ATS)
+        </span>
+      );
+    }
+    if (t === 'GENERADOR' || t === 'GEN' || t === 'PLANTA') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 mt-1">
+          ⚡ GENERADOR
+        </span>
+      );
+    }
+    if (t === 'CCM' || t === 'MOTOR') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 mt-1">
+          ⚙️ CCM
+        </span>
+      );
+    }
+    if (t === 'SUBESTACION' || t === 'SE') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300 mt-1">
+          🏛️ SUBESTACIÓN
+        </span>
+      );
+    }
+    if (t === 'TRANSFORMADOR' || t === 'TRAFO') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 mt-1">
+          🔌 TRANSFORMADOR
+        </span>
+      );
+    }
+    if (t === 'PUNTO_MEDICION' || t === 'MEDIDOR') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300 mt-1">
+          📊 MEDIDOR
+        </span>
+      );
+    }
+    if (t === 'SUB_TABLERO' || t === 'TABLERO') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 mt-1">
+          🏢 SUB-TABLERO
+        </span>
+      );
+    }
+    if (t === 'SUB_TABLERO_PENDIENTE') {
+      return (
+        <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 mt-1">
+          ⏳ RESERVA PENDIENTE
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 mt-1">
+        🔗 {t}
+      </span>
     );
   };
 
@@ -112,11 +190,17 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   const normalizedCircuits = React.useMemo(() => {
     if (!tableroData) return [];
-    const list = circuits.map(c => ({
-      ...c,
-      poles: Array.isArray(c.poles) && c.poles.length > 0 ? c.poles : [1],
-      breaker: c.breaker || { marca: '', tipo: '', amp: '' }
-    }));
+    const list = circuits.map(c => {
+      const firstPole = Array.isArray(c.poles) && c.poles.length > 0 ? c.poles[0] : 1;
+      const customLabel = c.codigoPolo || c.polo_label || c.poloLabel || (tableroData.poleLabels && tableroData.poleLabels[firstPole]) || '';
+      return {
+        ...c,
+        poles: Array.isArray(c.poles) && c.poles.length > 0 ? c.poles : [1],
+        breaker: c.breaker || { marca: '', tipo: '', amp: '' },
+        codigoPolo: customLabel,
+        polo_label: customLabel
+      };
+    });
 
     const coveredPoles = new Set();
     list.forEach(c => {
@@ -128,6 +212,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     // Fill in missing poles
     for (let pole = 1; pole <= maxPoles; pole++) {
       if (!coveredPoles.has(pole)) {
+        const customLabel = (tableroData.poleLabels && tableroData.poleLabels[pole]) || '';
         list.push({
           id: `auto_${pole}`,
           side: pole % 2 === 1 ? 'left' : 'right',
@@ -135,6 +220,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
           equipo: 'RESERVA',
           breaker: { marca: '', tipo: '', amp: '' },
           conductor: '',
+          codigoPolo: customLabel,
+          polo_label: customLabel
         });
       }
     }
@@ -202,22 +289,94 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     onUpdateTablero(newData);
   };
 
+  // Update or assign a custom pole label / nomenclature
+  const handleUpdatePoleLabel = (poleNumber, newLabel) => {
+    if (readOnly) return;
+    const newData = { ...tableroData };
+    let currentCircuits = [...(tableroData.circuits || [])];
+
+    // Actualizar mapa global de etiquetas de polo
+    newData.poleLabels = {
+      ...(tableroData.poleLabels || {}),
+      [poleNumber]: newLabel
+    };
+
+    // Buscar si ya existe un circuito que contenga este polo
+    const existingIndex = currentCircuits.findIndex(c => Array.isArray(c.poles) && c.poles.includes(poleNumber));
+
+    if (existingIndex >= 0) {
+      currentCircuits[existingIndex] = {
+        ...currentCircuits[existingIndex],
+        codigoPolo: newLabel,
+        polo_label: newLabel,
+        poloLabel: newLabel
+      };
+    } else {
+      // Si era un polo vacío/auto, crear circuito para persistir su etiqueta personalizada
+      currentCircuits.push({
+        id: `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        side: poleNumber % 2 === 1 ? 'left' : 'right',
+        poles: [poleNumber],
+        equipo: 'RESERVA',
+        breaker: { marca: '', tipo: '', amp: '' },
+        conductor: '',
+        codigoPolo: newLabel,
+        polo_label: newLabel,
+        poloLabel: newLabel
+      });
+    }
+
+    newData.circuits = currentCircuits.filter(c => {
+      const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
+      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
+      const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
+      const hasFicha = c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts);
+      const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
+      const hasPoleLabel = !!(c.codigoPolo || c.polo_label || c.poloLabel);
+      return hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino || c.vinculadoId || hasFicha || isMultiPole || hasPoleLabel;
+    });
+
+    onUpdateTablero(newData);
+  };
+
   const saveCircuitFromModal = (circuitId, updatedFields) => {
     if (readOnly) return;
     const newData = { ...tableroData };
 
-    if (updatedFields && updatedFields.tipoDestino === 'SUB_TABLERO_PENDIENTE' && project?.id) {
-      const prov = crearElementoProvisional(project.id, {
-        nombre: updatedFields.equipo && updatedFields.equipo !== 'RESERVA (Pendiente por Crear)'
-          ? updatedFields.equipo
-          : `Sub-Tablero Alimentado (${circuitId})`,
-        tipoElemento: 'TABLERO',
-        circuitoOrigen: circuitId
-      });
+    if (updatedFields && (updatedFields.tipoDestino === 'SUB_TABLERO_PENDIENTE' || updatedFields.tipoDestino === 'ELEMENTO_PENDIENTE') && project?.id) {
+      const existingProvId = updatedFields.elementoDestinoId || updatedFields.vinculadoId;
+      let prov = null;
+      if (existingProvId) {
+        prov = (project.elementosUnifilares || project.tableros || []).find(e => e.id === existingProvId);
+      }
+      if (!prov) {
+        const polesStr = Array.isArray(updatedFields.poles) && updatedFields.poles.length > 0
+          ? updatedFields.poles.join(', ')
+          : (updatedFields.posicionPolo || circuitId);
+
+        const provType = updatedFields.tipoElementoProvisional || updatedFields.tipoElementoDestino || 'TABLERO';
+        const defaultName = `${provType} Alimentado (Polo ${polesStr})`;
+        const provName = updatedFields.nombreProvisional || updatedFields.equipo || defaultName;
+
+        prov = crearElementoProvisional(project.id, {
+          nombre: provName && provName !== 'RESERVA (Pendiente por Crear)' ? provName : defaultName,
+          tipoElemento: provType,
+          circuitoOrigen: circuitId
+        });
+      }
+
       if (prov) {
         updatedFields.vinculadoId = prov.id;
+        updatedFields.elementoDestinoId = prov.id;
+        updatedFields.tipoElementoDestino = prov.tipoElemento || updatedFields.tipoElementoProvisional || 'TABLERO';
         updatedFields.equipo = `${prov.nombre} (ID: ${prov.id})`;
-        updatedFields.tipoDestino = 'SUB_TABLERO';
+        updatedFields.tipoDestino = prov.tipoElemento === 'TABLERO' ? 'SUB_TABLERO' : 'ELEMENTO_VINCULADO';
+
+        const pendingItem = { id: prov.id, nombre: prov.nombre, tipoElemento: prov.tipoElemento, circuitoId };
+        const filteredPendientes = (elementosPorCrear || []).filter(item => item.circuitoId !== circuitId && item.id !== prov.id);
+        const updatedList = [...filteredPendientes, pendingItem];
+        setElementosPorCrear(updatedList);
+        newData.elementosPorCrear = updatedList;
       }
     }
 
@@ -252,7 +411,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
       const hasFicha = c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts);
       const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
-      return hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino || c.vinculadoId || hasFicha || isMultiPole;
+      const hasPoleLabel = !!(c.codigoPolo || c.polo_label || c.poloLabel);
+      const hasDestino = !!(c.elementoDestinoId || c.vinculadoId || c.tipoElementoDestino || c.tipoDestino);
+      return hasBreaker || hasConductor || hasEquipo || c.fotografia || hasDestino || hasFicha || isMultiPole || hasPoleLabel;
     });
 
     onUpdateTablero(newData);
@@ -265,7 +426,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     if (!circuit) return;
 
     if (circuit.poles.length >= 3) {
-      alert("El número máximo de polos agrupados es 3.");
+      customAlert("El número máximo de polos agrupados es 3.");
       return;
     }
 
@@ -283,7 +444,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
     const targetOccupied = (tableroData.circuits || []).find(c => c.id !== circuitId && c.poles.includes(targetPole));
     if (targetOccupied && isOccupiedByRealCircuit(targetOccupied)) {
-      alert(`El polo ${targetPole} ya está ocupado por el circuito "${targetOccupied.equipo}".`);
+      customAlert(`El polo ${targetPole} ya está ocupado por el circuito "${targetOccupied.equipo}".`);
       return;
     }
 
@@ -377,47 +538,29 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             </td>
           </tr>
 
-          {/* Fila 3: Alimentado Por */}
+          {/* Fila 3: Alimentado Por Jerárquico Dinámico */}
           <tr className="border-b border-slate-800 dark:border-slate-700">
-            <td className="w-24 p-2 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase">
+            <td className="w-28 p-2.5 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase text-xs">
               Alimentado Por:
             </td>
-            <td colSpan={6} className="p-2 font-medium">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="flex-1">
-                  <EditableCell
-                    value={alimentadoPor}
-                    onSave={(val) => updateField('alimentadoPor', val)}
-                    placeholder="Indique procedencia de la alimentación, interruptor y calibre..."
-                    className="px-1"
-                  />
-                </div>
-                {alimentadores.length > 0 && (
-                  <div className="flex items-center gap-1.5 shrink-0 bg-slate-105 border border-slate-800/20 dark:bg-slate-900/40 dark:border-slate-750 px-2 py-1 rounded">
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Vincular Alimentador:</span>
-                    <select
-                      value={tableroData.datosTecnicos?.alimentadorId || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const selectedAlim = alimentadores.find(a => a.id === val);
-                        updateField('datosTecnicos.alimentadorId', val || null);
-                        if (selectedAlim) {
-                          updateField('alimentadoPor', `${selectedAlim.nombre} (${selectedAlim.capacidadAmperios ? selectedAlim.capacidadAmperios + 'A' : 'N/D'})`);
-                        }
-                        updateTableroAlimentador(project?.id, tableroData.id, val || null);
-                      }}
-                      className="bg-transparent text-slate-900 dark:text-slate-100 font-bold border-none text-[11px] focus:outline-none cursor-pointer"
-                    >
-                      <option value="" className="bg-slate-900 text-slate-100">-- Ninguno --</option>
-                      {alimentadores.map(a => (
-                        <option key={a.id} value={a.id} className="bg-slate-900 text-slate-100">
-                          {a.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
+            <td colSpan={6} className="p-2.5 font-medium">
+              <SelectorAlimentadorJerarquico
+                proyectoId={project?.id}
+                tableroActualId={tableroData?.id}
+                value={alimentadoPor}
+                onChange={(val, selectedObj) => {
+                  updateField('alimentadoPor', val);
+                  if (selectedObj?.tipoElemento === 'ALIMENTADOR') {
+                    updateField('datosTecnicos.alimentadorId', selectedObj.id);
+                    updateTableroAlimentador(project?.id, tableroData.id, selectedObj.id);
+                  } else {
+                    updateField('datosTecnicos.alimentadorId', selectedObj?.id !== 'CUSTOM' ? (selectedObj?.id || null) : null);
+                    updateTableroAlimentador(project?.id, tableroData.id, selectedObj?.id !== 'CUSTOM' ? (selectedObj?.id || null) : null);
+                  }
+                }}
+                label=""
+                placeholder="Seleccionar Subestación, Transformador, CCM, Tablero o Acometida..."
+              />
             </td>
           </tr>
 
@@ -441,7 +584,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         return maxVal > acc ? maxVal : acc;
                       }, 0);
                       if (val < maxCircPosition) {
-                        alert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
+                        customAlert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
                         return;
                       }
                       updateField('maxPoles', val);
@@ -459,7 +602,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         return maxVal > acc ? maxVal : acc;
                       }, 0);
                       if (val < maxCircPosition) {
-                        alert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
+                        customAlert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
                         return;
                       }
                       updateField('maxPoles', val);
@@ -709,7 +852,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   if (!file) return;
                   
                   if (file.size > 2 * 1024 * 1024) {
-                    alert("La imagen es demasiado grande. Máximo 2MB.");
+                    customAlert("La imagen es demasiado grande. Máximo 2MB.");
                     return;
                   }
                   
@@ -810,28 +953,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       >
                         <div className="flex flex-col justify-center min-h-[2rem] pr-6">
                           <div className="flex items-center justify-between">
-                            {renderCircuitEquipo(cLeft.equipo, cLeft.vinculadoId)}
+                            {renderCircuitEquipo(cLeft.equipo, cLeft.vinculadoId, cLeft.elementoDestinoId, cLeft.tipoDestino, cLeft.tipoElementoDestino)}
                             {cLeft.fotografia && (
                               <Image className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
                             )}
                           </div>
                           
-                          {/* Badges based on tipoDestino */}
-                          {cLeft.tipoDestino === 'ARTEFACTO' && (
-                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 mt-1">
-                              🔌 ARTEFACTO
-                            </span>
-                          )}
-                          {cLeft.tipoDestino === 'SUB_TABLERO' && (
-                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 mt-1">
-                              ⚡ SUB-TABLERO
-                            </span>
-                          )}
-                          {cLeft.tipoDestino === 'SUB_TABLERO_PENDIENTE' && (
-                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 mt-1">
-                              ⚠️ POR CREAR
-                            </span>
-                          )}
+                          {/* Badges based on tipoDestino / tipoElementoDestino */}
+                          {renderTipoDestinoBadge(cLeft.tipoDestino, cLeft.tipoElementoDestino)}
                         </div>
                         {rowSpanLeft > 1 && (
                           <button
@@ -909,15 +1038,15 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                     </>
                   )}
 
-                  {/* Número de Polo Impar */}
-                  <td className="border-r-2 border-slate-800 dark:border-slate-700 p-1 text-center font-mono font-bold bg-amber-500/10 dark:bg-amber-500/5 text-amber-700 dark:text-amber-400 select-none align-middle relative group/pole">
-                    <div className="flex flex-col items-center justify-center min-h-[1.75rem]">
-                      <span>{oddPole}</span>
+                  {/* Número de Polo Impar (Barra Colectora Física Fija) */}
+                  <td className="border-r-2 border-slate-800 dark:border-slate-700 p-0 text-center font-mono font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 align-middle select-none relative group/pole cursor-default">
+                    <div className="flex items-center justify-center min-h-[1.75rem] px-1">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{oddPole}</span>
                       {/* Interactive Group Control */}
                       {oddPole < maxPoles - 1 && isFirstLeft && rowSpanLeft === 1 && (
                         <button
                           onClick={() => groupWithNext(cLeft.id, 'left')}
-                          title="Agrupar con siguiente"
+                          title="Agrupar con siguiente polo"
                           className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-0 group-hover/pole:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
                         >
                           <Plus className="w-2.5 h-2.5" />
@@ -927,15 +1056,15 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   </td>
 
                   {/* === LADO DERECHO (PAR) === */}
-                  {/* Número de Polo Par */}
-                  <td className="border-r border-slate-800 dark:border-slate-700 p-1 text-center font-mono font-bold bg-amber-500/10 dark:bg-amber-500/5 text-amber-700 dark:text-amber-400 select-none align-middle relative group/pole-right">
-                    <div className="flex flex-col items-center justify-center min-h-[1.75rem]">
-                      <span>{evenPole}</span>
+                  {/* Número de Polo Par (Barra Colectora Física Fija) */}
+                  <td className="border-r border-slate-800 dark:border-slate-700 p-0 text-center font-mono font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 align-middle select-none relative group/pole-right cursor-default">
+                    <div className="flex items-center justify-center min-h-[1.75rem] px-1">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{evenPole}</span>
                       {/* Interactive Group Control */}
                       {evenPole < maxPoles && isFirstRight && rowSpanRight === 1 && (
                         <button
                           onClick={() => groupWithNext(cRight.id, 'right')}
-                          title="Agrupar con siguiente"
+                          title="Agrupar con siguiente polo"
                           className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-0 group-hover/pole-right:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
                         >
                           <Plus className="w-2.5 h-2.5" />
@@ -1014,28 +1143,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       >
                         <div className="flex flex-col justify-center min-h-[2rem] pr-6">
                           <div className="flex items-center justify-between">
-                            {renderCircuitEquipo(cRight.equipo, cRight.vinculadoId)}
+                            {renderCircuitEquipo(cRight.equipo, cRight.vinculadoId, cRight.elementoDestinoId, cRight.tipoDestino, cRight.tipoElementoDestino)}
                             {cRight.fotografia && (
                               <Image className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
                             )}
                           </div>
                           
-                          {/* Badges based on tipoDestino */}
-                          {cRight.tipoDestino === 'ARTEFACTO' && (
-                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 mt-1">
-                              🔌 ARTEFACTO
-                            </span>
-                          )}
-                          {cRight.tipoDestino === 'SUB_TABLERO' && (
-                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 mt-1">
-                              ⚡ SUB-TABLERO
-                            </span>
-                          )}
-                          {cRight.tipoDestino === 'SUB_TABLERO_PENDIENTE' && (
-                            <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 mt-1">
-                              ⚠️ POR CREAR
-                            </span>
-                          )}
+                          {/* Badges based on tipoDestino / tipoElementoDestino */}
+                          {renderTipoDestinoBadge(cRight.tipoDestino, cRight.tipoElementoDestino)}
                         </div>
                         {rowSpanRight > 1 && (
                           <button
@@ -1164,31 +1279,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         isOpen={!!editingCircuit}
         onClose={() => setEditingCircuit(null)}
         circuitData={editingCircuit}
+        tableroCircuits={circuits}
+        maxPolos={maxPoles}
         onSave={saveCircuitFromModal}
         elementosCreados={todosElementosCreados}
-        onAgregarPorCrear={(item) => {
-          if (project?.id) {
-            const prov = crearElementoProvisional(project.id, {
-              nombre: item.nombre,
-              tipoElemento: 'TABLERO',
-              circuitoOrigen: item.circuitoId
-            });
-            const newItem = prov ? { ...item, id: prov.id, nombre: prov.nombre } : item;
-            const updatedList = [...elementosPorCrear, newItem];
-            setElementosPorCrear(updatedList);
-            onUpdateTablero({
-              ...tableroData,
-              elementosPorCrear: updatedList
-            });
-          } else {
-            const updatedList = [...elementosPorCrear, item];
-            setElementosPorCrear(updatedList);
-            onUpdateTablero({
-              ...tableroData,
-              elementosPorCrear: updatedList
-            });
-          }
-        }}
       />
 
             {/* Botón flotante para exportar a PDF (no-print) */}

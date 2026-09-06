@@ -16,7 +16,7 @@ import { crearCcm, eliminarCcm } from '../controllers/ccmController.js';
 import { crearElementoUnifilar, eliminarElementoUnifilar } from '../controllers/elementoController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
-import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto } from '../controllers/jerarquiaController.js';
+import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto, obtenerPotencialesAlimentadores } from '../controllers/jerarquiaController.js';
 import { procesarSincronizacionBatch } from '../controllers/syncController.js';
 
 const router = Router();
@@ -94,5 +94,6 @@ router.post('/jerarquia/vincular', requireRoles('ADMIN', 'WORKER'), vincularElem
 router.post('/jerarquia/desvincular', requireRoles('ADMIN', 'WORKER'), desvincularElemento);
 router.post('/jerarquia/crear-provisional', requireRoles('ADMIN', 'WORKER'), crearProvisional);
 router.get('/jerarquia/arbol/:proyectoId', obtenerArbolProyecto);
+router.get('/jerarquia/alimentadores/:proyectoId', obtenerPotencialesAlimentadores);
 
 export default router;

@@ -8,7 +8,9 @@ import {
   Zap
 } from 'lucide-react';
 import useStore from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
+import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 
 // Componente para renderizar Blobs de imagen de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -34,6 +36,7 @@ const SafeImage = ({ blob, src, alt, className }) => {
 
 export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly }) {
   const [isEditing, setIsEditing] = useState(false);
+  const { alert: customAlert } = useConfirm();
   const companies = useStore((state) => state.companies || []);
 
   const allFeeders = React.useMemo(() => {
@@ -138,7 +141,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
-      alert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
+      customAlert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
       return;
     }
     setFotoBlob(file);
@@ -309,37 +312,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               </button>
             </div>
             {isEditing ? (
-              <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center w-full sm:w-3/4 inline-flex">
-                <input
-                  type="text"
+              <div className="w-full sm:w-2/3">
+                <SelectorAlimentadorJerarquico
+                  proyectoId={elementoData?.proyectoId}
+                  tableroActualId={elementoData?.id}
+                  elementosList={allFeeders}
                   value={alimentadoPor}
-                  onChange={(e) => setAlimentadoPor(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 flex-1 w-full"
-                  placeholder="Escriba el origen de la alimentación o seleccione de la lista..."
+                  onChange={(val) => setAlimentadoPor(val)}
+                  label=""
+                  placeholder="Seleccionar o escribir procedencia..."
                 />
-                {allFeeders.length > 0 && (
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        const selectedFeeder = allFeeders.find(f => f.nombre === e.target.value || f.id === e.target.value);
-                        if (selectedFeeder) {
-                          setAlimentadoPor(`${selectedFeeder.nombre} (ID: ${selectedFeeder.id})`);
-                        } else {
-                          setAlimentadoPor(e.target.value);
-                        }
-                      }
-                    }}
-                    value={allFeeders.some(f => f.nombre === alimentadoPor || `${f.nombre} (ID: ${f.id})` === alimentadoPor) ? alimentadoPor : ''}
-                    className="bg-slate-900 border border-slate-700 text-slate-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-amber-500 w-full sm:w-auto min-w-[200px]"
-                  >
-                    <option value="">-- Seleccionar Equipo --</option>
-                    {allFeeders.map((f) => (
-                      <option key={f.id} value={`${f.nombre} (ID: ${f.id})`}>
-                        [{f.id}] {f.nombre}
-                      </option>
-                    ))}
-                  </select>
-                )}
               </div>
             ) : (
               renderElementWithId(alimentadoPor || 'ATS SOTANO (ID: ATS-1)', elementoData?.alimentadoPorId)
@@ -2369,6 +2351,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         isOpen={modalJerarquiaOpen}
         onClose={() => setModalJerarquiaOpen(false)}
         circuitData={circuitDataWizard}
+        tableroCircuits={dt.circuits || dt.circuitos || []}
+        maxPolos={dt.maxPoles || 42}
         modo={wizardModo}
         tipoOrigen={tipoElemento}
         elementosCreados={allFeeders}
@@ -2448,11 +2432,14 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
           // Elemento provisional pendiente
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && elementoData?.proyectoId) {
-            crearElementoProvisional(elementoData.proyectoId, {
-              nombre: updated.equipo,
-              tipoElemento: 'TABLERO',
-              circuitoOrigen: idSalida
-            });
+            const existingProvId = updated.elementoDestinoId || updated.vinculadoId;
+            if (!existingProvId) {
+              crearElementoProvisional(elementoData.proyectoId, {
+                nombre: updated.equipo && updated.equipo !== 'RESERVA (Pendiente por Crear)' ? updated.equipo : `Sub-Tablero Alimentado (${idSalida})`,
+                tipoElemento: 'TABLERO',
+                circuitoOrigen: idSalida
+              });
+            }
           }
         }}
       />

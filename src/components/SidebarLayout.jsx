@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import useStore from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '../utils/api';
 import { 
@@ -47,6 +48,8 @@ export const SidebarLayout = () => {
     fetchMessagesList,
     showToast
   } = useStore();
+  
+  const { confirm } = useConfirm();
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -174,7 +177,14 @@ export const SidebarLayout = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!window.confirm("¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos PostgreSQL.")) {
+    const ok = await confirm({
+      title: 'Sobrescribir Base de Datos',
+      message: '¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos PostgreSQL.',
+      type: 'danger',
+      confirmText: 'Importar y Sobrescribir'
+    });
+
+    if (!ok) {
       return;
     }
 
@@ -348,7 +358,14 @@ export const SidebarLayout = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (window.confirm("¿Está seguro de que desea eliminar este usuario?")) {
+    const ok = await confirm({
+      title: 'Eliminar Usuario',
+      message: '¿Está seguro de que desea eliminar este usuario?',
+      type: 'danger',
+      confirmText: 'Eliminar'
+    });
+
+    if (ok) {
       const result = await deleteUser(userId);
       if (result.success) {
         showToast("Usuario eliminado con éxito.", "success");

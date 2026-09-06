@@ -494,26 +494,29 @@ const TableroWrapper = () => {
 
 import SyncStatusBanner from './components/SyncStatusBanner';
 import ToastNotification from './components/ToastNotification';
+import { ConfirmProvider } from './context/ConfirmContext';
 
 export function App() {
   return (
     <BrowserRouter>
-      <SyncStatusBanner />
-      <ToastNotification />
-      <Routes>
-        <Route path="/login" element={<LoginView />} />
-        
-        {/* Rutas protegidas bajo el Layout con Barra Lateral */}
-        <Route element={<ProtectedRoute><SidebarLayout /></ProtectedRoute>}>
-          <Route path="/" element={<DashboardView />} />
-          <Route path="/empresa/:companyId" element={<EmpresaView />} />
-          <Route path="/empresa/:companyId/proyecto/:proyectoId" element={<ProyectoView />} />
-          <Route path="/empresa/:companyId/proyecto/:proyectoId/informe" element={<InformeCompiladoView />} />
-          <Route path="/empresa/:companyId/tablero/:tableroId" element={<TableroWrapper />} />
-        </Route>
+      <ConfirmProvider>
+        <SyncStatusBanner />
+        <ToastNotification />
+        <Routes>
+          <Route path="/login" element={<LoginView />} />
+          
+          {/* Rutas protegidas bajo el Layout con Barra Lateral */}
+          <Route element={<ProtectedRoute><SidebarLayout /></ProtectedRoute>}>
+            <Route path="/" element={<DashboardView />} />
+            <Route path="/empresa/:companyId" element={<EmpresaView />} />
+            <Route path="/empresa/:companyId/proyecto/:proyectoId" element={<ProyectoView />} />
+            <Route path="/empresa/:companyId/proyecto/:proyectoId/informe" element={<InformeCompiladoView />} />
+            <Route path="/empresa/:companyId/tablero/:tableroId" element={<TableroWrapper />} />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ConfirmProvider>
     </BrowserRouter>
   );
 }

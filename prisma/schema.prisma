@@ -199,21 +199,23 @@ model Tablero {
 }
 
 model Circuito {
-  id           String   @id @default(uuid())
-  tableroId    String
-  tablero      Tablero  @relation(fields: [tableroId], references: [id], onDelete: Cascade)
-  posicionPolo Int
-  numPolos     Int      @default(1)
-  amperaje     Float?
-  descripcion  String?
-  estado       String   @default("ACTIVO") // "ACTIVO", "RESERVA", "DISPONIBLE"
+  id                  String   @id @default(uuid())
+  tableroId           String
+  tablero             Tablero  @relation(fields: [tableroId], references: [id], onDelete: Cascade)
+  posicionPolo        Int
+  numPolos            Int      @default(1)
+  amperaje            Float?
+  descripcion         String?
+  estado              String   @default("ACTIVO") // "ACTIVO", "RESERVA", "DISPONIBLE"
+  elementoDestinoId   String?
+  tipoElementoDestino String?
 
   // Campos para Concurrencia Optimista (OCC) y Soft Delete
-  version      Int      @default(1)
-  deletedAt    DateTime?
+  version             Int      @default(1)
+  deletedAt           DateTime?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([tableroId])
   @@index([tableroId, posicionPolo])

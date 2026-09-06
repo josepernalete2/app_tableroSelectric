@@ -775,11 +775,25 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
         elementosCreados={[]}
         onSave={(circuitId, updated) => {
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && ccmData.proyectoId) {
-            crearElementoProvisional(ccmData.proyectoId, {
-              nombre: updated.equipo,
-              tipoElemento: 'TABLERO',
-              circuitoOrigen: circuitId
-            });
+            const existingProvId = updated.elementoDestinoId || updated.vinculadoId;
+            let prov = null;
+            if (existingProvId) {
+              prov = (companies || []).flatMap(c => c.proyectos || []).flatMap(p => p.elementosUnifilares || p.tableros || []).find(e => e.id === existingProvId);
+            }
+            if (!prov) {
+              prov = crearElementoProvisional(ccmData.proyectoId, {
+                nombre: updated.equipo && updated.equipo !== 'RESERVA (Pendiente por Crear)' ? updated.equipo : `Sub-Tablero desde CCM (${circuitId})`,
+                tipoElemento: 'TABLERO',
+                circuitoOrigen: circuitId
+              });
+            }
+            if (prov) {
+              updated.vinculadoId = prov.id;
+              updated.elementoDestinoId = prov.id;
+              updated.tipoElementoDestino = 'TABLERO';
+              updated.equipo = `${prov.nombre} (ID: ${prov.id})`;
+              updated.tipoDestino = 'SUB_TABLERO';
+            }
           }
           if (updated.equipo) updateGaveta(circuitId, 'tagEquipo', updated.equipo);
           if (updated.detallesTecnicos?.esquemaArranque) updateGaveta(circuitId, 'tipoArranque', updated.detallesTecnicos.esquemaArranque);

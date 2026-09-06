@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DiagramaUnifilarBlueprint from './DiagramaUnifilarBlueprint';
+import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import useStore from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 
 export default function ModalDiagramaUnifilar({ 
   isOpen, 
@@ -28,6 +30,7 @@ export default function ModalDiagramaUnifilar({
 }) {
   const navigate = useNavigate();
   const { addElementoUnifilar, updateElementoUnifilar, deleteElementoUnifilar, showToast } = useStore();
+  const { confirm } = useConfirm();
 
   const [selectedNode, setSelectedNode] = useState(null);
   
@@ -219,7 +222,14 @@ export default function ModalDiagramaUnifilar({
   // Eliminar elemento del diagrama
   const handleDeleteElement = async () => {
     if (!selectedNode) return;
-    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" y desvincular todas sus conexiones?`)) {
+    const ok = await confirm({
+      title: 'Eliminar Equipo del Diagrama',
+      message: `¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" y desvincular todas sus conexiones?`,
+      type: 'danger',
+      confirmText: 'Eliminar'
+    });
+
+    if (ok) {
       const idToDelete = selectedNode.id;
       
       // Desconectar huérfanos antes de eliminar para mantener coherencia en cascada
@@ -466,31 +476,17 @@ export default function ModalDiagramaUnifilar({
                         />
                       </div>
 
-                      {/* Dropdown de Alimentación */}
+                      {/* Dropdown de Alimentación Jerárquico */}
                       <div>
-                        <label className="block text-slate-450 font-bold mb-1 uppercase text-[9px] tracking-wider">Alimentado por (Origen de Flujo)</label>
-                        <div className="flex gap-1.5 items-center">
-                          <select
-                            value={editAlimentadoPor}
-                            onChange={(e) => setEditAlimentadoPor(e.target.value)}
-                            className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 font-sans cursor-pointer text-xs min-w-0"
-                          >
-                            <option value="">Ninguno (Origen del Sistema)</option>
-                            {potentialFeeders.map(el => (
-                              <option key={el.id} value={el.nombre}>{el.nombre} ({el.id})</option>
-                            ))}
-                          </select>
-                          {editAlimentadoPor && (
-                            <button
-                              type="button"
-                              onClick={handleDisconnectElement}
-                              title="Desconectar alimentación"
-                              className="p-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-red-400 rounded-lg cursor-pointer"
-                            >
-                              <Unlink className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        <SelectorAlimentadorJerarquico
+                          proyectoId={proyectoId || selectedNode?.proyectoId}
+                          tableroActualId={selectedNode?.id}
+                          elementosList={elementos}
+                          value={editAlimentadoPor}
+                          onChange={(val) => setEditAlimentadoPor(val)}
+                          label="Alimentado por (Origen de Flujo)"
+                          placeholder="Ninguno (Origen del Sistema)..."
+                        />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">

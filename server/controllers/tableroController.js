@@ -28,7 +28,8 @@ export const crearTableroCompleto = async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'El campo proyectoId es requerido para asociar el tablero.' });
     }
 
-    // Validar reglas de polos antes de guardar
+    // Validar reglas de polos y colisiones internas en la lista de circuitos
+    const polosOcupadosMap = new Map();
     for (const circ of circuitos) {
       const numPolos = circ.numPolos !== undefined ? parseInt(circ.numPolos, 10) : 1;
       const posicionPolo = circ.posicionPolo !== undefined ? parseInt(circ.posicionPolo, 10) : 1;
@@ -40,11 +41,32 @@ export const crearTableroCompleto = async (req, res, next) => {
         });
       }
 
-      if (posicionPolo + (numPolos - 1) > maxPolos) {
-        return res.status(400).json({
+      // Calcular polos requeridos [p, p+2, ...]
+      const requiredPoles = [];
+      for (let i = 0; i < numPolos; i++) {
+        requiredPoles.push(posicionPolo + i * 2);
+      }
+
+      const highestPole = Math.max(...requiredPoles);
+      if (highestPole > maxPolos) {
+        return res.status(409).json({
           ok: false,
-          error: `Validación fallida: El circuito en la posición ${posicionPolo} con ${numPolos} polos supera la capacidad máxima del gabinete de ${maxPolos} polos.`
+          error: 'Capacidad de polos excedida',
+          detalle: `El circuito en la posición ${posicionPolo} con ${numPolos} polos ocupa los polos [${requiredPoles.join(', ')}], superando el límite del tablero (${maxPolos} polos).`
         });
+      }
+
+      for (const p of requiredPoles) {
+        if (polosOcupadosMap.has(p)) {
+          const occ = polosOcupadosMap.get(p);
+          return res.status(409).json({
+            ok: false,
+            error: 'Conflicto de colisión de polos',
+            detalle: `El polo ${p} está duplicado/solapado entre el circuito "${circ.descripcion || `Circuito ${posicionPolo}`}" y el circuito "${occ.descripcion || `Circuito ${occ.posicionPolo}`}".`,
+            poloEnConflicto: p
+          });
+        }
+        polosOcupadosMap.set(p, { posicionPolo, descripcion: circ.descripcion });
       }
     }
 
@@ -67,8 +89,10 @@ export const crearTableroCompleto = async (req, res, next) => {
             posicionPolo: parseInt(circ.posicionPolo, 10),
             numPolos: parseInt(circ.numPolos, 10) || 1,
             amperaje: circ.amperaje ? parseFloat(circ.amperaje) : null,
-            descripcion: circ.descripcion || null,
-            estado: circ.estado || 'ACTIVO'
+            descripcion: circ.descripcion || circ.equipo || null,
+            estado: circ.estado || 'ACTIVO',
+            elementoDestinoId: circ.elementoDestinoId || circ.vinculadoId || null,
+            tipoElementoDestino: circ.tipoElementoDestino || circ.tipoDestino || null
           }))
         }
       },
@@ -218,7 +242,7 @@ export const eliminarTablero = async (req, res, next) => {
 
 /**
  * POST /api/tableros/:tableroId/circuitos
- * Añade un circuito a un tablero.
+ * Añade un circuito a un tablero con validación estricta de polos y colisión.
  */
 export const crearCircuito = async (req, res, next) => {
   try {
@@ -226,32 +250,70 @@ export const crearCircuito = async (req, res, next) => {
     const { posicionPolo, numPolos = 1, amperaje, descripcion, estado = 'ACTIVO' } = req.body;
 
     const tablero = await prisma.tablero.findUnique({
-      where: { id: tableroId }
+      where: { id: tableroId },
+      include: { circuitos: true }
     });
 
     if (!tablero) {
       return res.status(404).json({ ok: false, error: 'Tablero no encontrado.' });
     }
 
-    if (numPolos < 1 || numPolos > 3) {
+    const startPole = parseInt(posicionPolo, 10);
+    const count = parseInt(numPolos, 10) || 1;
+
+    if (isNaN(startPole) || startPole < 1) {
+      return res.status(400).json({ ok: false, error: 'La posición del polo debe ser un entero mayor o igual a 1.' });
+    }
+
+    if (count < 1 || count > 3) {
       return res.status(400).json({ ok: false, error: 'El número de polos (numPolos) debe estar entre 1 y 3.' });
     }
 
-    if (parseInt(posicionPolo, 10) + (parseInt(numPolos, 10) - 1) > tablero.maxPolos) {
-      return res.status(400).json({
+    // Calcular arreglo de polos requeridos en la misma columna [p, p+2, ...]
+    const requiredPoles = [];
+    for (let i = 0; i < count; i++) {
+      requiredPoles.push(startPole + i * 2);
+    }
+
+    const highestPole = Math.max(...requiredPoles);
+    if (highestPole > tablero.maxPolos) {
+      return res.status(409).json({
         ok: false,
-        error: `La posición del circuito supera la capacidad de polos del tablero (${tablero.maxPolos}).`
+        error: 'Capacidad de polos excedida',
+        detalle: `Los polos requeridos [${requiredPoles.join(', ')}] superan la capacidad máxima del tablero (${tablero.maxPolos} polos).`
       });
+    }
+
+    // Verificar colisión contra circuitos existentes en el tablero
+    for (const circ of tablero.circuitos) {
+      const circCount = circ.numPolos || 1;
+      const occupiedPoles = [];
+      for (let i = 0; i < circCount; i++) {
+        occupiedPoles.push(circ.posicionPolo + i * 2);
+      }
+
+      const colision = requiredPoles.find((p) => occupiedPoles.includes(p));
+      if (colision) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Conflicto de ocupación de polos',
+          detalle: `El polo ${colision} ya está ocupado por el circuito "${circ.descripcion || `Circuito Polo ${circ.posicionPolo}`}" (Estado: ${circ.estado || 'ACTIVO'}).`,
+          poloEnConflicto: colision,
+          circuitoExistente: circ
+        });
+      }
     }
 
     const nuevoCircuito = await prisma.circuito.create({
       data: {
         tableroId,
-        posicionPolo: parseInt(posicionPolo, 10),
-        numPolos: parseInt(numPolos, 10),
+        posicionPolo: startPole,
+        numPolos: count,
         amperaje: amperaje ? parseFloat(amperaje) : null,
         descripcion: descripcion || null,
-        estado
+        estado,
+        elementoDestinoId: req.body.elementoDestinoId || req.body.vinculadoId || null,
+        tipoElementoDestino: req.body.tipoElementoDestino || req.body.tipoDestino || null
       }
     });
 
@@ -264,7 +326,7 @@ export const crearCircuito = async (req, res, next) => {
 
 /**
  * PUT /api/circuitos/:id
- * Actualiza un circuito individual.
+ * Actualiza un circuito individual con validación estricta de colisión.
  */
 export const actualizarCircuito = async (req, res, next) => {
   try {
@@ -273,36 +335,75 @@ export const actualizarCircuito = async (req, res, next) => {
 
     const circuitoActual = await prisma.circuito.findUnique({
       where: { id },
-      include: { tablero: true }
+      include: {
+        tablero: {
+          include: { circuitos: true }
+        }
+      }
     });
 
     if (!circuitoActual) {
       return res.status(404).json({ ok: false, error: 'Circuito no encontrado.' });
     }
 
-    const finalPosicion = posicionPolo !== undefined ? parseInt(posicionPolo, 10) : circuitoActual.posicionPolo;
-    const finalNumPolos = numPolos !== undefined ? parseInt(numPolos, 10) : circuitoActual.numPolos;
-    const maxPolos = circuitoActual.tablero.maxPolos;
+    const startPole = posicionPolo !== undefined ? parseInt(posicionPolo, 10) : circuitoActual.posicionPolo;
+    const count = numPolos !== undefined ? parseInt(numPolos, 10) : circuitoActual.numPolos;
+    const maxPolos = circuitoActual.tablero?.maxPolos || 42;
 
-    if (finalNumPolos < 1 || finalNumPolos > 3) {
+    if (isNaN(startPole) || startPole < 1) {
+      return res.status(400).json({ ok: false, error: 'La posición del polo debe ser un entero mayor o igual a 1.' });
+    }
+
+    if (count < 1 || count > 3) {
       return res.status(400).json({ ok: false, error: 'El número de polos (numPolos) debe estar entre 1 y 3.' });
     }
 
-    if (finalPosicion + (finalNumPolos - 1) > maxPolos) {
-      return res.status(400).json({
+    // Calcular polos requeridos
+    const requiredPoles = [];
+    for (let i = 0; i < count; i++) {
+      requiredPoles.push(startPole + i * 2);
+    }
+
+    const highestPole = Math.max(...requiredPoles);
+    if (highestPole > maxPolos) {
+      return res.status(409).json({
         ok: false,
-        error: `La posición del circuito excede la capacidad del gabinete (${maxPolos} polos).`
+        error: 'Capacidad de polos excedida',
+        detalle: `Los polos requeridos [${requiredPoles.join(', ')}] superan la capacidad del gabinete (${maxPolos} polos).`
       });
+    }
+
+    // Verificar colisión con los demás circuitos del tablero
+    const otrosCircuitos = (circuitoActual.tablero?.circuitos || []).filter((c) => c.id !== id);
+    for (const circ of otrosCircuitos) {
+      const circCount = circ.numPolos || 1;
+      const occupiedPoles = [];
+      for (let i = 0; i < circCount; i++) {
+        occupiedPoles.push(circ.posicionPolo + i * 2);
+      }
+
+      const colision = requiredPoles.find((p) => occupiedPoles.includes(p));
+      if (colision) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Conflicto de ocupación de polos',
+          detalle: `El polo ${colision} ya está ocupado por el circuito "${circ.descripcion || `Circuito Polo ${circ.posicionPolo}`}" (Estado: ${circ.estado || 'ACTIVO'}).`,
+          poloEnConflicto: colision,
+          circuitoExistente: circ
+        });
+      }
     }
 
     const updated = await prisma.circuito.update({
       where: { id },
       data: {
-        posicionPolo: finalPosicion,
-        numPolos: finalNumPolos,
+        posicionPolo: startPole,
+        numPolos: count,
         amperaje: amperaje !== undefined ? (amperaje ? parseFloat(amperaje) : null) : undefined,
         descripcion: descripcion !== undefined ? descripcion : undefined,
-        estado: estado !== undefined ? estado : undefined
+        estado: estado !== undefined ? estado : undefined,
+        elementoDestinoId: req.body.elementoDestinoId !== undefined ? (req.body.elementoDestinoId || null) : (req.body.vinculadoId !== undefined ? (req.body.vinculadoId || null) : undefined),
+        tipoElementoDestino: req.body.tipoElementoDestino !== undefined ? (req.body.tipoElementoDestino || null) : (req.body.tipoDestino !== undefined ? (req.body.tipoDestino || null) : undefined)
       }
     });
 

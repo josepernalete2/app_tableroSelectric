@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 import NotificationButton from '../components/NotificationButton';
 import { 
   Folder, 
@@ -15,6 +16,7 @@ import {
 
 export const DashboardView = () => {
   const { user, companies, addCompany, deleteCompany } = useStore();
+  const { confirm } = useConfirm();
   const [showModal, setShowModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [rif, setRif] = useState('');
@@ -134,9 +136,15 @@ export const DashboardView = () => {
                     <div className="flex items-center gap-2">
                       {user?.role !== 'CLIENT' && (
                         <button
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            if (window.confirm(`¿Estás seguro de que deseas eliminar la empresa "${company.nombre}" y todos sus tableros?`)) {
+                            const ok = await confirm({
+                              title: 'Eliminar Empresa',
+                              message: `¿Estás seguro de que deseas eliminar la empresa "${company.nombre}" y todos sus tableros y proyectos en cascada?`,
+                              type: 'danger',
+                              confirmText: 'Eliminar Empresa'
+                            });
+                            if (ok) {
                               deleteCompany(company.id);
                             }
                           }}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import { 
   ArrowLeft, 
@@ -60,6 +61,7 @@ export const EmpresaView = () => {
   } = useStore();
   
   const company = companies.find((c) => c.id === companyId);
+  const { confirm, alert: customAlert } = useConfirm();
   
   // Estados para Edición de Empresa
   const [showEditEmpresaModal, setShowEditEmpresaModal] = useState(false);
@@ -126,11 +128,18 @@ export const EmpresaView = () => {
     setSelectedIds(new Set());
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     const selectedCount = selectedIds.size;
     if (selectedCount === 0) return;
 
-    if (window.confirm(`¿Estás seguro de que deseas eliminar los ${selectedCount} equipos seleccionados?`)) {
+    const ok = await confirm({
+      title: 'Eliminar equipos seleccionados',
+      message: `¿Estás seguro de que deseas eliminar los ${selectedCount} equipos seleccionados?`,
+      type: 'danger',
+      confirmText: 'Eliminar seleccionados'
+    });
+
+    if (ok) {
       selectedIds.forEach((id) => {
         deleteElementoUnifilar(null, id);
       });
@@ -140,8 +149,15 @@ export const EmpresaView = () => {
     }
   };
 
-  const handleDeleteProyecto = (proyectoId, name) => {
-    if (window.confirm(`¿Estás seguro de que deseas eliminar el proyecto "${name}"? Se eliminarán todas sus subestaciones, tableros y elementos unifilares en cascada.`)) {
+  const handleDeleteProyecto = async (proyectoId, name) => {
+    const ok = await confirm({
+      title: 'Eliminar Proyecto',
+      message: `¿Estás seguro de que deseas eliminar el proyecto "${name}"? Se eliminarán todas sus subestaciones, tableros y elementos unifilares en cascada.`,
+      type: 'danger',
+      confirmText: 'Eliminar Proyecto'
+    });
+
+    if (ok) {
       deleteProyecto(companyId, proyectoId);
       showToast?.('Proyecto eliminado correctamente', 'success');
     }
@@ -250,7 +266,7 @@ export const EmpresaView = () => {
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-      alert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
+      customAlert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
       return;
     }
 
@@ -274,7 +290,7 @@ export const EmpresaView = () => {
       setProyectoDescripcion('');
       setShowModal(false);
     } else {
-      alert(result.error);
+      customAlert(result.error);
     }
   };
 
@@ -395,7 +411,7 @@ export const EmpresaView = () => {
       setPreviewUrl(null);
       setShowElementoModal(false);
     } else {
-      alert(result.error);
+      customAlert(result.error);
     }
   };
 
@@ -795,9 +811,15 @@ export const EmpresaView = () => {
 
                       {user?.role !== 'CLIENT' && !isMultiSelectMode && (
                         <button
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            if (window.confirm(`¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`)) {
+                            const ok = await confirm({
+                              title: 'Eliminar Equipo',
+                              message: `¿Estás seguro de que deseas eliminar el equipo "${item.nombre}"?`,
+                              type: 'danger',
+                              confirmText: 'Eliminar'
+                            });
+                            if (ok) {
                               deleteElementoUnifilar(null, item.id);
                             }
                           }}
