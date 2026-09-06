@@ -19,7 +19,6 @@ import {
   Radio 
 } from 'lucide-react';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
-import useStore from '../store/useStore';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -39,13 +38,10 @@ export const ModalEdicionCircuito = ({
   circuitData,
   onSave,
   elementosCreados = MOCK_ELEMENTOS_CREADOS,
-  tableroCircuits = [],
-  maxPoles = 42,
   onAgregarPorCrear,
   tipoOrigen = 'TABLERO',
   modo = 'SALIDA'
 }) => {
-  const { showToast } = useStore();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
   const [step, setStep] = useState('PREGUNTA_ES_ARTEFACTO');
@@ -58,10 +54,6 @@ export const ModalEdicionCircuito = ({
   const [nombreArtefacto, setNombreArtefacto] = useState('');
   const [descArtefacto, setDescArtefacto] = useState('');
   const [potenciaWatts, setPotenciaWatts] = useState('');
-
-  // Elementos por crear y reserva
-  const [tipoElementoPendiente, setTipoElementoPendiente] = useState('TABLERO');
-  const [nombrePersonalizadoPendiente, setNombrePersonalizadoPendiente] = useState('');
 
   // Parámetros Físicos Tablero
   const [numPolos, setNumPolos] = useState(1);
@@ -111,16 +103,6 @@ export const ModalEdicionCircuito = ({
       setRotulo(circuitData.equipo || circuitData.nombre || '');
       setSelectedLinks([]);
       setSelectedLink(null);
-
-      // Cargar polos existentes del circuito de manera segura
-      const safePoles = Array.isArray(circuitData.poles) && circuitData.poles.length > 0 
-        ? circuitData.poles 
-        : [parseInt(circuitData.posicionPolo, 10) || 1];
-      const initialStartPole = Math.min(...safePoles);
-      const initialNumPolos = circuitData.numPolos || safePoles.length || 1;
-      setPosicionPolo(Number.isFinite(initialStartPole) && initialStartPole > 0 ? initialStartPole : 1);
-      setNumPolos(initialNumPolos > 3 ? 3 : initialNumPolos < 1 ? 1 : initialNumPolos);
-      setEstado(circuitData.estado || (circuitData.equipo === 'RESERVA' ? 'RESERVA' : circuitData.equipo === 'DISPONIBLE' ? 'DISPONIBLE' : 'ACTIVO'));
 
       // Cargar otros campos técnicos si existen
       const dt = circuitData.detallesTecnicos || {};
@@ -183,118 +165,20 @@ export const ModalEdicionCircuito = ({
     }
   }, [circuitData, isOpen, elementosCreados, isTablero, tipoOrigen, modo]);
 
-  const getPolesArray = (startPole, n) => {
-    const arr = [];
-    const validStart = Number.isFinite(startPole) && startPole > 0 ? startPole : 1;
-    const validN = Number.isFinite(n) && n > 0 ? n : 1;
-    for (let i = 0; i < validN; i++) {
-      arr.push(validStart + i * 2);
-    }
-    return arr;
-  };
-
-  // Helper para verificar si un circuito está realmente ocupado por configuración previa
-  const isCircuitOccupied = (c) => {
-    if (!c) return false;
-    const isCustomId = !String(c.id).startsWith('auto_');
-    const hasBreaker = Boolean(c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp));
-    const hasConductor = Boolean(c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '');
-    const hasRealEquipo = Boolean(c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE' && !c.equipo.startsWith('RESERVA') && !c.equipo.startsWith('DISPONIBLE'));
-    const hasDestino = Boolean(c.tipoDestino || c.vinculadoId);
-    const hasFicha = Boolean(c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts));
-    const hasPhoto = Boolean(c.fotografia);
-
-    return isCustomId || hasBreaker || hasConductor || hasRealEquipo || hasDestino || hasFicha || hasPhoto;
-  };
-
-  // Mapa de polos ocupados por otros circuitos reales del tablero
-  const occupiedPolesMap = React.useMemo(() => {
-    const map = new Map();
-    if (!isTablero || !Array.isArray(tableroCircuits)) return map;
-    tableroCircuits.forEach(other => {
-      if (!other || other.id === circuitData?.id) return;
-      if (isCircuitOccupied(other)) {
-        const otherPoles = Array.isArray(other.poles) && other.poles.length > 0
-          ? other.poles.map(p => parseInt(p, 10)).filter(Number.isFinite)
-          : [parseInt(other.posicionPolo, 10) || 1];
-        otherPoles.forEach(p => {
-          map.set(p, other);
-        });
-      }
-    });
-    return map;
-  }, [isTablero, tableroCircuits, circuitData?.id]);
-
-  const startPole = parseInt(posicionPolo, 10) || 1;
-  const parsedMax = parseInt(maxPoles, 10) || 42;
-
-  // Cálculo de disponibilidad para 1P, 2P y 3P desde el polo inicial fijo
-  const poleAvailability = React.useMemo(() => {
-    const p1 = startPole;
-    const p2 = startPole + 2;
-    const p3 = startPole + 4;
-
-    const occ1 = occupiedPolesMap.get(p1);
-    const occ2 = occupiedPolesMap.get(p2);
-    const occ3 = occupiedPolesMap.get(p3);
-
-    const can1P = p1 <= parsedMax && (!occ1 || occ1.id === circuitData?.id);
-    const can2P = can1P && (p2 <= parsedMax) && !occ2;
-    const can3P = can2P && (p3 <= parsedMax) && !occ3;
-
-    return {
-      can1P,
-      can2P,
-      can3P,
-      reason2P: p2 > parsedMax ? `Supera máx (${parsedMax})` : occ2 ? `Polo ${p2} ocupado` : null,
-      reason3P: p3 > parsedMax ? `Supera máx (${parsedMax})` : occ2 ? `Polo ${p2} ocupado` : occ3 ? `Polo ${p3} ocupado` : null
-    };
-  }, [startPole, parsedMax, occupiedPolesMap, circuitData?.id]);
-
-  // Cálculo defensivo de los polos destino y detección de colisiones
-  const calculatedPoles = React.useMemo(() => {
-    if (!isTablero) return [1, 2, 3];
-    return getPolesArray(startPole, parseInt(numPolos, 10) || 1);
-  }, [isTablero, startPole, numPolos]);
-
-  const poleConflicts = React.useMemo(() => {
-    if (!isTablero || !isOpen) return [];
-    const conflicts = [];
-
-    // 1. Validar límite superior
-    const outOfRange = calculatedPoles.filter(p => p > parsedMax);
-    if (outOfRange.length > 0) {
-      conflicts.push({
-        type: 'OUT_OF_RANGE',
-        severity: 'CRITICAL',
-        poles: outOfRange,
-        message: `El polo ${outOfRange.join(', ')} supera la capacidad máxima del tablero (${parsedMax} polos).`
-      });
-    }
-
-    // 2. Validar colisión con otros circuitos reales del tablero
-    calculatedPoles.forEach(p => {
-      const occ = occupiedPolesMap.get(p);
-      if (occ && occ.id !== circuitData?.id) {
-        conflicts.push({
-          type: 'COLLISION',
-          severity: 'CRITICAL',
-          poles: [p],
-          otherCircuit: occ,
-          message: `El polo ${p} ya está en uso por el circuito "${occ.equipo || 'Circuito ' + p}". Para modificarlo, debe editar directamente dicho equipo en la tabla.`
-        });
-      }
-    });
-
-    return conflicts;
-  }, [isTablero, isOpen, calculatedPoles, parsedMax, occupiedPolesMap, circuitData?.id]);
-
   if (!isOpen || !circuitData) return null;
 
   const filteredElements = (elementosCreados || []).filter((el) =>
     (el.nombre || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (el.id || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const getPolesArray = (startPole, n) => {
+    const arr = [];
+    for (let i = 0; i < n; i++) {
+      arr.push(startPole + i * 2);
+    }
+    return arr;
+  };
 
   const getHeaderTitle = () => {
     if (isTablero) {
@@ -326,17 +210,7 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveEquipment = (equipoName, tipoDestinoVal, extra = {}) => {
-    // Bloquear guardado en caso de colisión con polos ya registrados
-    if (poleConflicts.length > 0) {
-      showToast?.(poleConflicts[0].message, 'error');
-      return;
-    }
-
     const finalEquipo = normalizeText(equipoName || extra.equipo || rotulo || 'EQUIPO DE POTENCIA');
-    const safeStartPole = parseInt(posicionPolo, 10) || 1;
-    const safeNumPolos = parseInt(numPolos, 10) || 1;
-    const finalPoles = isTablero ? getPolesArray(safeStartPole, safeNumPolos) : [1, 2, 3];
-
     onSave(circuitData.id, {
       equipo: finalEquipo,
       tipoDestino: tipoDestinoVal || 'SUB_TABLERO',
@@ -347,9 +221,9 @@ export const ModalEdicionCircuito = ({
         tipo: normalizeText(breakerTipo)
       },
       conductor: normalizeText(conductor || extra.conductor),
-      poles: finalPoles,
-      numPolos: isTablero ? safeNumPolos : 3,
-      posicionPolo: isTablero ? safeStartPole : 1,
+      poles: isTablero ? getPolesArray(posicionPolo, numPolos) : [1, 2, 3],
+      numPolos: isTablero ? numPolos : 3,
+      posicionPolo: isTablero ? posicionPolo : 1,
       estado: estado,
       ficha: {
         descripcion: descArtefacto,
@@ -381,48 +255,33 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveArtefacto = () => {
-    if (!nombreArtefacto.trim()) return showToast?.('Por favor, ingresa el nombre del artefacto.', 'warning');
+    if (!nombreArtefacto.trim()) return alert('Por favor, ingresa el nombre del artefacto.');
     handleSaveEquipment(nombreArtefacto, 'ARTEFACTO');
   };
 
   const handleSaveVinculo = (linkElement) => {
     if (isMultiSelect) {
-      if (selectedLinks.length === 0) return showToast?.('Por favor, selecciona al menos un elemento para vincular.', 'warning');
+      if (selectedLinks.length === 0) return alert('Por favor, selecciona al menos un elemento para vincular.');
       const names = selectedLinks.map(el => `${el.nombre} (ID: ${el.id})`).join(', ');
       const ids = selectedLinks.map(el => el.id).join(', ');
       handleSaveEquipment(names, 'SUB_TABLERO', { vinculadoId: ids, vinculados: selectedLinks });
       return;
     }
     const el = linkElement || selectedLink;
-    if (!el) return showToast?.('Por favor, selecciona un elemento para vincular.', 'warning');
+    if (!el) return alert('Por favor, selecciona un elemento para vincular.');
     handleSaveEquipment(`${el.nombre} (ID: ${el.id})`, 'SUB_TABLERO', { vinculadoId: el.id });
   };
 
   const handleSavePorCrear = () => {
-    if (poleConflicts.length > 0) {
-      showToast?.(poleConflicts[0].message, 'error');
-      return;
+    const calculatedPoles = getPolesArray(posicionPolo, numPolos);
+    const pendingName = `Equipo / Sub-Elemento (${isTablero ? `Polo ${calculatedPoles.join(', ')}` : 'Provisional'})`;
+    if (onAgregarPorCrear) {
+      onAgregarPorCrear({
+        nombre: pendingName,
+        circuitoId: circuitData.id,
+      });
     }
-    const safeStartPole = parseInt(posicionPolo, 10) || 1;
-    const safeNumPolos = parseInt(numPolos, 10) || 1;
-    const calculatedPoles = getPolesArray(safeStartPole, safeNumPolos);
-    
-    const typeLabel = {
-      TABLERO: 'Tablero / Panel',
-      TRANSFORMADOR: 'Transformador MT/BT',
-      GENERADOR: 'Generador / Planta',
-      TRANSFER: 'Transferencia ATS',
-      CCM: 'CCM Motores',
-      PUNTO_MEDICION: 'Punto de Medición',
-      PUESTA_TIERRA: 'Puesta a Tierra'
-    }[tipoElementoPendiente] || 'Sub-Elemento';
-
-    const defaultName = `${typeLabel} (${isTablero ? `Polo ${calculatedPoles.join(', ')}` : 'Provisional'})`;
-    const pendingName = (nombrePersonalizadoPendiente && nombrePersonalizadoPendiente.trim()) || defaultName;
-
-    handleSaveEquipment(pendingName, 'SUB_TABLERO_PENDIENTE', {
-      tipoElementoPendiente
-    });
+    handleSaveEquipment('RESERVA (Pendiente por Crear)', 'SUB_TABLERO_PENDIENTE');
   };
 
   const handleSaveRotuloFoto = () => {
@@ -495,47 +354,32 @@ export const ModalEdicionCircuito = ({
           
           {/* Parámetros Físicos del Breaker (SOLO PARA TABLEROS) */}
           {isTablero && (
-            <div className={`p-4 border rounded-xl space-y-3 font-sans text-xs transition-colors ${
-              poleConflicts.some(c => c.severity === 'CRITICAL')
-                ? 'bg-rose-950/40 border-rose-600/60'
-                : poleConflicts.length > 0
-                ? 'bg-amber-950/30 border-amber-600/50'
-                : 'bg-slate-950/60 border-slate-800'
-            }`}>
+            <div className="bg-slate-950/60 p-4 border border-slate-800 rounded-xl space-y-4 font-sans text-xs">
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Polos Breaker</label>
+                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Polos</label>
                   <select
                     value={numPolos}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (val === 2 && !poleAvailability.can2P) {
-                        showToast?.(`No se puede seleccionar 2 Polos: ${poleAvailability.reason2P}.`, 'warning');
-                        return;
-                      }
-                      if (val === 3 && !poleAvailability.can3P) {
-                        showToast?.(`No se puede seleccionar 3 Polos: ${poleAvailability.reason3P}.`, 'warning');
-                        return;
-                      }
-                      setNumPolos(val);
-                    }}
+                    onChange={(e) => setNumPolos(parseInt(e.target.value, 10))}
                     className="w-full bg-slate-900 border border-slate-750 rounded-lg px-2 py-1.5 text-slate-100 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
-                    <option value={1}>1 Polo (1P)</option>
-                    <option value={2} disabled={!poleAvailability.can2P}>
-                      2 Polos (2P) {poleAvailability.reason2P ? `(${poleAvailability.reason2P})` : ''}
-                    </option>
-                    <option value={3} disabled={!poleAvailability.can3P}>
-                      3 Polos (3P) {poleAvailability.reason3P ? `(${poleAvailability.reason3P})` : ''}
-                    </option>
+                    {[1, 2, 3].map(p => (
+                      <option key={p} value={p}>{p === 1 ? '1 Polo (1P)' : p === 2 ? '2 Polos (2P)' : '3 Polos (3P)'}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Polo Asignado</label>
-                  <div className="flex items-center gap-1.5 w-full bg-slate-900/90 border border-slate-750 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono font-bold text-xs select-none">
-                    <span className="text-amber-400">Polo #{startPole}</span>
-                  </div>
+                  <label className="block text-slate-400 font-bold uppercase tracking-wider text-[9px] mb-1">Polo Inicial</label>
+                  <input
+                    type="number"
+                    value={posicionPolo}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (val > 0) setPosicionPolo(val);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg px-2 py-1 text-slate-100 font-semibold focus:outline-none focus:border-amber-500"
+                  />
                 </div>
 
                 <div>
@@ -561,48 +405,6 @@ export const ModalEdicionCircuito = ({
                   </select>
                 </div>
               </div>
-
-              {/* Indicador de Polos Resultantes y Lado */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800/80 text-[11px]">
-                <div className="flex items-center gap-1.5 font-mono">
-                  <span className="text-slate-400 font-bold">Polos calculados:</span>
-                  <div className="flex gap-1">
-                    {calculatedPoles.map(p => (
-                      <span 
-                        key={p} 
-                        className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
-                          p > (maxPoles || 42)
-                            ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        }`}
-                      >
-                        #{p}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <span className="text-[10px] text-slate-400">
-                  Lado: <strong className="text-slate-200">{(calculatedPoles[0] || 1) % 2 === 1 ? 'Izquierdo (Impar)' : 'Derecho (Par)'}</strong>
-                </span>
-              </div>
-
-              {/* Alerta de Colisión / Solapamiento */}
-              {poleConflicts.length > 0 && (
-                <div className={`p-2.5 rounded-lg border flex items-start gap-2 text-[11px] ${
-                  poleConflicts.some(c => c.severity === 'CRITICAL')
-                    ? 'bg-rose-950/60 border-rose-500/60 text-rose-300'
-                    : 'bg-amber-950/50 border-amber-500/50 text-amber-300'
-                }`}>
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-                  <div className="space-y-1">
-                    {poleConflicts.map((conf, idx) => (
-                      <p key={idx} className="leading-snug">
-                        {conf.message}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className="flex gap-2">
                 <button
@@ -1706,86 +1508,27 @@ export const ModalEdicionCircuito = ({
           )}
 
           {/* ============================================================== */}
-          {/* AGREGAR A LA LISTA POR CREAR (COMPARTIDO CON SELECCIÓN DE TIPO) */}
+          {/* AGREGAR A LA LISTA POR CREAR (COMPARTIDO) */}
           {/* ============================================================== */}
           {step === 'ALIMENTAR_POR_CREAR' && (
-            <div className="space-y-5 text-left">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto border border-amber-500/30 mb-2">
-                  <PlusCircle className="w-7 h-7 text-amber-500" />
-                </div>
+            <div className="space-y-6 text-center">
+              <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto border border-amber-500/30">
+                <PlusCircle className="w-10 h-10 text-amber-500" />
+              </div>
+              <div>
                 <h4 className="text-base font-bold text-slate-100">
-                  Seleccionar Tipo de Elemento a Crear
+                  ¿Agregar a la Lista de Elementos por Crear?
                 </h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  Elige qué tipo de equipo será alimentado por este circuito para registrarlo en estado pendiente.
+                <p className="text-xs text-slate-400 mt-2 px-4 leading-relaxed">
+                  Al confirmar, se registrará una tarea pendiente para crear este nuevo Sub-Elemento en el proyecto.
                 </p>
               </div>
-
-              {/* Selector de Tipo de Elemento */}
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                  Tipo de Elemento Eléctrico
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'TABLERO', label: 'Panel / Tablero Eléctrico', icon: '⚡' },
-                    { id: 'TRANSFORMADOR', label: 'Transformador / Subestación', icon: '🔌' },
-                    { id: 'GENERADOR', label: 'Generador / Planta Eléctrica', icon: '🔋' },
-                    { id: 'TRANSFER', label: 'Transferencia Automática (ATS)', icon: '🔄' },
-                    { id: 'CCM', label: 'Centro Control de Motores (CCM)', icon: '⚙️' },
-                    { id: 'PUNTO_MEDICION', label: 'Punto de Medición / Acometida', icon: '📊' },
-                    { id: 'PUESTA_TIERRA', label: 'Puesta a Tierra / Malla', icon: '🛡️' },
-                  ].map(t => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setTipoElementoPendiente(t.id)}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer ${
-                        tipoElementoPendiente === t.id
-                          ? 'bg-amber-500/15 border-amber-500 text-amber-300 font-bold shadow-sm'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <span className="text-lg">{t.icon}</span>
-                      <span className="text-[11px] leading-tight">{t.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Nombre Personalizado (Opcional) */}
-              <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                  Nombre o Identificador Descriptivo (Opcional)
-                </label>
-                <input
-                  type="text"
-                  value={nombrePersonalizadoPendiente}
-                  onChange={(e) => setNombrePersonalizadoPendiente(e.target.value)}
-                  placeholder={`Ej. ${tipoElementoPendiente === 'TABLERO' ? 'TAB-2: Sub-Tablero Iluminación' : tipoElementoPendiente === 'TRANSFORMADOR' ? 'TR-1: Transformador Secundario' : tipoElementoPendiente === 'GENERADOR' ? 'GEN-1: Planta de Emergencia' : 'Equipo / Sub-Elemento'}`}
-                  className="w-full px-3 py-2 text-xs border border-slate-750 rounded-lg bg-slate-950 text-white focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Aviso de Reserva y Bloqueo de Polos */}
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-[11px] text-amber-300 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="leading-snug space-y-0.5">
-                  <p className="font-bold">Polos Reservados y Ocupados:</p>
-                  <p className="text-slate-300 text-[10px]">
-                    Al confirmar, el polo <strong>#{calculatedPoles.join(', ')}</strong> quedará ocupado y bloqueado en este tablero, y el elemento aparecerá en el proyecto listo para completar su ficha técnica.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-4 border-t border-slate-800">
                 <button
-                  type="button"
                   onClick={handleSavePorCrear}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-colors w-full cursor-pointer active:scale-[0.98] uppercase tracking-wider"
+                  className="px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer active:scale-[0.98]"
                 >
-                  Registrar Elemento Pendiente y Ocupar Polo
+                  Agregar a la Lista de Pendientes
                 </button>
               </div>
             </div>

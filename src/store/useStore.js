@@ -245,39 +245,9 @@ export const useStore = create(
       syncQueue: [],
       socket: null,
       toast: { show: false, message: '', type: 'success' },
-      confirmDialog: {
-        isOpen: false,
-        title: '',
-        message: '',
-        confirmText: 'Aceptar',
-        cancelText: 'Cancelar',
-        variant: 'danger',
-        onConfirm: null,
-      },
 
       showToast: (message, type = 'success') => set({ toast: { show: true, message, type } }),
       hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
-
-      showConfirm: ({ title = '¿Estás seguro?', message = '', confirmText = 'Aceptar', cancelText = 'Cancelar', variant = 'danger', onConfirm = null }) => {
-        set({
-          confirmDialog: {
-            isOpen: true,
-            title,
-            message,
-            confirmText,
-            cancelText,
-            variant,
-            onConfirm
-          }
-        });
-      },
-      closeConfirm: () => set((state) => ({
-        confirmDialog: {
-          ...state.confirmDialog,
-          isOpen: false,
-          onConfirm: null
-        }
-      })),
       setSocket: (socket) => set({ socket }),
 
       handleAuthError: (status) => {
@@ -889,7 +859,6 @@ export const useStore = create(
           : uuidId;
 
         const nuevoElemento = {
-          ...elementoData,
           id: uuidId,
           nombre: nombreFinal,
           tipoElemento: elementoData.tipoElemento || 'TABLERO',
@@ -901,7 +870,7 @@ export const useStore = create(
           datosTecnicos: elementoData.datosTecnicos || {},
           proyectoId: proyectoId || null,
           empresaId: parentCompanyId,
-          createdAt: elementoData.createdAt || new Date().toISOString()
+          createdAt: new Date().toISOString()
         };
 
         set((state) => ({
@@ -1669,20 +1638,16 @@ export const useStore = create(
         const state = get();
         const tipo = datosProvisional.tipoElemento || 'TABLERO';
         const newId = datosProvisional.id || getNextElementId(tipo, state);
-        const poles = Array.isArray(datosProvisional.poles) && datosProvisional.poles.length > 0 
-          ? datosProvisional.poles 
-          : (datosProvisional.circuitoOrigen ? [parseInt(String(datosProvisional.circuitoOrigen).replace('auto_', ''), 10)].filter(Number.isFinite) : []);
 
         const provisionalObj = {
           id: newId,
           nombre: datosProvisional.nombre || `RESERVA (${newId})`,
           tipoElemento: tipo,
           ubicacion: 'RESERVA (Pendiente por Crear)',
-          alimentadoPor: datosProvisional.alimentadoPor || (poles.length > 0 ? `Polo ${poles.join(', ')}` : (datosProvisional.circuitoOrigen ? `Circuito ${datosProvisional.circuitoOrigen}` : null)),
+          alimentadoPor: datosProvisional.circuitoOrigen ? `Circuito ${datosProvisional.circuitoOrigen}` : null,
           circuitoOrigen: datosProvisional.circuitoOrigen || null,
-          polosOrigen: poles,
           estadoVinculo: 'PENDIENTE_CREAR',
-          observacionesGenerales: `Elemento registrado en estado provisional. Polos reservados: ${poles.join(', ')}.`,
+          observacionesGenerales: 'Nodo registrado en estado provisional como Reserva activa.',
           datosTecnicos: {},
           proyectoId
         };

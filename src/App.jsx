@@ -399,7 +399,6 @@ const TableroWrapper = () => {
   // 3. Renderizar Ficha de Tablero Termográfico (TABLERO)
   const enrichedTablero = {
     id: element?.id || tableroId,
-    proyectoId: targetProyecto?.id || element?.proyectoId || null,
     nombre: element?.nombre || 'Tablero Eléctrico',
     ubicacion: element?.ubicacion || '',
     alimentadoPor: element?.alimentadoPor || '',
@@ -407,7 +406,6 @@ const TableroWrapper = () => {
     fotoBlob: element?.fotoBlob || null,
     observacionesGenerales: element?.observacionesGenerales || '',
     ...(element?.datosTecnicos || {}),
-    elementosPorCrear: element?.elementosPorCrear || element?.datosTecnicos?.elementosPorCrear || [],
     circuits: Array.isArray(element?.datosTecnicos?.circuits)
       ? element.datosTecnicos.circuits
       : (Array.isArray(element?.circuits) ? element.circuits : []),
@@ -496,14 +494,12 @@ const TableroWrapper = () => {
 
 import SyncStatusBanner from './components/SyncStatusBanner';
 import ToastNotification from './components/ToastNotification';
-import ModalConfirmacion from './components/ModalConfirmacion';
 
 export function App() {
   return (
     <BrowserRouter>
       <SyncStatusBanner />
       <ToastNotification />
-      <ModalConfirmacion />
       <Routes>
         <Route path="/login" element={<LoginView />} />
         
