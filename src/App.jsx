@@ -11,6 +11,7 @@ import TableroComponent from './components/TableroComponent';
 import SubestacionComponent from './components/SubestacionComponent';
 import PuntoMedicionComponent from './components/PuntoMedicionComponent';
 import CcmComponent from './components/CcmComponent';
+import TransferComponent from './components/TransferComponent';
 import FichaTecnicaComponent from './components/FichaTecnicaComponent';
 import InformeCompiladoView from './views/InformeCompiladoView';
 import SidebarLayout from './components/SidebarLayout';
@@ -337,7 +338,66 @@ const TableroWrapper = () => {
     );
   }
 
-  // 2. Renderizar Elemento Especial (Generador / Transfer / Otro)
+  // 1.3 Renderizar Transferencia Eléctrica (TRANSFER / ATS / MTS)
+  if (element && element.tipoElemento === 'TRANSFER') {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+        {/* Top Navbar */}
+        <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(backPath)}
+              className="p-2 hover:bg-slate-900 rounded-xl text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+              title="Volver al Proyecto"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
+                Unidad de Transferencia (ATS / MTS)
+              </span>
+              <h1 className="text-base font-bold text-slate-100 animate-fade-in">
+                {element.nombre}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => window.print()}
+              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 rounded-xl transition-all cursor-pointer flex items-center gap-2 text-xs font-black shadow-sm"
+              title="Guardar como PDF o Imprimir esta Transferencia"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">Guardar PDF</span>
+            </button>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl">
+              <User className="w-4 h-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-300">{user?.email}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2.5 bg-slate-900 hover:bg-red-950/40 hover:text-red-400 border border-slate-800 hover:border-red-900/60 rounded-xl transition-all cursor-pointer"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Componente de Transferencia */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+          <TransferComponent
+            transferData={element}
+            onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto?.id || null, tableroId, updatedData)}
+            readOnly={user?.role === 'CLIENT'}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // 2. Renderizar Elemento Especial (Generador / Trafo / Otro)
   if (element && element.tipoElemento !== 'TABLERO') {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
