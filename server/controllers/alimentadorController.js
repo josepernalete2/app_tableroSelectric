@@ -3,7 +3,15 @@ import prisma from '../db.js';
 export const obtenerAlimentadores = async (req, res, next) => {
   try {
     const { proyectoId } = req.query;
-    const where = proyectoId ? { proyectoId } : {};
+    const where = {};
+
+    if (proyectoId) {
+      where.proyectoId = proyectoId;
+    }
+
+    if (req.user && req.user.role === 'CLIENT') {
+      where.proyecto = { empresaId: req.user.companyId };
+    }
 
     const alimentadores = await prisma.alimentador.findMany({
       where,

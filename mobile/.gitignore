@@ -8,3 +8,10 @@ npm-debug.*
 *.key
 *.mobileprovision
 *.orig.*
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production

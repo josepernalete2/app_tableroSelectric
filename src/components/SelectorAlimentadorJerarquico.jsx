@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { API_BASE_URL } from '../utils/api';
+import useStore from '../store/useStore';
 import {
   Search,
   ChevronDown,
@@ -129,10 +130,11 @@ export default function SelectorAlimentadorJerarquico({
     const fetchFeeders = async () => {
       try {
         setLoading(true);
+        const token = useStore.getState().token || localStorage.getItem('token') || '';
         const url = `${API_BASE_URL}/api/jerarquia/alimentadores/${proyectoId}${tableroActualId ? `?excluirId=${tableroActualId}` : ''}`;
         const res = await fetch(url, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+            'Authorization': `Bearer ${token}`
           }
         });
         const contentType = res.headers.get('content-type') || '';

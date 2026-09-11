@@ -115,92 +115,101 @@ export const crearElementoUnifilar = async (req, res, next) => {
         }
       }
 
-      // Upsert Tablero
-      const tension = parsedDatosTecnicos.tension || parsedDatosTecnicos.voltajeAcometida || null;
-      const fases = parsedDatosTecnicos.fases !== undefined ? parseInt(parsedDatosTecnicos.fases, 10) : 3;
-      const alimentadorId = parsedDatosTecnicos.alimentadorId || null;
+    // Inserción o actualización atómica relacional en PostgreSQL
+    const nuevoElemento = await prisma.$transaction(async (tx) => {
+      // SI ES TABLERO, APLICAR VALIDACIONES Y CREAR EN TABLAS INDEPENDIENTES
+      if (tipoElemento === 'TABLERO') {
+        const tension = parsedDatosTecnicos.tension || parsedDatosTecnicos.voltajeAcometida || null;
+        const fases = parsedDatosTecnicos.fases !== undefined ? parseInt(parsedDatosTecnicos.fases, 10) : 3;
+        const alimentadorId = parsedDatosTecnicos.alimentadorId || null;
 
-      await prisma.tablero.upsert({
+        await tx.tablero.upsert({
+          where: { id: id || '' },
+          update: {
+            nombre,
+            ubicacion: ubicacion || null,
+            maxPolos: parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42,
+            tension,
+            fases,
+            alimentadorId,
+            proyectoId,
+            empresaId: empresaId || null,
+            version: { increment: 1 },
+            circuitos: {
+              deleteMany: {},
+              create: (parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || []).map(c => ({
+                id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
+                posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
+                numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
+                amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
+                descripcion: c.descripcion || c.equipo || null,
+                estado: c.estado || 'ACTIVO',
+                elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
+                tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null,
+                version: 1
+              }))
+            }
+          },
+          create: {
+            id: id || undefined,
+            nombre,
+            ubicacion: ubicacion || null,
+            maxPolos: parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42,
+            tension,
+            fases,
+            alimentadorId,
+            proyectoId,
+            empresaId: empresaId || null,
+            version: 1,
+            circuitos: {
+              create: (parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || []).map(c => ({
+                id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
+                posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
+                numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
+                amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
+                descripcion: c.descripcion || c.equipo || null,
+                estado: c.estado || 'ACTIVO',
+                elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
+                tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null,
+                version: 1
+              }))
+            }
+          }
+        });
+      }
+
+      return await tx.elementoUnifilar.upsert({
         where: { id: id || '' },
         update: {
           nombre,
+          tipoElemento,
           ubicacion: ubicacion || null,
-          maxPolos,
-          tension,
-          fases,
-          alimentadorId,
-          proyectoId,
-          empresaId: empresaId || null,
-          circuitos: {
-            deleteMany: {},
-            create: circuits.map(c => ({
-              id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
-              posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
-              numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
-              amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
-              descripcion: c.descripcion || c.equipo || null,
-              estado: c.estado || 'ACTIVO',
-              elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
-              tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null
-            }))
-          }
+          alimentadoPor: alimentadoPor || null,
+          foto: finalFoto,
+          observacionesGenerales: observacionesGenerales || null,
+          datosTecnicos: parsedDatosTecnicos,
+          version: { increment: 1 },
+          proyecto: {
+            connect: { id: proyectoId }
+          },
+          ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
         },
         create: {
           id: id || undefined,
           nombre,
+          tipoElemento,
           ubicacion: ubicacion || null,
-          maxPolos,
-          tension,
-          fases,
-          alimentadorId,
-          proyectoId,
-          empresaId: empresaId || null,
-          circuitos: {
-            create: circuits.map(c => ({
-              id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
-              posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
-              numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
-              amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
-              descripcion: c.descripcion || c.equipo || null,
-              estado: c.estado || 'ACTIVO',
-              elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
-              tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null
-            }))
-          }
+          alimentadoPor: alimentadoPor || null,
+          foto: finalFoto,
+          observacionesGenerales: observacionesGenerales || null,
+          datosTecnicos: parsedDatosTecnicos,
+          version: 1,
+          proyecto: {
+            connect: { id: proyectoId }
+          },
+          ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
         }
       });
-    }
-
-    // 4. Inserción o actualización relacional segura en PostgreSQL
-    const nuevoElemento = await prisma.elementoUnifilar.upsert({
-      where: { id: id || '' },
-      update: {
-        nombre,
-        tipoElemento,
-        ubicacion: ubicacion || null,
-        alimentadoPor: alimentadoPor || null,
-        foto: finalFoto,
-        observacionesGenerales: observacionesGenerales || null,
-        datosTecnicos: parsedDatosTecnicos,
-        proyecto: {
-          connect: { id: proyectoId }
-        },
-        ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
-      },
-      create: {
-        id: id || undefined,
-        nombre,
-        tipoElemento,
-        ubicacion: ubicacion || null,
-        alimentadoPor: alimentadoPor || null,
-        foto: finalFoto,
-        observacionesGenerales: observacionesGenerales || null,
-        datosTecnicos: parsedDatosTecnicos,
-        proyecto: {
-          connect: { id: proyectoId }
-        },
-        ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
-      }
     });
 
     return res.status(201).json({
@@ -217,40 +226,41 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
 /**
  * DELETE /api/elementos-unifilares/:id
- * Elimina un elemento unifilar (y su tablero/circuitos si es de tipo TABLERO).
+ * Elimina un elemento unifilar (y su tablero/circuitos si es de tipo TABLERO) de forma atómica.
  */
 export const eliminarElementoUnifilar = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Verificar si existe
-    const elemento = await prisma.elementoUnifilar.findUnique({
-      where: { id }
-    });
+    await prisma.$transaction(async (tx) => {
+      // Verificar si existe
+      const elemento = await tx.elementoUnifilar.findUnique({
+        where: { id }
+      });
 
-    if (!elemento) {
-      return res.status(404).json({ ok: false, error: 'Elemento unifilar no encontrado.' });
-    }
-
-    // Si es tablero, eliminarlo de la tabla de tableros (se eliminan sus circuitos en cascada)
-    if (elemento.tipoElemento === 'TABLERO') {
-      try {
-        const tableroExiste = await prisma.tablero.findUnique({ where: { id } });
-        if (tableroExiste) {
-          await prisma.tablero.delete({ where: { id } });
-        }
-      } catch (err) {
-        console.warn('Error al intentar eliminar tablero asociado:', err.message);
+      if (!elemento) {
+        throw new Error('NOT_FOUND');
       }
-    }
 
-    // Eliminar el elemento unifilar
-    await prisma.elementoUnifilar.delete({
-      where: { id }
+      // Si es tablero, eliminarlo de la tabla de tableros (se eliminan sus circuitos en cascada)
+      if (elemento.tipoElemento === 'TABLERO') {
+        const tableroExiste = await tx.tablero.findUnique({ where: { id } });
+        if (tableroExiste) {
+          await tx.tablero.delete({ where: { id } });
+        }
+      }
+
+      // Eliminar el elemento unifilar
+      await tx.elementoUnifilar.delete({
+        where: { id }
+      });
     });
 
     return res.status(200).json({ ok: true, message: 'Elemento unifilar eliminado con éxito.' });
   } catch (error) {
+    if (error.message === 'NOT_FOUND') {
+      return res.status(404).json({ ok: false, error: 'Elemento unifilar no encontrado.' });
+    }
     console.error('Error en eliminarElementoUnifilar:', error);
     next(error);
   }

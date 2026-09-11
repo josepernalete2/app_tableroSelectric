@@ -13,6 +13,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from './middleware/authMiddleware.js';
 import tableroRoutes from './routes/tableroRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
 
@@ -106,12 +108,43 @@ const connectedUsers = new Map();
 app.set('io', io);
 app.set('connectedUsers', connectedUsers);
 
+// Middleware de autenticación estricto para conexiones WebSocket (SEC-05)
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || 
+                socket.handshake.headers?.authorization?.replace('Bearer ', '') ||
+                socket.handshake.query?.token;
+
+  if (!token) {
+    return next(new Error('Autenticación requerida: debe proporcionar un token JWT para conectar a WebSocket'));
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.user = decoded; // { id, username, role, companyId }
+    next();
+  } catch (err) {
+    console.warn('⚠️ Token inválido en WebSocket handshake:', err.message);
+    next(new Error('Autenticación fallida en WebSocket: token inválido o expirado'));
+  }
+});
+
 io.on('connection', (socket) => {
   console.log('⚡ Nuevo cliente WebSocket conectado:', socket.id);
 
+  // Registro automático seguro basado en identidad verificada del token
+  if (socket.user?.id) {
+    connectedUsers.set(socket.user.id, socket.id);
+    console.log(`👤 Usuario autenticado registrado en Socket: ${socket.user.username} (${socket.user.id}) -> ${socket.id}`);
+  }
+
   socket.on('register_user', (userId) => {
-    connectedUsers.set(userId, socket.id);
-    console.log(`👤 Usuario registrado en Socket: ${userId} -> Socket ID: ${socket.id}`);
+    // Solo permitir registro si coincide estrictamente con el token verificado o si es ADMIN
+    if (socket.user && (socket.user.id === userId || socket.user.role === 'ADMIN')) {
+      connectedUsers.set(userId, socket.id);
+      console.log(`👤 Usuario verificado registrado en Socket: ${userId} -> Socket ID: ${socket.id}`);
+    } else {
+      console.warn(`⚠️ [SECURITY WARNING] Intento no autorizado de register_user para '${userId}' desde socket '${socket.id}'`);
+    }
   });
 
   socket.on('disconnect', () => {
@@ -159,10 +192,16 @@ app.use((req, res, next) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Middleware Global de Manejo de Errores
+// Middleware Global de Manejo de Errores Seguro
 app.use((err, req, res, next) => {
   console.error("❌ ERROR EN EL SERVIDOR:", err.stack);
-  res.status(500).json({ ok: false, error: "Error interno del servidor", detalle: err.message });
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  res.status(err.status || 500).json({ 
+    ok: false, 
+    error: err.status ? err.message : "Error interno del servidor",
+    ...(isDev ? { detalle: err.message, stack: err.stack } : {})
+  });
 });
 
 server.listen(PORT, '0.0.0.0', () => {

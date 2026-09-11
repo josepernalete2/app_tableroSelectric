@@ -126,6 +126,9 @@ export const crearUsuario = async (req, res, next) => {
 
     return res.status(201).json({ ok: true, data: newUser });
   } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({ ok: false, error: 'Ya existe un usuario con este nombre de usuario.' });
+    }
     console.error('Error en crearUsuario:', error);
     next(error);
   }
@@ -172,6 +175,9 @@ export const actualizarUsuario = async (req, res, next) => {
 
     return res.status(200).json({ ok: true, data: updated });
   } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({ ok: false, error: 'Ya existe otro usuario con este nombre de usuario.' });
+    }
     console.error('Error en actualizarUsuario:', error);
     next(error);
   }

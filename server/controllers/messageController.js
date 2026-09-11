@@ -7,6 +7,14 @@ export const obtenerMensajesUsuario = async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'El ID de usuario es requerido.' });
     }
 
+    // Control de Acceso (BOLA / IDOR): Solo el propio usuario o un ADMIN pueden consultar los mensajes
+    if (req.user.role !== 'ADMIN' && req.user.id !== userId) {
+      return res.status(403).json({ 
+        ok: false, 
+        error: 'Acceso denegado. No tiene autorización para consultar los mensajes de este usuario.' 
+      });
+    }
+
     const messages = await prisma.message.findMany({
       where: {
         OR: [
@@ -26,18 +34,22 @@ export const obtenerMensajesUsuario = async (req, res, next) => {
 
 export const guardarMensaje = async (req, res, next) => {
   try {
-    const { senderId, senderUsername, receiverId, text } = req.body;
+    const { receiverId, text } = req.body;
 
-    if (!senderId || !receiverId || !text) {
-      return res.status(400).json({ ok: false, error: 'Campos incompletos para registrar el mensaje.' });
+    if (!receiverId || !text || !text.trim()) {
+      return res.status(400).json({ ok: false, error: 'Campos receiverId y text son obligatorios.' });
     }
+
+    // Identidad asegurada directamente desde el token JWT verificado (inmune a spoofing)
+    const senderId = req.user.id;
+    const senderUsername = req.user.username || 'Usuario';
 
     const newMessage = await prisma.message.create({
       data: {
         senderId,
-        senderUsername: senderUsername || 'Anónimo',
+        senderUsername,
         receiverId,
-        text,
+        text: text.trim(),
         read: false
       }
     });
@@ -66,6 +78,14 @@ export const marcarMensajesComoLeidos = async (req, res, next) => {
 
     if (!senderId || !receiverId) {
       return res.status(400).json({ ok: false, error: 'Campos senderId y receiverId requeridos.' });
+    }
+
+    // Control de Acceso: Solo el receptor legítimo o un ADMIN pueden marcar como leído
+    if (req.user.role !== 'ADMIN' && req.user.id !== receiverId) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Acceso denegado. Solo el destinatario puede marcar sus mensajes como leídos.'
+      });
     }
 
     await prisma.message.updateMany({

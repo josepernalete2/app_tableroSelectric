@@ -2,7 +2,7 @@ import prisma from '../db.js';
 
 /**
  * POST /api/jerarquia/vincular
- * Establece el enlace Padre -> Hijo con actualización bidireccional.
+ * Establece el enlace Padre -> Hijo con validación atómica y detección de ciclos.
  */
 export const vincularElemento = async (req, res, next) => {
   try {
@@ -22,37 +22,81 @@ export const vincularElemento = async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'El id del elemento hijo es obligatorio.' });
     }
 
-    // 1. Obtener información del padre si existe
-    let nombrePadre = null;
-    if (padreId) {
-      const padre = await prisma.elementoUnifilar.findUnique({ where: { id: padreId } });
-      if (padre) {
-        nombrePadre = padre.nombre;
-      }
+    if (padreId && padreId === hijoId) {
+      return res.status(400).json({ ok: false, error: 'Un elemento no puede alimentarse a sí mismo.' });
     }
 
-    // 2. Actualizar el elemento hijo
-    const hijoActualizado = await prisma.elementoUnifilar.update({
-      where: { id: hijoId },
-      data: {
-        alimentadoPorId: padreId || null,
-        alimentadoPor: nombrePadre ? `${nombrePadre} (${circuitoOrigen || 'Salida'})` : null,
-        circuitoOrigen: circuitoOrigen || null,
-        calibreConductor: calibreConductor || null,
-        breakerAmperaje: breakerAmperaje ? parseFloat(breakerAmperaje) : null,
-        breakerMarca: breakerMarca || null,
-        breakerTipo: breakerTipo || null,
-        potenciaEstimada: potenciaEstimada || null,
-        estadoVinculo: 'ACTIVO',
-        detallesFormato: detallesFormato || undefined
+    const resultado = await prisma.$transaction(async (tx) => {
+      // 1. Validar existencia del hijo
+      const hijoActual = await tx.elementoUnifilar.findUnique({
+        where: { id: hijoId }
+      });
+
+      if (!hijoActual) {
+        return { status: 404, body: { ok: false, error: 'Elemento hijo no encontrado.' } };
       }
+
+      // 2. Si se especifica padre, validar y verificar dependencias circulares
+      let nombrePadre = null;
+      if (padreId) {
+        const padre = await tx.elementoUnifilar.findUnique({ where: { id: padreId } });
+        if (!padre) {
+          return { status: 404, body: { ok: false, error: 'Elemento padre alimentador no encontrado.' } };
+        }
+        nombrePadre = padre.nombre;
+
+        // Detección de ciclos en la cadena jerárquica aguas arriba
+        let currAncestorId = padre.alimentadoPorId;
+        let depth = 0;
+        const maxDepth = 64;
+        while (currAncestorId && depth < maxDepth) {
+          if (currAncestorId === hijoId) {
+            return {
+              status: 400,
+              body: {
+                ok: false,
+                error: 'Dependencia circular detectada: el elemento seleccionado como alimentador ya recibe energía directa o indirectamente de este equipo.'
+              }
+            };
+          }
+          const ancestor = await tx.elementoUnifilar.findUnique({
+            where: { id: currAncestorId },
+            select: { alimentadoPorId: true }
+          });
+          currAncestorId = ancestor?.alimentadoPorId || null;
+          depth++;
+        }
+      }
+
+      // 3. Actualizar el elemento hijo de forma atómica
+      const hijoActualizado = await tx.elementoUnifilar.update({
+        where: { id: hijoId },
+        data: {
+          alimentadoPorId: padreId || null,
+          alimentadoPor: nombrePadre ? `${nombrePadre} (${circuitoOrigen || 'Salida'})` : null,
+          circuitoOrigen: circuitoOrigen || null,
+          calibreConductor: calibreConductor || null,
+          breakerAmperaje: breakerAmperaje ? parseFloat(breakerAmperaje) : null,
+          breakerMarca: breakerMarca || null,
+          breakerTipo: breakerTipo || null,
+          potenciaEstimada: potenciaEstimada || null,
+          estadoVinculo: 'ACTIVO',
+          detallesFormato: detallesFormato || undefined,
+          version: { increment: 1 }
+        }
+      });
+
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          message: 'Enlace jerárquico establecido con éxito.',
+          data: hijoActualizado
+        }
+      };
     });
 
-    return res.status(200).json({
-      ok: true,
-      message: 'Enlace jerárquico establecido con éxito.',
-      data: hijoActualizado
-    });
+    return res.status(resultado.status).json(resultado.body);
   } catch (error) {
     console.error('Error en vincularElemento:', error);
     next(error);
@@ -61,7 +105,7 @@ export const vincularElemento = async (req, res, next) => {
 
 /**
  * POST /api/jerarquia/desvincular
- * Limpia la procedencia de alimentación del equipo.
+ * Limpia la procedencia de alimentación del equipo atómicamente.
  */
 export const desvincularElemento = async (req, res, next) => {
   try {
@@ -77,7 +121,8 @@ export const desvincularElemento = async (req, res, next) => {
         alimentadoPorId: null,
         alimentadoPor: null,
         circuitoOrigen: null,
-        estadoVinculo: 'ACTIVO'
+        estadoVinculo: 'ACTIVO',
+        version: { increment: 1 }
       }
     });
 
@@ -104,8 +149,21 @@ export const crearProvisional = async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'Campos requeridos: id, nombre y proyectoId.' });
     }
 
-    const provisional = await prisma.elementoUnifilar.create({
-      data: {
+    const provisional = await prisma.elementoUnifilar.upsert({
+      where: { id },
+      update: {
+        nombre,
+        tipoElemento: tipoElemento || 'TABLERO',
+        ubicacion: 'RESERVA (Pendiente por Crear)',
+        alimentadoPor: circuitoOrigen ? `Circuito ${circuitoOrigen}` : null,
+        circuitoOrigen: circuitoOrigen || null,
+        estadoVinculo: 'PENDIENTE_CREAR',
+        observacionesGenerales: 'Elemento registrado en estado provisional como Reserva activa.',
+        proyectoId,
+        empresaId: empresaId || null,
+        version: { increment: 1 }
+      },
+      create: {
         id,
         nombre,
         tipoElemento: tipoElemento || 'TABLERO',
@@ -116,7 +174,8 @@ export const crearProvisional = async (req, res, next) => {
         observacionesGenerales: 'Elemento registrado en estado provisional como Reserva activa.',
         datosTecnicos: {},
         proyectoId,
-        empresaId: empresaId || null
+        empresaId: empresaId || null,
+        version: 1
       }
     });
 
@@ -138,6 +197,18 @@ export const crearProvisional = async (req, res, next) => {
 export const obtenerArbolProyecto = async (req, res, next) => {
   try {
     const { proyectoId } = req.params;
+
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id: proyectoId }
+    });
+
+    if (!proyecto) {
+      return res.status(404).json({ ok: false, error: 'Proyecto no encontrado.' });
+    }
+
+    if (req.user && req.user.role === 'CLIENT' && req.user.companyId !== proyecto.empresaId) {
+      return res.status(403).json({ ok: false, error: 'Acceso denegado a este proyecto.' });
+    }
 
     const elementos = await prisma.elementoUnifilar.findMany({
       where: { proyectoId },
@@ -169,6 +240,18 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
 
     if (!proyectoId) {
       return res.status(400).json({ ok: false, error: 'El ID del proyecto es requerido.' });
+    }
+
+    const proyecto = await prisma.proyecto.findUnique({
+      where: { id: proyectoId }
+    });
+
+    if (!proyecto) {
+      return res.status(404).json({ ok: false, error: 'Proyecto no encontrado.' });
+    }
+
+    if (req.user && req.user.role === 'CLIENT' && req.user.companyId !== proyecto.empresaId) {
+      return res.status(403).json({ ok: false, error: 'Acceso denegado a este proyecto.' });
     }
 
     // 1. Consultar elementos unifilares del proyecto

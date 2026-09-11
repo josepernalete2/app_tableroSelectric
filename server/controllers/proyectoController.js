@@ -21,7 +21,17 @@ const sanitizarProyecto = (proyecto, role) => {
  */
 export const obtenerProyectos = async (req, res, next) => {
   try {
+    const where = {};
+    // Aislamiento Multitenant: Filtrar solo los proyectos de la empresa del cliente
+    if (req.user.role === 'CLIENT') {
+      if (!req.user.companyId) {
+        return res.status(200).json({ ok: true, data: [] });
+      }
+      where.empresaId = req.user.companyId;
+    }
+
     const proyectos = await prisma.proyecto.findMany({
+      where,
       orderBy: { createdAt: 'desc' }
     });
 
@@ -40,6 +50,14 @@ export const obtenerProyectos = async (req, res, next) => {
 export const obtenerProyectosPorEmpresa = async (req, res, next) => {
   try {
     const { empresaId } = req.params;
+
+    // Aislamiento Multitenant: Bloquear acceso a proyectos de otras empresas
+    if (req.user.role === 'CLIENT' && req.user.companyId !== empresaId) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Acceso denegado. No tiene permisos para consultar proyectos de esta empresa.'
+      });
+    }
 
     // Verificar si la empresa existe
     const empresaExiste = await prisma.empresa.findUnique({
@@ -199,6 +217,14 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
       return res.status(404).json({
         ok: false,
         error: 'El proyecto especificado no existe.'
+      });
+    }
+
+    // Aislamiento Multitenant: Si es CLIENT, validar pertenencia
+    if (req.user.role === 'CLIENT' && proyecto.empresaId !== req.user.companyId) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Acceso denegado. No tiene permisos para consultar este proyecto.'
       });
     }
 

@@ -2,7 +2,17 @@ import prisma from '../db.js';
 
 export const obtenerEmpresas = async (req, res, next) => {
   try {
+    const where = {};
+    // Aislamiento Multitenant: Si es CLIENT, restringir exclusivamente a su empresa
+    if (req.user.role === 'CLIENT') {
+      if (!req.user.companyId) {
+        return res.status(200).json({ ok: true, data: [] });
+      }
+      where.id = req.user.companyId;
+    }
+
     const empresas = await prisma.empresa.findMany({
+      where,
       orderBy: { nombre: 'asc' }
     });
 
@@ -29,6 +39,15 @@ export const obtenerEmpresas = async (req, res, next) => {
 export const obtenerEmpresaPorId = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Aislamiento Multitenant: Bloquear acceso a empresas ajenas
+    if (req.user.role === 'CLIENT' && req.user.companyId !== id) {
+      return res.status(403).json({ 
+        ok: false, 
+        error: 'Acceso denegado. No tiene permisos para consultar datos de esta empresa.' 
+      });
+    }
+
     const empresa = await prisma.empresa.findUnique({
       where: { id },
       include: {
