@@ -22,8 +22,9 @@ class TableroRepository(
     suspend fun fetchTablerosRemote(empresaId: String): Result<List<Tablero>> {
         return try {
             val response = apiService.getTablerosPorEmpresa(empresaId)
-            if (response.isSuccessful && response.body() != null) {
-                val tableros = response.body()!!
+            val body = response.body()
+            if (response.isSuccessful && body != null && body.ok) {
+                val tableros = body.data ?: emptyList()
                 // Guardar en Room para caché offline
                 tablerosDao.insertTableros(tableros.map { TableroEntity.fromDomain(it) })
                 for (tablero in tableros) {
@@ -33,7 +34,8 @@ class TableroRepository(
                 }
                 Result.success(tableros)
             } else {
-                Result.failure(Exception("Error al cargar tableros del servidor"))
+                val err = body?.error ?: "Error al cargar tableros del servidor (${response.code()})"
+                Result.failure(Exception(err))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -43,8 +45,9 @@ class TableroRepository(
     suspend fun getTableroDetail(tableroId: String): Result<Tablero> {
         return try {
             val response = apiService.getTableroById(tableroId)
-            if (response.isSuccessful && response.body() != null) {
-                val tablero = response.body()!!
+            val body = response.body()
+            if (response.isSuccessful && body != null && body.ok && body.data != null) {
+                val tablero = body.data
                 tablerosDao.insertTablero(TableroEntity.fromDomain(tablero))
                 tablerosDao.insertCircuitos(tablero.circuitos.map { CircuitoEntity.fromDomain(it) })
                 Result.success(tablero)
@@ -55,7 +58,7 @@ class TableroRepository(
                     val circuitos = tablerosDao.getCircuitosByTableroSync(tableroId).map { it.toDomain() }
                     Result.success(cached.toDomain(circuitos))
                 } else {
-                    Result.failure(Exception("Tablero no encontrado"))
+                    Result.failure(Exception(body?.error ?: "Tablero no encontrado"))
                 }
             }
         } catch (e: Exception) {
@@ -78,8 +81,9 @@ class TableroRepository(
                 apiService.updateCircuito(circuito.id, circuito)
             }
 
-            if (response.isSuccessful && response.body() != null) {
-                val saved = response.body()!!
+            val body = response.body()
+            if (response.isSuccessful && body != null && body.ok && body.data != null) {
+                val saved = body.data
                 tablerosDao.insertCircuito(CircuitoEntity.fromDomain(saved, isPendingSync = false))
                 Result.success(saved)
             } else {

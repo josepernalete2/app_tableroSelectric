@@ -21,12 +21,14 @@ class EmpresasRepository(
     suspend fun fetchEmpresasRemote(): Result<List<Empresa>> {
         return try {
             val response = apiService.getEmpresas()
-            if (response.isSuccessful && response.body() != null) {
-                val empresas = response.body()!!
+            val body = response.body()
+            if (response.isSuccessful && body != null && body.ok) {
+                val empresas = body.data ?: emptyList()
                 tablerosDao.insertEmpresas(empresas.map { EmpresaEntity.fromDomain(it) })
                 Result.success(empresas)
             } else {
-                Result.failure(Exception("Error al consultar empresas"))
+                val err = body?.error ?: "Error al consultar empresas (${response.code()})"
+                Result.failure(Exception(err))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -36,10 +38,12 @@ class EmpresasRepository(
     suspend fun fetchProyectos(empresaId: String): Result<List<Proyecto>> {
         return try {
             val response = apiService.getProyectosPorEmpresa(empresaId)
-            if (response.isSuccessful && response.body() != null) {
-                Result.success(response.body()!!)
+            val body = response.body()
+            if (response.isSuccessful && body != null && body.ok) {
+                Result.success(body.data ?: emptyList())
             } else {
-                Result.failure(Exception("Error al consultar proyectos"))
+                val err = body?.error ?: "Error al consultar proyectos (${response.code()})"
+                Result.failure(Exception(err))
             }
         } catch (e: Exception) {
             Result.failure(e)

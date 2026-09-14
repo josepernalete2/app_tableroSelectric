@@ -2,6 +2,14 @@ package com.selectric.tableros.data.remote.dto
 
 import com.google.gson.annotations.SerializedName
 
+// --- ENVOLTORIO GENÉRICO DE RESPUESTAS API ---
+data class ApiResponse<T>(
+    @SerializedName("ok") val ok: Boolean,
+    @SerializedName("data") val data: T? = null,
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("message") val message: String? = null
+)
+
 // --- AUTENTICACIÓN ---
 data class LoginRequest(
     @SerializedName("username") val username: String,
