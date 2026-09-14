@@ -41,7 +41,8 @@ class DashboardViewModel(
         viewModelScope.launch {
             try {
                 val empresasRes = apiService.getEmpresas()
-                val count = if (empresasRes.isSuccessful) empresasRes.body()?.size ?: 0 else 0
+                val body = empresasRes.body()
+                val count = if (empresasRes.isSuccessful && body != null && body.ok) body.data?.size ?: 0 else 0
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     empresasCount = count,
