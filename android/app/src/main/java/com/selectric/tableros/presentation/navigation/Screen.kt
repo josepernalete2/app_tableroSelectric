@@ -10,7 +10,16 @@ sealed class Screen(val route: String) {
     object Tablero : Screen("tablero/{tableroId}") {
         fun createRoute(tableroId: String) = "tablero/$tableroId"
     }
-    object Subestaciones : Screen("subestaciones/{proyectoId}") {
-        fun createRoute(proyectoId: String) = "subestaciones/$proyectoId"
+    object SubestacionDetail : Screen("subestacion/{subestacionId}") {
+        fun createRoute(subestacionId: String) = "subestacion/$subestacionId"
+    }
+    object Ccm : Screen("ccm/{ccmId}") {
+        fun createRoute(ccmId: String) = "ccm/$ccmId"
+    }
+    object Medicion : Screen("medicion/{puntoId}") {
+        fun createRoute(puntoId: String) = "medicion/$puntoId"
+    }
+    object Unifilar : Screen("unifilar/{proyectoId}") {
+        fun createRoute(proyectoId: String) = "unifilar/$proyectoId"
     }
 }

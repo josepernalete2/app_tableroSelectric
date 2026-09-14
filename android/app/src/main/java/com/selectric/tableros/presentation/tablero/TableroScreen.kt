@@ -1,10 +1,10 @@
 package com.selectric.tableros.presentation.tablero
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -15,15 +15,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.selectric.tableros.data.remote.dto.Circuito
 import com.selectric.tableros.data.remote.dto.Tablero
+import com.selectric.tableros.domain.usecase.CalcularBalanceFasesUseCase
 import com.selectric.tableros.presentation.theme.StatusActive
 import com.selectric.tableros.presentation.theme.StatusDisponible
 import com.selectric.tableros.presentation.theme.StatusReserva
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +35,7 @@ fun TableroScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedCircuitoForEdit by remember { mutableStateOf<Circuito?>(null) }
+    var selectedPoloDefault by remember { mutableStateOf(1) }
     var showDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(tableroId) {
@@ -69,6 +71,7 @@ fun TableroScreen(
             FloatingActionButton(
                 onClick = {
                     selectedCircuitoForEdit = null
+                    selectedPoloDefault = 1
                     showDialog = true
                 },
                 containerColor = MaterialTheme.colorScheme.secondary
@@ -110,21 +113,29 @@ fun TableroScreen(
                         onCircuitoClick = { circ ->
                             selectedCircuitoForEdit = circ
                             showDialog = true
+                        },
+                        onEmptyPoloClick = { polo ->
+                            selectedCircuitoForEdit = null
+                            selectedPoloDefault = polo
+                            showDialog = true
                         }
                     )
-                }
-            }
 
-            if (showDialog) {
-                CircuitoEditDialog(
-                    circuito = selectedCircuitoForEdit,
-                    tableroId = tableroId,
-                    onDismiss = { showDialog = false },
-                    onSave = { updatedCirc ->
-                        viewModel.saveCircuito(tableroId, updatedCirc)
-                        showDialog = false
+                    if (showDialog) {
+                        CircuitoEditDialog(
+                            circuito = selectedCircuitoForEdit,
+                            tableroId = tableroId,
+                            maxPolos = tablero.maxPolos,
+                            circuitosExistentes = tablero.circuitos,
+                            posicionPoloDefault = selectedPoloDefault,
+                            onDismiss = { showDialog = false },
+                            onSave = { updatedCirc ->
+                                viewModel.saveCircuito(tableroId, updatedCirc)
+                                showDialog = false
+                            }
+                        )
                     }
-                )
+                }
             }
         }
     }
@@ -133,125 +144,230 @@ fun TableroScreen(
 @Composable
 fun TableroContent(
     tablero: Tablero,
-    onCircuitoClick: (Circuito) -> Unit
+    onCircuitoClick: (Circuito) -> Unit,
+    onEmptyPoloClick: (Int) -> Unit
 ) {
-    Column(
+    val balanceUseCase = remember { CalcularBalanceFasesUseCase() }
+    val balance = remember(tablero) {
+        balanceUseCase.execute(
+            maxPolos = tablero.maxPolos,
+            circuitos = tablero.circuitos,
+            fases = tablero.fases
+        )
+    }
+
+    val circuitosMap = remember(tablero.circuitos) {
+        val map = mutableMapOf<Int, Circuito>()
+        for (c in tablero.circuitos) {
+            val start = c.posicionPolo
+            for (i in 0 until c.numPolos) {
+                map[start + (i * 2)] = c
+            }
+        }
+        map
+    }
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Encabezado Técnico
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+        // Resumen General del Tablero
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Column {
-                    Text("Capacidad: ${tablero.maxPolos} Polos", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Text("Fases: ${tablero.fases}Ф", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Tensión: ${tablero.tension ?: "208/120V"}", fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                    Text("Ubicación: ${tablero.ubicacion ?: "N/D"}", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("Capacidad: ${tablero.maxPolos} Polos", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Fases: ${tablero.fases}Ф", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Tensión: ${tablero.tension ?: "208/120V"}", fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                        Text("Ubicación: ${tablero.ubicacion ?: "N/D"}", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            "Circuitos e Interruptores (${tablero.circuitos.size})",
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // Dashboard de Balance de Fases
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Dashboard de Balance de Cargas", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        MetricItem("Fase A", "${String.format(Locale.getDefault(), "%.1f", balance.corrienteFaseA)} A")
+                        MetricItem("Fase B", "${String.format(Locale.getDefault(), "%.1f", balance.corrienteFaseB)} A")
+                        MetricItem("Fase C", "${String.format(Locale.getDefault(), "%.1f", balance.corrienteFaseC)} A")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Ocupación: ${String.format(Locale.getDefault(), "%.1f", balance.porcentajeOcupacion)}%", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text("Desbalance: ${String.format(Locale.getDefault(), "%.1f", balance.porcentajeDesbalance)}%", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(tablero.circuitos.sortedBy { it.posicionPolo }) { circuito ->
-                CircuitoCardItem(circuito = circuito, onClick = { onCircuitoClick(circuito) })
+        // Grilla Técnica de Polos Impares (Izquierda) y Pares (Derecha)
+        item {
+            Text(
+                "Diagrama Físico de Polos (${tablero.maxPolos} Polos)",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        val rows = (tablero.maxPolos + 1) / 2
+        items(rows) { rowIndex ->
+            val oddPolo = (rowIndex * 2) + 1
+            val evenPolo = (rowIndex * 2) + 2
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Polo Impar (Izquierda)
+                Box(modifier = Modifier.weight(1f)) {
+                    if (oddPolo <= tablero.maxPolos) {
+                        PoleSlotItem(
+                            poloNumber = oddPolo,
+                            circuito = circuitosMap[oddPolo],
+                            onCircuitoClick = onCircuitoClick,
+                            onEmptyClick = { onEmptyPoloClick(oddPolo) }
+                        )
+                    }
+                }
+
+                // Polo Par (Derecha)
+                Box(modifier = Modifier.weight(1f)) {
+                    if (evenPolo <= tablero.maxPolos) {
+                        PoleSlotItem(
+                            poloNumber = evenPolo,
+                            circuito = circuitosMap[evenPolo],
+                            onCircuitoClick = onCircuitoClick,
+                            onEmptyClick = { onEmptyPoloClick(evenPolo) }
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun CircuitoCardItem(circuito: Circuito, onClick: () -> Unit) {
-    val statusColor = when (circuito.estado) {
-        "ACTIVO" -> StatusActive
-        "RESERVA" -> StatusReserva
-        else -> StatusDisponible
+fun MetricItem(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
+        Text(value, fontSize = 16.sp, fontWeight = FontWeight.Bold)
     }
+}
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
+@Composable
+fun PoleSlotItem(
+    poloNumber: Int,
+    circuito: Circuito?,
+    onCircuitoClick: (Circuito) -> Unit,
+    onEmptyClick: () -> Unit
+) {
+    if (circuito != null) {
+        val statusColor = when (circuito.estado) {
+            "ACTIVO" -> StatusActive
+            "RESERVA" -> StatusReserva
+            else -> StatusDisponible
+        }
+
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .clickable { onCircuitoClick(circuito) },
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "#${circuito.posicionPolo}",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontSize = 14.sp
-                    )
+                    Text("$poloNumber", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = circuito.descripcion?.ifBlank { "Sin descripción" } ?: "Sin descripción",
+                        text = circuito.descripcion?.ifBlank { "Circuito" } ?: "Circuito",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontSize = 12.sp,
+                        maxLines = 1
                     )
                     Text(
-                        text = "${circuito.numPolos} Polo(s) • ${circuito.amperaje ?: 20.0}A",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "${circuito.numPolos}P • ${circuito.amperaje ?: 20.0}A",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
-            }
 
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(statusColor.copy(alpha = 0.15f))
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(statusColor)
+                )
+            }
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                .clickable { onEmptyClick() }
+                .padding(vertical = 10.dp, horizontal = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = circuito.estado,
-                    color = statusColor,
+                    text = "$poloNumber",
+                    fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "+ Disponible",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
                 )
             }
         }

@@ -4,23 +4,27 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.selectric.tableros.data.local.dao.SyncQueueDao
 import com.selectric.tableros.data.local.dao.TablerosDao
 import com.selectric.tableros.data.local.entities.CircuitoEntity
 import com.selectric.tableros.data.local.entities.EmpresaEntity
+import com.selectric.tableros.data.local.entities.SyncQueueEntity
 import com.selectric.tableros.data.local.entities.TableroEntity
 
 @Database(
     entities = [
         EmpresaEntity::class,
         TableroEntity::class,
-        CircuitoEntity::class
+        CircuitoEntity::class,
+        SyncQueueEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun tablerosDao(): TablerosDao
+    abstract fun syncQueueDao(): SyncQueueDao
 
     companion object {
         @Volatile

@@ -12,16 +12,24 @@ import com.selectric.tableros.data.remote.ApiService
 import com.selectric.tableros.data.repository.AuthRepository
 import com.selectric.tableros.data.repository.EmpresasRepository
 import com.selectric.tableros.data.repository.TableroRepository
+import com.selectric.tableros.presentation.ccm.CcmScreen
+import com.selectric.tableros.presentation.ccm.CcmViewModel
 import com.selectric.tableros.presentation.dashboard.DashboardScreen
 import com.selectric.tableros.presentation.dashboard.DashboardViewModel
 import com.selectric.tableros.presentation.empresas.EmpresasScreen
 import com.selectric.tableros.presentation.empresas.EmpresasViewModel
 import com.selectric.tableros.presentation.login.LoginScreen
 import com.selectric.tableros.presentation.login.LoginViewModel
+import com.selectric.tableros.presentation.medicion.MedicionScreen
+import com.selectric.tableros.presentation.medicion.MedicionViewModel
 import com.selectric.tableros.presentation.proyectos.ProyectosScreen
 import com.selectric.tableros.presentation.proyectos.ProyectosViewModel
+import com.selectric.tableros.presentation.subestaciones.SubestacionScreen
+import com.selectric.tableros.presentation.subestaciones.SubestacionViewModel
 import com.selectric.tableros.presentation.tablero.TableroScreen
 import com.selectric.tableros.presentation.tablero.TableroViewModel
+import com.selectric.tableros.presentation.unifilar.UnifilarTreeScreen
+import com.selectric.tableros.presentation.unifilar.UnifilarViewModel
 
 @Composable
 fun AppNavGraph(
@@ -111,6 +119,66 @@ fun AppNavGraph(
 
             TableroScreen(
                 tableroId = tableroId,
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // SUBESTACION DETALLE
+        composable(
+            route = Screen.SubestacionDetail.route,
+            arguments = listOf(navArgument("subestacionId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val subestacionId = backStackEntry.arguments?.getString("subestacionId") ?: ""
+            val viewModel = SubestacionViewModel()
+
+            SubestacionScreen(
+                subestacionId = subestacionId,
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // CCM (GAVETAS)
+        composable(
+            route = Screen.Ccm.route,
+            arguments = listOf(navArgument("ccmId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val ccmId = backStackEntry.arguments?.getString("ccmId") ?: ""
+            val viewModel = CcmViewModel()
+
+            CcmScreen(
+                ccmId = ccmId,
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // PUNTO DE MEDICION
+        composable(
+            route = Screen.Medicion.route,
+            arguments = listOf(navArgument("puntoId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val puntoId = backStackEntry.arguments?.getString("puntoId") ?: ""
+            val viewModel = MedicionViewModel()
+
+            MedicionScreen(
+                puntoId = puntoId,
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // DIAGRAMA UNIFILAR
+        composable(
+            route = Screen.Unifilar.route,
+            arguments = listOf(navArgument("proyectoId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val proyectoId = backStackEntry.arguments?.getString("proyectoId") ?: ""
+            val viewModel = UnifilarViewModel()
+
+            UnifilarTreeScreen(
+                proyectoId = proyectoId,
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() }
             )

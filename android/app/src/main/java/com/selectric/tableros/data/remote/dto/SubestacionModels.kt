@@ -1,15 +1,5 @@
 package com.selectric.tableros.data.remote.dto
 
-data class Subestacion(
-    val id: String,
-    val nombre: String,
-    val ubicacion: String?,
-    val nivelTension: String?, // Ej: 13.8kV / 480V
-    val capacidadKva: Double?,
-    val empresaId: String,
-    val estado: String = "OPERATIVO"
-)
-
 data class InspeccionSubestacion(
     val id: String? = null,
     val subestacionId: String,
@@ -29,7 +19,7 @@ data class InspeccionSubestacion(
 data class GavetaCcm(
     val id: String,
     val nombre: String,
-    val cubículo: String,
+    val cubiculo: String,
     val potenciaHp: Double?,
     val releTermicoA: Double?,
     val contactorModelo: String?,

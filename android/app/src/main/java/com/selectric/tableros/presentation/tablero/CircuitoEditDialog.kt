@@ -11,12 +11,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.selectric.tableros.data.remote.dto.Circuito
+import com.selectric.tableros.domain.validation.ReglasElectricasValidator
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CircuitoEditDialog(
     circuito: Circuito?,
     tableroId: String,
+    maxPolos: Int = 42,
+    circuitosExistentes: List<Circuito> = emptyList(),
     posicionPoloDefault: Int = 1,
     onDismiss: () -> Unit,
     onSave: (Circuito) -> Unit
@@ -26,6 +28,7 @@ fun CircuitoEditDialog(
     var amperajeText by remember { mutableStateOf(circuito?.amperaje?.toString() ?: "20") }
     var descripcion by remember { mutableStateOf(circuito?.descripcion ?: "") }
     var estado by remember { mutableStateOf(circuito?.estado ?: "ACTIVO") }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     val estados = listOf("ACTIVO", "RESERVA", "DISPONIBLE")
 
@@ -33,7 +36,7 @@ fun CircuitoEditDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                if (circuito?.id == null) "Nuevo Circuito / Interruptor" else "Editar Circuito #${circuito.posicionPolo}",
+                if (circuito?.id == null) "Nuevo Circuito / Breaker" else "Editar Circuito #${circuito.posicionPolo}",
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
@@ -51,7 +54,10 @@ fun CircuitoEditDialog(
                 ) {
                     OutlinedTextField(
                         value = poloText,
-                        onValueChange = { poloText = it },
+                        onValueChange = {
+                            poloText = it
+                            validationError = null
+                        },
                         label = { Text("Polo #") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
@@ -59,8 +65,11 @@ fun CircuitoEditDialog(
                     )
                     OutlinedTextField(
                         value = numPolosText,
-                        onValueChange = { numPolosText = it },
-                        label = { Text("Polos (1-3)") },
+                        onValueChange = {
+                            numPolosText = it
+                            validationError = null
+                        },
+                        label = { Text("Polos (1P/2P/3P)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp)
@@ -99,6 +108,15 @@ fun CircuitoEditDialog(
                         )
                     }
                 }
+
+                validationError?.let { err ->
+                    Text(
+                        text = err,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         },
         confirmButton = {
@@ -107,16 +125,29 @@ fun CircuitoEditDialog(
                     val pos = poloText.toIntOrNull() ?: 1
                     val poles = numPolosText.toIntOrNull() ?: 1
                     val amp = amperajeText.toDoubleOrNull() ?: 20.0
-                    val updated = Circuito(
-                        id = circuito?.id,
-                        tableroId = tableroId,
+
+                    val validation = ReglasElectricasValidator.validarCircuito(
                         posicionPolo = pos,
                         numPolos = poles,
-                        amperaje = amp,
-                        descripcion = descripcion.trim(),
-                        estado = estado
+                        maxPolos = maxPolos,
+                        circuitosExistentes = circuitosExistentes,
+                        circuitoActualId = circuito?.id
                     )
-                    onSave(updated)
+
+                    if (!validation.isValid) {
+                        validationError = validation.errorMessage
+                    } else {
+                        val updated = Circuito(
+                            id = circuito?.id,
+                            tableroId = tableroId,
+                            posicionPolo = pos,
+                            numPolos = poles,
+                            amperaje = amp,
+                            descripcion = descripcion.trim(),
+                            estado = estado
+                        )
+                        onSave(updated)
+                    }
                 }
             ) {
                 Text("Guardar")
