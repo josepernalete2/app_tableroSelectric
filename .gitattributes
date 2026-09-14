@@ -1,0 +1,32 @@
+# Auto-detect text files and normalize line endings to LF in Git repository
+* text=auto eol=lf
+
+# Kotlin & Java sources
+*.kt text eol=lf
+*.kts text eol=lf
+*.java text eol=lf
+
+# Build scripts & Configs
+*.gradle text eol=lf
+*.properties text eol=lf
+*.xml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
+# Windows Batch scripts must keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.keystore binary
+*.jks binary

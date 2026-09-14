@@ -32,3 +32,28 @@ google-credentials.json
 *.njsproj
 *.sln
 *.sw?
+
+# Android & Gradle Build Artifacts
+.gradle/
+build/
+**/build/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.cxx/
+android/.externalNativeBuild/
+android/captures/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Android Studio temporary files & caches
+*.iml
+.idea/
+.navigation/
+.gradle/
+local.properties
+
