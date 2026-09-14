@@ -114,6 +114,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           polosOcupadosMap.set(p, { posicionPolo, descripcion: circ.descripcion || circ.equipo });
         }
       }
+    }
 
     // Inserción o actualización atómica relacional en PostgreSQL
     const nuevoElemento = await prisma.$transaction(async (tx) => {
