@@ -18,6 +18,7 @@ enum TipoElemento {
   TRANSFER
   PUNTO_MEDICION
   CCM
+  BANCO_CONDENSADOR
   OTRO
 }
 

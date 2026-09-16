@@ -1595,6 +1595,176 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   )}
                 </div>
               </div>
+
+              {/* Subtabla interactiva de Pasos y Corrientes Auditadas */}
+              <div className="pt-2 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wide">
+                    Registro de Corriente por Paso (Auditoría en Campo):
+                  </span>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = dt.pasosAuditoria || [];
+                        const nextNum = current.length + 1;
+                        handleDtChange('pasosAuditoria', [
+                          ...current,
+                          { paso: nextNum, kvar: '', iNominal: '', iL1: '', iL2: '', iL3: '', estado: 'Operativo' }
+                        ]);
+                      }}
+                      className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 rounded text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      + Agregar Paso
+                    </button>
+                  )}
+                </div>
+                {(dt.pasosAuditoria && dt.pasosAuditoria.length > 0) ? (
+                  <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-slate-900 text-slate-400 font-bold border-b border-slate-800">
+                        <tr>
+                          <th className="p-2">Paso</th>
+                          <th className="p-2">Potencia (kVAR)</th>
+                          <th className="p-2">I Nominal (A)</th>
+                          <th className="p-2">I L1 (A)</th>
+                          <th className="p-2">I L2 (A)</th>
+                          <th className="p-2">I L3 (A)</th>
+                          <th className="p-2">Estado</th>
+                          {isEditing && <th className="p-2 text-center">Acción</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-850 text-slate-200">
+                        {dt.pasosAuditoria.map((p, idx) => (
+                          <tr key={idx}>
+                            <td className="p-2 font-mono font-bold text-amber-500">Paso #{p.paso || idx + 1}</td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={p.kvar || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.pasosAuditoria];
+                                    updated[idx] = { ...updated[idx], kvar: e.target.value };
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  placeholder="kVAR"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center focus:border-amber-500"
+                                />
+                              ) : (p.kvar ? `${p.kvar} kVAR` : '—')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={p.iNominal || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.pasosAuditoria];
+                                    updated[idx] = { ...updated[idx], iNominal: e.target.value };
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  placeholder="A"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center focus:border-amber-500"
+                                />
+                              ) : (p.iNominal ? `${p.iNominal} A` : '—')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={p.iL1 || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.pasosAuditoria];
+                                    updated[idx] = { ...updated[idx], iL1: e.target.value };
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  placeholder="A"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center focus:border-amber-500"
+                                />
+                              ) : (p.iL1 ? `${p.iL1} A` : '—')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={p.iL2 || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.pasosAuditoria];
+                                    updated[idx] = { ...updated[idx], iL2: e.target.value };
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  placeholder="A"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center focus:border-amber-500"
+                                />
+                              ) : (p.iL2 ? `${p.iL2} A` : '—')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={p.iL3 || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.pasosAuditoria];
+                                    updated[idx] = { ...updated[idx], iL3: e.target.value };
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  placeholder="A"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center focus:border-amber-500"
+                                />
+                              ) : (p.iL3 ? `${p.iL3} A` : '—')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <select
+                                  value={p.estado || 'Operativo'}
+                                  onChange={(e) => {
+                                    const updated = [...dt.pasosAuditoria];
+                                    updated[idx] = { ...updated[idx], estado: e.target.value };
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  className="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200 focus:border-amber-500"
+                                >
+                                  <option value="Operativo">Operativo</option>
+                                  <option value="Capacitor Débil / Desbalanceado">Capacitor Débil</option>
+                                  <option value="Desconectado">Desconectado</option>
+                                  <option value="Dañado / Fuga Dieléctrica">Dañado</option>
+                                </select>
+                              ) : (
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  p.estado === 'Operativo' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                                  p.estado === 'Capacitor Débil / Desbalanceado' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                                  'bg-red-950 text-red-400 border border-red-800'
+                                }`}>
+                                  {p.estado || 'Operativo'}
+                                </span>
+                              )}
+                            </td>
+                            {isEditing && (
+                              <td className="p-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = dt.pasosAuditoria.filter((_, i) => i !== idx);
+                                    handleDtChange('pasosAuditoria', updated);
+                                  }}
+                                  className="text-red-400 hover:text-red-300 p-1 text-xs"
+                                  title="Eliminar paso"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-500 italic bg-slate-950/40 p-2.5 rounded-lg border border-slate-900">
+                    Sin registros individuales de pasos. {isEditing ? 'Haz clic en "+ Agregar Paso" para auditar corrientes.' : ''}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* SECCIÓN 4: UNIDADES DE CONDENSADORES (MÓDULOS) */}

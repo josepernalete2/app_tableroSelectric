@@ -32,6 +32,8 @@ const getIconAndColor = (tipo) => {
     case 'GENERADOR':
     case 'TRANSFER':
       return { icon: Activity, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
+    case 'BANCO_CONDENSADOR':
+      return { icon: Zap, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
     case 'PUNTO_MEDICION':
       return { icon: Radio, color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' };
     default:
@@ -73,6 +75,7 @@ export default function SelectorAlimentadorJerarquico({
         case 'TRANSFORMADOR': return 'Transformadores';
         case 'CCM': return 'Celdas y CCM';
         case 'TABLERO': return 'Tableros Aguas Arriba';
+        case 'BANCO_CONDENSADOR': return 'Bancos de Condensadores';
         case 'GENERADOR':
         case 'TRANSFER': return 'Generación y Transferencias';
         case 'PUNTO_MEDICION': return 'Puntos de Medición / Acometidas';
@@ -97,6 +100,9 @@ export default function SelectorAlimentadorJerarquico({
       }
       if (el.tipoElemento === 'CCM') {
         return tech.tension || '480/277 V';
+      }
+      if (el.tipoElemento === 'BANCO_CONDENSADOR') {
+        return tech.tensionNominal || (tech.potenciaReactivaTotal ? `${tech.potenciaReactivaTotal} kVAR` : 'Compensación Reactiva');
       }
       if (el.tipoElemento === 'PUNTO_MEDICION') {
         return tech.tensionNominal || tech.nivelTensionContrato || 'Acometida Red';

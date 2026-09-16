@@ -77,6 +77,7 @@ export default function InformeCompiladoView() {
   const generadores = elementos.filter(e => e.tipoElemento === 'GENERADOR');
   const transferencias = elementos.filter(e => e.tipoElemento === 'TRANSFER');
   const tableros = elementos.filter(e => e.tipoElemento === 'TABLERO');
+  const bancosCondensadores = elementos.filter(e => e.tipoElemento === 'BANCO_CONDENSADOR');
   const otros = elementos.filter(e => e.tipoElemento === 'OTRO' || e.tipoElemento === 'PUESTA_TIERRA');
 
   // Year for cover page
@@ -245,6 +246,11 @@ export default function InformeCompiladoView() {
                 <span className="font-mono">Pág. 3</span>
               </div>
               <div className="flex justify-between items-end gap-2 pl-4">
+                <span>Puntos de Suministro / Acometida</span>
+                <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
+                <span className="font-mono">Pág. 3</span>
+              </div>
+              <div className="flex justify-between items-end gap-2 pl-4">
                 <span>Transformadores</span>
                 <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
                 <span className="font-mono">Pág. 3</span>
@@ -255,7 +261,22 @@ export default function InformeCompiladoView() {
                 <span className="font-mono">Pág. 3</span>
               </div>
               <div className="flex justify-between items-end gap-2 pl-4">
+                <span>Transferencias (ATS / MTS)</span>
+                <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
+                <span className="font-mono">Pág. 3</span>
+              </div>
+              <div className="flex justify-between items-end gap-2 pl-4">
                 <span>Tableros Eléctricos</span>
+                <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
+                <span className="font-mono">Pág. 3</span>
+              </div>
+              <div className="flex justify-between items-end gap-2 pl-4">
+                <span>Bancos de Condensadores</span>
+                <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
+                <span className="font-mono">Pág. 3</span>
+              </div>
+              <div className="flex justify-between items-end gap-2 pl-4">
+                <span>Centros de Control de Motores (CCM)</span>
                 <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
                 <span className="font-mono">Pág. 3</span>
               </div>
@@ -324,6 +345,37 @@ export default function InformeCompiladoView() {
               2. Sistema de Alimentación
             </h2>
             
+            {/* Puntos de Medición y Suministro */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Puntos de Suministro / Acometida</h3>
+              {puntosMedicion.length > 0 ? (
+                <table className="w-full text-xs text-left border border-slate-800 print:border-gray-300">
+                  <thead className="bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-400 print:bg-gray-100 print:text-slate-700">
+                    <tr>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nombre / Tag</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Empresa Distribuidora</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nivel Tensión</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Potencia Contratada</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tipo Medición</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 print:divide-gray-255 text-slate-300 print:text-slate-800">
+                    {puntosMedicion.map(e => (
+                      <tr key={e.id}>
+                        <td className="p-2.5 font-bold">{e.nombre}</td>
+                        <td className="p-2.5">{e.empresaDistribuidora || '—'}</td>
+                        <td className="p-2.5">{e.nivelTensionContrato || e.tensionNominal || '—'}</td>
+                        <td className="p-2.5">{e.potenciaContratada || '—'}</td>
+                        <td className="p-2.5">{e.tipoMedicion || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-slate-550 italic">No se registraron puntos de medición específicos en este proyecto.</p>
+              )}
+            </div>
+
             {/* Transformadores */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Transformadores</h3>
@@ -386,6 +438,37 @@ export default function InformeCompiladoView() {
               )}
             </div>
 
+            {/* Transferencias (ATS / MTS) */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Transferencias (ATS / MTS)</h3>
+              {transferencias.length > 0 ? (
+                <table className="w-full text-xs text-left border border-slate-800 print:border-gray-300">
+                  <thead className="bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-400 print:bg-gray-100 print:text-slate-700">
+                    <tr>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nombre</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tipo</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Capacidad (A)</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Marca / Controlador</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Ubicación</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 print:divide-gray-255 text-slate-300 print:text-slate-800">
+                    {transferencias.map(e => (
+                      <tr key={e.id}>
+                        <td className="p-2.5 font-bold">{e.nombre}</td>
+                        <td className="p-2.5">{e.datosTecnicos?.tipoTransferencia || e.datosTecnicos?.tipo || 'Automática (ATS)'}</td>
+                        <td className="p-2.5">{e.datosTecnicos?.amperajeNominal || e.datosTecnicos?.amperaje || '—'}</td>
+                        <td className="p-2.5">{e.datosTecnicos?.marcaControlador || e.datosTecnicos?.marca || '—'}</td>
+                        <td className="p-2.5">{e.ubicacion || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-slate-550 italic">No se registraron transferencias en este proyecto.</p>
+              )}
+            </div>
+
             {/* Tableros */}
             <div className="space-y-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Tableros Eléctricos</h3>
@@ -412,6 +495,68 @@ export default function InformeCompiladoView() {
                 </table>
               ) : (
                 <p className="text-xs text-slate-550 italic">No se registraron tableros eléctricos en este proyecto.</p>
+              )}
+            </div>
+
+            {/* Bancos de Condensadores */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Bancos de Condensadores (Compensación Reactiva)</h3>
+              {bancosCondensadores.length > 0 ? (
+                <table className="w-full text-xs text-left border border-slate-800 print:border-gray-300">
+                  <thead className="bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-400 print:bg-gray-100 print:text-slate-700">
+                    <tr>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nombre / Tag</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Ubicación</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Capacidad Total</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tipo / Pasos</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tensión</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 print:divide-gray-255 text-slate-300 print:text-slate-800">
+                    {bancosCondensadores.map(e => (
+                      <tr key={e.id}>
+                        <td className="p-2.5 font-bold">{e.nombre}</td>
+                        <td className="p-2.5">{e.ubicacion}</td>
+                        <td className="p-2.5">{e.datosTecnicos?.potenciaReactivaTotal ? `${e.datosTecnicos.potenciaReactivaTotal} kVAR` : '—'}</td>
+                        <td className="p-2.5">{e.datosTecnicos?.tipoCompensacion || 'Automática'} {e.datosTecnicos?.numPasos ? `(${e.datosTecnicos.numPasos} pasos)` : ''}</td>
+                        <td className="p-2.5">{e.datosTecnicos?.tensionNominal || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-slate-550 italic">No se registraron bancos de condensadores en este proyecto.</p>
+              )}
+            </div>
+
+            {/* Centro Control de Motores (CCM) */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Centros de Control de Motores (CCM)</h3>
+              {ccmList.length > 0 ? (
+                <table className="w-full text-xs text-left border border-slate-800 print:border-gray-300">
+                  <thead className="bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-400 print:bg-gray-100 print:text-slate-700">
+                    <tr>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tag CCM</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Planta / Área</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Marca / Modelo</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nivel Tensión</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Gavetas / Buckets</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 print:divide-gray-255 text-slate-300 print:text-slate-800">
+                    {ccmList.map(e => (
+                      <tr key={e.id}>
+                        <td className="p-2.5 font-bold">{e.nombre}</td>
+                        <td className="p-2.5">{e.plantaInstalacion || e.areaProceso || '—'}</td>
+                        <td className="p-2.5">{e.fabricanteMarca || '—'}</td>
+                        <td className="p-2.5">{e.parametrosElectricos?.tensionNominal || '480 V'}</td>
+                        <td className="p-2.5">{e.gavetasBucketLog?.length ? `${e.gavetasBucketLog.length} gavetas` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-slate-550 italic">No se registraron centros de control de motores en este proyecto.</p>
               )}
             </div>
           </div>
