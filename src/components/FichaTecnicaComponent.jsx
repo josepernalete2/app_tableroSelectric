@@ -631,6 +631,184 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </tbody>
           </table>
 
+          {/* Sub-Header: Tanque de Combustible, Autonomía y Dique */}
+          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-amber-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+            INSPECCIÓN DE TANQUE DE COMBUSTIBLE Y AUTONOMÍA (CAPA 2)
+          </div>
+
+          <div className="p-4 bg-slate-950 border-b border-slate-700 space-y-4 font-mono text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <span className="text-slate-400 block font-bold mb-1">CAPACIDAD TOTAL:</span>
+                {isEditing ? (
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      value={dt.tanqueCapacidad || ''}
+                      onChange={(e) => handleDtChange('tanqueCapacidad', e.target.value)}
+                      placeholder="Ej. 1000"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:border-amber-500"
+                    />
+                    <select
+                      value={dt.tanqueUnidad || 'Litros'}
+                      onChange={(e) => handleDtChange('tanqueUnidad', e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs px-1"
+                    >
+                      <option value="Litros">Litros</option>
+                      <option value="Galones">Galones</option>
+                    </select>
+                  </div>
+                ) : (
+                  <span className="text-slate-100 font-bold bg-slate-900/60 px-2.5 py-1 rounded block">
+                    {dt.tanqueCapacidad ? `${dt.tanqueCapacidad} ${dt.tanqueUnidad || 'Litros'}` : '—'}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <span className="text-slate-400 block font-bold mb-1">NIVEL ACTUAL (%):</span>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={dt.tanqueNivelPct || 75}
+                      onChange={(e) => handleDtChange('tanqueNivelPct', parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-800 rounded appearance-none accent-amber-500"
+                    />
+                    <span className="font-bold text-amber-400 w-10 text-right">{dt.tanqueNivelPct || 75}%</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
+                      <div
+                        className={`h-full ${
+                          (dt.tanqueNivelPct || 75) < 25 ? 'bg-red-500' :
+                          (dt.tanqueNivelPct || 75) < 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${dt.tanqueNivelPct || 75}%` }}
+                      ></div>
+                    </div>
+                    <span className="font-bold text-slate-200">{dt.tanqueNivelPct || 75}%</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <span className="text-slate-400 block font-bold mb-1">CONSUMO ESPECÍFICO (L/h):</span>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={dt.consumoLh || ''}
+                    onChange={(e) => handleDtChange('consumoLh', e.target.value)}
+                    placeholder="Ej. 35"
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:border-amber-500"
+                  />
+                ) : (
+                  <span className="text-slate-100 font-bold bg-slate-900/60 px-2.5 py-1 rounded block">
+                    {dt.consumoLh ? `${dt.consumoLh} L/h` : '—'}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <span className="text-slate-400 block font-bold mb-1">AUTONOMÍA ESTIMADA:</span>
+                {(() => {
+                  const cap = parseFloat(dt.tanqueCapacidad) || 0;
+                  const nivel = (parseFloat(dt.tanqueNivelPct) || 75) / 100;
+                  const cons = parseFloat(dt.consumoLh) || 0;
+                  const litrosDisponibles = dt.tanqueUnidad === 'Galones' ? (cap * 3.78541 * nivel) : (cap * nivel);
+                  const horasAutonomia = cons > 0 ? (litrosDisponibles / cons).toFixed(1) : null;
+
+                  return (
+                    <span className={`px-2.5 py-1 rounded block font-bold font-mono text-center ${
+                      horasAutonomia && parseFloat(horasAutonomia) >= 12 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                      horasAutonomia && parseFloat(horasAutonomia) >= 6 ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                      'bg-slate-900 text-slate-300 border border-slate-800'
+                    }`}>
+                      {horasAutonomia ? `⏱️ ~${horasAutonomia} Horas` : (dt.autonomiaHoras ? `${dt.autonomiaHoras} h` : '—')}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Checklist de Seguridad de Combustible */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-slate-900 text-[11px]">
+              <div className="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-850">
+                <span className="text-slate-400">Dique Contención (110%):</span>
+                {isEditing ? (
+                  <select
+                    value={dt.diqueContencion || 'Conforme'}
+                    onChange={(e) => handleDtChange('diqueContencion', e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 text-slate-200"
+                  >
+                    <option value="Conforme">Conforme</option>
+                    <option value="Sin Dique">Sin Dique</option>
+                    <option value="Fisurado / Sucio">Fisurado / Sucio</option>
+                  </select>
+                ) : (
+                  <span className={`font-bold ${dt.diqueContencion === 'Sin Dique' ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {dt.diqueContencion || 'Conforme'}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-850">
+                <span className="text-slate-400">Filtro Racor / Trampa:</span>
+                {isEditing ? (
+                  <select
+                    value={dt.filtroRacor || 'Operativo'}
+                    onChange={(e) => handleDtChange('filtroRacor', e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 text-slate-200"
+                  >
+                    <option value="Operativo">Operativo</option>
+                    <option value="Agua / Sucio">Agua / Sucio</option>
+                    <option value="Requiere Reemplazo">Requiere Reemplazo</option>
+                  </select>
+                ) : (
+                  <span className="font-bold text-slate-200">{dt.filtroRacor || 'Operativo'}</span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-850">
+                <span className="text-slate-400">Bomba de Trasiego:</span>
+                {isEditing ? (
+                  <select
+                    value={dt.bombaTrasiego || 'Manual y Eléctrica'}
+                    onChange={(e) => handleDtChange('bombaTrasiego', e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 text-slate-200"
+                  >
+                    <option value="Manual y Eléctrica">Manual y Eléctrica</option>
+                    <option value="Solo Manual">Solo Manual</option>
+                    <option value="Solo Eléctrica">Solo Eléctrica</option>
+                    <option value="Inoperativa">Inoperativa</option>
+                  </select>
+                ) : (
+                  <span className="font-bold text-slate-200">{dt.bombaTrasiego || 'Manual y Eléctrica'}</span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-850">
+                <span className="text-slate-400">Válvula Corte Rápido:</span>
+                {isEditing ? (
+                  <select
+                    value={dt.valvulaCorte || 'Operativa'}
+                    onChange={(e) => handleDtChange('valvulaCorte', e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded px-1 text-slate-200"
+                  >
+                    <option value="Operativa">Operativa</option>
+                    <option value="Trabada">Trabada</option>
+                    <option value="No Posee">No Posee</option>
+                  </select>
+                ) : (
+                  <span className="font-bold text-slate-200">{dt.valvulaCorte || 'Operativa'}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Imagen del Generador (Parte inferior del cuadro) */}
           <div className="p-4 bg-slate-900/30 text-center print:bg-white">
             {fotoBlob || fotoSrc || previewUrl ? (
@@ -2173,6 +2351,473 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     value={dt.fotoScale || 280}
                     onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value))}
                     className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                  />
+                </div>
+              )}
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. PLANTILLA: SISTEMA DE PUESTA A TIERRA (PAT / TELUROMETRÍA) */}
+      {/* ========================================================================= */}
+      {tipoElemento === 'PUESTA_TIERRA' && (
+        <div className="bg-slate-950 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl print:border-black print:bg-white print:text-black">
+          
+          {/* Título Principal */}
+          <div className="bg-slate-900 border-b-2 border-slate-700 p-3.5 text-center print:bg-gray-200 print:border-black">
+            <h2 className="text-base md:text-lg font-black tracking-wide text-slate-100 uppercase font-mono print:text-black">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold"
+                />
+              ) : (
+                `FICHA TÉCNICA - SISTEMA DE PUESTA A TIERRA (PAT): ${nombre || 'PAT-1'}`
+              )}
+            </h2>
+          </div>
+
+          <div className="p-4 md:p-6 space-y-6">
+
+            {/* SECCIÓN 1: DATOS GENERALES */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                1. Datos Generales de la Puesta a Tierra
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Código / Tag:</span>
+                  <span className="font-mono text-slate-300 font-bold bg-slate-900 border border-slate-850 px-2.5 py-1.5 rounded-lg block print:bg-white print:border-gray-300 print:text-slate-900">
+                    {elementoData.id}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Ubicación / Área:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={ubicacion}
+                      onChange={(e) => setUbicacion(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {ubicacion || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Equipo Protegido / Vinculado:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.equipoVinculado || ''}
+                      onChange={(e) => handleDtChange('equipoVinculado', e.target.value)}
+                      placeholder="Ej. Subestación Principal / Tablero TAB-1"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block truncate print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.equipoVinculado || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Fecha de Medición:</span>
+                  {isEditing ? (
+                    <input
+                      type="date"
+                      value={dt.fechaMedicion || ''}
+                      onChange={(e) => handleDtChange('fechaMedicion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 font-medium px-2.5 py-1.5 bg-slate-900/50 rounded-lg border border-slate-900 block print:bg-white print:border-gray-200 print:text-slate-800">
+                      {dt.fechaMedicion || '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: MEDICIóN DE TELUROMETRÍA (RESISTENCIA EN OHMIOS) */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                2. Medición de Telurometría y Conformidad Normativa (IEEE 80 / CEN)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Resistencia Medida (Ω):</span>
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={dt.resistenciaOhms || dt.resistencia || ''}
+                      onChange={(e) => {
+                        handleDtChange('resistenciaOhms', e.target.value);
+                        handleDtChange('resistencia', e.target.value);
+                      }}
+                      placeholder="Ej. 2.45"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 font-mono font-bold"
+                    />
+                  ) : (
+                    <span className="text-amber-400 font-mono font-extrabold text-base px-2.5 py-1 bg-slate-900/80 rounded-lg border border-slate-800 block print:bg-white print:text-black">
+                      {dt.resistenciaOhms || dt.resistencia ? `${dt.resistenciaOhms || dt.resistencia} Ω` : '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Estado de Conformidad:</span>
+                  {(() => {
+                    const r = parseFloat(dt.resistenciaOhms || dt.resistencia);
+                    if (isNaN(r)) return <span className="text-slate-400">Sin Medición</span>;
+                    if (r <= 5.0) {
+                      return (
+                        <span className="px-2.5 py-1.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded-lg font-bold block text-center">
+                          🟢 Conforme (≤ 5.0 Ω)
+                        </span>
+                      );
+                    } else if (r <= 10.0) {
+                      return (
+                        <span className="px-2.5 py-1.5 bg-amber-950 text-amber-400 border border-amber-800 rounded-lg font-bold block text-center">
+                          🟡 Aceptable Secundario (≤ 10.0 Ω)
+                        </span>
+                      );
+                    } else {
+                      return (
+                        <span className="px-2.5 py-1.5 bg-red-950 text-red-400 border border-red-800 rounded-lg font-bold block text-center">
+                          🔴 No Conforme (&gt; 10.0 Ω)
+                        </span>
+                      );
+                    }
+                  })()}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Método de Medición:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.metodoMedicion || 'Caída de Potencial (62%)'}
+                      onChange={(e) => handleDtChange('metodoMedicion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Caída de Potencial (62%)">Caída de Potencial (62%)</option>
+                      <option value="Método de 3 Puntos">Método de 3 Puntos</option>
+                      <option value="Método Wenner (4 Picas)">Método Wenner (4 Picas)</option>
+                      <option value="Pinza de Tierra (Sin Picas)">Pinza de Tierra (Sin Picas)</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:bg-white print:text-black">
+                      {dt.metodoMedicion || 'Caída de Potencial (62%)'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Telurómetro Utilizado:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.telurometroMarcaModelo || ''}
+                      onChange={(e) => handleDtChange('telurometroMarcaModelo', e.target.value)}
+                      placeholder="Ej. Megger DET4TD2 / Fluke 1625"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:bg-white print:text-black">
+                      {dt.telurometroMarcaModelo || '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 3: CONFIGURACIÓN FÍSICA Y MATERIALES */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 print:text-slate-800 print:border-gray-200">
+                3. Configuración Física de la Malla y Electrodos
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tipo de Sistema:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoSistemaPat || 'Malla con Varillas'}
+                      onChange={(e) => handleDtChange('tipoSistemaPat', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Malla con Varillas">Malla con Varillas</option>
+                      <option value="Pozo Individual">Pozo Individual</option>
+                      <option value="Anillo Perimetral Equipotencial">Anillo Perimetral Equipotencial</option>
+                      <option value="Pata de Ganso">Pata de Ganso</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:bg-white print:text-black">
+                      {dt.tipoSistemaPat || 'Malla con Varillas'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Nro. de Varillas / Picas:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.barillaCantidad || dt.numVarillas || ''}
+                      onChange={(e) => handleDtChange('numVarillas', e.target.value)}
+                      placeholder="Ej. 4 (5/8'' x 2.4m)"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:bg-white print:text-black">
+                      {dt.spt?.barillaCantidad || dt.numVarillas || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Calibre Conductor (GEC):</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.spt?.conductorCalibre || dt.calibreConductor || ''}
+                      onChange={(e) => handleDtChange('calibreConductor', e.target.value)}
+                      placeholder="Ej. 2/0 AWG Cu Desnudo"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                    />
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:bg-white print:text-black">
+                      {dt.spt?.conductorCalibre || dt.calibreConductor || '—'}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tipo de Unión / Soldadura:</span>
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoUnion || 'Soldadura Exotérmica (Cadweld)'}
+                      onChange={(e) => handleDtChange('tipoUnion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500 h-9"
+                    >
+                      <option value="Soldadura Exotérmica (Cadweld)">Soldadura Exotérmica (Cadweld)</option>
+                      <option value="Conector Mecánico (Grapa de Bronce)">Conector Mecánico (Grapa de Bronce)</option>
+                      <option value="Terminal a Compresión">Terminal a Compresión</option>
+                    </select>
+                  ) : (
+                    <span className="text-slate-200 px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:bg-white print:text-black">
+                      {dt.tipoUnion || 'Soldadura Exotérmica (Cadweld)'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 4: AUDITORÍA TERMOGRÁFICA Y PUNTOS CALIENTES */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center border-b border-slate-900 pb-1.5">
+                <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider print:text-slate-800 print:border-gray-200">
+                  4. Inspección Termográfica y Puntos Calientes en Conexiones
+                </h3>
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = dt.puntosTermograficos || [];
+                      handleDtChange('puntosTermograficos', [
+                        ...current,
+                        { punto: `Punto #${current.length + 1}`, tSpot: '', tRef: '', componente: 'Borne / Terminal' }
+                      ]);
+                    }}
+                    className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer transition-all"
+                  >
+                    + Agregar Punto Termográfico
+                  </button>
+                )}
+              </div>
+
+              {(dt.puntosTermograficos && dt.puntosTermograficos.length > 0) ? (
+                <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-slate-900 text-slate-400 font-bold border-b border-slate-800">
+                      <tr>
+                        <th className="p-2">Componente / Punto</th>
+                        <th className="p-2">T. Medida (°C)</th>
+                        <th className="p-2">T. Referencia (°C)</th>
+                        <th className="p-2">ΔT Calculado</th>
+                        <th className="p-2">Severidad NETA/NFPA</th>
+                        {isEditing && <th className="p-2 text-center">Acción</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850 text-slate-200">
+                      {dt.puntosTermograficos.map((pt, idx) => {
+                        const spot = parseFloat(pt.tSpot);
+                        const ref = parseFloat(pt.tRef);
+                        const deltaT = (!isNaN(spot) && !isNaN(ref)) ? (spot - ref).toFixed(1) : null;
+                        const deltaNum = deltaT !== null ? parseFloat(deltaT) : null;
+
+                        return (
+                          <tr key={idx}>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={pt.componente || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.puntosTermograficos];
+                                    updated[idx] = { ...updated[idx], componente: e.target.value };
+                                    handleDtChange('puntosTermograficos', updated);
+                                  }}
+                                  placeholder="Ej. Borne barra de tierra"
+                                  className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-100"
+                                />
+                              ) : (pt.componente || 'Borne de Conexión')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={pt.tSpot || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.puntosTermograficos];
+                                    updated[idx] = { ...updated[idx], tSpot: e.target.value };
+                                    handleDtChange('puntosTermograficos', updated);
+                                  }}
+                                  placeholder="°C"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center"
+                                />
+                              ) : (pt.tSpot ? `${pt.tSpot} °C` : '—')}
+                            </td>
+                            <td className="p-2">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={pt.tRef || ''}
+                                  onChange={(e) => {
+                                    const updated = [...dt.puntosTermograficos];
+                                    updated[idx] = { ...updated[idx], tRef: e.target.value };
+                                    handleDtChange('puntosTermograficos', updated);
+                                  }}
+                                  placeholder="°C"
+                                  className="w-16 bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-center"
+                                />
+                              ) : (pt.tRef ? `${pt.tRef} °C` : '—')}
+                            </td>
+                            <td className="p-2 font-mono font-bold">
+                              {deltaT !== null ? `${deltaT > 0 ? '+' : ''}${deltaT} °C` : '—'}
+                            </td>
+                            <td className="p-2">
+                              {deltaNum !== null ? (
+                                deltaNum > 20 ? (
+                                  <span className="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded text-[10px] font-bold">
+                                    🔴 Crítica (Acción Inmediata)
+                                  </span>
+                                ) : deltaNum > 10 ? (
+                                  <span className="px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded text-[10px] font-bold">
+                                    🟡 Moderada (Mantenimiento)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold">
+                                    🟢 Normal
+                                  </span>
+                                )
+                              ) : <span className="text-slate-500">Pendiente</span>}
+                            </td>
+                            {isEditing && (
+                              <td className="p-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = dt.puntosTermograficos.filter((_, i) => i !== idx);
+                                    handleDtChange('puntosTermograficos', updated);
+                                  }}
+                                  className="text-red-400 hover:text-red-300 p-1 text-xs"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-500 italic bg-slate-900/40 p-2.5 rounded-lg border border-slate-900">
+                  Sin registros de anomalías térmicas en este electrodo/malla. {isEditing ? 'Haz clic en "+ Agregar Punto Termográfico" para registrar inspección.' : ''}
+                </div>
+              )}
+            </div>
+
+            {/* SECCIÓN 5: OBSERVACIONES */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-700">
+                5. Observaciones Técnicas y Recomendaciones
+              </span>
+              {isEditing ? (
+                <textarea
+                  value={observacionesGenerales}
+                  onChange={(e) => setObservacionesGenerales(e.target.value)}
+                  rows={4}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-sans resize-none"
+                  placeholder="Escriba observaciones sobre corrosión en soldaduras, sulfatación en barras, estado de la caja de inspección..."
+                />
+              ) : (
+                <p className="text-xs leading-relaxed text-slate-300 font-sans italic bg-slate-900/40 p-4 rounded-xl border border-slate-900 print:text-black print:bg-white print:border-gray-300">
+                  {observacionesGenerales || 'Sin observaciones específicas registradas para este sistema de puesta a tierra.'}
+                </p>
+              )}
+            </div>
+
+            {/* SECCIÓN 6: REGISTRO FOTOGRÁFICO */}
+            <div className="pt-4 border-t border-slate-900/60 flex flex-col items-center gap-4">
+              {(fotoBlob || fotoSrc || previewUrl) ? (
+                <div className="relative group rounded-xl overflow-hidden border border-slate-800 shadow-lg max-w-sm">
+                  <SafeImage
+                    blob={fotoBlob}
+                    src={fotoSrc}
+                    alt={nombre}
+                    className="object-contain w-full rounded-xl"
+                    style={{ maxHeight: `${dt.fotoScale || 280}px` }}
+                  />
+                </div>
+              ) : (
+                <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
+                  <Camera className="w-8 h-8 text-slate-600 mx-auto" />
+                  <span className="text-xs text-slate-500 font-mono block">Sin fotografía adjunta de la puesta a tierra</span>
+                  <label className="inline-block px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold rounded-lg cursor-pointer transition-colors">
+                    Adjuntar Foto
+                    <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                  </label>
+                </div>
+              )}
+
+              {(fotoBlob || fotoSrc || previewUrl) && (
+                <div className="no-print mt-3 max-w-xs mx-auto space-y-1.5">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
+                    <span>Ajustar tamaño en PDF</span>
+                    <span className="text-amber-400 font-mono">{dt.fotoScale || 280}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="120"
+                    max="380"
+                    value={dt.fotoScale || 280}
+                    onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value))}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
                   />
                 </div>
               )}

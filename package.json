@@ -9,7 +9,9 @@
     "build": "npx prisma generate && vite build",
     "start": "npx prisma db push && npx prisma db seed && node server/index.js",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "android": "npx cap run android",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

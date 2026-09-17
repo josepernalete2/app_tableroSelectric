@@ -58,16 +58,6 @@ export default function TransferComponent({
 
   const [isEditing, setIsEditing] = useState(false);
 
-  // Fallback si no hay datos
-  if (!data) {
-    return (
-      <div className="text-center p-12 text-slate-400 font-sans">
-        <RefreshCw className="w-12 h-12 text-slate-600 mx-auto mb-3 animate-spin" />
-        <p className="text-sm">No se han encontrado datos para esta unidad de Transferencia.</p>
-      </div>
-    );
-  }
-
   // Lista de elementos de jerarquía del proyecto para alimentar los selectores
   const projectElements = useMemo(() => {
     const list = [];
@@ -97,18 +87,18 @@ export default function TransferComponent({
   }, [companies, data]);
 
   // Estados locales editables
-  const [nombre, setNombre] = useState(data.nombre || 'ATS-1 - Transferencia Principal');
-  const [ubicacion, setUbicacion] = useState(data.ubicacion || 'SALA TÉCNICA / SÓTANO');
+  const [nombre, setNombre] = useState(data?.nombre || 'ATS-1 - Transferencia Principal');
+  const [ubicacion, setUbicacion] = useState(data?.ubicacion || 'SALA TÉCNICA / SÓTANO');
   const [observaciones, setObservaciones] = useState(
-    data.observacionesGenerales || data.datosTecnicos?.observacionTransferencia || 'TRANSFERENCIA AUTOMÁTICA CON ENCLAVAMIENTO MECÁNICO Y ELÉCTRICO.'
+    data?.observacionesGenerales || data?.datosTecnicos?.observacionTransferencia || 'TRANSFERENCIA AUTOMÁTICA CON ENCLAVAMIENTO MECÁNICO Y ELÉCTRICO.'
   );
 
   // Datos Técnicos JSON
-  const [dt, setDt] = useState(data.datosTecnicos || {});
+  const [dt, setDt] = useState(data?.datosTecnicos || {});
 
   // Foto
-  const [fotoBlob, setFotoBlob] = useState(data.fotoBlob || null);
-  const [fotoSrc, setFotoSrc] = useState(data.foto || null);
+  const [fotoBlob, setFotoBlob] = useState(data?.fotoBlob || null);
+  const [fotoSrc, setFotoSrc] = useState(data?.foto || null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
   // Sincronizar si cambian los props
@@ -122,6 +112,17 @@ export default function TransferComponent({
       setFotoSrc(data.foto || null);
     }
   }, [data]);
+
+  // Fallback si no hay datos
+  if (!data) {
+    return (
+      <div className="text-center p-12 text-slate-400 font-sans">
+        <RefreshCw className="w-12 h-12 text-slate-600 mx-auto mb-3 animate-spin" />
+        <p className="text-sm">No se han encontrado datos para esta unidad de Transferencia.</p>
+      </div>
+    );
+  }
+
 
   const handleDtChange = (key, value) => {
     if (readOnly) return;

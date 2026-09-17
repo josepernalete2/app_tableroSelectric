@@ -11,6 +11,7 @@ datasource db {
 
 enum TipoElemento {
   TABLERO
+  PUNTO_SUMINISTRO
   SUBESTACION
   TRANSFORMADOR
   GENERADOR
@@ -19,6 +20,10 @@ enum TipoElemento {
   PUNTO_MEDICION
   CCM
   BANCO_CONDENSADOR
+  AMBIENTAL_FISICA
+  TERMOGRAFICA
+  SISTEMA_ATERRAMIENTO
+  TANQUE_COMBUSTIBLE
   OTRO
 }
 
@@ -46,6 +51,9 @@ model Empresa {
   puntosMedicion      PuntoMedicion[]
   ccmList             Ccm[]
   tableros            Tablero[]
+  inspeccionesTermograficas    InspeccionTermografica[]
+  inspeccionesAterramiento     InspeccionAterramiento[]
+  inspeccionesTanquesCombustible InspeccionTanqueCombustible[]
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -68,6 +76,10 @@ model Proyecto {
   alimentadores       Alimentador[]
   tableros            Tablero[]
   elementosUnifilares ElementoUnifilar[]
+  inspeccionesTermograficas    InspeccionTermografica[]
+  inspeccionesAterramiento     InspeccionAterramiento[]
+  inspeccionesTanquesCombustible InspeccionTanqueCombustible[]
+  alarmas             Alarma[]
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -161,6 +173,7 @@ model Alimentador {
   nombre           String
   origen           String?
   capacidadAmperios Float?
+  capacidadKVA     Float?
   proyectoId       String
   proyecto         Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   tableros         Tablero[]
@@ -307,6 +320,94 @@ model PuntoMedicion {
   @@map("puntos_medicion")
 }
 
+model InspeccionTermografica {
+  id                   String    @id @default(uuid())
+  nombre               String
+  ubicacion            String?
+  fecha                String?
+  hora                 String?
+  inspector            String?
+  supervisor           String?
+  tempAmbiente         Float?
+  tempPuntoCaliente    Float?
+  tempReferencia       Float?
+  cameraModel          String?
+
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version              Int       @default(1)
+  deletedAt            DateTime?
+
+  proyectoId           String
+  proyecto             Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  empresaId            String?
+  empresa              Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([proyectoId])
+  @@index([empresaId])
+  @@map("inspecciones_termograficas")
+}
+
+model InspeccionAterramiento {
+  id                   String    @id @default(uuid())
+  nombre               String
+  ubicacion            String?
+  fecha                String?
+  hora                 String?
+  inspector            String?
+  supervisor           String?
+  resistenciaOhmios    Float?
+  metodoMedicion       String?
+  tipoSistemaPat       String?
+  tipoUnion            String?
+
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version              Int       @default(1)
+  deletedAt            DateTime?
+
+  proyectoId           String
+  proyecto             Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  empresaId            String?
+  empresa              Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([proyectoId])
+  @@index([empresaId])
+  @@map("inspecciones_aterramiento")
+}
+
+model InspeccionTanqueCombustible {
+  id                       String    @id @default(uuid())
+  nombre                   String
+  ubicacion                String?
+  fecha                    String?
+  hora                     String?
+  inspector                String?
+  supervisor               String?
+  tipoCombustible          String?
+  capacidadTotalLitros     Float?
+  nivelActualPorcentaje    Float?
+  consumoGeneradorLh       Float?
+  diqueContencion110       String?
+
+  // Campos para Concurrencia Optimista (OCC) y Soft Delete
+  version                  Int       @default(1)
+  deletedAt                DateTime?
+
+  proyectoId               String
+  proyecto                 Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  empresaId                String?
+  empresa                  Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@index([proyectoId])
+  @@index([empresaId])
+  @@map("inspecciones_tanques_combustible")
+}
+
 model Ccm {
   id                        String   @id @default(uuid())
   nombre                    String   // Tag / Identificación CCM
@@ -347,4 +448,24 @@ model Ccm {
   @@index([proyectoId])
   @@index([empresaId])
   @@map("centros_control_motores")
+}
+
+model Alarma {
+  id          String    @id @default(uuid())
+  proyectoId  String
+  proyecto    Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  tableroId   String?
+  tipo        String    // DESBALANCE, SOBRECARGA, AISLAMIENTO, CRITICO
+  severidad   String    // INFO, WARNING, CRITICAL
+  mensaje     String
+  detalles    Json?
+  estado      String    @default("ACTIVA") // ACTIVA, RECONOCIDA, RESUELTA
+  leidaAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([proyectoId])
+  @@index([tableroId])
+  @@index([estado])
+  @@map("alarmas")
 }

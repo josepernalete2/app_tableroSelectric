@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 
@@ -499,6 +499,41 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     return normalizedCircuits.find(c => c.poles.includes(pole));
   };
 
+  const handleExportDXF = async () => {
+    try {
+      const tableroId = tableroData?.id;
+      if (!tableroId) {
+        customAlert("ID de tablero no disponible.");
+        return;
+      }
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/tableros/${tableroId}/dxf`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Error al generar el archivo DXF');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `unifilar_${(tableroData.nombre || 'tablero').replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase()}.dxf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error al descargar DXF:', err);
+      customAlert('No se pudo descargar el archivo DXF: ' + err.message);
+    }
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
   return (
     <div className={`w-full text-slate-900 dark:text-slate-100 print-card font-sans select-text ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
       
@@ -518,6 +553,26 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 <div className="flex items-center gap-2 min-w-0">
                   <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
                   <span className="font-mono font-black tracking-wide text-xs sm:text-sm">INFORMACIÓN GENERAL DE PANEL ELÉCTRICO / TABLERO</span>
+                </div>
+                <div className="flex items-center gap-2 no-print">
+                  <button
+                    type="button"
+                    onClick={handleExportDXF}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/40 rounded-lg text-xs font-bold transition cursor-pointer"
+                    title="Descargar diagrama unifilar en formato AutoCAD DXF"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Descargar DXF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrintPDF}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-500/40 rounded-lg text-xs font-bold transition cursor-pointer"
+                    title="Imprimir o guardar como PDF"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Imprimir / PDF</span>
+                  </button>
                 </div>
               </div>
             </td>

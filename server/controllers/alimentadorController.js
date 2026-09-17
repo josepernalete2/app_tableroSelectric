@@ -27,10 +27,26 @@ export const obtenerAlimentadores = async (req, res, next) => {
 
 export const crearAlimentador = async (req, res, next) => {
   try {
-    const { id, nombre, origen, capacidadAmperios, proyectoId } = req.body;
+    const { id, nombre, origen, capacidadAmperios, capacidadKVA, proyectoId } = req.body;
 
     if (!nombre || !proyectoId) {
       return res.status(400).json({ ok: false, error: 'Los campos nombre y proyectoId son requeridos.' });
+    }
+
+    let parsedAmperios = null;
+    if (capacidadAmperios !== undefined && capacidadAmperios !== null && capacidadAmperios !== '') {
+      parsedAmperios = parseFloat(capacidadAmperios);
+      if (isNaN(parsedAmperios) || parsedAmperios < 0) {
+        return res.status(400).json({ ok: false, error: 'La capacidad en amperios debe ser un número positivo válido.' });
+      }
+    }
+
+    let parsedKVA = null;
+    if (capacidadKVA !== undefined && capacidadKVA !== null && capacidadKVA !== '') {
+      parsedKVA = parseFloat(capacidadKVA);
+    } else if (parsedAmperios && parsedAmperios > 0) {
+      // Cálculo automático nominal 3-fases a 208V: (√3 * 208 * I) / 1000
+      parsedKVA = Math.round(((Math.sqrt(3) * 208 * parsedAmperios) / 1000) * 100) / 100;
     }
 
     const nuevoAlimentador = await prisma.alimentador.create({
@@ -38,7 +54,8 @@ export const crearAlimentador = async (req, res, next) => {
         id: id || undefined,
         nombre,
         origen: origen || null,
-        capacidadAmperios: capacidadAmperios ? parseFloat(capacidadAmperios) : null,
+        capacidadAmperios: parsedAmperios,
+        capacidadKVA: parsedKVA,
         proyecto: { connect: { id: proyectoId } }
       }
     });
@@ -53,14 +70,34 @@ export const crearAlimentador = async (req, res, next) => {
 export const actualizarAlimentador = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { nombre, origen, capacidadAmperios } = req.body;
+    const { nombre, origen, capacidadAmperios, capacidadKVA } = req.body;
+
+    let parsedAmperios = undefined;
+    if (capacidadAmperios !== undefined) {
+      if (capacidadAmperios === null || capacidadAmperios === '') {
+        parsedAmperios = null;
+      } else {
+        parsedAmperios = parseFloat(capacidadAmperios);
+        if (isNaN(parsedAmperios) || parsedAmperios < 0) {
+          return res.status(400).json({ ok: false, error: 'La capacidad en amperios debe ser un número positivo válido.' });
+        }
+      }
+    }
+
+    let parsedKVA = undefined;
+    if (capacidadKVA !== undefined) {
+      parsedKVA = capacidadKVA !== null && capacidadKVA !== '' ? parseFloat(capacidadKVA) : null;
+    } else if (parsedAmperios !== undefined) {
+      parsedKVA = parsedAmperios ? Math.round(((Math.sqrt(3) * 208 * parsedAmperios) / 1000) * 100) / 100 : null;
+    }
 
     const updated = await prisma.alimentador.update({
       where: { id },
       data: {
         nombre: nombre || undefined,
         origen: origen !== undefined ? origen : undefined,
-        capacidadAmperios: capacidadAmperios !== undefined ? (capacidadAmperios ? parseFloat(capacidadAmperios) : null) : undefined
+        capacidadAmperios: parsedAmperios,
+        capacidadKVA: parsedKVA
       }
     });
 

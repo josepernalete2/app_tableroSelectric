@@ -5,15 +5,20 @@ import { verificarToken, requireRoles } from '../middleware/authMiddleware.js';
 import { uploadFotoInspeccion } from '../middleware/uploadMiddleware.js';
 
 // Controladores
-import { loginUsuario, obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario } from '../controllers/userController.js';
+import { loginUsuario, obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario, solicitarResetPassword, verificar2FA } from '../controllers/userController.js';
 import { obtenerEmpresas, obtenerEmpresaPorId, actualizarEmpresa, crearEmpresa } from '../controllers/empresaController.js';
 import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto, actualizarProyecto, eliminarProyecto } from '../controllers/proyectoController.js';
 import { obtenerAlimentadores, crearAlimentador, actualizarAlimentador, eliminarAlimentador } from '../controllers/alimentadorController.js';
-import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito } from '../controllers/tableroController.js';
+import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito, obtenerBalanceTablero, exportarTableroDXF } from '../controllers/tableroController.js';
 import { crearInspeccionSubestacion, eliminarInspeccionSubestacion } from '../controllers/subestacionController.js';
 import { crearPuntoMedicion, eliminarPuntoMedicion } from '../controllers/puntoMedicionController.js';
 import { crearCcm, eliminarCcm } from '../controllers/ccmController.js';
 import { crearElementoUnifilar, eliminarElementoUnifilar } from '../controllers/elementoController.js';
+import { createInspeccionTermografica, getInspeccionesPorProyecto as getTermograficasPorProyecto, updateInspeccionTermografica, deleteInspeccionTermografica } from '../controllers/inspeccionTermograficaController.js';
+import { createInspeccionAterramiento, getInspeccionesPorProyecto as getAterramientoPorProyecto, updateInspeccionAterramiento, deleteInspeccionAterramiento } from '../controllers/inspeccionAterramientoController.js';
+import { createInspeccionTanqueCombustible, getInspeccionesPorProyecto as getTanquesPorProyecto, updateInspeccionTanqueCombustible, deleteInspeccionTanqueCombustible } from '../controllers/inspeccionTanqueCombustibleController.js';
+import { getAuditoriaCompleta, getHuerfanos, getSinCarga, getSinAprobar, getEstadisticas } from '../controllers/auditorController.js';
+import { getAlarmasProyecto, cambiarEstadoAlarma } from '../controllers/alarmController.js';
 import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto, obtenerPotencialesAlimentadores } from '../controllers/jerarquiaController.js';
@@ -21,8 +26,10 @@ import { procesarSincronizacionBatch } from '../controllers/syncController.js';
 
 const router = Router();
 
-// Endpoint de Autenticación (PÚBLICO)
+// Endpoints Públicos de Autenticación y Recuperación
 router.post('/login', loginUsuario);
+router.post('/users/request-reset', solicitarResetPassword);
+router.post('/users/verify-2fa', verificar2FA);
 
 // A partir de aquí todas las rutas requieren autenticación JWT
 router.use(verificarToken);
@@ -54,6 +61,8 @@ router.post('/tableros', requireRoles('ADMIN', 'WORKER'), crearTableroCompleto);
 router.post('/empresas/:empresaId/tableros', requireRoles('ADMIN', 'WORKER'), crearTableroCompleto);
 router.put('/tableros/:id', requireRoles('ADMIN', 'WORKER'), actualizarTablero);
 router.delete('/tableros/:id', requireRoles('ADMIN'), eliminarTablero);
+router.get('/tableros/:id/balance', obtenerBalanceTablero);
+router.get('/tableros/:id/dxf', exportarTableroDXF);
 
 // Rutas de Circuitos
 router.post('/tableros/:tableroId/circuitos', requireRoles('ADMIN', 'WORKER'), crearCircuito);
@@ -69,6 +78,33 @@ router.post('/puntos-medicion', requireRoles('ADMIN', 'WORKER'), crearPuntoMedic
 router.delete('/puntos-medicion/:id', requireRoles('ADMIN'), eliminarPuntoMedicion);
 router.post('/ccm', requireRoles('ADMIN', 'WORKER'), crearCcm);
 router.delete('/ccm/:id', requireRoles('ADMIN'), eliminarCcm);
+
+// Rutas de Inspecciones Técnicas (Capa 2: Termografía, Aterramiento, Tanque de Combustible)
+router.post('/inspecciones/termograficas', requireRoles('ADMIN', 'WORKER'), createInspeccionTermografica);
+router.get('/inspecciones/termograficas/proyecto/:proyectoId', getTermograficasPorProyecto);
+router.put('/inspecciones/termograficas/:id', requireRoles('ADMIN', 'WORKER'), updateInspeccionTermografica);
+router.delete('/inspecciones/termograficas/:id', requireRoles('ADMIN'), deleteInspeccionTermografica);
+
+router.post('/inspecciones/aterramiento', requireRoles('ADMIN', 'WORKER'), createInspeccionAterramiento);
+router.get('/inspecciones/aterramiento/proyecto/:proyectoId', getAterramientoPorProyecto);
+router.put('/inspecciones/aterramiento/:id', requireRoles('ADMIN', 'WORKER'), updateInspeccionAterramiento);
+router.delete('/inspecciones/aterramiento/:id', requireRoles('ADMIN'), deleteInspeccionAterramiento);
+
+router.post('/inspecciones/tanque-combustible', requireRoles('ADMIN', 'WORKER'), createInspeccionTanqueCombustible);
+router.get('/inspecciones/tanque-combustible/proyecto/:proyectoId', getTanquesPorProyecto);
+router.put('/inspecciones/tanque-combustible/:id', requireRoles('ADMIN', 'WORKER'), updateInspeccionTanqueCombustible);
+router.delete('/inspecciones/tanque-combustible/:id', requireRoles('ADMIN'), deleteInspeccionTanqueCombustible);
+
+// Rutas de Auditoría Eléctrica (Capa 5)
+router.get('/auditoria/:proyectoId', getAuditoriaCompleta);
+router.get('/auditoria/:proyectoId/huerfanos', getHuerfanos);
+router.get('/auditoria/:proyectoId/sin-carga', getSinCarga);
+router.get('/auditoria/:proyectoId/sin-aprobar', getSinAprobar);
+router.get('/auditoria/:proyectoId/estadisticas', getEstadisticas);
+
+// Rutas de Alarmas Eléctricas (Capa 8)
+router.get('/alarmas/proyecto/:proyectoId', getAlarmasProyecto);
+router.put('/alarmas/:id/estado', requireRoles('ADMIN', 'WORKER'), cambiarEstadoAlarma);
 
 // Endpoint de Sincronización Offline Batch
 router.post('/sync/batch', requireRoles('ADMIN', 'WORKER'), procesarSincronizacionBatch);
@@ -97,3 +133,4 @@ router.get('/jerarquia/arbol/:proyectoId', obtenerArbolProyecto);
 router.get('/jerarquia/alimentadores/:proyectoId', obtenerPotencialesAlimentadores);
 
 export default router;
+

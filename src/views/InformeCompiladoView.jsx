@@ -78,7 +78,8 @@ export default function InformeCompiladoView() {
   const transferencias = elementos.filter(e => e.tipoElemento === 'TRANSFER');
   const tableros = elementos.filter(e => e.tipoElemento === 'TABLERO');
   const bancosCondensadores = elementos.filter(e => e.tipoElemento === 'BANCO_CONDENSADOR');
-  const otros = elementos.filter(e => e.tipoElemento === 'OTRO' || e.tipoElemento === 'PUESTA_TIERRA');
+  const puestasTierra = elementos.filter(e => e.tipoElemento === 'PUESTA_TIERRA');
+  const otros = elementos.filter(e => e.tipoElemento === 'OTRO');
 
   // Year for cover page
   const currentYear = new Date().getFullYear();
@@ -277,6 +278,11 @@ export default function InformeCompiladoView() {
               </div>
               <div className="flex justify-between items-end gap-2 pl-4">
                 <span>Centros de Control de Motores (CCM)</span>
+                <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
+                <span className="font-mono">Pág. 3</span>
+              </div>
+              <div className="flex justify-between items-end gap-2 pl-4">
+                <span>Sistemas de Puesta a Tierra (PAT / Telurometría)</span>
                 <span className="border-b border-dashed border-slate-800 flex-1 h-1 min-w-[20px] print:border-gray-300"></span>
                 <span className="font-mono">Pág. 3</span>
               </div>
@@ -557,6 +563,45 @@ export default function InformeCompiladoView() {
                 </table>
               ) : (
                 <p className="text-xs text-slate-550 italic">No se registraron centros de control de motores en este proyecto.</p>
+              )}
+            </div>
+
+            {/* Sistemas de Puesta a Tierra (PAT / Telurometría) */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500/80 print:text-slate-700">Sistemas de Puesta a Tierra (PAT / Telurometría)</h3>
+              {puestasTierra.length > 0 ? (
+                <table className="w-full text-xs text-left border border-slate-800 print:border-gray-300">
+                  <thead className="bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-400 print:bg-gray-100 print:text-slate-700">
+                    <tr>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nombre / Tag</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Ubicación / Equipo</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Resistencia Medida</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Conformidad Normativa</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tipo Sistema / Varillas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-850 print:divide-gray-255 text-slate-300 print:text-slate-800">
+                    {puestasTierra.map(e => {
+                      const res = parseFloat(e.datosTecnicos?.resistenciaOhms || e.datosTecnicos?.resistencia);
+                      const isNorm = !isNaN(res) ? (res <= 5.0 ? '🟢 Conforme (≤5.0 Ω)' : res <= 10.0 ? '🟡 Aceptable (≤10.0 Ω)' : '🔴 No Conforme (>10.0 Ω)') : '—';
+                      return (
+                        <tr key={e.id}>
+                          <td className="p-2.5 font-bold">{e.nombre}</td>
+                          <td className="p-2.5">{e.ubicacion || e.datosTecnicos?.equipoVinculado || '—'}</td>
+                          <td className="p-2.5 font-mono font-bold text-amber-400 print:text-black">
+                            {!isNaN(res) ? `${res} Ω` : '—'}
+                          </td>
+                          <td className="p-2.5 font-bold">
+                            {isNorm}
+                          </td>
+                          <td className="p-2.5">{e.datosTecnicos?.tipoSistemaPat || 'Malla PAT'} {e.datosTecnicos?.numVarillas ? `(${e.datosTecnicos.numVarillas} picas)` : ''}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-xs text-slate-550 italic">No se registraron sistemas de puesta a tierra en este proyecto.</p>
               )}
             </div>
           </div>

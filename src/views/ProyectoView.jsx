@@ -22,8 +22,10 @@ import {
   RefreshCw,
   FileText,
   CheckSquare,
-  Settings
+  Settings,
+  HelpCircle
 } from 'lucide-react';
+import HelpModal from '../components/HelpModal';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -278,6 +280,7 @@ export const ProyectoView = () => {
   }, [editingElemento]);
 
   const [showDiagramModal, setShowDiagramModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Selector de plantilla / tipo de elemento
   const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
@@ -319,14 +322,61 @@ export const ProyectoView = () => {
   const [tipoTransferencia, setTipoTransferencia] = useState('AUTOMATICA');
   const [tensionOperativa, setTensionOperativa] = useState('208 V');
 
+  // Campos de Banco de Condensadores
+  const [kvarTotal, setKvarTotal] = useState('150 kVAR');
+  const [pasosCondensador, setPasosCondensador] = useState('6');
+  const [tipoBanco, setTipoBanco] = useState('AUTOMATICO');
+  const [tensionBanco, setTensionBanco] = useState('208 V');
+
+  // Campos de Punto de Suministro
+  const [suministroTension, setSuministroTension] = useState('13.8 kV');
+  const [suministroEmpresa, setSuministroEmpresa] = useState('');
+  const [suministroTipoAcometida, setSuministroTipoAcometida] = useState('Subterránea');
+  const [suministroCapacidad, setSuministroCapacidad] = useState('1000 kVA');
+
+  // Campos de CCM Elemento
+  const [ccmCapacidadBarra, setCcmCapacidadBarra] = useState('1200 A');
+  const [ccmTension, setCcmTension] = useState('480 V');
+  const [ccmBreakerPrincipal, setCcmBreakerPrincipal] = useState('1200A 3P');
+  const [ccmNumeroGavetas, setCcmNumeroGavetas] = useState(8);
+
   // Campos de Otro
   const [descripcionOtro, setDescripcionOtro] = useState('');
 
-  // Campos de Inspección Estructural
+  // Campos de Inspecciones Separadas (Capa 2)
+  const [tipoInspeccionModal, setTipoInspeccionModal] = useState('AMBIENTAL_FISICA'); // 'AMBIENTAL_FISICA' | 'TERMOGRAFICA' | 'SISTEMA_ATERRAMIENTO' | 'TANQUE_COMBUSTIBLE'
+
+  // 1. Ambiental / Física (Subestación)
   const [subestacionNombre, setSubestacionNombre] = useState('');
   const [subestacionUbicacion, setSubestacionUbicacion] = useState('');
   const [nivelTension, setNivelTension] = useState('13.8 kV');
   const [inspectorName, setInspectorName] = useState('');
+
+  // 2. Termográfica
+  const [termoNombre, setTermoNombre] = useState('');
+  const [termoUbicacion, setTermoUbicacion] = useState('');
+  const [termoTempAmbiente, setTermoTempAmbiente] = useState('25');
+  const [termoTempPuntoCaliente, setTermoTempPuntoCaliente] = useState('');
+  const [termoTempRef, setTermoTempRef] = useState('30');
+  const [termoCamara, setTermoCamara] = useState('FLIR E8-XT');
+
+  // 3. Sistema de Aterramiento (PAT)
+  const [patNombre, setPatNombre] = useState('');
+  const [patUbicacion, setPatUbicacion] = useState('');
+  const [patResistencia, setPatResistencia] = useState('');
+  const [patMetodo, setPatMetodo] = useState('Caída de Potencial (62%)');
+  const [patTipo, setPatTipo] = useState('Malla con Varillas');
+  const [patUnion, setPatUnion] = useState('Soldadura Exotérmica (Cadweld)');
+  const [patTelurometro, setPatTelurometro] = useState('AEMC 4630');
+
+  // 4. Tanque de Combustible
+  const [tanqueNombre, setTanqueNombre] = useState('');
+  const [tanqueUbicacion, setTanqueUbicacion] = useState('');
+  const [tanqueTipoCombustible, setTanqueTipoCombustible] = useState('DIESEL');
+  const [tanqueCapacidadLitros, setTanqueCapacidadLitros] = useState('2000');
+  const [tanqueNivelPorcentaje, setTanqueNivelPorcentaje] = useState('75');
+  const [tanqueConsumoLh, setTanqueConsumoLh] = useState('45');
+  const [tanqueDique110, setTanqueDique110] = useState('CONFORME');
 
   if (!company || !proyecto) {
     return (
@@ -375,7 +425,17 @@ export const ProyectoView = () => {
   );
 
   const isElementoFormValid = nombre.trim() !== '' && !nombreElementoDuplicado;
-  const isInspeccionFormValid = subestacionNombre.trim() !== '' && !nombreInspeccionDuplicado;
+
+  const isInspeccionFormValid = 
+    tipoInspeccionModal === 'AMBIENTAL_FISICA' || tipoInspeccionModal === 'SUBESTACION'
+      ? (subestacionNombre.trim() !== '' && !nombreInspeccionDuplicado)
+      : tipoInspeccionModal === 'TERMOGRAFICA'
+        ? termoNombre.trim() !== ''
+        : tipoInspeccionModal === 'SISTEMA_ATERRAMIENTO' || tipoInspeccionModal === 'PUESTA_TIERRA'
+          ? (patNombre.trim() !== '' || subestacionNombre.trim() !== '')
+          : tipoInspeccionModal === 'TANQUE_COMBUSTIBLE'
+            ? tanqueNombre.trim() !== ''
+            : true;
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -409,11 +469,25 @@ export const ProyectoView = () => {
         puestaTierra: editingElemento?.datosTecnicos?.puestaTierra || { calibre: '', observaciones: '' }
       };
     } else if (tipoElemento === 'TRANSFORMADOR') {
+      const kvaNum = parseFloat(String(kvaTrafo || editingElemento?.datosTecnicos?.kva || editingElemento?.datosTecnicos?.potenciaKva || 0).replace(/[^0-9.]/g, '')) || null;
+      const fpTrafo = parseFloat(editingElemento?.datosTecnicos?.factorPotencia || 0.9) || 0.9;
+      const kvarCalc = kvaNum ? Math.round(kvaNum * Math.sqrt(Math.max(0, 1 - Math.pow(fpTrafo, 2))) * 100) / 100 : null;
+      const secVolts = parseFloat(String(voltajeSecundario || editingElemento?.datosTecnicos?.voltajeSecundario || '208').replace(/[^0-9.]/g, '')) || 208;
+      const secAmps = kvaNum && secVolts > 0 ? Math.round(((kvaNum * 1000) / (Math.sqrt(3) * secVolts)) * 100) / 100 : null;
+
       datosTecnicos = {
         marca: marcaTrafo || editingElemento?.datosTecnicos?.marca || '',
         fases: editingElemento?.datosTecnicos?.fases || '3',
         potenciaKva: kvaTrafo || editingElemento?.datosTecnicos?.potenciaKva || '',
-        kva: kvaTrafo || editingElemento?.datosTecnicos?.kva || '',
+        kva: kvaNum || kvaTrafo || '',
+        capEx: editingElemento?.datosTecnicos?.capEx || kvaNum || null,
+        capRe: editingElemento?.datosTecnicos?.capRe || kvarCalc || null,
+        kvar: editingElemento?.datosTecnicos?.kvar || kvarCalc || null,
+        factorPotencia: fpTrafo,
+        corrienteNominalA: editingElemento?.datosTecnicos?.corrienteNominalA || secAmps,
+        corrienteNominalB: editingElemento?.datosTecnicos?.corrienteNominalB || secAmps,
+        corrienteNominalC: editingElemento?.datosTecnicos?.corrienteNominalC || secAmps,
+        corrienteSecundaria: editingElemento?.datosTecnicos?.corrienteSecundaria || secAmps,
         tipoTransformador: tipoTrafo || editingElemento?.datosTecnicos?.tipoTransformador || 'Pedestal',
         conexion: conexionTrafo || editingElemento?.datosTecnicos?.conexion || '',
         voltajePrimario: voltajePrimario || editingElemento?.datosTecnicos?.voltajePrimario || '',
@@ -424,7 +498,7 @@ export const ProyectoView = () => {
         tensionPrimaria: editingElemento?.datosTecnicos?.tensionPrimaria || voltajePrimario || '',
         amperiosPrimaria: editingElemento?.datosTecnicos?.amperiosPrimaria || '',
         tensionSecundaria: editingElemento?.datosTecnicos?.tensionSecundaria || voltajeSecundario || '',
-        amperiosSecundaria: editingElemento?.datosTecnicos?.amperiosSecundaria || '',
+        amperiosSecundaria: editingElemento?.datosTecnicos?.amperiosSecundaria || secAmps || '',
         aislamiento: editingElemento?.datosTecnicos?.aislamiento || '',
         aceite: editingElemento?.datosTecnicos?.aceite || '',
         seco: editingElemento?.datosTecnicos?.seco || '',
@@ -444,19 +518,34 @@ export const ProyectoView = () => {
         }
       };
     } else if (tipoElemento === 'GENERADOR') {
+      const kvaGenNum = parseFloat(String(kvaGen || editingElemento?.datosTecnicos?.kva || 0).replace(/[^0-9.]/g, '')) || null;
+      const kwGenNum = parseFloat(String(potenciaKwGen || editingElemento?.datosTecnicos?.kw || editingElemento?.datosTecnicos?.potenciaKw || 0).replace(/[^0-9.]/g, '')) || (kvaGenNum ? Math.round(kvaGenNum * 0.8 * 100) / 100 : null);
+      const fpGen = parseFloat(editingElemento?.datosTecnicos?.factorPotencia || 0.8) || 0.8;
+      const kvarGen = kvaGenNum ? Math.round(kvaGenNum * Math.sqrt(Math.max(0, 1 - Math.pow(fpGen, 2))) * 100) / 100 : null;
+      const ampGenNum = parseFloat(String(amperajeGen || editingElemento?.datosTecnicos?.amperaje || 0).replace(/[^0-9.]/g, '')) || null;
+
       datosTecnicos = {
-        kva: kvaGen,
-        combustible: combustibleGen,
-        voltajeGeneracion: voltajeGen,
-        potenciaKw: potenciaKwGen,
-        amperaje: amperajeGen
+        kva: kvaGenNum || kvaGen,
+        kw: kwGenNum || potenciaKwGen,
+        potenciaKw: kwGenNum || potenciaKwGen,
+        kvar: editingElemento?.datosTecnicos?.kvar || kvarGen,
+        factorPotencia: fpGen,
+        voltajeGeneracion: voltajeGen || editingElemento?.datosTecnicos?.voltajeGeneracion || '',
+        amperaje: ampGenNum || amperajeGen,
+        tipoCombustible: combustibleGen || editingElemento?.datosTecnicos?.tipoCombustible || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
+        combustible: combustibleGen || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
+        capacidadCombustible: editingElemento?.datosTecnicos?.capacidadCombustible || null,
+        consumoEspecificado: editingElemento?.datosTecnicos?.consumoEspecificado || null,
+        horasOperacion: editingElemento?.datosTecnicos?.horasOperacion || null,
+        horasReserva: editingElemento?.datosTecnicos?.horasReserva || null
       };
     } else if (tipoElemento === 'BANCO_CONDENSADOR') {
       datosTecnicos = editingElemento?.datosTecnicos || {
         marca: '', modelo: '', alimentador: '', calibreConductor: '', fabricante: '', anioFabricacion: '',
-        tensionNominal: '', tensionRegistrada: '', frecuencia: '60 Hz', potenciaReactivaTotal: '',
+        tensionNominal: tensionBanco || '208 V', tensionRegistrada: tensionBanco || '208 V', frecuencia: '60 Hz', 
+        potenciaReactivaTotal: kvarTotal || '150 kVAR',
         corrienteNominalTotal: '', numFases: 'Trifásico', conexion: 'Estrella', nivelAislamientoBIL: '',
-        tipoCompensacion: 'Automática (Pasos)', numPasos: '', secuenciaPasosKvar: '',
+        tipoCompensacion: tipoBanco === 'AUTOMATICO' ? 'Automática (Pasos)' : 'Fija', numPasos: pasosCondensador || '6', secuenciaPasosKvar: '',
         tipoConmutacion: 'Contactores dedicados', potenciaIndividual: '', capacitanciaMuf: '',
         tensionCondensador: '', tecnologiaDielectrica: 'Polipropileno metalizado',
         resistenciaDescarga: 'Sí', seguridad: 'Desconectador por sobrepresión',
@@ -466,6 +555,20 @@ export const ProyectoView = () => {
         interruptorPrincipalAmp: '', proteccionPasos: 'Fusibles', gradoProteccionEnvolvente: 'IP54',
         dimensionesAlto: '', dimensionesAncho: '', dimensionesProf: '',
         sistemaEnfriamiento: 'Ventilación Forzada', temperaturaC: '', humedadPct: ''
+      };
+    } else if (tipoElemento === 'PUNTO_SUMINISTRO') {
+      datosTecnicos = {
+        nivelTension: suministroTension || '13.8 kV',
+        empresaDistribuidora: suministroEmpresa || 'Compañía Eléctrica',
+        tipoAcometida: suministroTipoAcometida || 'Subterránea',
+        capacidadContratadaKva: suministroCapacidad || '1000 kVA'
+      };
+    } else if (tipoElemento === 'CCM') {
+      datosTecnicos = {
+        capacidadBarraAmperios: ccmCapacidadBarra || '1200 A',
+        tensionOperativa: ccmTension || '480 V',
+        breakerPrincipal: ccmBreakerPrincipal || '1200A 3P',
+        numeroGavetas: parseInt(ccmNumeroGavetas, 10) || 8
       };
     } else if (tipoElemento === 'PUESTA_TIERRA') {
       datosTecnicos = {
@@ -529,28 +632,158 @@ export const ProyectoView = () => {
     e.preventDefault();
     if (!isInspeccionFormValid) return;
 
-    const result = addInspeccionSubestacion(proyectoId, {
-      nombre: subestacionNombre.trim(),
-      ubicacion: subestacionUbicacion.trim() || 'Sin ubicación',
-      nivelTension: nivelTension.trim() || 'No definido',
-      inspector: inspectorName.trim() || 'No asignado',
-      fecha: new Date().toISOString().split('T')[0],
-      hora: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
-      estadoEntorno: {},
-      obrasCiviles: {},
-      equiposPrincipales: {},
-      puestaTierra: {},
-      edificioControl: {}
-    });
+    if (tipoInspeccionModal === 'AMBIENTAL_FISICA' || tipoInspeccionModal === 'SUBESTACION') {
+      const result = addInspeccionSubestacion(proyectoId, {
+        nombre: subestacionNombre.trim() || 'Subestación Principal',
+        ubicacion: subestacionUbicacion.trim() || 'Sala Eléctrica',
+        nivelTension: nivelTension.trim() || '13.8 kV',
+        inspector: inspectorName.trim() || 'No asignado',
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        estadoEntorno: {},
+        obrasCiviles: {},
+        equiposPrincipales: {},
+        puestaTierra: {},
+        edificioControl: {}
+      });
 
-    if (result.success) {
-      setSubestacionNombre('');
-      setSubestacionUbicacion('');
-      setNivelTension('13.8 kV');
-      setInspectorName('');
-      setShowInspeccionModal(false);
-    } else {
-      customAlert(result.error);
+      if (result.success) {
+        setSubestacionNombre('');
+        setSubestacionUbicacion('');
+        setNivelTension('13.8 kV');
+        setInspectorName('');
+        setShowInspeccionModal(false);
+        showToast?.("Inspección Ambiental o Física registrada exitosamente.", "success");
+      } else {
+        customAlert(result.error);
+      }
+      return;
+    }
+
+    if (tipoInspeccionModal === 'TERMOGRAFICA') {
+      const tPunto = parseFloat(termoTempPuntoCaliente) || 0;
+      const tRef = parseFloat(termoTempRef) || 0;
+      const deltaT = (tPunto - tRef).toFixed(1);
+      let severidad = 'NORMAL';
+      if (deltaT > 40) severidad = 'CRITICA';
+      else if (deltaT > 20) severidad = 'ALTA';
+      else if (deltaT > 10) severidad = 'MODERADA';
+
+      const result = addInspeccionSubestacion(proyectoId, {
+        nombre: termoNombre.trim() || `IT-1: Inspección Termográfica`,
+        tipoElemento: 'TERMOGRAFICA',
+        ubicacion: termoUbicacion.trim() || 'Sala Eléctrica',
+        nivelTension: 'Termografía',
+        inspector: inspectorName.trim() || user?.username || 'Inspector',
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        estadoEntorno: {},
+        obrasCiviles: {},
+        equiposPrincipales: {
+          temperaturaAmbiente: termoTempAmbiente,
+          temperaturaPuntoCaliente: termoTempPuntoCaliente,
+          temperaturaReferencia: termoTempRef,
+          deltaT,
+          severidadNeta: severidad,
+          camaraModelo: termoCamara
+        },
+        puestaTierra: {},
+        edificioControl: {}
+      });
+
+      if (result.success) {
+        setTermoNombre('');
+        setTermoUbicacion('');
+        setTermoTempPuntoCaliente('');
+        setShowInspeccionModal(false);
+        showToast?.("Inspección Termográfica registrada exitosamente.", "success");
+      } else {
+        customAlert(result.error);
+      }
+      return;
+    }
+
+    if (tipoInspeccionModal === 'SISTEMA_ATERRAMIENTO' || tipoInspeccionModal === 'PUESTA_TIERRA') {
+      const rOhms = parseFloat(patResistencia) || 0;
+      let cumplimientoIeee = 'CUMPLE (Excelente <= 5Ω)';
+      if (rOhms > 10) cumplimientoIeee = 'NO CUMPLE (> 10Ω - Requiere Mantenimiento)';
+      else if (rOhms > 5) cumplimientoIeee = 'ACEPTABLE (<= 10Ω)';
+
+      const result = addInspeccionSubestacion(proyectoId, {
+        nombre: (patNombre || subestacionNombre).trim() || `PAT-1: Sistema de Aterramiento`,
+        tipoElemento: 'SISTEMA_ATERRAMIENTO',
+        ubicacion: (patUbicacion || subestacionUbicacion).trim() || 'Patio / Sala Eléctrica',
+        nivelTension: 'Aterramiento PAT',
+        inspector: inspectorName.trim() || user?.username || 'Inspector',
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        estadoEntorno: {},
+        obrasCiviles: {},
+        equiposPrincipales: {},
+        puestaTierra: {
+          resistenciaOhms: patResistencia.trim() || '',
+          metodoMedicion: patMetodo || 'Caída de Potencial (62%)',
+          tipoSistemaPat: patTipo || 'Malla con Varillas',
+          tipoUnion: patUnion || 'Soldadura Exotérmica (Cadweld)',
+          telurometro: patTelurometro,
+          cumplimientoIeee80: cumplimientoIeee
+        },
+        edificioControl: {}
+      });
+
+      if (result.success) {
+        setPatNombre('');
+        setPatUbicacion('');
+        setPatResistencia('');
+        setSubestacionNombre('');
+        setSubestacionUbicacion('');
+        setShowInspeccionModal(false);
+        showToast?.("Inspección del Sistema de Aterramiento registrada exitosamente.", "success");
+      } else {
+        customAlert(result.error);
+      }
+      return;
+    }
+
+    if (tipoInspeccionModal === 'TANQUE_COMBUSTIBLE') {
+      const capLitros = parseFloat(tanqueCapacidadLitros) || 0;
+      const nivelPct = parseFloat(tanqueNivelPorcentaje) || 0;
+      const consumo = parseFloat(tanqueConsumoLh) || 1;
+      const litrosActuales = ((capLitros * nivelPct) / 100).toFixed(0);
+      const autonomiaHoras = (litrosActuales / (consumo || 1)).toFixed(1);
+
+      const result = addInspeccionSubestacion(proyectoId, {
+        nombre: tanqueNombre.trim() || `TK-1: Tanque de Combustible`,
+        tipoElemento: 'TANQUE_COMBUSTIBLE',
+        ubicacion: tanqueUbicacion.trim() || 'Área de Generación',
+        nivelTension: 'Combustible',
+        inspector: inspectorName.trim() || user?.username || 'Inspector',
+        fecha: new Date().toISOString().split('T')[0],
+        hora: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        estadoEntorno: {
+          tipoCombustible: tanqueTipoCombustible,
+          capacidadLitros: tanqueCapacidadLitros,
+          nivelPorcentaje: tanqueNivelPorcentaje,
+          litrosActuales,
+          consumoLh: tanqueConsumoLh,
+          autonomiaHorasCalculada: autonomiaHoras,
+          diqueContencion110: tanqueDique110
+        },
+        obrasCiviles: {},
+        equiposPrincipales: {},
+        puestaTierra: {},
+        edificioControl: {}
+      });
+
+      if (result.success) {
+        setTanqueNombre('');
+        setTanqueUbicacion('');
+        setShowInspeccionModal(false);
+        showToast?.("Inspección de Tanque de Combustible registrada exitosamente.", "success");
+      } else {
+        customAlert(result.error);
+      }
+      return;
     }
   };
 
@@ -696,26 +929,6 @@ export const ProyectoView = () => {
             >
               <Building className="w-4 h-4" /> Inspección Estructural
             </button>
-            <button
-              onClick={() => setActiveTab('MEDICION')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'MEDICION' 
-                  ? 'bg-amber-500 text-slate-950 shadow-md' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
-            >
-              <Gauge className="w-4 h-4" /> Puntos de Medición
-            </button>
-            <button
-              onClick={() => setActiveTab('CCM')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'CCM' 
-                  ? 'bg-amber-500 text-slate-950 shadow-md' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
-            >
-              <Cpu className="w-4 h-4" /> CCM (Motores)
-            </button>
           </div>
 
           {/* Buscador & Botones en Paralelo */}
@@ -746,12 +959,11 @@ export const ProyectoView = () => {
                   <FileText className="w-3.5 h-3.5" /> Informe PDF
                 </button>
                 <button
-                  type="button"
-                  disabled
-                  title="Exportar a Excel (Próximamente)"
-                  className="opacity-40 text-slate-400 font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 h-9 text-xs cursor-not-allowed bg-slate-900 border border-slate-800"
+                  onClick={() => setShowHelpModal(true)}
+                  className="bg-slate-900 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-amber-400 font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 h-9 text-xs transition-all cursor-pointer shadow-sm"
+                  title="Manual de Usuario, Matriz de Roles y Normativa Eléctrica"
                 >
-                  <FileText className="w-3.5 h-3.5 text-slate-500" /> Excel (Futuro)
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-500" /> Ayuda / Manual
                 </button>
               </div>
 
@@ -794,26 +1006,6 @@ export const ProyectoView = () => {
                       className="bg-slate-900 border border-slate-800 text-slate-100 font-bold hover:bg-slate-850 active:scale-95 transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs"
                     >
                       <Building className="w-4 h-4 text-amber-500" /> + Crear Inspección
-                    </button>
-                  )}
-
-                  {/* Controles para Puntos de Medición */}
-                  {activeTab === 'MEDICION' && (
-                    <button
-                      onClick={() => setShowPuntoMedicionModal(true)}
-                      className="bg-slate-900 border border-slate-800 text-slate-100 font-bold hover:bg-slate-850 active:scale-95 transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs"
-                    >
-                      <Gauge className="w-4 h-4 text-amber-500" /> + Crear Punto de Medición
-                    </button>
-                  )}
-
-                  {/* Controles para CCM */}
-                  {activeTab === 'CCM' && (
-                    <button
-                      onClick={() => setShowCcmModal(true)}
-                      className="bg-slate-900 border border-slate-800 text-slate-100 font-bold hover:bg-slate-850 active:scale-95 transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs"
-                    >
-                      <Cpu className="w-4 h-4 text-amber-500" /> + Crear CCM
                     </button>
                   )}
                 </div>
@@ -967,242 +1159,6 @@ export const ProyectoView = () => {
           </div>
         )}
 
-        {/* CONTENIDO DE PESTAÑA C: PUNTOS DE MEDICIÓN */}
-        {activeTab === 'MEDICION' && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-md font-bold text-slate-200">Formato de Levantamiento: Puntos de Medición y Suministro</h2>
-              <p className="text-xs text-slate-500">Gestión de acometidas, infraestructura de entrada, sistemas de transformación y medidores.</p>
-            </div>
-
-            {filteredPuntosMedicion.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredPuntosMedicion.map((item) => {
-                  const isSelected = selectedIds.has(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => {
-                        if (isMultiSelectMode) {
-                          handleToggleSelect(item.id);
-                        } else {
-                          navigate(`/empresa/${companyId}/tablero/${item.id}`);
-                        }
-                      }}
-                      className={`bg-slate-950 border flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group rounded-2xl shadow-md hover:shadow-xl ${
-                        isMultiSelectMode && isSelected 
-                          ? 'border-amber-500 shadow-amber-500/5 ring-1 ring-amber-500/20' 
-                          : 'border-slate-800/80 hover:border-slate-700/60'
-                      }`}
-                    >
-                      <div className="h-32 w-full bg-gradient-to-br from-slate-900 to-slate-900/40 relative flex flex-col items-center justify-center border-b border-slate-900/50 select-none">
-                        <Gauge className="w-9 h-9 text-amber-500/70 group-hover:scale-105 transition-transform duration-500" />
-                        <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">Punto de Medición</span>
-                        
-                        <div className="absolute top-3 left-3">
-                          <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                            ⚡ PUNTO DE MEDICIÓN
-                          </span>
-                        </div>
-
-                        <div className="absolute top-3 right-3 flex items-center gap-2">
-                          <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
-                            ID: {item.id}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                        <div>
-                          <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-1">
-                            {formatElementTitleWithId(item.nombre, item.id)}
-                          </h3>
-                          {item.nombreUsuario && (
-                            <p className="text-xs text-slate-400 font-medium mt-0.5 line-clamp-1">
-                              Usuario: {item.nombreUsuario}
-                            </p>
-                          )}
-                          {item.numeroContrato && (
-                            <p className="text-[10px] text-slate-500 font-mono mt-1">
-                              NIC/Contrato: {item.numeroContrato}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="pt-3 border-t border-slate-900 flex items-center justify-between">
-                          <span className="text-[10px] font-mono text-slate-500">
-                            {item.fecha || 'Sin fecha'}
-                          </span>
-                          {user?.role !== 'CLIENT' && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const ok = await confirm({
-                                  title: 'Eliminar Punto de Medición',
-                                  message: `¿Eliminar el punto de medición "${item.nombre}"?`,
-                                  type: 'danger',
-                                  confirmText: 'Eliminar'
-                                });
-                                if (ok) {
-                                  deletePuntoMedicion(proyectoId, item.id);
-                                  showToast?.('Punto de medición eliminado', 'info');
-                                }
-                              }}
-                              className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-                              title="Eliminar Punto de Medición"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-12 text-center space-y-3">
-                <Gauge className="w-10 h-10 text-slate-600 mx-auto" />
-                <h3 className="text-sm font-bold text-slate-300">No hay Puntos de Medición creados</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Registra el levantamiento técnico de puntos de medición y suministro eléctrico para este proyecto.
-                </p>
-                {user?.role !== 'CLIENT' && (
-                  <button
-                    onClick={() => setShowPuntoMedicionModal(true)}
-                    className="mt-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                  >
-                    + Registrar Primer Punto de Medición
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* CONTENIDO DE PESTAÑA D: CENTROS DE CONTROL DE MOTORES (CCM) */}
-        {activeTab === 'CCM' && (
-          <div>
-            <div className="mb-4">
-              <h2 className="text-md font-bold text-slate-200">Formato de Levantamiento: Centros de Control de Motores (CCM)</h2>
-              <p className="text-xs text-slate-500">Gestión de parámetros eléctricos, compartimentos/gavetas (bucket log), inspección ambiental y termografía.</p>
-            </div>
-
-            {(proyecto?.ccmList || []).length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {(proyecto?.ccmList || [])
-                  .filter((item) => {
-                    if (!searchQuery) return true;
-                    const q = searchQuery.toLowerCase();
-                    return (
-                      (item.nombre && item.nombre.toLowerCase().includes(q)) ||
-                      (item.plantaInstalacion && item.plantaInstalacion.toLowerCase().includes(q)) ||
-                      (item.areaProceso && item.areaProceso.toLowerCase().includes(q))
-                    );
-                  })
-                  .map((item) => {
-                    const isSelected = selectedIds.has(item.id);
-                    return (
-                      <div
-                        key={item.id}
-                        onClick={() => {
-                          if (isMultiSelectMode) {
-                            handleToggleSelect(item.id);
-                          } else {
-                            navigate(`/empresa/${companyId}/tablero/${item.id}`);
-                          }
-                        }}
-                        className={`bg-slate-950 border flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group rounded-2xl shadow-md hover:shadow-xl ${
-                          isMultiSelectMode && isSelected 
-                            ? 'border-amber-500 shadow-amber-500/5 ring-1 ring-amber-500/20' 
-                            : 'border-slate-800/80 hover:border-slate-700/60'
-                        }`}
-                      >
-                        <div className="h-32 w-full bg-gradient-to-br from-slate-900 to-slate-900/40 relative flex flex-col items-center justify-center border-b border-slate-900/50 select-none">
-                          <Cpu className="w-9 h-9 text-amber-500/70 group-hover:scale-105 transition-transform duration-500" />
-                          <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">CCM Industrial</span>
-                          
-                          <div className="absolute top-3 left-3">
-                            <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              ⚙️ CCM INDUSTRIAL
-                            </span>
-                          </div>
-
-                          <div className="absolute top-3 right-3 flex items-center gap-2">
-                            <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
-                              ID: {item.id}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                          <div>
-                            <h3 className="font-extrabold text-sm text-slate-100 group-hover:text-amber-400 transition-colors line-clamp-1">
-                              {formatElementTitleWithId(item.nombre, item.id)}
-                            </h3>
-                            {item.plantaInstalacion && (
-                              <p className="text-xs text-slate-400 font-medium mt-0.5 line-clamp-1">
-                                Planta: {item.plantaInstalacion}
-                              </p>
-                            )}
-                            {item.areaProceso && (
-                              <p className="text-[10px] text-slate-500 font-mono mt-1">
-                                Área: {item.areaProceso}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="pt-3 border-t border-slate-900 flex items-center justify-between">
-                            <span className="text-[10px] font-mono text-slate-500">
-                              {item.fecha || 'Sin fecha'}
-                            </span>
-                            {user?.role !== 'CLIENT' && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  const ok = await confirm({
-                                    title: 'Eliminar CCM',
-                                    message: `¿Eliminar el CCM "${item.nombre}"?`,
-                                    type: 'danger',
-                                    confirmText: 'Eliminar'
-                                  });
-                                  if (ok) {
-                                    deleteCcm(proyectoId, item.id);
-                                    showToast?.('CCM eliminado correctamente', 'info');
-                                  }
-                                }}
-                                className="p-1.5 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-                                title="Eliminar CCM"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            ) : (
-              <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-12 text-center space-y-3">
-                <Cpu className="w-10 h-10 text-slate-600 mx-auto" />
-                <h3 className="text-sm font-bold text-slate-300">No hay Centros de Control de Motores (CCM) creados</h3>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Registra los datos de inspección de tableros CCM y gavetas de motores para este proyecto.
-                </p>
-                {user?.role !== 'CLIENT' && (
-                  <button
-                    onClick={() => setShowCcmModal(true)}
-                    className="mt-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
-                  >
-                    + Registrar Primer CCM
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* CONTENIDO DE PESTAÑA B: DIAGRAMA UNIFILAR */}
         {activeTab === 'UNIFILAR' && (
           <div>
@@ -1228,6 +1184,9 @@ export const ProyectoView = () => {
                   const isGen = item.tipoElemento === 'GENERADOR';
                   const isPuestaTierra = item.tipoElemento === 'PUESTA_TIERRA';
                   const isTransfer = item.tipoElemento === 'TRANSFER';
+                  const isPuntoSuministro = item.tipoElemento === 'PUNTO_SUMINISTRO';
+                  const isCcm = item.tipoElemento === 'CCM';
+                  const isBanco = item.tipoElemento === 'BANCO_CONDENSADOR';
 
                   return (
                     <div
@@ -1261,7 +1220,10 @@ export const ProyectoView = () => {
                             {isGen && <Zap className="w-8 h-8 opacity-25 text-amber-400" />}
                             {isPuestaTierra && <ShieldAlert className="w-8 h-8 opacity-25 text-teal-400" />}
                             {isTransfer && <RefreshCw className="w-8 h-8 opacity-25 text-emerald-400" />}
-                            {!isTablero && !isTrafo && !isGen && !isPuestaTierra && !isTransfer && <Layers className="w-8 h-8 opacity-25 text-slate-400" />}
+                            {isPuntoSuministro && <Gauge className="w-8 h-8 opacity-25 text-blue-400" />}
+                            {isCcm && <Cpu className="w-8 h-8 opacity-25 text-amber-400" />}
+                            {isBanco && <Layers className="w-8 h-8 opacity-25 text-emerald-400" />}
+                            {!isTablero && !isTrafo && !isGen && !isPuestaTierra && !isTransfer && !isPuntoSuministro && !isCcm && !isBanco && <Layers className="w-8 h-8 opacity-25 text-slate-400" />}
                             <span className="text-[9px] uppercase font-bold tracking-widest opacity-30">Sin Imagen</span>
                           </div>
                         )}
@@ -1275,12 +1237,12 @@ export const ProyectoView = () => {
                           )}
                           {isTrafo && (
                             <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              ⚡ TRANSFORMADOR
+                              🔄 TRANSFORMADOR
                             </span>
                           )}
                           {isGen && (
                             <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              ⚡ GENERADOR
+                              🔋 GENERADOR
                             </span>
                           )}
                           {isPuestaTierra && (
@@ -1290,7 +1252,22 @@ export const ProyectoView = () => {
                           )}
                           {isTransfer && (
                             <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              🔄 TRANSFERENCIA
+                              🔀 TRANSFERENCIA
+                            </span>
+                          )}
+                          {isPuntoSuministro && (
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                              🔌 PTO. SUMINISTRO
+                            </span>
+                          )}
+                          {isCcm && (
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                              ⚙️ CCM MOTORES
+                            </span>
+                          )}
+                          {isBanco && (
+                            <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
+                              ⚡ BANCO CONDENSADOR
                             </span>
                           )}
                         </div>
@@ -1450,36 +1427,26 @@ export const ProyectoView = () => {
 
             <form onSubmit={handleCreateElemento} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
               
-              {/* Selector de Tipo de Plantilla */}
+              {/* Selector de Tipo de Elemento (7 Opciones de Capa 1) */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Tipo de Plantilla de Elemento
+                  Tipo de Elemento Eléctrico
                 </label>
-                <div className="flex flex-wrap gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
                   {[
-                    { id: 'TABLERO', label: 'PANEL ELÉCTRICO' },
-                    { id: 'TRANSFER', label: 'TRANSFERENCIA' },
-                    { id: 'GENERADOR', label: 'GENERADOR' },
-                    { id: 'TRANSFORMADOR', label: 'TRANSFORMADOR' },
-                    { id: 'BANCO_CONDENSADOR', label: 'BANCO CONDENSADOR' },
-                    { id: 'PUNTO_MEDICION', label: 'PUNTO DE MEDICIÓN' },
-                    { id: 'CCM', label: 'CCM (MOTORES)' }
+                    { id: 'TABLERO', label: '⚡ PANEL ELÉCTRICO' },
+                    { id: 'PUNTO_SUMINISTRO', label: '🔌 PTO. SUMINISTRO' },
+                    { id: 'GENERADOR', label: '🔋 GENERADOR' },
+                    { id: 'TRANSFORMADOR', label: '🔄 TRANSFORMADOR' },
+                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA' },
+                    { id: 'CCM', label: '⚙️ CCM (MOTORES)' },
+                    { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' }
                   ].map((t) => (
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => {
-                        if (t.id === 'PUNTO_MEDICION') {
-                          setShowElementoModal(false);
-                          setShowPuntoMedicionModal(true);
-                        } else if (t.id === 'CCM') {
-                          setShowElementoModal(false);
-                          setShowCcmModal(true);
-                        } else {
-                          setTipoElemento(t.id);
-                        }
-                      }}
-                      className={`py-2 px-2.5 font-black rounded-lg transition-all text-center cursor-pointer ${
+                      onClick={() => setTipoElemento(t.id)}
+                      className={`py-2 px-2 font-black rounded-lg transition-all text-center cursor-pointer ${
                         tipoElemento === t.id 
                           ? 'bg-amber-500 text-slate-950 shadow-md' 
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1679,6 +1646,90 @@ export const ProyectoView = () => {
                 </div>
               )}
 
+              {/* BANCO CONDENSADOR */}
+              {tipoElemento === 'BANCO_CONDENSADOR' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (kVAR)</label>
+                      <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value)} placeholder="Ej. 150 kVAR" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pasos / Escalones</label>
+                      <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value)} placeholder="Ej. 6 pasos" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Banco</label>
+                      <select value={tipoBanco} onChange={(e) => setTipoBanco(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="AUTOMATICO">AUTOMÁTICO (CONTROLADOR)</option>
+                        <option value="FIJO">FIJO</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                      <input type="text" value={tensionBanco} onChange={(e) => setTensionBanco(e.target.value)} placeholder="Ej. 208 V o 480 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PUNTO DE SUMINISTRO */}
+              {tipoElemento === 'PUNTO_SUMINISTRO' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nivel de Tensión</label>
+                      <input type="text" value={suministroTension} onChange={(e) => setSuministroTension(e.target.value)} placeholder="Ej. 13.8 kV" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad (kVA)</label>
+                      <input type="text" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value)} placeholder="Ej. 1000 kVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Empresa Distribuidora</label>
+                      <input type="text" value={suministroEmpresa} onChange={(e) => setSuministroEmpresa(e.target.value)} placeholder="Ej. CORPOELEC / Compañía Eléctrica" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Acometida</label>
+                      <select value={suministroTipoAcometida} onChange={(e) => setSuministroTipoAcometida(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="Subterránea">Subterránea</option>
+                        <option value="Aérea">Aérea</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CCM (CENTRO DE CONTROL DE MOTORES) */}
+              {tipoElemento === 'CCM' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Barra (A)</label>
+                      <input type="text" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value)} placeholder="Ej. 1200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                      <input type="text" value={ccmTension} onChange={(e) => setCcmTension(e.target.value)} placeholder="Ej. 480 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Breaker Principal</label>
+                      <input type="text" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value)} placeholder="Ej. 1200A 3P" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. de Gavetas / Buckets</label>
+                      <input type="number" min="1" max="48" value={ccmNumeroGavetas} onChange={(e) => setCcmNumeroGavetas(parseInt(e.target.value, 10) || 1)} placeholder="8" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* OTRO */}
               {tipoElemento === 'OTRO' && (
                 <div>
@@ -1769,15 +1820,15 @@ export const ProyectoView = () => {
         </div>
       )}
 
-      {/* MODAL FICHA DE INSPECCIÓN ESTRUCTURAL */}
+      {/* MODAL CREAR INSPECCIÓN TÉCNICA (CAPA 2 - 4 INSPECCIONES SEPARADAS) */}
       {showInspeccionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowInspeccionModal(false)} />
           
-          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+          <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Building className="w-4 h-4 text-amber-500" /> Registrar Inspección Estructural Subestación
+                <Building className="w-4 h-4 text-amber-500" /> Registrar Inspección Técnica (Capa 2)
               </h3>
               <button 
                 onClick={() => setShowInspeccionModal(false)}
@@ -1787,57 +1838,344 @@ export const ProyectoView = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateInspeccion} className="mt-4 space-y-4">
+            <form onSubmit={handleCreateInspeccion} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
               
+              {/* Selector de 4 Inspecciones Separadas */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nombre de la Subestación
+                  Tipo de Inspección Técnica
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={subestacionNombre}
-                  onChange={(e) => setSubestacionNombre(e.target.value)}
-                  placeholder="Ej. Subestación Principal Sótano 2"
-                  className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
-                    nombreInspeccionDuplicado 
-                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
-                      : 'border-slate-800 focus:border-amber-500 focus:ring-amber-500'
-                  }`}
-                />
-                {nombreInspeccionDuplicado && (
-                  <p className="text-[10px] text-red-550 font-bold flex items-center gap-1.5 mt-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Nombre duplicado: ya existe esta subestación registrada.
-                  </p>
-                )}
+                <div className="grid grid-cols-2 gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[10px]">
+                  {[
+                    { id: 'AMBIENTAL_FISICA', label: '🏢 AMBIENTAL O FÍSICA' },
+                    { id: 'TERMOGRAFICA', label: '🌡️ TERMOGRÁFICA' },
+                    { id: 'SISTEMA_ATERRAMIENTO', label: '🛡️ SISTEMA ATERRAMIENTO' },
+                    { id: 'TANQUE_COMBUSTIBLE', label: '⛽ TANQUE COMBUSTIBLE' }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTipoInspeccionModal(t.id)}
+                      className={`py-2 px-2.5 font-bold rounded-lg transition-all text-center cursor-pointer ${
+                        tipoInspeccionModal === t.id 
+                          ? 'bg-amber-500 text-slate-950 shadow-md font-black' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Ubicación Física
-                </label>
-                <input
-                  type="text"
-                  value={subestacionUbicacion}
-                  onChange={(e) => setSubestacionUbicacion(e.target.value)}
-                  placeholder="Ej. Patio de Transformadores Norte"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
-                />
-              </div>
+              {/* CAMPOS SEGÚN CADA INSPECCIÓN POR SEPARADO */}
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nivel de Tensión (kV)
-                </label>
-                <input
-                  type="text"
-                  value={nivelTension}
-                  onChange={(e) => setNivelTension(e.target.value)}
-                  placeholder="Ej. 13.8 kV, 4.16 kV"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
-                />
-              </div>
+              {/* 1. AMBIENTAL O FÍSICA */}
+              {(tipoInspeccionModal === 'AMBIENTAL_FISICA' || tipoInspeccionModal === 'SUBESTACION') && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Nombre de la Subestación / Sala Eléctrica
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={subestacionNombre}
+                      onChange={(e) => setSubestacionNombre(e.target.value)}
+                      placeholder="Ej. Subestación Principal Sótano 2"
+                      className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
+                        nombreInspeccionDuplicado 
+                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                          : 'border-slate-800 focus:border-amber-500 focus:ring-amber-500'
+                      }`}
+                    />
+                    {nombreInspeccionDuplicado && (
+                      <p className="text-[10px] text-red-550 font-bold flex items-center gap-1.5 mt-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Nombre duplicado: ya existe esta inspección.
+                      </p>
+                    )}
+                  </div>
 
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Ubicación Física
+                    </label>
+                    <input
+                      type="text"
+                      value={subestacionUbicacion}
+                      onChange={(e) => setSubestacionUbicacion(e.target.value)}
+                      placeholder="Ej. Patio de Transformadores Norte / Sala Eléctrica"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Nivel de Tensión (kV)
+                    </label>
+                    <input
+                      type="text"
+                      value={nivelTension}
+                      onChange={(e) => setNivelTension(e.target.value)}
+                      placeholder="Ej. 13.8 kV, 4.16 kV"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* 2. TERMOGRÁFICA */}
+              {tipoInspeccionModal === 'TERMOGRAFICA' && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Nombre / Tag de la Inspección Termográfica
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={termoNombre}
+                      onChange={(e) => setTermoNombre(e.target.value)}
+                      placeholder="Ej. IT-01: Termografía Tableros Principales"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Ubicación / Equipo</label>
+                      <input type="text" value={termoUbicacion} onChange={(e) => setTermoUbicacion(e.target.value)} placeholder="Ej. Interruptor Principal TAB-01" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cámara Termográfica</label>
+                      <input type="text" value={termoCamara} onChange={(e) => setTermoCamara(e.target.value)} placeholder="Ej. FLIR E8-XT / Fluke Ti480" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">T. Ambiente (°C)</label>
+                      <input type="number" step="0.1" value={termoTempAmbiente} onChange={(e) => setTermoTempAmbiente(e.target.value)} placeholder="25" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 font-mono h-9" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">T. Punto (°C)</label>
+                      <input type="number" step="0.1" value={termoTempPuntoCaliente} onChange={(e) => setTermoTempPuntoCaliente(e.target.value)} placeholder="48.5" className="w-full px-2.5 py-1.5 bg-slate-950 border border-amber-500/50 rounded-lg text-xs text-amber-400 font-mono h-9 font-bold" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">T. Ref (°C)</label>
+                      <input type="number" step="0.1" value={termoTempRef} onChange={(e) => setTermoTempRef(e.target.value)} placeholder="30" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 font-mono h-9" />
+                    </div>
+                  </div>
+
+                  {/* Cálculo en vivo de Delta T y Severidad */}
+                  {termoTempPuntoCaliente && (
+                    <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block uppercase font-bold">Gradiente Térmico (ΔT)</span>
+                        <span className="font-mono font-bold text-amber-400 text-sm">
+                          {(parseFloat(termoTempPuntoCaliente || 0) - parseFloat(termoTempRef || 0)).toFixed(1)} °C
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 block uppercase font-bold">Severidad NETA/NFPA</span>
+                        {(() => {
+                          const dtVal = parseFloat(termoTempPuntoCaliente || 0) - parseFloat(termoTempRef || 0);
+                          if (dtVal > 40) return <span className="px-2 py-0.5 bg-red-950 border border-red-800 text-red-400 font-black rounded-lg text-[10px]">CRÍTICA (&gt;40°C)</span>;
+                          if (dtVal > 20) return <span className="px-2 py-0.5 bg-amber-950 border border-amber-800 text-amber-400 font-black rounded-lg text-[10px]">ALTA (21-40°C)</span>;
+                          if (dtVal > 10) return <span className="px-2 py-0.5 bg-yellow-950 border border-yellow-800 text-yellow-400 font-black rounded-lg text-[10px]">MODERADA (11-20°C)</span>;
+                          return <span className="px-2 py-0.5 bg-emerald-950 border border-emerald-800 text-emerald-400 font-black rounded-lg text-[10px]">NORMAL (≤10°C)</span>;
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 3. SISTEMA DE ATERRAMIENTO */}
+              {(tipoInspeccionModal === 'SISTEMA_ATERRAMIENTO' || tipoInspeccionModal === 'PUESTA_TIERRA') && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Nombre / Tag del Sistema de Aterramiento (PAT)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={patNombre || subestacionNombre}
+                      onChange={(e) => { setPatNombre(e.target.value); setSubestacionNombre(e.target.value); }}
+                      placeholder="Ej. PAT-01: Malla Pozo Principal Transformador"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Resistencia Ohmios (Ω)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={patResistencia}
+                        onChange={(e) => setPatResistencia(e.target.value)}
+                        placeholder="Ej. 2.5 Ω"
+                        className="w-full px-3 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-xs text-amber-400 h-10 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Método Medición
+                      </label>
+                      <select
+                        value={patMetodo}
+                        onChange={(e) => setPatMetodo(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        <option value="Caída de Potencial (62%)">Caída de Potencial (62%)</option>
+                        <option value="Método de 3 Puntos">Método de 3 Puntos</option>
+                        <option value="Pinza de Tierra (Sin Picas)">Pinza de Tierra (Sin Picas)</option>
+                        <option value="Método Wenner (4 Picas)">Método Wenner (4 Picas)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {patResistencia && (
+                    <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">Criterio IEEE 80 / Código</span>
+                      {parseFloat(patResistencia) > 10 ? (
+                        <span className="text-red-450 font-bold">⚠️ &gt; 10 Ω (Requiere Mantenimiento)</span>
+                      ) : parseFloat(patResistencia) > 5 ? (
+                        <span className="text-amber-450 font-bold">🟡 ≤ 10 Ω (Aceptable)</span>
+                      ) : (
+                        <span className="text-emerald-450 font-bold">✅ ≤ 5 Ω (Excelente para Subestación)</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Tipo de Sistema PAT
+                      </label>
+                      <select
+                        value={patTipo}
+                        onChange={(e) => setPatTipo(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        <option value="Malla con Varillas">Malla con Varillas Copperweld</option>
+                        <option value="Pozo Individual">Pozo a Tierra Individual</option>
+                        <option value="Anillo Perimetral">Anillo Perimetral Edificio</option>
+                        <option value="Malla Profunda">Malla Profunda</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Tipo de Unión
+                      </label>
+                      <select
+                        value={patUnion}
+                        onChange={(e) => setPatUnion(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        <option value="Soldadura Exotérmica (Cadweld)">Soldadura Exotérmica (Cadweld)</option>
+                        <option value="Conector Mecánico Bronce">Conector Mecánico Bronce</option>
+                        <option value="Terminal a Compresión">Terminal a Compresión</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Ubicación Física
+                    </label>
+                    <input
+                      type="text"
+                      value={patUbicacion || subestacionUbicacion}
+                      onChange={(e) => { setPatUbicacion(e.target.value); setSubestacionUbicacion(e.target.value); }}
+                      placeholder="Ej. Patio de Transformadores Norte / Sala Eléctrica"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* 4. TANQUE DE COMBUSTIBLE */}
+              {tipoInspeccionModal === 'TANQUE_COMBUSTIBLE' && (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                      Nombre / Tag del Tanque de Combustible
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={tanqueNombre}
+                      onChange={(e) => setTanqueNombre(e.target.value)}
+                      placeholder="Ej. TK-01: Tanque Principal Diésel Generador"
+                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Combustible</label>
+                      <select value={tanqueTipoCombustible} onChange={(e) => setTanqueTipoCombustible(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="DIESEL">Diésel / Gasoil</option>
+                        <option value="GASOLINA">Gasolina</option>
+                        <option value="GAS">Gas Licuado / GLP</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (L)</label>
+                      <input type="number" value={tanqueCapacidadLitros} onChange={(e) => setTanqueCapacidadLitros(e.target.value)} placeholder="Ej. 2000" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nivel Actual (%)</label>
+                      <input type="number" min="0" max="100" value={tanqueNivelPorcentaje} onChange={(e) => setTanqueNivelPorcentaje(e.target.value)} placeholder="Ej. 75" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Consumo Generador (L/h)</label>
+                      <input type="number" step="0.1" value={tanqueConsumoLh} onChange={(e) => setTanqueConsumoLh(e.target.value)} placeholder="Ej. 45" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+
+                  {/* Autonomía Calculada en Tiempo Real */}
+                  <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Litros Actuales</span>
+                      <span className="font-mono font-bold text-amber-400 text-sm">
+                        {((parseFloat(tanqueCapacidadLitros || 0) * parseFloat(tanqueNivelPorcentaje || 0)) / 100).toFixed(0)} Litros
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Autonomía Estimada</span>
+                      <span className="font-mono font-black text-emerald-400 text-sm">
+                        {((parseFloat(tanqueCapacidadLitros || 0) * (parseFloat(tanqueNivelPorcentaje || 0) / 100)) / (parseFloat(tanqueConsumoLh) || 1)).toFixed(1)} Horas
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Dique Contención 110%</label>
+                      <select value={tanqueDique110} onChange={(e) => setTanqueDique110(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="CONFORME">Conforme (110% sin fugas)</option>
+                        <option value="NO_CONFORME">No Conforme / Sin Dique</option>
+                        <option value="CON_FILTRACION">Con Filtración / Fisuras</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Ubicación Tanque</label>
+                      <input type="text" value={tanqueUbicacion} onChange={(e) => setTanqueUbicacion(e.target.value)} placeholder="Ej. Sala de Generación / Exterior" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Inspector Encargado */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Nombre del Inspector Encargado
@@ -1851,7 +2189,7 @@ export const ProyectoView = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-900">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-900 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowInspeccionModal(false)}
@@ -1862,9 +2200,9 @@ export const ProyectoView = () => {
                 <button
                   type="submit"
                   disabled={!isInspeccionFormValid}
-                  className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
+                  className="bg-amber-500 text-slate-950 font-black hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
-                  Crear Ficha
+                  Crear Ficha de Inspección
                 </button>
               </div>
 
@@ -2157,6 +2495,12 @@ export const ProyectoView = () => {
         companyName={company?.nombre}
         proyectoId={proyectoId}
         companyId={companyId}
+      />
+
+      {/* Modal de Centro de Ayuda, Roles y Normativa Eléctrica (Capa 7) */}
+      <HelpModal
+        isOpen={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
       />
 
     </div>

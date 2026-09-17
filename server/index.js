@@ -17,8 +17,10 @@ import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/authMiddleware.js';
 import tableroRoutes from './routes/tableroRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
+import { inicializarBackupScheduler } from './services/backupScheduler.js';
 
 dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -206,4 +208,5 @@ app.use((err, req, res, next) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en el puerto ${PORT}`);
-});
+  inicializarBackupScheduler();
+});

@@ -1,4 +1,6 @@
 import prisma from '../db.js';
+import { computeBalance } from '../utils/electricalMath.js';
+import { generateTableroDXF } from '../services/dxfService.js';
 
 /**
  * POST /api/tableros
@@ -571,3 +573,234 @@ export const eliminarCircuito = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * GET /api/tableros/:id/balance
+ * Calcula balance de energía por fase (Capa 4) para un tablero.
+ * Retorna datos listos para Recharts: corriente nominal, carga total (kVA/kW),
+ * % desbalance por fase A/B/C, factor de potencia, clasificación de cargas
+ * y advertencia de sobrecarga según capacidad del transformador/alimentador.
+ */
+export const obtenerBalanceTablero = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const tablero = await prisma.tablero.findUnique({
+      where: { id },
+      include: {
+        circuitos: {
+          where: {
+            deletedAt: null
+          },
+          orderBy: {
+            posicionPolo: 'asc'
+          }
+        },
+        alimentador: true,
+        proyecto: true
+      }
+    });
+
+    if (!tablero) {
+      return res.status(404).json({ ok: false, error: 'Tablero no encontrado.' });
+    }
+
+    // Validación de permisos multitenant para rol CLIENT
+    if (req.user && req.user.role === 'CLIENT') {
+      const empresaDuena = tablero.empresaId || (tablero.proyecto && tablero.proyecto.empresaId);
+      if (empresaDuena && req.user.companyId !== empresaDuena) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Acceso denegado: no tiene permisos para consultar este tablero.'
+        });
+      }
+    }
+
+    const maxPolos = tablero.maxPolos || 42;
+    const fases = tablero.fases === 1 ? 1 : tablero.fases === 2 ? 2 : 3;
+    const faseNames = fases === 1 ? ['A'] : fases === 2 ? ['A', 'B'] : ['A', 'B', 'C'];
+
+    const faseAmps = { A: 0, B: 0, C: 0 };
+    const circuitosPorFase = { A: [], B: [], C: [] };
+    const polosOcupadosSet = new Set();
+
+    for (const c of tablero.circuitos) {
+      if (c.estado === 'ELIMINADO' || c.deletedAt) continue;
+
+      const np = Math.max(1, parseInt(c.numPolos, 10) || 1);
+      const pp = Math.max(1, parseInt(c.posicionPolo, 10) || 1);
+      const amp = Number(c.amperaje) || 0;
+
+      for (let p = 0; p < np; p++) {
+        const polo = pp + p * 2;
+        if (polo > maxPolos) break;
+        polosOcupadosSet.add(polo);
+
+        const phaseIdx = Math.floor((polo - 1) / 2) % (fases === 1 ? 1 : fases === 2 ? 2 : 3);
+        const fase = faseNames[phaseIdx] || 'A';
+
+        faseAmps[fase] += amp;
+        circuitosPorFase[fase].push({
+          id: c.id,
+          descripcion: c.descripcion || `Circuito Polo ${polo}`,
+          amperaje: amp,
+          posicionPolo: c.posicionPolo,
+          numPolos: c.numPolos,
+          poloFisico: polo,
+          estado: c.estado
+        });
+      }
+    }
+
+    const capacidadAmperios = Number(tablero.alimentador?.capacidadAmperios) || 0;
+    const alimentadorKVA = Number(tablero.alimentador?.capacidadKVA) || 0;
+
+    // Consultar transformador asociado si el alimentador tiene origen o en el proyecto
+    let transformadorAsociado = null;
+    if (tablero.alimentador?.origen) {
+      transformadorAsociado = await prisma.elementoUnifilar.findFirst({
+        where: {
+          proyectoId: tablero.proyectoId,
+          tipoElemento: 'TRANSFORMADOR',
+          deletedAt: null,
+          nombre: { contains: tablero.alimentador.origen, mode: 'insensitive' }
+        }
+      });
+    }
+
+    if (!transformadorAsociado) {
+      transformadorAsociado = await prisma.elementoUnifilar.findFirst({
+        where: {
+          proyectoId: tablero.proyectoId,
+          tipoElemento: 'TRANSFORMADOR',
+          deletedAt: null
+        }
+      });
+    }
+
+    let trafoKVA = null;
+    let trafoDetalle = null;
+    if (transformadorAsociado) {
+      const dt = transformadorAsociado.datosTecnicos || {};
+      trafoKVA = parseFloat(dt.kva || dt.potenciaKva || dt.capEx || 0) || null;
+      trafoDetalle = {
+        id: transformadorAsociado.id,
+        nombre: transformadorAsociado.nombre,
+        ubicacion: transformadorAsociado.ubicacion,
+        kva: trafoKVA,
+        voltajePrimario: dt.voltajePrimario || dt.tensionPrimaria || null,
+        voltajeSecundario: dt.voltajeSecundario || dt.tensionSecundaria || null,
+        factorPotencia: dt.factorPotencia ? parseFloat(dt.factorPotencia) : 0.90,
+        corrienteSecundaria: dt.amperiosSecundaria ? parseFloat(dt.amperiosSecundaria) : null
+      };
+    }
+
+    const effectiveKvaCap = alimentadorKVA > 0 ? alimentadorKVA : (trafoKVA || 0);
+
+    const balance = computeBalance({
+      phases: { ia: faseAmps.A, ib: faseAmps.B, ic: faseAmps.C },
+      tension: tablero.tension,
+      fases,
+      capacidad: {
+        capacidadAmperios,
+        amperajeMax: capacidadAmperios,
+        capacidadKVA: effectiveKvaCap,
+        transformadorKVA: trafoKVA
+      },
+      tipoUso: req.query?.tipoUso || 'INDUSTRIAL',
+      factorPotencia: req.query?.fp ? Number(req.query.fp) : 0.90
+    });
+
+    const response = {
+      tablero: {
+        id: tablero.id,
+        nombre: tablero.nombre,
+        ubicacion: tablero.ubicacion,
+        tension: tablero.tension,
+        fases: tablero.fases,
+        maxPolos: tablero.maxPolos
+      },
+      alimentador: tablero.alimentador ? {
+        id: tablero.alimentador.id,
+        nombre: tablero.alimentador.nombre,
+        origen: tablero.alimentador.origen,
+        capacidadAmperios: tablero.alimentador.capacidadAmperios,
+        capacidadKVA: tablero.alimentador.capacidadKVA || balance.sobrecarga?.capacidadNominalKVA || null
+      } : null,
+      transformador: trafoDetalle,
+      nominalCurrent: balance.nominalCurrent,
+      corrientesPorFase: balance.corrientesPorFase,
+      carga: balance.carga,
+      kvarTotal: balance.kvarTotal,
+      pfTotal: balance.pfTotal,
+      desbalance: balance.desbalance,
+      factorPotencia: balance.factorPotencia,
+      clasificacion: balance.clasificacion,
+      sobrecarga: balance.sobrecarga,
+      ocupacion: {
+        polosOcupados: polosOcupadosSet.size,
+        maxPolos,
+        porcentajeOcupacionPolos: maxPolos > 0 ? Math.round((polosOcupadosSet.size / maxPolos) * 10000) / 100 : 0,
+        porcentajeOcupacionAmperios: balance.sobrecarga.porcentajeOcupacion || null,
+        porcentajeOcupacionTransformador: balance.sobrecarga.porcentajeOcupacionTransformador || null
+      },
+      chartData: balance.chartData,
+      circuitosPorFase,
+      calculado: balance.calculado
+    };
+
+    return res.status(200).json({ ok: true, data: response });
+  } catch (error) {
+    console.error('Error en obtenerBalanceTablero:', error);
+    next(error);
+  }
+};
+
+/**
+ * GET /api/tableros/:id/dxf
+ * Genera y descarga el archivo CAD DXF (Release 12) del diagrama unifilar del tablero.
+ */
+export const exportarTableroDXF = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const tablero = await prisma.tablero.findUnique({
+      where: { id },
+      include: {
+        circuitos: {
+          where: { deletedAt: null },
+          orderBy: { posicionPolo: 'asc' }
+        },
+        alimentador: true,
+        proyecto: true
+      }
+    });
+
+    if (!tablero) {
+      return res.status(404).json({ ok: false, error: 'Tablero no encontrado.' });
+    }
+
+    if (req.user && req.user.role === 'CLIENT') {
+      const empresaDuena = tablero.empresaId || (tablero.proyecto && tablero.proyecto.empresaId);
+      if (empresaDuena && req.user.companyId !== empresaDuena) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Acceso denegado: no tiene permisos para descargar el archivo DXF de este tablero.'
+        });
+      }
+    }
+
+    const dxfContent = generateTableroDXF(tablero);
+    const sanitizedName = (tablero.nombre || 'tablero')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .toLowerCase();
+
+    res.setHeader('Content-Type', 'application/dxf');
+    res.setHeader('Content-Disposition', `attachment; filename="unifilar_${sanitizedName}.dxf"`);
+    return res.status(200).send(dxfContent);
+  } catch (error) {
+    console.error('Error en exportarTableroDXF:', error);
+    next(error);
+  }
+};
+

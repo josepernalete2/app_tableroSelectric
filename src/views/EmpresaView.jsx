@@ -205,6 +205,24 @@ export const EmpresaView = () => {
   const [tipoTransferencia, setTipoTransferencia] = useState('AUTOMATICA');
   const [tensionOperativa, setTensionOperativa] = useState('208 V');
 
+  // Campos de Banco de Condensadores
+  const [kvarTotal, setKvarTotal] = useState('150 kVAR');
+  const [pasosCondensador, setPasosCondensador] = useState('6');
+  const [tipoBanco, setTipoBanco] = useState('AUTOMATICO');
+  const [tensionBanco, setTensionBanco] = useState('208 V');
+
+  // Campos de Punto de Suministro
+  const [suministroTension, setSuministroTension] = useState('13.8 kV');
+  const [suministroEmpresa, setSuministroEmpresa] = useState('');
+  const [suministroTipoAcometida, setSuministroTipoAcometida] = useState('Subterránea');
+  const [suministroCapacidad, setSuministroCapacidad] = useState('1000 kVA');
+
+  // Campos de CCM Elemento
+  const [ccmCapacidadBarra, setCcmCapacidadBarra] = useState('1200 A');
+  const [ccmTension, setCcmTension] = useState('480 V');
+  const [ccmBreakerPrincipal, setCcmBreakerPrincipal] = useState('1200A 3P');
+  const [ccmNumeroGavetas, setCcmNumeroGavetas] = useState(8);
+
   // Campos de Otro
   const [descripcionOtro, setDescripcionOtro] = useState('');
 
@@ -357,9 +375,10 @@ export const EmpresaView = () => {
     } else if (tipoElemento === 'BANCO_CONDENSADOR') {
       datosTecnicos = {
         marca: '', modelo: '', alimentador: '', calibreConductor: '', fabricante: '', anioFabricacion: '',
-        tensionNominal: '', tensionRegistrada: '', frecuencia: '60 Hz', potenciaReactivaTotal: '',
+        tensionNominal: tensionBanco || '208 V', tensionRegistrada: tensionBanco || '208 V', frecuencia: '60 Hz', 
+        potenciaReactivaTotal: kvarTotal || '150 kVAR',
         corrienteNominalTotal: '', numFases: 'Trifásico', conexion: 'Estrella', nivelAislamientoBIL: '',
-        tipoCompensacion: 'Automática (Pasos)', numPasos: '', secuenciaPasosKvar: '',
+        tipoCompensacion: tipoBanco === 'AUTOMATICO' ? 'Automática (Pasos)' : 'Fija', numPasos: pasosCondensador || '6', secuenciaPasosKvar: '',
         tipoConmutacion: 'Contactores dedicados', potenciaIndividual: '', capacitanciaMuf: '',
         tensionCondensador: '', tecnologiaDielectrica: 'Polipropileno metalizado',
         resistenciaDescarga: 'Sí', seguridad: 'Desconectador por sobrepresión',
@@ -369,6 +388,20 @@ export const EmpresaView = () => {
         interruptorPrincipalAmp: '', proteccionPasos: 'Fusibles', gradoProteccionEnvolvente: 'IP54',
         dimensionesAlto: '', dimensionesAncho: '', dimensionesProf: '',
         sistemaEnfriamiento: 'Ventilación Forzada', temperaturaC: '', humedadPct: ''
+      };
+    } else if (tipoElemento === 'PUNTO_SUMINISTRO') {
+      datosTecnicos = {
+        nivelTension: suministroTension || '13.8 kV',
+        empresaDistribuidora: suministroEmpresa || 'Compañía Eléctrica',
+        tipoAcometida: suministroTipoAcometida || 'Subterránea',
+        capacidadContratadaKva: suministroCapacidad || '1000 kVA'
+      };
+    } else if (tipoElemento === 'CCM') {
+      datosTecnicos = {
+        capacidadBarraAmperios: ccmCapacidadBarra || '1200 A',
+        tensionOperativa: ccmTension || '480 V',
+        breakerPrincipal: ccmBreakerPrincipal || '1200A 3P',
+        numeroGavetas: parseInt(ccmNumeroGavetas, 10) || 8
       };
     } else if (tipoElemento === 'PUESTA_TIERRA') {
       datosTecnicos = {
@@ -1007,21 +1040,21 @@ export const EmpresaView = () => {
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
                   Tipo de Plantilla de Elemento
                 </label>
-                <div className="flex flex-wrap gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
                   {[
-                    { id: 'TABLERO', label: 'PANEL ELÉCTRICO' },
-                    { id: 'TRANSFER', label: 'TRANSFERENCIA' },
-                    { id: 'GENERADOR', label: 'GENERADOR' },
-                    { id: 'TRANSFORMADOR', label: 'TRANSFORMADOR' },
-                    { id: 'BANCO_CONDENSADOR', label: 'BANCO CONDENSADOR' },
-                    { id: 'PUNTO_MEDICION', label: 'PUNTO DE MEDICIÓN' },
-                    { id: 'CCM', label: 'CCM (MOTORES)' }
+                    { id: 'TABLERO', label: '⚡ PANEL ELÉCTRICO' },
+                    { id: 'PUNTO_SUMINISTRO', label: '🔌 PTO. SUMINISTRO' },
+                    { id: 'GENERADOR', label: '🔋 GENERADOR' },
+                    { id: 'TRANSFORMADOR', label: '🔄 TRANSFORMADOR' },
+                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA' },
+                    { id: 'CCM', label: '⚙️ CCM (MOTORES)' },
+                    { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' }
                   ].map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setTipoElemento(t.id)}
-                      className={`py-2 px-2.5 font-black rounded-lg transition-all text-center cursor-pointer ${
+                      className={`py-2 px-2 font-black rounded-lg transition-all text-center cursor-pointer ${
                         tipoElemento === t.id 
                           ? 'bg-amber-500 text-slate-950 shadow-md' 
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -1205,19 +1238,86 @@ export const EmpresaView = () => {
                 </div>
               )}
 
-              {/* TRANSFER */}
-              {tipoElemento === 'TRANSFER' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
-                    <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 3200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+              {/* BANCO CONDENSADOR */}
+              {tipoElemento === 'BANCO_CONDENSADOR' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (kVAR)</label>
+                      <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value)} placeholder="Ej. 150 kVAR" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pasos / Escalones</label>
+                      <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value)} placeholder="Ej. 6 pasos" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transferencia</label>
-                    <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                      <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
-                      <option value="MANUAL">MANUAL (MTS)</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Banco</label>
+                      <select value={tipoBanco} onChange={(e) => setTipoBanco(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="AUTOMATICO">AUTOMÁTICO (CONTROLADOR)</option>
+                        <option value="FIJO">FIJO</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                      <input type="text" value={tensionBanco} onChange={(e) => setTensionBanco(e.target.value)} placeholder="Ej. 208 V o 480 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PUNTO DE SUMINISTRO */}
+              {tipoElemento === 'PUNTO_SUMINISTRO' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nivel de Tensión</label>
+                      <input type="text" value={suministroTension} onChange={(e) => setSuministroTension(e.target.value)} placeholder="Ej. 13.8 kV" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad (kVA)</label>
+                      <input type="text" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value)} placeholder="Ej. 1000 kVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Empresa Distribuidora</label>
+                      <input type="text" value={suministroEmpresa} onChange={(e) => setSuministroEmpresa(e.target.value)} placeholder="Ej. CORPOELEC / Compañía Eléctrica" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Acometida</label>
+                      <select value={suministroTipoAcometida} onChange={(e) => setSuministroTipoAcometida(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                        <option value="Subterránea">Subterránea</option>
+                        <option value="Aérea">Aérea</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CCM (CENTRO DE CONTROL DE MOTORES) */}
+              {tipoElemento === 'CCM' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Barra (A)</label>
+                      <input type="text" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value)} placeholder="Ej. 1200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                      <input type="text" value={ccmTension} onChange={(e) => setCcmTension(e.target.value)} placeholder="Ej. 480 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Breaker Principal</label>
+                      <input type="text" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value)} placeholder="Ej. 1200A 3P" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. de Gavetas / Buckets</label>
+                      <input type="number" min="1" max="48" value={ccmNumeroGavetas} onChange={(e) => setCcmNumeroGavetas(e.target.value)} placeholder="8" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                    </div>
                   </div>
                 </div>
               )}
