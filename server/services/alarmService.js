@@ -3,7 +3,7 @@
  * Servicio para evaluación automática, deduplicación y persistencia de alarmas eléctricas.
  */
 
-import prisma from '../config/prisma.js';
+import prisma from '../db.js';
 import { computeBalance } from '../utils/electricalMath.js';
 
 /**

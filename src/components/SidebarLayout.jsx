@@ -416,9 +416,10 @@ export const SidebarLayout = () => {
   }
 
   navLinks.push(
-    { name: 'Respaldos y Nube', onClick: () => setShowSettingsModal(true), icon: Database },
-    { name: 'Futuros Reportes', onClick: () => setShowReportsModal(true), icon: TrendingUp }
+    { name: 'Reportes y Auditoría', path: '/reportes', icon: FileText },
+    { name: 'Respaldos y Nube', onClick: () => setShowSettingsModal(true), icon: Database }
   );
+
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col lg:flex-row antialiased">

@@ -3,6 +3,7 @@ import EditableCell from './EditableCell';
 import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
+import { API_BASE_URL } from '../utils/api';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -506,15 +507,29 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         customAlert("ID de tablero no disponible.");
         return;
       }
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/tableros/${tableroId}/dxf`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      });
+      const token = useStore.getState().token || localStorage.getItem('token');
+      const headers = {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+
+      let response = await fetch(`${API_BASE_URL}/api/tableros/${tableroId}/dxf`, { headers });
+
+      // Fallback a POST con datos locales si la búsqueda por ID en la BD primaria no lo localiza
       if (!response.ok) {
-        throw new Error('Error al generar el archivo DXF');
+        response = await fetch(`${API_BASE_URL}/api/tableros/dxf/export-custom`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...headers
+          },
+          body: JSON.stringify({ tablero: tableroData })
+        });
       }
+
+      if (!response.ok) {
+        throw new Error(`Error en el servidor (HTTP ${response.status})`);
+      }
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -529,6 +544,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       customAlert('No se pudo descargar el archivo DXF: ' + err.message);
     }
   };
+
 
   const handlePrintPDF = () => {
     window.print();

@@ -757,32 +757,93 @@ export const obtenerBalanceTablero = async (req, res, next) => {
 };
 
 /**
- * GET /api/tableros/:id/dxf
+ * GET /api/tableros/:id/dxf o POST /api/tableros/dxf/export-custom
  * Genera y descarga el archivo CAD DXF (Release 12) del diagrama unifilar del tablero.
  */
 export const exportarTableroDXF = async (req, res, next) => {
   try {
     const { id } = req.params;
+    let tablero = null;
 
-    const tablero = await prisma.tablero.findUnique({
-      where: { id },
-      include: {
-        circuitos: {
-          where: { deletedAt: null },
-          orderBy: { posicionPolo: 'asc' }
-        },
-        alimentador: true,
-        proyecto: true
+    // 1. Buscar en modelo Tablero
+    if (id) {
+      tablero = await prisma.tablero.findUnique({
+        where: { id },
+        include: {
+          circuitos: {
+            where: { deletedAt: null },
+            orderBy: { posicionPolo: 'asc' }
+          },
+          alimentador: true,
+          proyecto: true
+        }
+      });
+
+      // 2. Si no existe en tableros, buscar en elementos_unifilares
+      if (!tablero) {
+        const elemento = await prisma.elementoUnifilar.findUnique({
+          where: { id },
+          include: { proyecto: true }
+        });
+
+        if (elemento) {
+          const dt = elemento.datosTecnicos || {};
+          const circuits = Array.isArray(dt.circuits) ? dt.circuits : [];
+          
+          tablero = {
+            id: elemento.id,
+            nombre: elemento.nombre,
+            ubicacion: elemento.ubicacion || 'No especificada',
+            tension: dt.tension || dt.voltaje || '208 / 120 V',
+            fases: dt.fases ? parseInt(dt.fases, 10) : 3,
+            maxPolos: dt.maxPoles ? parseInt(dt.maxPoles, 10) : 42,
+            alimentadoPor: elemento.alimentadoPor || 'Acometida Principal',
+            alimentador: {
+              nombre: elemento.alimentadoPor || 'Principal',
+              capacidadAmperios: dt.capacidadInterruptorPrincipalAmperios || dt.amperajePrincipal || '100A'
+            },
+            circuitos: circuits.map(c => ({
+              posicionPolo: c.posicionPolo || (Array.isArray(c.poles) ? c.poles[0] : 1),
+              numPolos: c.numPolos || (Array.isArray(c.poles) ? c.poles.length : 1),
+              amperaje: c.amperaje || c.breaker?.amp || '20',
+              descripcion: c.descripcion || c.equipo || 'Circuito Derivado',
+              estado: c.estado || 'ACTIVO'
+            })),
+            proyecto: elemento.proyecto,
+            empresaId: elemento.empresaId || elemento.proyecto?.empresaId
+          };
+        }
       }
-    });
+    }
+
+    // 3. Si se envían datos del tablero directamente en el cuerpo (POST fallback)
+    if (!tablero && req.body && req.body.tablero) {
+      const tb = req.body.tablero;
+      const circuits = Array.isArray(tb.circuits) ? tb.circuits : (Array.isArray(tb.circuitos) ? tb.circuitos : []);
+      tablero = {
+        id: tb.id || 'tablero_local',
+        nombre: tb.nombre || 'Tablero Eléctrico',
+        ubicacion: tb.ubicacion || 'Planta General',
+        tension: tb.tension || tb.datosTecnicos?.tension || '208 / 120 V',
+        fases: tb.fases || tb.datosTecnicos?.fases || 3,
+        maxPolos: tb.maxPolos || tb.datosTecnicos?.maxPoles || 42,
+        alimentador: tb.alimentadoPor || tb.alimentador || 'Principal',
+        circuitos: circuits.map(c => ({
+          posicionPolo: c.posicionPolo || (Array.isArray(c.poles) ? c.poles[0] : 1),
+          numPolos: c.numPolos || (Array.isArray(c.poles) ? c.poles.length : 1),
+          amperaje: c.amperaje || c.breaker?.amp || '20',
+          descripcion: c.descripcion || c.equipo || 'Circuito Derivado',
+          estado: c.estado || 'ACTIVO'
+        }))
+      };
+    }
 
     if (!tablero) {
       return res.status(404).json({ ok: false, error: 'Tablero no encontrado.' });
     }
 
-    if (req.user && req.user.role === 'CLIENT') {
-      const empresaDuena = tablero.empresaId || (tablero.proyecto && tablero.proyecto.empresaId);
-      if (empresaDuena && req.user.companyId !== empresaDuena) {
+    if (req.user && req.user.role === 'CLIENT' && tablero.empresaId) {
+      if (req.user.companyId !== tablero.empresaId) {
         return res.status(403).json({
           ok: false,
           error: 'Acceso denegado: no tiene permisos para descargar el archivo DXF de este tablero.'
@@ -803,4 +864,5 @@ export const exportarTableroDXF = async (req, res, next) => {
     next(error);
   }
 };
+
 

@@ -63,6 +63,9 @@ router.put('/tableros/:id', requireRoles('ADMIN', 'WORKER'), actualizarTablero);
 router.delete('/tableros/:id', requireRoles('ADMIN'), eliminarTablero);
 router.get('/tableros/:id/balance', obtenerBalanceTablero);
 router.get('/tableros/:id/dxf', exportarTableroDXF);
+router.post('/tableros/:id/dxf', exportarTableroDXF);
+router.post('/tableros/dxf/export-custom', exportarTableroDXF);
+
 
 // Rutas de Circuitos
 router.post('/tableros/:tableroId/circuitos', requireRoles('ADMIN', 'WORKER'), crearCircuito);

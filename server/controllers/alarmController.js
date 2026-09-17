@@ -3,7 +3,7 @@
  * Endpoints REST para gestión de alarmas eléctricas.
  */
 
-import prisma from '../config/prisma.js';
+import prisma from '../db.js';
 import {
   sincronizarAlarmasProyecto,
   listarAlarmasProyecto,
