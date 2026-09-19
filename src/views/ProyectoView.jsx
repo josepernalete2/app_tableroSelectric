@@ -441,8 +441,8 @@ export const ProyectoView = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      customAlert("La imagen es demasiado grande. Por favor elija una de menos de 2MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      customAlert("La imagen es demasiado grande. Por favor elija una de menos de 10MB.");
       return;
     }
 

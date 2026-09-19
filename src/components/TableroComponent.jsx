@@ -922,8 +922,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   const file = e.target.files[0];
                   if (!file) return;
                   
-                  if (file.size > 2 * 1024 * 1024) {
-                    customAlert("La imagen es demasiado grande. Máximo 2MB.");
+                  if (file.size > 10 * 1024 * 1024) {
+                    customAlert("La imagen es demasiado grande. Máximo 10MB.");
                     return;
                   }
                   

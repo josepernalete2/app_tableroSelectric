@@ -144,8 +144,8 @@ export default function TransferComponent({
     if (readOnly) return;
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      customAlert("La imagen seleccionada supera los 3MB. Por favor elija un archivo más liviano.");
+    if (file.size > 10 * 1024 * 1024) {
+      customAlert("La imagen seleccionada supera los 10MB. Por favor elija un archivo más liviano.");
       return;
     }
     setFotoBlob(file);
