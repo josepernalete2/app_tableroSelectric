@@ -303,6 +303,32 @@ export const useStore = create(
         }
       },
 
+      pullInitialData: async () => {
+        const { token } = get();
+        if (!token) return;
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/sync/pull`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          const data = await res.json();
+          if (data.ok && data.data) {
+            const remoteCompanies = data.data || [];
+
+            // Reemplazar empresas y sus proyectos anidados con los del servidor
+            set({ companies: remoteCompanies });
+
+            // Opcional: también podríamos restablecer arrays locales que ya fueron
+            // sincronizados, pero dejamos la cola (syncQueue) para operaciones pendientes
+            // get().limpiarSincronizados(); 
+          }
+        } catch (e) {
+          console.error('Error al sincronizar datos iniciales tras login:', e);
+        }
+      },
+
       login: async (username, password) => {
         if (navigator.onLine) {
           try {
@@ -316,6 +342,8 @@ export const useStore = create(
               set({ user: data.user, token: data.token });
               get().fetchMessagesList(data.user.id);
               get().fetchUsersList();
+              // NUEVA RUTINA: hidratación inicial de datos al login
+              get().pullInitialData();
               return { success: true, user: data.user };
             } else {
               return { success: false, error: data.error || 'Usuario o contraseña incorrectos.' };
@@ -337,6 +365,8 @@ export const useStore = create(
 
         if (found) {
           set({ user: { id: found.id, username: found.username, role: found.role }, token: 'mock-offline-token' });
+          // Incluso en modo offline, intentamos pull inicial (usando mock data o vacío)
+          get().pullInitialData();
           return { success: true, user: found };
         }
         return { success: false, error: 'Usuario o contraseña incorrectos en modo offline.' };
@@ -1503,6 +1533,38 @@ export const useStore = create(
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== id),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id)
         }));
+      },
+
+      processSyncQueue: async () => {
+        const { syncQueue, token } = get();
+        if (!token || syncQueue.length === 0) return;
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/sync`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ mutations: syncQueue.map(item => ({
+              entity: item.tipo,
+              id: item.id,
+              operation: 'CREATE',
+              data: item.payload
+            })) })
+          });
+          const data = await res.json();
+          if (data.ok) {
+            // Limpiar la cola localmente tras confirmación exitosa
+            set({ syncQueue: [] });
+            get().showToast('Sincronización completada', 'success');
+          } else {
+            get().showToast('Error en sincronización: ' + (data.error || 'unknown'), 'error');
+          }
+        } catch (e) {
+          console.error('Error al procesar cola de sincronización:', e);
+          get().showToast('Error de red al sincronizar', 'error');
+        }
       },
       messages: [],
       sendMessage: async (receiverId, text) => {

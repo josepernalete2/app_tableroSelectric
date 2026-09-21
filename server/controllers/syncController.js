@@ -191,3 +191,92 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
     next(error);
   }
 };
+
+// ENDPOINT PULL: Traer datos actualizados desde el servidor
+// Filtrado por lastSyncTimestamp para obtener solo cambios desde última sincronización
+export const pullData = async (req, res) => {
+  try {
+    const user = req.user;
+    const { empresaId } = user;
+    const { lastSyncTimestamp } = req.query;
+
+    const where = {};
+
+    // Multitenancy: usuarios CLIENT solo ven su empresa
+    if (user.role === 'CLIENT' && empresaId) {
+      where.empresaId = empresaId;
+    }
+
+    // Filtrar por última fecha de sincronización si viene del cliente
+    if (lastSyncTimestamp) {
+      const ts = new Date(lastSyncTimestamp);
+      where.updatedAt = { gte: ts };
+    }
+
+    // Traer empresas con todas sus relaciones anidadas
+    const companies = await prisma.empresa.findMany({
+      where,
+      include: {
+        proyectos: {
+          include: {
+            tableros: {
+              include: {
+                circuitos: true
+              }
+            },
+            elementosUnifilares: {
+              include: {
+                inspeccionesSubestacion: true,
+                puntosMedicion: true,
+                ccmList: true
+              }
+            },
+            inspeccionesSubestacion: true,
+            puntosMedicion: true,
+            ccmList: true,
+            alimentadores: true
+          }
+        }
+      }
+    });
+
+    // Formatear datos para el frontend
+    const formattedCompanies = companies.map(company => ({
+      ...company,
+      proyectos: company.proyectos.map(proyecto => ({
+        ...proyecto,
+        tableros: proyecto.tableros.map(tablero => ({
+          ...tablero,
+          circuitos: tablero.circuitos || []
+        })),
+        elementosUnifilares: proyecto.elementosUnifilares.map(elem => ({
+          ...elem,
+          foto: elem.foto ? elem.foto.toString('base64') : null,
+          fotoBlob: elem.fotoBlob
+        })),
+        inspeccionesSubestacion: proyecto.inspeccionesSubestacion.map(sub => ({
+          ...sub,
+          foto: sub.foto ? sub.foto.toString('base64') : null
+        })),
+        puntosMedicion: proyecto.puntosMedicion.map(pm => ({
+          ...pm,
+          foto: pm.foto ? pm.foto.toString('base64') : null
+        })),
+        ccmList: proyecto.ccmList.map(ccm => ({
+          ...ccm,
+          foto: ccm.foto ? ccm.foto.toString('base64') : null
+        })),
+        alimentadores: proyecto.alimentadores || []
+      }))
+    }));
+
+    return res.status(200).json({
+      ok: true,
+      data: formattedCompanies,
+      lastSyncTimestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error en pullData:', error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+};

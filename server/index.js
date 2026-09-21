@@ -17,6 +17,7 @@ import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from './middleware/authMiddleware.js';
 import tableroRoutes from './routes/tableroRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
+import syncRoutes from './routes/syncRoutes.js';
 import { inicializarBackupScheduler } from './services/backupScheduler.js';
 
 dotenv.config();
@@ -172,6 +173,9 @@ app.use('/api/notifications', pushRoutes);
 
 // Endpoints Principales de la Inspección Eléctrica
 app.use('/api', tableroRoutes);
+
+// Endpoints de Sincronización Offline-First
+app.use('/api/sync', syncRoutes);
 
 // Manejo fallback para endpoints de API no encontrados
 app.use('/api', (req, res) => {
