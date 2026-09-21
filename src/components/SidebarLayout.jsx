@@ -153,8 +153,16 @@ export const SidebarLayout = () => {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       });
-      const result = await res.json();
-      if (result.ok) {
+      let result;
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        result = { ok: false, error: text || `Error HTTP ${res.status}` };
+      }
+
+      if (res.ok && (result.ok || result.success)) {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
@@ -164,7 +172,7 @@ export const SidebarLayout = () => {
         downloadAnchor.remove();
         showToast("Base de datos exportada con éxito.", "success");
       } else {
-        showToast("Error al exportar base de datos: " + result.error, "error");
+        showToast("Error al exportar base de datos: " + (result.error || result.message || 'Error desconocido'), "error");
       }
     } catch (err) {
       console.error(err);
@@ -200,16 +208,23 @@ export const SidebarLayout = () => {
           },
           body: JSON.stringify({ data: parsed })
         });
-        const result = await res.json();
+        let result;
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          result = await res.json();
+        } else {
+          const text = await res.text();
+          result = { ok: false, error: text || `Error HTTP ${res.status}` };
+        }
 
-        if (result.ok) {
+        if (res.ok && (result.ok || result.success)) {
           showToast("Base de datos importada y restaurada con éxito.", "success");
           importCompanies(parsed);
           setTimeout(() => {
             window.location.reload();
           }, 1500);
         } else {
-          showToast("Fallo al importar datos: " + result.error, "error");
+          showToast("Fallo al importar datos: " + (result.error || result.message || 'Error desconocido'), "error");
         }
       } catch (err) {
         console.error(err);
@@ -239,9 +254,17 @@ export const SidebarLayout = () => {
           email: gdriveEmail.trim()
         })
       });
-      const result = await res.json();
 
-      if (result.ok) {
+      let result;
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await res.json();
+      } else {
+        const text = await res.text();
+        result = { ok: false, success: false, error: text || `Error HTTP ${res.status}` };
+      }
+
+      if (res.ok && (result.ok || result.success)) {
         const time = new Date().toLocaleTimeString();
         setSyncStatus('Sincronizado con éxito');
         setLastSyncTime(time);
@@ -249,12 +272,13 @@ export const SidebarLayout = () => {
         showToast(result.message || "Respaldo cargado y compartido en Google Drive.", "success");
       } else {
         setSyncStatus('Fallo en sincronización');
-        showToast("Error al sincronizar con Google Drive: " + result.error, "error");
+        const errMsg = result.error || result.message || 'Error desconocido';
+        showToast(`Fallo en sincronización con Drive: ${errMsg}. Puede utilizar la opción "Exportar DB" para guardar el respaldo en su dispositivo.`, "error");
       }
     } catch (err) {
       console.error(err);
       setSyncStatus('Error de conexión');
-      showToast("Error de conexión al sincronizar con Google Drive.", "error");
+      showToast("Error de conexión al sincronizar con Google Drive. Puede utilizar 'Exportar DB' como alternativa local.", "error");
     } finally {
       setIsSyncing(false);
     }
@@ -278,14 +302,23 @@ export const SidebarLayout = () => {
               email: email.trim()
             })
           });
-          const result = await res.json();
-          if (result.ok) {
+
+          let result;
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            result = await res.json();
+          } else {
+            const text = await res.text();
+            result = { ok: false, error: text || `Error HTTP ${res.status}` };
+          }
+
+          if (res.ok && (result.ok || result.success)) {
             const time = new Date().toLocaleTimeString();
             setLastSyncTime(time);
             setSyncStatus('Sincronizado con éxito');
             localStorage.setItem('tableroselectrico_gdrive_lastSyncTime', time);
           } else {
-            setSyncStatus('Error en respaldo automático: ' + result.error);
+            setSyncStatus('Error en respaldo automático: ' + (result.error || result.message || 'Error'));
           }
         } catch {
           setSyncStatus('Error de conexión automática');

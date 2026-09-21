@@ -6,7 +6,8 @@ import prisma from '../db.js';
  * GET /api/backup/export
  * Exporta la base de datos completa (Empresas -> Tableros -> Circuitos) en formato JSON.
  */
-export const exportDatabase = async (req, res, next) => {
+export const exportDatabase = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
   try {
     const data = await prisma.empresa.findMany({
       include: {
@@ -30,11 +31,16 @@ export const exportDatabase = async (req, res, next) => {
 
     return res.status(200).json({
       ok: true,
+      success: true,
       data
     });
   } catch (error) {
     console.error('Error al exportar base de datos:', error);
-    next(error);
+    return res.status(500).json({
+      ok: false,
+      success: false,
+      error: error.message || 'Error al exportar la base de datos'
+    });
   }
 };
 
@@ -42,13 +48,15 @@ export const exportDatabase = async (req, res, next) => {
  * POST /api/backup/import
  * Reemplaza la base de datos completa con los datos proporcionados en formato JSON de forma transaccional.
  */
-export const importDatabase = async (req, res, next) => {
+export const importDatabase = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
   try {
-    const { data } = req.body;
+    const { data } = req.body || {};
 
     if (!data || !Array.isArray(data)) {
       return res.status(400).json({
         ok: false,
+        success: false,
         error: 'El formato de importación es inválido. Debe proporcionar un arreglo de Empresas.'
       });
     }
@@ -111,12 +119,17 @@ export const importDatabase = async (req, res, next) => {
 
     return res.status(200).json({
       ok: true,
+      success: true,
       message: 'Base de datos importada y restaurada con éxito.'
     });
 
   } catch (error) {
     console.error('Error al importar base de datos:', error);
-    next(error);
+    return res.status(500).json({
+      ok: false,
+      success: false,
+      error: error.message || 'Error al importar la base de datos'
+    });
   }
 };
 
@@ -124,20 +137,31 @@ export const importDatabase = async (req, res, next) => {
  * POST /api/backup/gdrive-sync
  * Exporta el estado actual y lo sube directamente a la cuenta de Google Drive configurada.
  */
-export const syncToGoogleDrive = async (req, res, next) => {
+export const syncToGoogleDrive = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
   try {
-    const { email } = req.body;
+    const { email } = req.body || {};
 
-    if (!email) {
+    if (!email || typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({
         ok: false,
-        error: 'Debe proporcionar un correo electrónico para compartir el respaldo.'
+        success: false,
+        error: 'Debe proporcionar un correo electrónico válido para compartir el respaldo.'
       });
     }
 
-    const serviceEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY;
-    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    // Verificar si las variables de entorno existen
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+      return res.status(400).json({
+        ok: false,
+        success: false,
+        error: 'Las credenciales de Google Drive no están configuradas en el servidor.'
+      });
+    }
+
+    const serviceEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL.trim();
+    const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID || null;
 
     // 1. Obtener los datos del volcado actual de la base de datos
     const dbData = await prisma.empresa.findMany({
@@ -150,21 +174,7 @@ export const syncToGoogleDrive = async (req, res, next) => {
       }
     });
 
-    // 2. Si no están configuradas las variables de entorno, hacer simulación exitosa
-    if (!serviceEmail || !privateKey) {
-      console.log(`[Simulación] Respaldo automático subido a Google Drive de administrador y compartido con: ${email}`);
-      return res.status(200).json({
-        ok: true,
-        message: `[Simulación] Respaldo generado y compartido con ${email}. (Nota: Configure GOOGLE_SERVICE_ACCOUNT_EMAIL y GOOGLE_PRIVATE_KEY en .env para activar la subida real).`,
-        data: {
-          success: true,
-          fileId: 'simulated-id-' + Date.now(),
-          fileName: `respaldo_tableros_simulado_${Date.now()}.json`
-        }
-      });
-    }
-
-    // 3. Subir el respaldo a la cuenta administradora de Google Drive
+    // 2. Subir el respaldo a la cuenta administradora de Google Drive
     const credentials = {
       client_email: serviceEmail,
       private_key: privateKey
@@ -172,20 +182,20 @@ export const syncToGoogleDrive = async (req, res, next) => {
 
     const gDriveResult = await uploadBackupToGDrive(dbData, folderId, credentials);
 
-    if (!gDriveResult.success) {
+    if (!gDriveResult || !gDriveResult.success) {
       return res.status(500).json({
         ok: false,
-        error: 'Error al cargar respaldo en Google Drive.',
-        details: gDriveResult.error
+        success: false,
+        error: gDriveResult?.error || 'Error al cargar respaldo en Google Drive.'
       });
     }
 
-    // 4. Compartir el archivo recién creado con el correo electrónico del usuario (rol editor)
+    // 3. Compartir el archivo recién creado con el correo electrónico del usuario (rol editor)
     try {
       const auth = new google.auth.JWT(
         serviceEmail,
         null,
-        privateKey.replace(/\\n/g, '\n'),
+        privateKey,
         ['https://www.googleapis.com/auth/drive']
       );
       const drive = google.drive({ version: 'v3', auth });
@@ -195,15 +205,16 @@ export const syncToGoogleDrive = async (req, res, next) => {
         requestBody: {
           type: 'user',
           role: 'writer',
-          emailAddress: email
+          emailAddress: email.trim()
         }
       });
     } catch (shareError) {
       console.error('Error al compartir permisos del archivo en Google Drive:', shareError);
-      // Retornamos de todos modos éxito ya que el archivo fue subido al Drive administrador
+      // El archivo sí se subió al Drive
       return res.status(200).json({
         ok: true,
-        message: 'Respaldo subido a Google Drive de administrador, pero falló el compartido de permisos.',
+        success: true,
+        message: 'Respaldo subido a Google Drive de administrador, pero no se pudo compartir automáticamente los permisos por correo.',
         details: shareError.message,
         data: gDriveResult
       });
@@ -211,12 +222,17 @@ export const syncToGoogleDrive = async (req, res, next) => {
 
     return res.status(200).json({
       ok: true,
-      message: `Respaldo subido y compartido exitosamente con ${email}.`,
+      success: true,
+      message: `Respaldo subido y compartido exitosamente con ${email.trim()}.`,
       data: gDriveResult
     });
 
   } catch (error) {
     console.error('Error en syncToGoogleDrive:', error);
-    next(error);
+    return res.status(500).json({
+      ok: false,
+      success: false,
+      error: error.message || 'Error interno al sincronizar con Google Drive'
+    });
   }
 };

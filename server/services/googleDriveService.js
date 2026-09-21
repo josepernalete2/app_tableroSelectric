@@ -12,11 +12,14 @@ import { Readable } from 'stream';
 export const uploadBackupToGDrive = async (jsonData, folderId, credentials) => {
   try {
     if (!credentials || !credentials.client_email || !credentials.private_key) {
-      throw new Error('Credenciales de Cuenta de Servicio incompletas (falta client_email o private_key).');
+      return {
+        success: false,
+        error: 'Credenciales de Cuenta de Servicio incompletas (falta client_email o private_key).'
+      };
     }
 
     // El JWT requiere formatear la llave privada correctamente
-    const formattedPrivateKey = credentials.private_key.replace(/\\n/g, '\n');
+    const formattedPrivateKey = String(credentials.private_key).replace(/\\n/g, '\n');
 
     const auth = new google.auth.JWT(
       credentials.client_email,
@@ -54,15 +57,15 @@ export const uploadBackupToGDrive = async (jsonData, folderId, credentials) => {
 
     return {
       success: true,
-      fileId: response.data.id,
-      fileName: response.data.name,
-      webViewLink: response.data.webViewLink
+      fileId: response.data?.id,
+      fileName: response.data?.name,
+      webViewLink: response.data?.webViewLink
     };
   } catch (error) {
     console.error('Error al subir archivo a Google Drive:', error);
     return {
       success: false,
-      error: error.message
+      error: error.message || 'Error al comunicarse con la API de Google Drive'
     };
   }
 };
