@@ -51,18 +51,19 @@ async function main() {
   console.log('Poblando usuarios iniciales...');
 
   // Generamos los hashes de las contraseñas antes de guardarlas
-  const hashedPassword1 = await bcrypt.hash('admin1', 10);
+  const hashedPassword1 = await bcrypt.hash('tobby 1', 10);
   const hashedPassword2 = await bcrypt.hash('admin2', 10);
 
   await prisma.user.upsert({
     where: { username: 'admin1' },
     update: {
-      password: hashedPassword1 // Asegura que si el usuario ya existe, se actualice con la contraseña encriptada
+      password: hashedPassword1,
+      role: 'ADMIN'
     },
     create: {
       id: 'u-1',
       username: 'admin1',
-      password: hashedPassword1, // Guarda la contraseña encriptada
+      password: hashedPassword1,
       role: 'ADMIN'
     }
   });

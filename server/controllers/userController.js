@@ -162,6 +162,20 @@ export const actualizarUsuario = async (req, res, next) => {
       hashedPassword = await bcrypt.hash(password, 12);
     }
 
+    const userToUpdate = await prisma.user.findUnique({ where: { id } });
+    if (!userToUpdate) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    }
+
+    if (userToUpdate.username.toLowerCase() === 'admin1') {
+      if (role && role !== 'ADMIN') {
+        return res.status(403).json({ ok: false, error: 'No se puede revocar el rol de Administrador al usuario principal admin1.' });
+      }
+      if (username && username.trim().toLowerCase() !== 'admin1') {
+        return res.status(403).json({ ok: false, error: 'No se puede cambiar el nombre del usuario principal admin1.' });
+      }
+    }
+
     const updated = await prisma.user.update({
       where: { id },
       data: {
@@ -186,6 +200,15 @@ export const actualizarUsuario = async (req, res, next) => {
 export const eliminarUsuario = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const userToDelete = await prisma.user.findUnique({ where: { id } });
+    if (!userToDelete) {
+      return res.status(404).json({ ok: false, error: 'Usuario no encontrado.' });
+    }
+
+    if (userToDelete.username.toLowerCase() === 'admin1') {
+      return res.status(403).json({ ok: false, error: 'El usuario administrador principal (admin1) está protegido y no se puede eliminar.' });
+    }
+
     await prisma.user.delete({ where: { id } });
     return res.status(200).json({ ok: true, message: 'Usuario eliminado con éxito.' });
   } catch (error) {

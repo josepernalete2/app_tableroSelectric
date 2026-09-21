@@ -1089,7 +1089,7 @@ export const SidebarLayout = () => {
                                   >
                                     Editar
                                   </button>
-                                  {!isSelf && (
+                                  {!isSelf && (u.username || '').toLowerCase() !== 'admin1' && (
                                     <button
                                       onClick={() => handleDeleteUser(u.id)}
                                       className="px-2 py-1 bg-slate-900 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded border border-slate-800 hover:border-red-900/40 transition-all font-bold text-[10px] cursor-pointer"

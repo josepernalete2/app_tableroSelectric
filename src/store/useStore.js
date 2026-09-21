@@ -502,6 +502,11 @@ export const useStore = create(
           return { success: false, error: 'Acción permitida únicamente para administradores.' };
         }
 
+        const userToDelete = (get().usersList || []).find((u) => u.id === userId);
+        if (userToDelete && (userToDelete.username || '').toLowerCase() === 'admin1') {
+          return { success: false, error: 'El usuario administrador principal (admin1) está protegido y no se puede eliminar.' };
+        }
+
         if (currentUser.id === userId) {
           return { success: false, error: 'No puedes eliminar tu propia cuenta de usuario activo.' };
         }
