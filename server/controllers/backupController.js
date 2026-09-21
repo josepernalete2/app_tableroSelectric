@@ -4,25 +4,55 @@ import prisma from '../db.js';
 
 /**
  * GET /api/backup/export
- * Exporta la base de datos completa (Empresas -> Tableros -> Circuitos) en formato JSON.
+ * Exporta la base de datos completa en formato JSON estructurado.
  */
 export const exportDatabase = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   try {
     const data = await prisma.empresa.findMany({
       include: {
+        proyectos: {
+          include: {
+            tableros: {
+              include: {
+                circuitos: {
+                  orderBy: {
+                    posicionPolo: 'asc'
+                  }
+                },
+                alimentador: true
+              },
+              orderBy: {
+                createdAt: 'asc'
+              }
+            },
+            elementosUnifilares: true,
+            subestaciones: true,
+            puntosMedicion: true,
+            ccmList: true,
+            inspeccionesTermograficas: true,
+            inspeccionesAterramiento: true,
+            inspeccionesTanquesCombustible: true,
+            alarmas: true,
+            alimentadores: true
+          }
+        },
         tableros: {
           include: {
             circuitos: {
               orderBy: {
-                numeroPolo: 'asc'
+                posicionPolo: 'asc'
               }
             }
           },
           orderBy: {
             createdAt: 'asc'
           }
-        }
+        },
+        elementosUnifilares: true,
+        subestaciones: true,
+        puntosMedicion: true,
+        ccmList: true
       },
       orderBy: {
         nombre: 'asc'
@@ -64,56 +94,107 @@ export const importDatabase = async (req, res) => {
     // Ejecutar borrado completo e inserción limpia dentro de una transacción.
     // Si algún elemento falla, se revierte todo y la base de datos queda intacta.
     await prisma.$transaction(async (tx) => {
-      // 1. Borrar todas las relaciones en cascada (circuito -> tablero -> empresa)
+      // 1. Borrar todas las entidades secundarias en cascada
+      await tx.alarma.deleteMany();
       await tx.circuito.deleteMany();
       await tx.tablero.deleteMany();
+      await tx.elementoUnifilar.deleteMany();
+      await tx.subestacion.deleteMany();
+      await tx.puntoMedicion.deleteMany();
+      await tx.ccm.deleteMany();
+      await tx.inspeccionTermografica.deleteMany();
+      await tx.inspeccionAterramiento.deleteMany();
+      await tx.inspeccionTanqueCombustible.deleteMany();
+      await tx.alimentador.deleteMany();
+      await tx.proyecto.deleteMany();
       await tx.empresa.deleteMany();
 
       // 2. Insertar los datos limpios de forma recursiva
       for (const comp of data) {
-        await tx.empresa.create({
+        const createdEmpresa = await tx.empresa.create({
           data: {
             id: comp.id,
-            nombre: comp.nombre,
-            direccion: comp.direccion || 'Sin dirección',
-            createdAt: comp.createdAt ? new Date(comp.createdAt) : undefined,
-            tableros: {
-              create: (comp.tableros || []).map((t) => ({
-                id: t.id,
-                nombre: t.nombre,
-                ubicacion: t.ubicacion || 'Sin ubicación',
-                alimentadoPor: t.alimentadoPor || '',
-                tipo: t.tipo || 'superficial',
-                foto: t.foto || null,
-                ia: t.ia || null,
-                ib: t.ib || null,
-                ic: t.ic || null,
-                va: t.va || null,
-                vb: t.vb || null,
-                vc: t.vc || null,
-                acometida: t.acometida || null,
-                neutroCalibre: t.neutroCalibre || null,
-                neutroObservaciones: t.neutroObservaciones || null,
-                tierraCalibre: t.tierraCalibre || null,
-                tierraObservaciones: t.tierraObservaciones || null,
-                observacionesGenerales: t.observacionesGenerales || null,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
-                circuitos: {
-                  create: (t.circuitos || t.circuits || []).map((c) => ({
-                    id: c.id,
-                    numeroPolo: parseInt(c.numeroPolo, 10),
-                    equipo: c.equipo || null,
-                    breakerMarca: c.breakerMarca || null,
-                    breakerTipo: c.breakerTipo || null,
-                    breakerAmperaje: c.breakerAmperaje ? String(c.breakerAmperaje) : null,
-                    conductorCalibre: c.conductorCalibre || null,
-                    createdAt: c.createdAt ? new Date(c.createdAt) : undefined,
-                  }))
-                }
-              }))
-            }
+            nombre: comp.nombre || 'Empresa sin nombre',
+            rif: comp.rif || `J-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            direccionFiscal: comp.direccionFiscal || comp.direccion || 'Sin dirección fiscal',
+            direccion: comp.direccion || null,
+            gerente1Nombre: comp.gerente1Nombre || null,
+            gerente1Telefono: comp.gerente1Telefono || null,
+            gerente1Email: comp.gerente1Email || null,
+            gerente2Nombre: comp.gerente2Nombre || null,
+            gerente2Telefono: comp.gerente2Telefono || null,
+            gerente2Email: comp.gerente2Email || null,
+            createdAt: comp.createdAt ? new Date(comp.createdAt) : undefined
           }
         });
+
+        // Insertar proyectos
+        for (const proy of (comp.proyectos || [])) {
+          const createdProyecto = await tx.proyecto.create({
+            data: {
+              id: proy.id,
+              nombre: proy.nombre || 'Proyecto sin nombre',
+              direccion: proy.direccion || 'Sin dirección',
+              descripcion: proy.descripcion || null,
+              empresaId: createdEmpresa.id,
+              responsableNombre: proy.responsableNombre || null,
+              responsableTelefono: proy.responsableTelefono || null,
+              responsableEmail: proy.responsableEmail || null,
+              createdAt: proy.createdAt ? new Date(proy.createdAt) : undefined
+            }
+          });
+
+          // Insertar tableros del proyecto
+          const tablerosList = proy.tableros || [];
+          for (const tab of tablerosList) {
+            await tx.tablero.create({
+              data: {
+                id: tab.id,
+                nombre: tab.nombre || 'Tablero',
+                ubicacion: tab.ubicacion || null,
+                maxPolos: parseInt(tab.maxPolos || 42, 10),
+                tension: tab.tension || null,
+                fases: parseInt(tab.fases || 3, 10),
+                proyectoId: createdProyecto.id,
+                empresaId: createdEmpresa.id,
+                createdAt: tab.createdAt ? new Date(tab.createdAt) : undefined,
+                circuitos: {
+                  create: (tab.circuitos || tab.circuits || []).map((c) => ({
+                    id: c.id,
+                    posicionPolo: parseInt(c.posicionPolo ?? c.numeroPolo ?? 1, 10),
+                    numPolos: parseInt(c.numPolos || 1, 10),
+                    amperaje: c.amperaje ? parseFloat(c.amperaje) : null,
+                    descripcion: c.descripcion || c.equipo || null,
+                    estado: c.estado || 'ACTIVO',
+                    elementoDestinoId: c.elementoDestinoId || null,
+                    tipoElementoDestino: c.tipoElementoDestino || null,
+                    createdAt: c.createdAt ? new Date(c.createdAt) : undefined
+                  }))
+                }
+              }
+            });
+          }
+
+          // Insertar elementos unifilares del proyecto
+          const elementosList = proy.elementosUnifilares || [];
+          for (const elem of elementosList) {
+            await tx.elementoUnifilar.create({
+              data: {
+                id: elem.id,
+                nombre: elem.nombre || 'Elemento',
+                tipoElemento: elem.tipoElemento || 'TABLERO',
+                ubicacion: elem.ubicacion || null,
+                alimentadoPor: elem.alimentadoPor || null,
+                foto: elem.foto || null,
+                observacionesGenerales: elem.observacionesGenerales || null,
+                datosTecnicos: elem.datosTecnicos || {},
+                proyectoId: createdProyecto.id,
+                empresaId: createdEmpresa.id,
+                createdAt: elem.createdAt ? new Date(elem.createdAt) : undefined
+              }
+            });
+          }
+        }
       }
     });
 
@@ -166,11 +247,41 @@ export const syncToGoogleDrive = async (req, res) => {
     // 1. Obtener los datos del volcado actual de la base de datos
     const dbData = await prisma.empresa.findMany({
       include: {
+        proyectos: {
+          include: {
+            tableros: {
+              include: {
+                circuitos: {
+                  orderBy: {
+                    posicionPolo: 'asc'
+                  }
+                },
+                alimentador: true
+              }
+            },
+            elementosUnifilares: true,
+            subestaciones: true,
+            puntosMedicion: true,
+            ccmList: true,
+            inspeccionesTermograficas: true,
+            inspeccionesAterramiento: true,
+            inspeccionesTanquesCombustible: true,
+            alarmas: true,
+            alimentadores: true
+          }
+        },
         tableros: {
           include: {
-            circuitos: true
+            circuitos: {
+              orderBy: {
+                posicionPolo: 'asc'
+              }
+            }
           }
         }
+      },
+      orderBy: {
+        nombre: 'asc'
       }
     });
 
@@ -210,7 +321,6 @@ export const syncToGoogleDrive = async (req, res) => {
       });
     } catch (shareError) {
       console.error('Error al compartir permisos del archivo en Google Drive:', shareError);
-      // El archivo sí se subió al Drive
       return res.status(200).json({
         ok: true,
         success: true,
