@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
@@ -15,8 +15,14 @@ import {
 
 
 export const DashboardView = () => {
-  const { user, companies, addCompany, deleteCompany } = useStore();
+  const { user, companies, addCompany, deleteCompany, cargarDatosServidor } = useStore();
   const { confirm } = useConfirm();
+
+  useEffect(() => {
+    if (cargarDatosServidor) {
+      cargarDatosServidor();
+    }
+  }, [cargarDatosServidor]);
   const [showModal, setShowModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [rif, setRif] = useState('');

@@ -303,29 +303,46 @@ export const useStore = create(
         }
       },
 
+      cargarDatosServidor: async () => {
+        return get().pullInitialData();
+      },
+
       pullInitialData: async () => {
-        const { token } = get();
-        if (!token) return;
+        const { token, user } = get();
+        if (!token || !navigator.onLine) return;
 
         try {
+          // 1. Intentar descargar datos vía /api/sync/pull
           const res = await fetch(`${API_BASE_URL}/api/sync/pull`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
           });
-          const data = await res.json();
-          if (data.ok && data.data) {
-            const remoteCompanies = data.data || [];
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
+              get().importCompanies(data.data);
+              return { success: true, count: data.data.length };
+            }
+          }
 
-            // Reemplazar empresas y sus proyectos anidados con los del servidor
-            set({ companies: remoteCompanies });
-
-            // Opcional: también podríamos restablecer arrays locales que ya fueron
-            // sincronizados, pero dejamos la cola (syncQueue) para operaciones pendientes
-            // get().limpiarSincronizados(); 
+          // 2. Fallback: Si es ADMIN y pull no devolvió empresas, intentar export de base de datos
+          if (user && user.role === 'ADMIN') {
+            const resBackup = await fetch(`${API_BASE_URL}/api/backup/export`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            if (resBackup.ok) {
+              const dataBackup = await resBackup.json();
+              if (dataBackup.ok && Array.isArray(dataBackup.data) && dataBackup.data.length > 0) {
+                get().importCompanies(dataBackup.data);
+                return { success: true, count: dataBackup.data.length };
+              }
+            }
           }
         } catch (e) {
-          console.error('Error al sincronizar datos iniciales tras login:', e);
+          console.error('Error al sincronizar datos iniciales desde el servidor:', e);
         }
       },
 
