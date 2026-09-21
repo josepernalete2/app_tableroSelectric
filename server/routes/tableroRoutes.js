@@ -19,7 +19,15 @@ import { createInspeccionAterramiento, getInspeccionesPorProyecto as getAterrami
 import { createInspeccionTanqueCombustible, getInspeccionesPorProyecto as getTanquesPorProyecto, updateInspeccionTanqueCombustible, deleteInspeccionTanqueCombustible } from '../controllers/inspeccionTanqueCombustibleController.js';
 import { getAuditoriaCompleta, getHuerfanos, getSinCarga, getSinAprobar, getEstadisticas } from '../controllers/auditorController.js';
 import { getAlarmasProyecto, cambiarEstadoAlarma } from '../controllers/alarmController.js';
-import { exportDatabase, importDatabase, syncToGoogleDrive } from '../controllers/backupController.js';
+import { 
+  exportDatabase, 
+  importDatabase, 
+  listarBackupsEnNube, 
+  crearBackupEnNube, 
+  descargarBackupEnNube, 
+  restaurarBackupEnNube, 
+  eliminarBackupEnNube 
+} from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto, obtenerPotencialesAlimentadores } from '../controllers/jerarquiaController.js';
 import { procesarSincronizacionBatch } from '../controllers/syncController.js';
@@ -115,7 +123,13 @@ router.post('/sync/batch', requireRoles('ADMIN', 'WORKER'), procesarSincronizaci
 // Endpoints de Respaldo e Importación/Exportación (Solo ADMIN)
 router.get('/backup/export', requireRoles('ADMIN'), exportDatabase);
 router.post('/backup/import', requireRoles('ADMIN'), importDatabase);
-router.post('/backup/gdrive-sync', requireRoles('ADMIN'), syncToGoogleDrive);
+
+// Endpoints de Respaldo en la Nube (PostgreSQL / Sin Tokens)
+router.get('/backup/cloud', requireRoles('ADMIN'), listarBackupsEnNube);
+router.post('/backup/cloud', requireRoles('ADMIN'), crearBackupEnNube);
+router.get('/backup/cloud/:id/download', requireRoles('ADMIN'), descargarBackupEnNube);
+router.post('/backup/cloud/:id/restore', requireRoles('ADMIN'), restaurarBackupEnNube);
+router.delete('/backup/cloud/:id', requireRoles('ADMIN'), eliminarBackupEnNube);
 
 // Rutas de Gestión de Usuarios (Solo ADMIN)
 router.get('/users', requireRoles('ADMIN'), obtenerUsuarios);

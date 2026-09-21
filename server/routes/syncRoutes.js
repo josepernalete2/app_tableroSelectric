@@ -38,20 +38,21 @@ router.get('/pull', verificarToken, async (req, res) => {
           include: {
             tableros: {
               include: {
-                circuitos: true
+                circuitos: {
+                  orderBy: {
+                    posicionPolo: 'asc'
+                  }
+                }
               }
             },
-            elementosUnifilares: {
-              include: {
-                inspeccionesSubestacion: true,
-                puntosMedicion: true,
-                ccmList: true
-              }
-            },
-            inspeccionesSubestacion: true,
+            elementosUnifilares: true,
+            subestaciones: true,
             puntosMedicion: true,
             ccmList: true,
-            alimentadores: true
+            alimentadores: true,
+            inspeccionesTermograficas: true,
+            inspeccionesAterramiento: true,
+            inspeccionesTanquesCombustible: true
           }
         }
       }
@@ -60,29 +61,19 @@ router.get('/pull', verificarToken, async (req, res) => {
     // Formato de respuesta optimizado para el cliente
     const formattedCompanies = companies.map(company => ({
       ...company,
-      proyectos: company.proyectos.map(proyecto => ({
+      proyectos: (company.proyectos || []).map(proyecto => ({
         ...proyecto,
-        tableros: proyecto.tableros.map(tablero => ({
+        tableros: (proyecto.tableros || []).map(tablero => ({
           ...tablero,
           circuitos: tablero.circuitos || []
         })),
-        elementosUnifilares: proyecto.elementosUnifilares.map(elem => ({
-          ...elem,
-          foto: elem.foto ? elem.foto.toString('base64') : null,
-          fotoBlob: elem.fotoBlob
-        })),
-        inspeccionesSubestacion: proyecto.inspeccionesSubestacion.map(sub => ({
-          ...sub,
-          foto: sub.foto ? sub.foto.toString('base64') : null
-        })),
-        puntosMedicion: proyecto.puntosMedicion.map(pm => ({
-          ...pm,
-          foto: pm.foto ? pm.foto.toString('base64') : null
-        })),
-        ccmList: proyecto.ccmList.map(ccm => ({
-          ...ccm,
-          foto: ccm.foto ? ccm.foto.toString('base64') : null
-        })),
+        elementosUnifilares: proyecto.elementosUnifilares || [],
+        subestaciones: proyecto.subestaciones || [],
+        puntosMedicion: proyecto.puntosMedicion || [],
+        ccmList: proyecto.ccmList || [],
+        inspeccionesTermograficas: proyecto.inspeccionesTermograficas || [],
+        inspeccionesAterramiento: proyecto.inspeccionesAterramiento || [],
+        inspeccionesTanquesCombustible: proyecto.inspeccionesTanquesCombustible || [],
         alimentadores: proyecto.alimentadores || []
       }))
     }));

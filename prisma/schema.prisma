@@ -469,3 +469,16 @@ model Alarma {
   @@index([estado])
   @@map("alarmas")
 }
+
+model Backup {
+  id          String   @id @default(uuid())
+  nombre      String
+  descripcion String?
+  data        Json
+  tamanoBytes Int?
+  creadoPor   String?  @default("ADMIN")
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("backups")
+}
