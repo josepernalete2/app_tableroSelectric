@@ -280,3 +280,99 @@ export const pullData = async (req, res) => {
     return res.status(500).json({ ok: false, error: error.message });
   }
 };
+
+// ENDPOINT LOCAL BACKUP: Generar y descargar backup JSON local
+export const generarBackupLocal = async (req, res) => {
+  try {
+    const user = req.user;
+    const { tipo = 'completo' } = req.body;
+
+    // Obtener datos similar a pullData pero formateado para backup
+    const where = {};
+    if (user.role === 'CLIENT' && user.companyId) {
+      where.companyId = user.companyId; // Ajustar según tu modelo Prisma
+    }
+
+    const empresas = await prisma.empresa.findMany({
+      where,
+      include: {
+        proyectos: {
+          include: {
+            tableros: {
+              include: { circuitos: true }
+            },
+            elementosUnifilares: true,
+            puntosMedicion: true,
+            ccmList: true,
+            inspeccionesSubestacion: true
+          }
+        }
+      }
+    });
+
+    // Formatear datos completos para backup
+    const data = {
+      exportacion: new Date().toISOString(),
+      usuarioId: user.id,
+      tipo: tipo,
+      empresas: empresas.map(empresa => ({
+        ...empresa,
+        proyectos: empresa.proyectos.map(proyecto => ({
+          ...proyecto,
+          tableros: proyecto.tableros.map(tablero => ({
+            ...tablero,
+            circuitos: tablero.circuitos || []
+          })),
+          elementosUnifilares: proyecto.elementosUnifilares.map(elem => ({
+            ...elem,
+            foto: elem.foto ? elem.foto.toString('base64') : null,
+            fotoBlob: elem.fotoBlob
+          })),
+          puntosMedicion: proyecto.puntosMedicion.map(pm => ({
+            ...pm,
+            foto: pm.foto ? pm.foto.toString('base64') : null
+          })),
+          ccmList: proyecto.ccmList.map(ccm => ({
+            ...ccm,
+            foto: ccm.foto ? ccm.foto.toString('base64') : null
+          }))
+        }))
+      }))
+    };
+
+    // Nombre de archivo con timestamp
+    const filename = `backup-${user.id}-${tipo}-${Date.now()}.json`;
+
+    // Retornar los datos codificados en base64 para que el frontend los guarde
+    const archivoBase64 = Buffer.from(JSON.stringify(data)).toString('base64');
+
+    return res.status(200).json({
+      ok: true,
+      filename,
+      archivo: archivoBase64,
+      size: Buffer.byteLength(Buffer.from(JSON.stringify(data))),
+      recordCount: contarRegistros(data)
+    });
+
+  } catch (error) {
+    console.error('❌ Error en generarBackupLocal:', error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+};
+
+contarRegistros = (data) => {
+  let count = 0;
+  if (data.empresas) {
+    data.empresas.forEach(emp => {
+      count += emp.proyectos?.reduce((sum, proj) => {
+        return sum + (proj.tableros?.length || 0) + 
+                 (proj.elementosUnifilares?.length || 0) + 
+                 (proj.puntosMedicion?.length || 0) + 
+                 (proj.ccmList?.length || 0) + 
+                 (proj.alimentadores?.length || 0) + 
+                 (proj.ccmList?.length || 0);
+      }, 0) || 0;
+    });
+  }
+  return count;
+};

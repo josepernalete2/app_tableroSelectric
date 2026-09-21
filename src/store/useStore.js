@@ -1588,6 +1588,74 @@ export const useStore = create(
           get().showToast('Error de red al sincronizar', 'error');
         }
       },
+
+      backupDatos: async (tipo = 'completo') => {
+        const { user } = get();
+        if (!user) return { success: false, error: 'No ha iniciado sesión' };
+        
+        try {
+          get().showToast('Generando backup ' + tipo + '...', 'info');
+          
+          const res = await fetch(`${API_BASE_URL}/api/backup/local`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${user.token}` },
+            body: JSON.stringify({ tipo })
+          });
+          
+          const data = await res.json();
+          if (data.success && data.archivo) {
+            // Guardar archivo en localforage
+            const nombreArchivo = `backup-${tipo}-${Date.now()}.json`;
+            await localforage.setItem(nombreArchivo, data.archivo);
+            get().showToast('Backup guardado localmente como: ' + nombreArchivo, 'success');
+            return { success: true, filename: nombreArchivo };
+          } else {
+            get().showToast('Error generando backup: ' + (data.error || 'unknown'), 'error');
+            return { success: false, error: data.error };
+          }
+        } catch (e) {
+          console.error('Error al generar backup:', e);
+          get().showToast('Error de red al generar backup', 'error');
+          return { success: false, error: e.message };
+        }
+      },
+
+      respaldarEnLocalStorage: async (nombre, contenidoJson) => {
+        // Guardar backup codificado en localforage
+        const contenidoBlob = typeof contenidoJson === 'string' 
+          ? contenidoJson 
+          : JSON.stringify(contenidoJson, null, 2);
+        
+        await localforage.setItem(nombre, contenidoBlob);
+        get().showToast('Backup guardado en almacenamiento local', 'success');
+      },
+
+      obtenerRespaldoLocal: async (nombre) => {
+        return await localforage.getItem(nombre);
+      },
+
+      listarBackupsLocales: async () => {
+        const keys = await localforage.keys();
+        const backups = [];
+        
+        for (const key of keys) {
+          if (key.startsWith('backup-')) {
+            const data = await localforage.getItem(key);
+            backups.push({
+              nombre: key,
+              fecha: key.replace('backup-', '').replace('.json', '') || 'desconocida',
+              size: typeof data === 'string' ? data.length : 0
+            });
+          }
+        }
+        
+        return backups;
+      },
+
+      eliminarBackupLocal: async (nombre) => {
+        await localforage.removeItem(nombre);
+      },
+      
       messages: [],
       sendMessage: async (receiverId, text) => {
         const { user } = get();

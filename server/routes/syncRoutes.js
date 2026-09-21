@@ -94,4 +94,7 @@ router.get('/pull', verificarToken, async (req, res) => {
 // Procesa operaciones en lote usando transacción Prisma
 router.post('/', verificarToken, procesarSincronizacionBatch);
 
+// ENDPOINT LOCAL BACKUP: Generar backup JSON para descarga local
+router.post('/backup/local', verificarToken, generarBackupLocal);
+
 export default router;
