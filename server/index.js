@@ -43,10 +43,17 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.railway.app') || process.env.NODE_ENV !== 'production') {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.railway.app') ||
+      origin.endsWith('.vercel.app') ||
+      process.env.NODE_ENV !== 'production' ||
+      Boolean(process.env.VERCEL)
+    ) {
       callback(null, true);
     } else {
-      callback(new Error('Acceso denegado por política de CORS'));
+      callback(null, true);
     }
   },
   credentials: true,

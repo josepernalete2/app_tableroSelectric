@@ -3,14 +3,27 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 
-const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const uploadDir = isServerless ? path.join('/tmp', 'uploads') : path.join(process.cwd(), 'public', 'uploads');
+
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('⚠️ No se pudo inicializar el directorio de uploads en disco:', err.message);
 }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir);
+    try {
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    } catch (e) {
+      cb(e, uploadDir);
+    }
   },
   filename: (req, file, cb) => {
     const randomHex = crypto.randomBytes(16).toString('hex');
