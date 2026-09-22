@@ -374,24 +374,41 @@ export const restaurarDesdeDatos = async (data) => {
 
 /**
  * GET /api/backup/export
- * Exporta la base de datos completa en formato JSON estructurado para descarga directa.
+ * Obtiene la data completa de la base de datos usando Prisma, la convierte a JSON en memoria
+ * y la envía directamente con headers de descarga HTTP sin tocar el sistema de archivos (fs).
  */
 export const exportDatabase = async (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
   try {
+    // 1. Obtener la data completa de la base de datos usando Prisma
     const data = await generarSnapshotCompleto();
-    return res.status(200).json({
+
+    // 2. Convertir la data a un string JSON estructurado en memoria
+    const jsonString = JSON.stringify({
       ok: true,
       success: true,
+      version: '2.0',
+      timestamp: new Date().toISOString(),
       data
-    });
+    }, null, 2);
+
+    // 3. Configurar cabeceras HTTP para forzar la descarga en el navegador
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="backup_tableros.json"');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+
+    // 4. Enviar directamente la respuesta en memoria
+    return res.status(200).send(jsonString);
   } catch (error) {
-    console.error('Error al exportar base de datos:', error);
-    return res.status(500).json({
-      ok: false,
-      success: false,
-      error: error.message || 'Error al exportar la base de datos'
-    });
+    console.error('[BackupController] Error al exportar base de datos:', error);
+    if (!res.headersSent) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.status(500).json({
+        ok: false,
+        success: false,
+        error: error.message || 'Error al exportar la base de datos'
+      });
+    }
+    return res.end();
   }
 };
 
