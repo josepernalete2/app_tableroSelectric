@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
+    "server:dev": "node --watch server/index.js",
     "build": "npx prisma generate && vite build",
     "start": "node server/index.js",
     "lint": "oxlint",
