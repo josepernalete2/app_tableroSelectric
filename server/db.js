@@ -3,6 +3,10 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 
+if (process.env.VERCEL && !process.env.DATABASE_URL) {
+  console.error('❌ ERROR CRÍTICO EN VERCEL: DATABASE_URL no está definida en Environment Variables del proyecto en Vercel.');
+}
+
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:admin123@localhost:5432/inspecciones?schema=public';
 const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
 
@@ -13,7 +17,7 @@ if (!globalForPrisma.prismaPool) {
     connectionString,
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
     max: process.env.VERCEL ? 3 : 10,
-    connectionTimeoutMillis: 15000,
+    connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000
   });
 
