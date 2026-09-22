@@ -282,6 +282,91 @@ export const restaurarDesdeDatos = async (data) => {
             }
           });
         }
+
+        // Insertar Inspecciones Termográficas
+        for (const it of (proy.inspeccionesTermograficas || [])) {
+          await tx.inspeccionTermografica.create({
+            data: {
+              id: it.id,
+              nombre: it.nombre || 'Inspección Termográfica',
+              ubicacion: it.ubicacion || null,
+              fecha: it.fecha || null,
+              hora: it.hora || null,
+              inspector: it.inspector || null,
+              supervisor: it.supervisor || null,
+              tempAmbiente: it.tempAmbiente ? parseFloat(it.tempAmbiente) : null,
+              tempPuntoCaliente: it.tempPuntoCaliente ? parseFloat(it.tempPuntoCaliente) : null,
+              tempReferencia: it.tempReferencia ? parseFloat(it.tempReferencia) : null,
+              cameraModel: it.cameraModel || null,
+              proyectoId: createdProyecto.id,
+              empresaId: createdEmpresa.id,
+              createdAt: it.createdAt ? new Date(it.createdAt) : undefined
+            }
+          });
+        }
+
+        // Insertar Inspecciones de Aterramiento
+        for (const ia of (proy.inspeccionesAterramiento || [])) {
+          await tx.inspeccionAterramiento.create({
+            data: {
+              id: ia.id,
+              nombre: ia.nombre || 'Inspección Aterramiento',
+              ubicacion: ia.ubicacion || null,
+              fecha: ia.fecha || null,
+              hora: ia.hora || null,
+              inspector: ia.inspector || null,
+              supervisor: ia.supervisor || null,
+              resistenciaOhmios: ia.resistenciaOhmios ? parseFloat(ia.resistenciaOhmios) : null,
+              metodoMedicion: ia.metodoMedicion || null,
+              tipoSistemaPat: ia.tipoSistemaPat || null,
+              tipoUnion: ia.tipoUnion || null,
+              proyectoId: createdProyecto.id,
+              empresaId: createdEmpresa.id,
+              createdAt: ia.createdAt ? new Date(ia.createdAt) : undefined
+            }
+          });
+        }
+
+        // Insertar Inspecciones de Tanques de Combustible
+        for (const itc of (proy.inspeccionesTanquesCombustible || [])) {
+          await tx.inspeccionTanqueCombustible.create({
+            data: {
+              id: itc.id,
+              nombre: itc.nombre || 'Inspección Tanque',
+              ubicacion: itc.ubicacion || null,
+              fecha: itc.fecha || null,
+              hora: itc.hora || null,
+              inspector: itc.inspector || null,
+              supervisor: itc.supervisor || null,
+              tipoCombustible: itc.tipoCombustible || null,
+              capacidadTotalLitros: itc.capacidadTotalLitros ? parseFloat(itc.capacidadTotalLitros) : null,
+              nivelActualPorcentaje: itc.nivelActualPorcentaje ? parseFloat(itc.nivelActualPorcentaje) : null,
+              consumoGeneradorLh: itc.consumoGeneradorLh ? parseFloat(itc.consumoGeneradorLh) : null,
+              diqueContencion110: itc.diqueContencion110 || null,
+              proyectoId: createdProyecto.id,
+              empresaId: createdEmpresa.id,
+              createdAt: itc.createdAt ? new Date(itc.createdAt) : undefined
+            }
+          });
+        }
+
+        // Insertar Alarmas
+        for (const al of (proy.alarmas || [])) {
+          await tx.alarma.create({
+            data: {
+              id: al.id,
+              tipo: al.tipo || 'INFO',
+              severidad: al.severidad || 'INFO',
+              mensaje: al.mensaje || 'Alarma',
+              detalles: al.detalles || {},
+              estado: al.estado || 'ACTIVA',
+              leidaAt: al.leidaAt ? new Date(al.leidaAt) : null,
+              tableroId: al.tableroId || null,
+              proyectoId: createdProyecto.id,
+              createdAt: al.createdAt ? new Date(al.createdAt) : undefined
+            }
+          });
+        }
       }
     }
   });

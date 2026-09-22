@@ -68,12 +68,9 @@ export const SidebarLayout = () => {
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
 
-  // Estados de Respaldos en la Nube (PostgreSQL)
-  const [cloudBackups, setCloudBackups] = useState([]);
-  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
-  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
-  const [backupActionId, setBackupActionId] = useState(null);
-  const [backupNameInput, setBackupNameInput] = useState('');
+  // Estados de Copia de Seguridad JSON
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Estados de control de usuarios
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -143,6 +140,7 @@ export const SidebarLayout = () => {
 
   // Exportar DB PostgreSQL a archivo JSON local
   const handleExportDb = async () => {
+    setIsExporting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/backup/export`, {
         headers: {
@@ -162,17 +160,20 @@ export const SidebarLayout = () => {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
         const downloadAnchor = document.createElement('a');
         downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", `respaldo_inspecciones_${new Date().toISOString().split('T')[0]}.json`);
+        const timestamp = new Date().toISOString().split('T')[0];
+        downloadAnchor.setAttribute("download", `respaldo_selectric_${timestamp}.json`);
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
-        showToast("Base de datos exportada con éxito.", "success");
+        showToast("Base de datos exportada con éxito en formato JSON.", "success");
       } else {
         showToast("Error al exportar base de datos: " + (result.error || result.message || 'Error desconocido'), "error");
       }
     } catch (err) {
       console.error(err);
       showToast("Error de conexión al servidor backend para exportar.", "error");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -182,16 +183,18 @@ export const SidebarLayout = () => {
     if (!file) return;
 
     const ok = await confirm({
-      title: 'Sobrescribir Base de Datos',
-      message: '¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos PostgreSQL.',
+      title: 'Restaurar Base de Datos desde JSON',
+      message: '¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos actual con la información del respaldo.',
       type: 'danger',
       confirmText: 'Importar y Sobrescribir'
     });
 
     if (!ok) {
+      e.target.value = '';
       return;
     }
 
+    setIsImporting(true);
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -218,232 +221,19 @@ export const SidebarLayout = () => {
           importCompanies(parsed);
           setTimeout(() => {
             window.location.reload();
-          }, 1500);
+          }, 1200);
         } else {
           showToast("Fallo al importar datos: " + (result.error || result.message || 'Error desconocido'), "error");
         }
       } catch (err) {
         console.error(err);
         showToast("El archivo seleccionado no contiene una estructura JSON de respaldo válida.", "error");
+      } finally {
+        setIsImporting(false);
       }
     };
     reader.readAsText(file);
-  };
-
-  // Formateador de bytes a unidades legibles
-  const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  // Cargar lista de respaldos de la nube
-  const fetchCloudBackups = async () => {
-    setIsLoadingBackups(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/backup/cloud`, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-      let result;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        result = { ok: false, error: text || `Error HTTP ${res.status}` };
-      }
-
-      if (res.ok && (result.ok || result.success)) {
-        setCloudBackups(result.data || []);
-      }
-    } catch (err) {
-      console.error('Error al cargar respaldos en la nube:', err);
-    } finally {
-      setIsLoadingBackups(false);
-    }
-  };
-
-  // Consultar respaldos cuando se abre el modal
-  useEffect(() => {
-    if (showSettingsModal) {
-      fetchCloudBackups();
-    }
-  }, [showSettingsModal]);
-
-  // Crear nuevo respaldo en la nube
-  const handleCreateCloudBackup = async (e) => {
-    if (e) e.preventDefault();
-    setIsCreatingBackup(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/backup/cloud`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          nombre: backupNameInput.trim() || undefined
-        })
-      });
-
-      let result;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        result = { ok: false, error: text || `Error HTTP ${res.status}` };
-      }
-
-      if (res.ok && (result.ok || result.success)) {
-        showToast(result.message || "Respaldo guardado exitosamente en la nube.", "success");
-        setBackupNameInput('');
-        fetchCloudBackups();
-      } else {
-        showToast("Error al crear respaldo: " + (result.error || result.message || 'Error desconocido'), "error");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Error de conexión al crear respaldo en la nube.", "error");
-    } finally {
-      setIsCreatingBackup(false);
-    }
-  };
-
-  // Restaurar respaldo desde la nube
-  const handleRestoreCloudBackup = async (backupItem) => {
-    const ok = await confirm({
-      title: 'Restaurar Respaldo de la Nube',
-      message: `¿Está seguro de que desea restaurar el respaldo "${backupItem.nombre}"? Esta acción SOBRESCRIBIRÁ todos los datos actuales de la base de datos con esta copia de seguridad.`,
-      type: 'danger',
-      confirmText: 'Restaurar Base de Datos'
-    });
-
-    if (!ok) return;
-
-    setBackupActionId(backupItem.id);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/backup/cloud/${backupItem.id}/restore`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-
-      let result;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        result = { ok: false, error: text || `Error HTTP ${res.status}` };
-      }
-
-      if (res.ok && (result.ok || result.success)) {
-        showToast(result.message || "Base de datos restaurada con éxito.", "success");
-        if (result.data) {
-          importCompanies(result.data);
-        }
-        setTimeout(() => {
-          window.location.reload();
-        }, 1200);
-      } else {
-        showToast("Error al restaurar respaldo: " + (result.error || result.message || 'Error desconocido'), "error");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Error de conexión al restaurar el respaldo.", "error");
-    } finally {
-      setBackupActionId(null);
-    }
-  };
-
-  // Descargar respaldo JSON de la nube
-  const handleDownloadCloudBackup = async (backupItem) => {
-    setBackupActionId(backupItem.id);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/backup/cloud/${backupItem.id}/download`, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-
-      let result;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        result = { ok: false, error: text || `Error HTTP ${res.status}` };
-      }
-
-      if (res.ok && (result.ok || result.success)) {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        const cleanName = (backupItem.nombre || 'respaldo').replace(/[^a-zA-Z0-9_-]/g, '_');
-        downloadAnchor.setAttribute("download", `${cleanName}_${new Date(backupItem.createdAt).toISOString().split('T')[0]}.json`);
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
-        showToast("Archivo de respaldo descargado.", "success");
-      } else {
-        showToast("Error al descargar respaldo: " + (result.error || 'Error'), "error");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Error de conexión al descargar el respaldo.", "error");
-    } finally {
-      setBackupActionId(null);
-    }
-  };
-
-  // Eliminar respaldo de la nube
-  const handleDeleteCloudBackup = async (backupItem) => {
-    const ok = await confirm({
-      title: 'Eliminar Respaldo',
-      message: `¿Está seguro de que desea eliminar permanentemente el respaldo "${backupItem.nombre}" de la nube?`,
-      type: 'danger',
-      confirmText: 'Eliminar'
-    });
-
-    if (!ok) return;
-
-    setBackupActionId(backupItem.id);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/backup/cloud/${backupItem.id}`, {
-        method: 'DELETE',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-
-      let result;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        result = { ok: false, error: text || `Error HTTP ${res.status}` };
-      }
-
-      if (res.ok && (result.ok || result.success)) {
-        showToast("Respaldo eliminado de la nube.", "success");
-        setCloudBackups((prev) => prev.filter((b) => b.id !== backupItem.id));
-      } else {
-        showToast("Error al eliminar: " + (result.error || 'Error'), "error");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Error de conexión al eliminar el respaldo.", "error");
-    } finally {
-      setBackupActionId(null);
-    }
+    e.target.value = '';
   };
 
   // Cerrar menú móvil al navegar
@@ -566,7 +356,7 @@ export const SidebarLayout = () => {
 
   navLinks.push(
     { name: 'Reportes y Auditoría', path: '/reportes', icon: FileText },
-    { name: 'Respaldos y Nube', onClick: () => setShowSettingsModal(true), icon: Database }
+    { name: 'Copia de Seguridad (JSON)', onClick: () => setShowSettingsModal(true), icon: Database }
   );
 
 
@@ -856,23 +646,23 @@ export const SidebarLayout = () => {
         </div>
       )}
 
-      {/* MODAL 2: AJUSTES Y GESTIÓN DE RESPALDOS EN LA NUBE (POSTGRESQL) */}
+      {/* MODAL 2: COPIA DE SEGURIDAD Y RESTAURACIÓN (JSON) */}
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)} />
           
-          <div className="relative w-full max-w-3xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+          <div className="relative w-full max-w-xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500">
-                  <Cloud className="w-5 h-5" />
+                  <Database className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-100 flex items-center gap-2">
-                    Centro de Respaldos en la Nube
+                    Copia de Seguridad y Restauración
                   </h3>
                   <p className="text-[10.5px] text-slate-400">
-                    Almacenamiento seguro, gratuito y centralizado en la base de datos PostgreSQL
+                    Respaldo completo y portabilidad mediante archivos JSON
                   </p>
                 </div>
               </div>
@@ -884,197 +674,73 @@ export const SidebarLayout = () => {
               </button>
             </div>
 
-            <div className="mt-4 space-y-6 overflow-y-auto pr-1 flex-1 py-1 font-sans">
+            <div className="mt-5 space-y-4 font-sans">
               
-              {/* Sección 1: Crear Respaldo en la Nube */}
-              <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-850 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-amber-500" />
-                    Crear Nuevo Respaldo en la Nube
-                  </h4>
-                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
-                    ✓ 100% Gratuito y Sin Tokens
-                  </span>
-                </div>
-                <form onSubmit={handleCreateCloudBackup} className="flex flex-col sm:flex-row gap-2.5">
-                  <input
-                    type="text"
-                    value={backupNameInput}
-                    onChange={(e) => setBackupNameInput(e.target.value)}
-                    placeholder="Etiqueta opcional (ej. Antes de revisión mensual...)"
-                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 placeholder-slate-650 focus:outline-none h-10"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isCreatingBackup}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs cursor-pointer shadow-md transition-all active:scale-98 h-10 shrink-0"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isCreatingBackup ? 'animate-spin' : ''}`} />
-                    <span>{isCreatingBackup ? 'Generando...' : 'Crear Respaldo Ahora'}</span>
-                  </button>
-                </form>
-              </div>
-
-              {/* Sección 2: Lista de Respaldos en la Nube */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wide border-l-2 border-amber-500 pl-2">
-                    Respaldos Disponibles en la Nube ({cloudBackups.length})
-                  </h4>
-                  <button
-                    onClick={fetchCloudBackups}
-                    disabled={isLoadingBackups}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isLoadingBackups ? 'animate-spin text-amber-500' : ''}`} />
-                    Actualizar Lista
-                  </button>
-                </div>
-
-                {isLoadingBackups ? (
-                  <div className="py-12 flex flex-col items-center justify-center text-slate-500 space-y-2 border border-slate-850 rounded-xl bg-slate-950/40">
-                    <RefreshCw className="w-6 h-6 animate-spin text-amber-500" />
-                    <p className="text-xs">Consultando base de datos en la nube...</p>
+              {/* Opción 1: Exportar JSON */}
+              <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-3 hover:border-slate-800 transition-colors">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
+                    <Download className="w-5 h-5" />
                   </div>
-                ) : cloudBackups.length === 0 ? (
-                  <div className="py-10 flex flex-col items-center justify-center text-slate-500 space-y-2 border border-slate-850 rounded-xl bg-slate-950/40 text-center p-4">
-                    <Cloud className="w-8 h-8 text-slate-600 mb-1" />
-                    <p className="text-xs font-semibold text-slate-350">Aún no hay respaldos guardados en la nube.</p>
-                    <p className="text-[11px] text-slate-550 max-w-sm">
-                      Haz clic en "Crear Respaldo Ahora" arriba para resguardar el estado completo de tus empresas, tableros y circuitos.
+                  <div className="space-y-1 flex-1">
+                    <h4 className="text-xs font-bold text-slate-200">Exportar Base de Datos a JSON</h4>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Genera y descarga un archivo <code className="text-amber-400 font-mono text-[10px]">.json</code> con todas tus empresas, proyectos, tableros, circuitos, inspecciones técnicas y auditorías.
                     </p>
                   </div>
-                ) : (
-                  <div className="border border-slate-850 rounded-xl overflow-hidden bg-slate-950/40">
-                    <div className="overflow-x-auto max-h-64 divide-y divide-slate-900">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="bg-slate-950 text-slate-400 font-bold border-b border-slate-850 uppercase text-[9px] tracking-widest sticky top-0 z-10 backdrop-blur-md">
-                            <th className="p-3">Nombre / Respaldo</th>
-                            <th className="p-3">Origen</th>
-                            <th className="p-3">Fecha y Hora</th>
-                            <th className="p-3">Tamaño</th>
-                            <th className="p-3 text-right">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-900">
-                          {cloudBackups.map((b) => {
-                            const isActionInProgress = backupActionId === b.id;
-                            const isAuto = b.creadoPor === 'AUTOMATICO';
-                            return (
-                              <tr key={b.id} className="hover:bg-slate-900/40 transition-colors">
-                                <td className="p-3">
-                                  <div className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
-                                    <span>{b.nombre}</span>
-                                  </div>
-                                  {b.descripcion && (
-                                    <div className="text-[10px] text-slate-500 truncate max-w-xs">{b.descripcion}</div>
-                                  )}
-                                </td>
-                                <td className="p-3 whitespace-nowrap">
-                                  {isAuto ? (
-                                    <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[9px] font-black tracking-wide">
-                                      🤖 AUTOMÁTICO
-                                    </span>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-black tracking-wide">
-                                      👑 {b.creadoPor || 'ADMIN'}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3 font-mono text-[11px] text-slate-350 whitespace-nowrap">
-                                  {new Date(b.createdAt).toLocaleString('es-VE', { 
-                                    year: 'numeric', 
-                                    month: 'short', 
-                                    day: 'numeric', 
-                                    hour: '2-digit', 
-                                    minute: '2-digit' 
-                                  })}
-                                </td>
-                                <td className="p-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
-                                  {formatBytes(b.tamanoBytes)}
-                                </td>
-                                <td className="p-3 text-right whitespace-nowrap">
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    <button
-                                      onClick={() => handleRestoreCloudBackup(b)}
-                                      disabled={isActionInProgress}
-                                      title="Restaurar base de datos a este punto"
-                                      className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 rounded-lg text-[10px] font-bold cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                                    >
-                                      <RotateCcw className="w-3 h-3" />
-                                      <span>Restaurar</span>
-                                    </button>
-                                    <button
-                                      onClick={() => handleDownloadCloudBackup(b)}
-                                      disabled={isActionInProgress}
-                                      title="Descargar archivo JSON a tu equipo"
-                                      className="p-1.5 bg-sky-500/10 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 rounded-lg text-[10px] cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                                    >
-                                      <Download className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteCloudBackup(b)}
-                                      disabled={isActionInProgress}
-                                      title="Eliminar este respaldo de la nube"
-                                      className="p-1.5 bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-lg text-[10px] cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sección 3: Opciones Locales (Exportar/Importar archivo JSON) */}
-              <div className="space-y-3 pt-3 border-t border-slate-900">
-                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wide border-l-2 border-slate-600 pl-2">
-                  Herramientas de Archivo JSON Local (Descarga Directa)
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    onClick={handleExportDb}
-                    className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700 rounded-xl text-xs font-semibold cursor-pointer shadow transition-colors"
-                  >
-                    <Download className="w-4 h-4 text-sky-400" />
-                    Exportar JSON al Dispositivo
-                  </button>
-                  <label className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-slate-700 rounded-xl text-xs font-semibold cursor-pointer shadow transition-colors">
-                    <UploadCloud className="w-4 h-4 text-amber-500" />
-                    Importar y Sobrescribir JSON
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleImportDb}
-                      className="hidden"
-                    />
-                  </label>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleExportDb}
+                  disabled={isExporting}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-sky-950/40 text-sky-300 hover:text-sky-200 border border-slate-800 hover:border-sky-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-98 disabled:opacity-50 shadow-sm"
+                >
+                  <Download className={`w-4 h-4 ${isExporting ? 'animate-bounce' : ''}`} />
+                  <span>{isExporting ? 'Generando archivo de respaldo...' : '⬇ Descargar Respaldo JSON Ahora'}</span>
+                </button>
               </div>
 
-              {/* Información y Políticas de Respaldo */}
-              <div className="p-3 bg-slate-900/30 border border-slate-850/80 rounded-xl flex items-start gap-2.5 text-[11px] text-slate-400">
+              {/* Opción 2: Importar y Restaurar JSON */}
+              <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-3 hover:border-slate-800 transition-colors">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                    <UploadCloud className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <h4 className="text-xs font-bold text-slate-200">Restaurar Base de Datos desde JSON</h4>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Carga un archivo <code className="text-amber-400 font-mono text-[10px]">.json</code> para restaurar todos los registros. Se te pedirá confirmación de seguridad antes de sobreescribir la base de datos.
+                    </p>
+                  </div>
+                </div>
+                <label className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs cursor-pointer transition-all active:scale-98 shadow-md">
+                  <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-spin' : ''}`} />
+                  <span>{isImporting ? 'Restaurando base de datos...' : '⬆ Seleccionar Archivo JSON para Restaurar'}</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    disabled={isImporting}
+                    onChange={handleImportDb}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Banner de Consejos y Buenas Prácticas */}
+              <div className="p-3 bg-slate-900/25 border border-slate-850 rounded-xl flex items-start gap-2.5 text-[10.5px] text-slate-400">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  <strong className="text-slate-200">Respaldo Automático Centralizado:</strong> El servidor ejecuta una copia de seguridad automática nocturna directamente en la base de datos PostgreSQL, conservando un historial rotativo de los últimos 20 puntos de restauración. No se requieren credenciales externas de Google.
+                  <strong className="text-slate-200">Almacenamiento Seguro:</strong> Puedes guardar tus respaldos <code className="text-slate-300 font-mono">.json</code> en tu disco duro, pendrive o enviarlos por correo electrónico para tener copias históricas y migrar de equipo cuando lo necesites.
                 </p>
               </div>
 
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-slate-800 shrink-0">
+            <div className="flex justify-end pt-4 border-t border-slate-800 shrink-0 mt-4">
               <button
                 type="button"
                 onClick={() => setShowSettingsModal(false)}
-                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer transition-colors"
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer transition-colors"
               >
                 Cerrar
               </button>
