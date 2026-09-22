@@ -134,7 +134,7 @@ export const BackupView = () => {
               disabled={isGenerating}
             >
               <Clock className="mr-2 w-4 h-4" /> Backup Completo
-              {(isGenerando && tipo === 'completo') && <span className="ml-2 text-amber-400">Generando...</span>}
+              {(isGenerating && backupType === 'completo') && <span className="ml-2 text-amber-400">Generando...</span>}
             </button>
 
             <button
@@ -203,14 +203,14 @@ export const BackupView = () => {
                         <td className="py-3 px-2">
                           <div className="flex space-x-2">
                             <button
-                              onClick =() => descargarBackup(backup.nombre, backup.archivo)
+                              onClick={() => descargarBackup(backup.nombre, backup.archivo)}
                               className="text-amber-400 hover:text-amber-300 transition-colors"
                               title="Descargar"
                             >
                               <Download className="w-4 h-4" />
                             </button>
                             <button
-                              onClick =() => eliminarBackup(backup.nombre)
+                              onClick={() => eliminarBackup(backup.nombre)}
                               className="text-red-400 hover:text-red-300 transition-colors"
                               title="Eliminar"
                               disabled={deleting}
