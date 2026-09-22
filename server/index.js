@@ -70,34 +70,36 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Rate Limiters con validación de proxy desactivada
+// Rate Limiters tolerantes para entornos Serverless y Proxies
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { ok: false, error: 'Demasiados intentos de inicio de sesión. Por favor, intente de nuevo en 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false }
+  validate: false
 });
 
 const backupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 5,
-  message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en una hora.' },
-  validate: { xForwardedForHeader: false }
+  max: 60,
+  message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en unos minutos.' },
+  validate: false
 });
 
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 200,
+  max: 500,
   message: { ok: false, error: 'Demasiadas solicitudes a la API. Intente de nuevo en un momento.' },
-  validate: { xForwardedForHeader: false }
+  validate: false
 });
 
 // Aplicar Rate Limiters específicos
-app.use('/api/login', authLimiter);
-app.use('/api/backup', backupLimiter);
-app.use('/api', apiLimiter);
+if (!process.env.VERCEL) {
+  app.use('/api/login', authLimiter);
+  app.use('/api/backup', backupLimiter);
+  app.use('/api', apiLimiter);
+}
 
 const server = createServer(app);
 const io = new Server(server, {
@@ -194,17 +196,24 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', uptime: process.uptime(), date: new Date() });
 });
 
-// Servir archivos estáticos del frontend compilado (dist/)
-const distPath = path.join(process.cwd(), 'dist');
-app.use(express.static(distPath));
+// Servir archivos estáticos del frontend compilado (dist/) únicamente en servidores tradicionales (Railway / Local)
+if (!process.env.VERCEL) {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath));
 
-// Fallback SPA
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
-    return next();
-  }
-  res.sendFile(path.join(distPath, 'index.html'));
-});
+  // Fallback SPA
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
+      return next();
+    }
+    const indexPath = path.join(distPath, 'index.html');
+    try {
+      res.sendFile(indexPath);
+    } catch {
+      next();
+    }
+  });
+}
 
 // Middleware Global de Manejo de Errores Seguro
 app.use((err, req, res, next) => {

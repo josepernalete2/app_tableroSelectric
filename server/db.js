@@ -12,7 +12,13 @@ if (!globalForPrisma.prismaPool) {
   globalForPrisma.prismaPool = new pg.Pool({ 
     connectionString,
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
-    max: 10
+    max: process.env.VERCEL ? 3 : 10,
+    connectionTimeoutMillis: 15000,
+    idleTimeoutMillis: 30000
+  });
+
+  globalForPrisma.prismaPool.on('error', (err) => {
+    console.error('⚠️ Error inesperado en el pool de PostgreSQL:', err.message);
   });
 }
 
@@ -21,8 +27,6 @@ const adapter = new PrismaPg(pool);
 
 export const prisma = globalForPrisma.prisma || new PrismaClient({ adapter });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prisma;
 
 export default prisma;
