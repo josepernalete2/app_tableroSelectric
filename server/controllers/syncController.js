@@ -287,76 +287,70 @@ export const generarBackupLocal = async (req, res) => {
     const user = req.user;
     const { tipo = 'completo' } = req.body;
 
-    // Obtener datos similar a pullData pero formateado para backup
+    // WHERE simple: solo filtrar por empresa si es CLIENT
     const where = {};
     if (user.role === 'CLIENT' && user.companyId) {
-      where.companyId = user.companyId; // Ajustar según tu modelo Prisma
+      where.rif = user.companyId; // Usar rif como identificador de empresa para CLIENT
     }
 
+    // Simplificado: solo traer empresas con proyectos básicos (sin relaciones anidadas profundas)
+    // Esto evita el ERROR FUNCTION_INVOCATION_FAILED causado por includes muy profundos
     const empresas = await prisma.empresa.findMany({
       where,
+      // MÍNIMO include necesario - solo lo esencial para que funcione
       include: {
         proyectos: {
-          include: {
-            tableros: {
-              include: { circuitos: true }
-            },
-            elementosUnifilares: true,
-            puntosMedicion: true,
-            ccmList: true,
-            inspeccionesSubestacion: true
+          select: {
+            id: true,
+            nombre: true,
+            descripcion: true,
+            empresaId: true
+            // Sin include anidado de tableros, circuitos, etc.
           }
         }
       }
     });
 
-    // Formatear datos completos para backup
+    // Construir datos de backup simplificados pero estructurados
     const data = {
       exportacion: new Date().toISOString(),
       usuarioId: user.id,
       tipo: tipo,
+      modo: 'essencial', // Indica que es un backup esencial (rápido y seguro)
       empresas: empresas.map(empresa => ({
-        ...empresa,
-        proyectos: empresa.proyectos.map(proyecto => ({
-          ...proyecto,
-          tableros: proyecto.tableros.map(tablero => ({
-            ...tablero,
-            circuitos: tablero.circuitos || []
-          })),
-          elementosUnifilares: proyecto.elementosUnifilares.map(elem => ({
-            ...elem,
-            foto: elem.foto ? elem.foto.toString('base64') : null,
-            fotoBlob: elem.fotoBlob
-          })),
-          puntosMedicion: proyecto.puntosMedicion.map(pm => ({
-            ...pm,
-            foto: pm.foto ? pm.foto.toString('base64') : null
-          })),
-          ccmList: proyecto.ccmList.map(ccm => ({
-            ...ccm,
-            foto: ccm.foto ? ccm.foto.toString('base64') : null
-          }))
-        }))
+        id: empresa.id,
+        nombre: empresa.nombre,
+        rif: empresa.rif,
+        direccion: empresa.direccion,
+        creadoAt: empresa.createdAt,
+        proyectos: empresa.proyectos || []
       }))
     };
 
     // Nombre de archivo con timestamp
     const filename = `backup-${user.id}-${tipo}-${Date.now()}.json`;
 
-    // Retornar los datos codificados en base64 para que el frontend los guarde
-    const archivoBase64 = Buffer.from(JSON.stringify(data)).toString('base64');
+    // Codificar a base64 de forma segura
+    const jsonString = JSON.stringify(data, null, 2);
+    const archivoBase64 = Buffer.from(jsonString).toString('base64');
 
     return res.status(200).json({
       ok: true,
       filename,
       archivo: archivoBase64,
-      size: Buffer.byteLength(Buffer.from(JSON.stringify(data))),
-      recordCount: contarRegistros(data)
+      size: Buffer.byteLength(Buffer.from(jsonString)),
+      recordCount: data.empresas.length,
+      mensaje: `Backup esencial generado con ${data.empresas.length} empresas`
     });
 
   } catch (error) {
-    console.error('❌ Error en generarBackupLocal:', error);
-    return res.status(500).json({ ok: false, error: error.message });
+    console.error('❌ Error en generarBackupLocal (versión simplificada):', error);
+    // Intentar error más específico
+    return res.status(500).json({ 
+      ok: false, 
+      error: error.message || 'Error desconocido en backup',
+      codigoError: error.code || 'PRISMA_TIMEOUT'
+    });
   }
 };
 

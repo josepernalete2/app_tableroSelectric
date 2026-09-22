@@ -14,7 +14,7 @@ import CcmComponent from './components/CcmComponent';
 import TransferComponent from './components/TransferComponent';
 import FichaTecnicaComponent from './components/FichaTecnicaComponent';
 import InformeCompiladoView from './views/InformeCompiladoView';
-import ReportesView from './views/ReportesView';
+import BackupView from './views/BackupView';
 import SidebarLayout from './components/SidebarLayout';
 import { ArrowLeft, User, LogOut, Printer } from 'lucide-react';
 
@@ -570,6 +570,7 @@ export function App() {
           <Route element={<ProtectedRoute><SidebarLayout /></ProtectedRoute>}>
             <Route path="/" element={<DashboardView />} />
             <Route path="/reportes" element={<ReportesView />} />
+            <Route path="/backup" element={<BackupView />} />
             <Route path="/empresa/:companyId" element={<EmpresaView />} />
             <Route path="/empresa/:companyId/proyecto/:proyectoId" element={<ProyectoView />} />
             <Route path="/empresa/:companyId/proyecto/:proyectoId/informe" element={<InformeCompiladoView />} />
