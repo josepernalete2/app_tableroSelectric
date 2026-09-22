@@ -14,6 +14,7 @@ import CcmComponent from './components/CcmComponent';
 import TransferComponent from './components/TransferComponent';
 import FichaTecnicaComponent from './components/FichaTecnicaComponent';
 import InformeCompiladoView from './views/InformeCompiladoView';
+import ReportesView from './views/ReportesView';
 import BackupView from './views/BackupView';
 import SidebarLayout from './components/SidebarLayout';
 import { ArrowLeft, User, LogOut, Printer } from 'lucide-react';
