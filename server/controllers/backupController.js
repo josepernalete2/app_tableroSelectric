@@ -1,5 +1,5 @@
 import prisma from '../db.js';
-import { exportarBackupStream } from '../services/backup.service.js';
+import { exportarBackupStream, guardarBackupLocalEnDisco, listarBackupsLocalesEnDisco } from '../services/backup.service.js';
 
 /**
  * Función auxiliar para generar el volcado completo y limpio de la base de datos.
@@ -494,7 +494,14 @@ export const crearBackupEnNube = async (req, res) => {
       }
     });
 
-    // Mantener un máximo de 20 respaldos en la nube para optimizar el almacenamiento
+    // Guardar también una copia local en disco (backups/)
+    try {
+      guardarBackupLocalEnDisco(snapshot);
+    } catch (fsErr) {
+      console.warn('⚠️ No se pudo guardar la copia en disco local:', fsErr.message);
+    }
+
+    // Mantener un máximo de 20 respaldos en la base de datos
     const totalBackups = await prisma.backup.findMany({
       select: { id: true },
       orderBy: { createdAt: 'desc' }

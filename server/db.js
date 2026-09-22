@@ -12,17 +12,13 @@ if ((rawUrl.startsWith('"') && rawUrl.endsWith('"')) || (rawUrl.startsWith("'") 
 const connectionString = rawUrl;
 const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
 
-if (process.env.VERCEL && (!process.env.DATABASE_URL || isLocalhost)) {
-  console.error('❌ ERROR CRÍTICO EN VERCEL: DATABASE_URL no está definida o apunta a localhost en Vercel.');
-}
-
 const globalForPrisma = globalThis;
 
 if (!globalForPrisma.prismaPool) {
   globalForPrisma.prismaPool = new pg.Pool({ 
     connectionString,
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
-    max: process.env.VERCEL ? 3 : 10,
+    max: 10,
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000
   });

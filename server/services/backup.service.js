@@ -1,11 +1,22 @@
 /**
  * Servidor / Servicios - backup.service.js
- * Servicio modular de exportación de copias de seguridad para entornos Serverless y Contenedores (Railway).
- * Extrae la información estructurada de la base de datos vía Prisma y la transmite vía Stream en memoria.
+ * Servicio modular de exportación y gestión de copias de seguridad en entorno local y base de datos.
+ * Extrae la información estructurada de la base de datos vía Prisma y la gestiona en disco (backups/) y Streams.
  */
 
-import { Readable } from 'stream';
+import fs from 'fs';
+import path from 'path';
 import prisma from '../db.js';
+
+const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
+
+// Asegurar que el directorio local de respaldos exista
+export function asegurarDirectorioBackups() {
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+  return BACKUPS_DIR;
+}
 
 /**
  * Consulta de forma estructurada y segura todas las entidades principales del sistema.
@@ -104,7 +115,7 @@ export async function recopilarDatosCompletos() {
       exportVersion: '2.1.0',
       schemaVersion: '1.0.0',
       generatedAt: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'production',
+      environment: process.env.NODE_ENV || 'development',
       counts,
       totalRecords
     },
@@ -113,8 +124,45 @@ export async function recopilarDatosCompletos() {
 }
 
 /**
- * Transmite la exportación de respaldo en formato JSON directamente al stream de respuesta HTTP.
- * Utiliza un stream en memoria para optimizar el consumo de RAM y evitar escrituras en disco.
+ * Guarda una copia de seguridad en formato JSON en la carpeta local backups/.
+ */
+export function guardarBackupLocalEnDisco(data, filenameCustom = null) {
+  asegurarDirectorioBackups();
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+  const filename = filenameCustom || `backup_selectric_${timestamp}.json`;
+  const filepath = path.resolve(BACKUPS_DIR, filename);
+
+  fs.writeFileSync(filepath, JSON.stringify(data, null, 2), 'utf-8');
+  console.log(`💾 Respaldo guardado en disco local: ${filepath}`);
+  return { filename, filepath };
+}
+
+/**
+ * Lee y lista todos los respaldos JSON presentes en la carpeta local backups/.
+ */
+export function listarBackupsLocalesEnDisco() {
+  asegurarDirectorioBackups();
+  const files = fs.readdirSync(BACKUPS_DIR)
+    .filter(f => f.endsWith('.json'))
+    .map(filename => {
+      const filepath = path.resolve(BACKUPS_DIR, filename);
+      const stats = fs.statSync(filepath);
+      return {
+        filename,
+        filepath,
+        sizeBytes: stats.size,
+        createdAt: stats.birthtime || stats.mtime,
+        mtime: stats.mtime
+      };
+    })
+    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+
+  return files;
+}
+
+/**
+ * Transmite la exportación de respaldo en formato JSON directamente al stream de respuesta HTTP
+ * y guarda una copia local en backups/.
  * 
  * @param {import('express').Response} res Objeto de respuesta de Express
  * @param {object} usuario Objeto del usuario autenticado solicitante
@@ -135,13 +183,20 @@ export async function exportarBackupStream(res, usuario = {}) {
   const jsonString = JSON.stringify(backupCompleto, null, 2);
   const jsonBuffer = Buffer.from(jsonString, 'utf-8');
 
-  // Configuración de encabezados HTTP para forzar descarga segura y sin caché
+  // Guardar copia local en la carpeta backups/
+  try {
+    guardarBackupLocalEnDisco(backupCompleto, filename);
+  } catch (fsErr) {
+    console.error('⚠️ No se pudo guardar la copia local en disco:', fsErr.message);
+  }
+
+  // Configuración de encabezados HTTP para forzar descarga segura
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Content-Length', jsonBuffer.length);
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
 
-  // Enviar el buffer en memoria directamente para máxima compatibilidad con funciones Serverless (Vercel)
   return res.status(200).send(jsonBuffer);
 }
+

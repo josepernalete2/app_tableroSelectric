@@ -252,7 +252,7 @@ export const BackupView = () => {
             </div>
 
             <p className="text-slate-300 text-sm leading-relaxed mt-4">
-              Genera una instantánea completa de la base de datos procesada en memoria. Compatible con entornos Serverless (Vercel) y contenedores (Railway).
+              Genera una instantánea completa de la base de datos procesada de forma segura. Guarda una copia local en la carpeta backups/ y descarga el archivo JSON.
             </p>
 
             {exportStats && (
@@ -351,9 +351,9 @@ export const BackupView = () => {
       <div className="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-5 text-xs text-slate-400 flex items-start gap-3">
         <Sparkles className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <p className="text-slate-300 font-semibold">Arquitectura Serverless y Railway Ready</p>
+          <p className="text-slate-300 font-semibold">Almacenamiento Local y Respaldo Permanente</p>
           <p>
-            El módulo de exportación transmite el volcado mediante Streams de Node.js en memoria sin invocar binarios nativos del sistema operativo ni escribir en disco, garantizando compatibilidad inmediata con Vercel y futuras migraciones a Railway.
+            El sistema genera volcados completos estructurados y almacena copias de seguridad directamente en el directorio local backups/ y en la base de datos PostgreSQL, garantizando independencia total y rapidez de restauración.
           </p>
         </div>
       </div>

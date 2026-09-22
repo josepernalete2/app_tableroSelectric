@@ -1,11 +1,11 @@
 const getApiBaseUrl = () => {
-  // Allow overriding via localStorage at runtime (very useful for Capacitor/mobile apps or specific dev configs)
+  // Permitir sobreescritura dinámica en tiempo de ejecución (útil para Capacitor/móvil)
   const storedUrl = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('CUSTOM_API_BASE_URL') : null;
   if (storedUrl) {
     return storedUrl;
   }
 
-  // Allow configuring via Vite env variables at build time
+  // Permitir configuración mediante variables de entorno de Vite
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
@@ -13,23 +13,29 @@ const getApiBaseUrl = () => {
     return import.meta.env.VITE_API_BASE_URL;
   }
   
+  if (typeof window === 'undefined') {
+    return 'http://localhost:3001';
+  }
+
   const { protocol, hostname, origin } = window.location;
   
-  // Capacitor / Native App check
+  // Verificación de Capacitor / App nativa
   if (window.Capacitor || protocol === 'capacitor:') {
-    return 'http://10.0.2.2:3001'; // Default Android emulator host address
+    return 'http://10.0.2.2:3001';
   }
   
-  // If running Vite development server, point to backend on port 3001 of the same host
+  // En servidor de desarrollo Vite, apuntar al puerto configurado (3001 o VITE_API_PORT)
   if (import.meta.env.DEV) {
-    return `${protocol}//${hostname}:3001`;
+    const apiPort = import.meta.env.VITE_API_PORT || '3001';
+    return `${protocol}//${hostname}:${apiPort}`;
   }
   
-  // Production / Single server deployment (Express serving frontend assets on the same port)
+  // En despliegue local / producción, consumir desde el mismo origen
   return origin;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
 
 export default API_BASE_URL;
+
 

@@ -18,24 +18,23 @@ import { JWT_SECRET } from './middleware/authMiddleware.js';
 import tableroRoutes from './routes/tableroRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
-import { inicializarBackupScheduler } from './services/backupScheduler.js';
+import { iniciarSchedulerBackups } from './services/backupScheduler.js';
 
 dotenv.config();
-
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 1. Habilitar trust proxy para Railway
-app.set('trust proxy', 1);
-
-// Configuración de CORS tolerante y segura
+// Configuración de CORS
 const allowedOrigins = [
-  'https://apptableroselectric-production.up.railway.app',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:5000',
   'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:5000',
   process.env.CLIENT_URL,
   process.env.FRONTEND_URL,
   ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [])
@@ -46,10 +45,7 @@ const corsOptions = {
     if (
       !origin ||
       allowedOrigins.includes(origin) ||
-      origin.endsWith('.railway.app') ||
-      origin.endsWith('.vercel.app') ||
-      process.env.NODE_ENV !== 'production' ||
-      Boolean(process.env.VERCEL)
+      process.env.NODE_ENV !== 'production'
     ) {
       callback(null, true);
     } else {
@@ -70,10 +66,10 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Rate Limiters tolerantes para entornos Serverless y Proxies
+// Rate Limiters locales
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 50,
   message: { ok: false, error: 'Demasiados intentos de inicio de sesión. Por favor, intente de nuevo en 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -82,33 +78,31 @@ const authLimiter = rateLimit({
 
 const backupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 60,
+  max: 120,
   message: { ok: false, error: 'Límite de solicitudes de respaldo alcanzado. Intente de nuevo en unos minutos.' },
   validate: false
 });
 
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 500,
+  max: 1000,
   message: { ok: false, error: 'Demasiadas solicitudes a la API. Intente de nuevo en un momento.' },
   validate: false
 });
 
-// Aplicar Rate Limiters específicos
-if (!process.env.VERCEL) {
-  app.use('/api/login', authLimiter);
-  app.use('/api/backup', backupLimiter);
-  app.use('/api', apiLimiter);
-}
+app.use('/api/login', authLimiter);
+app.use('/api/backup', backupLimiter);
+app.use('/api/backups', backupLimiter);
+app.use('/api', apiLimiter);
 
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.railway.app')) {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
         callback(null, true);
       } else {
-        callback(new Error('Acceso denegado en WebSockets por CORS'));
+        callback(null, true);
       }
     },
     methods: ['GET', 'POST'],
@@ -144,14 +138,12 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   console.log('⚡ Nuevo cliente WebSocket conectado:', socket.id);
 
-  // Registro automático seguro basado en identidad verificada del token
   if (socket.user?.id) {
     connectedUsers.set(socket.user.id, socket.id);
     console.log(`👤 Usuario autenticado registrado en Socket: ${socket.user.username} (${socket.user.id}) -> ${socket.id}`);
   }
 
   socket.on('register_user', (userId) => {
-    // Solo permitir registro si coincide estrictamente con el token verificado o si es ADMIN
     if (socket.user && (socket.user.id === userId || socket.user.role === 'ADMIN')) {
       connectedUsers.set(userId, socket.id);
       console.log(`👤 Usuario verificado registrado en Socket: ${userId} -> Socket ID: ${socket.id}`);
@@ -175,7 +167,7 @@ io.on('connection', (socket) => {
 app.use('/uploads', (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   next();
-}, express.static(path.join(process.cwd(), 'public', 'uploads')));
+}, express.static(path.resolve(process.cwd(), 'public', 'uploads')));
 
 // Endpoints de Notificaciones Push
 app.use('/api/notifications', pushRoutes);
@@ -196,24 +188,22 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', uptime: process.uptime(), date: new Date() });
 });
 
-// Servir archivos estáticos del frontend compilado (dist/) únicamente en servidores tradicionales (Railway / Local)
-if (!process.env.VERCEL) {
-  const distPath = path.join(process.cwd(), 'dist');
-  app.use(express.static(distPath));
+// Servir archivos estáticos del frontend compilado (dist/)
+const distPath = path.resolve(process.cwd(), 'dist');
+app.use(express.static(distPath));
 
-  // Fallback SPA
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
-      return next();
-    }
-    const indexPath = path.join(distPath, 'index.html');
-    try {
-      res.sendFile(indexPath);
-    } catch {
-      next();
-    }
-  });
-}
+// Fallback SPA
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path === '/health') {
+    return next();
+  }
+  const indexPath = path.resolve(distPath, 'index.html');
+  try {
+    res.sendFile(indexPath);
+  } catch {
+    next();
+  }
+});
 
 // Middleware Global de Manejo de Errores Seguro
 app.use((err, req, res, next) => {
@@ -227,12 +217,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en el puerto ${PORT}`);
-    inicializarBackupScheduler();
-  });
-}
+// Iniciar Servidor Express y Programador de Respaldos
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en http://localhost:${PORT}`);
+  iniciarSchedulerBackups();
+});
 
 export { app, server, io };
 export default app;

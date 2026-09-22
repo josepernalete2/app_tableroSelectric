@@ -1,31 +1,38 @@
 /**
  * Servidor / Servicios - backupScheduler.js
- * Programador de copias de seguridad automáticas (Nightly Backup) en la nube PostgreSQL.
+ * Programador de copias de seguridad automáticas (Nightly Backup) en entorno local y base de datos.
  */
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import prisma from '../db.js';
 import { generarSnapshotCompleto } from '../controllers/backupController.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const BACKUPS_DIR = path.resolve(__dirname, '../../backups');
+const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
 
 /**
- * Ejecuta un volcado completo de la base de datos y lo guarda directamente en la tabla `backups` de PostgreSQL.
+ * Asegura la existencia del directorio local backups/
+ */
+function asegurarDirectorio() {
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+  return BACKUPS_DIR;
+}
+
+/**
+ * Ejecuta un volcado completo de la base de datos y lo guarda directamente en la tabla `backups` y en disco local en `backups/`.
  */
 export async function ejecutarBackupAutomatico() {
   try {
     const data = await generarSnapshotCompleto();
-    const jsonString = JSON.stringify(data);
+    const jsonString = JSON.stringify(data, null, 2);
     const tamanoBytes = Buffer.byteLength(jsonString, 'utf8');
 
     const timestamp = new Date().toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
     const isoTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
-    // 1. Guardar en la tabla `backups` de PostgreSQL
+    // 1. Guardar en la tabla `backups` de la base de datos
     const nuevoBackup = await prisma.backup.create({
       data: {
         nombre: `Respaldo Automático ${timestamp}`,
@@ -36,9 +43,9 @@ export async function ejecutarBackupAutomatico() {
       }
     });
 
-    console.log(`[BackupScheduler] Respaldo automático guardado en la nube con ID: ${nuevoBackup.id}`);
+    console.log(`[BackupScheduler] Respaldo automático registrado en BD con ID: ${nuevoBackup.id}`);
 
-    // Limpieza de backups antiguos: mantener solo los últimos 20 en la base de datos
+    // Limpieza en BD: mantener los últimos 20
     const totalBackups = await prisma.backup.findMany({
       select: { id: true },
       orderBy: { createdAt: 'desc' }
@@ -51,28 +58,27 @@ export async function ejecutarBackupAutomatico() {
       });
     }
 
-    // 2. Intentar guardar respaldo en disco local si el entorno lo permite
+    // 2. Guardar respaldo directamente en la carpeta local backups/
     try {
-      if (!fs.existsSync(BACKUPS_DIR)) {
-        fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-      }
+      asegurarDirectorio();
       const filename = `backup_auto_${isoTimestamp}.json`;
-      const filepath = path.join(BACKUPS_DIR, filename);
-      fs.writeFileSync(filepath, JSON.stringify(data, null, 2), 'utf-8');
+      const filepath = path.resolve(BACKUPS_DIR, filename);
+      fs.writeFileSync(filepath, jsonString, 'utf-8');
+      console.log(`[BackupScheduler] Respaldo guardado exitosamente en archivo local: ${filepath}`);
 
+      // Rotación local: conservar los últimos 15 archivos
       const files = fs.readdirSync(BACKUPS_DIR)
         .filter(f => f.startsWith('backup_auto_') && f.endsWith('.json'))
-        .map(f => ({ name: f, time: fs.statSync(path.join(BACKUPS_DIR, f)).mtime.getTime() }))
+        .map(f => ({ name: f, time: fs.statSync(path.resolve(BACKUPS_DIR, f)).mtime.getTime() }))
         .sort((a, b) => b.time - a.time);
 
       if (files.length > 15) {
         for (let i = 15; i < files.length; i++) {
-          fs.unlinkSync(path.join(BACKUPS_DIR, files[i].name));
+          fs.unlinkSync(path.resolve(BACKUPS_DIR, files[i].name));
         }
       }
     } catch (fsErr) {
-      // En entornos Serverless de solo lectura esto puede no ejecutarse, lo cual es normal
-      console.log('[BackupScheduler] Nota: El almacenamiento en disco local fue omitido (entorno serverless/ROFS).');
+      console.error('[BackupScheduler] Error al escribir respaldo en disco local:', fsErr.message);
     }
 
     return { ok: true, id: nuevoBackup.id, count: data.length };
@@ -85,7 +91,7 @@ export async function ejecutarBackupAutomatico() {
 /**
  * Inicializa el temporizador para ejecutar el respaldo a las 02:00 AM todos los días.
  */
-export function inicializarBackupScheduler() {
+export function iniciarSchedulerBackups() {
   const calcularMilisegundosHastaLasDosAM = () => {
     const ahora = new Date();
     const proximaEjecucion = new Date();
@@ -109,3 +115,7 @@ export function inicializarBackupScheduler() {
 
   programarSiguiente();
 }
+
+// Alias para compatibilidad
+export const inicializarBackupScheduler = iniciarSchedulerBackups;
+
