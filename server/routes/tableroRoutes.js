@@ -122,7 +122,9 @@ router.post('/sync/batch', requireRoles('ADMIN', 'WORKER'), procesarSincronizaci
 
 // Endpoints de Respaldo e Importación/Exportación (Solo ADMIN)
 router.get('/backup/export', requireRoles('ADMIN'), exportDatabase);
+router.get('/backups/export', requireRoles('ADMIN'), exportDatabase);
 router.post('/backup/import', requireRoles('ADMIN'), importDatabase);
+router.post('/backups/import', requireRoles('ADMIN'), importDatabase);
 
 // Endpoints de Respaldo en la Nube (PostgreSQL / Sin Tokens)
 router.get('/backup/cloud', requireRoles('ADMIN'), listarBackupsEnNube);

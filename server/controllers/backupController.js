@@ -1,4 +1,5 @@
 import prisma from '../db.js';
+import { exportarBackupStream } from '../services/backup.service.js';
 
 /**
  * Función auxiliar para generar el volcado completo y limpio de la base de datos.
@@ -58,9 +59,13 @@ export const generarSnapshotCompleto = async () => {
 /**
  * Función auxiliar para restaurar la base de datos a partir de un arreglo de Empresas.
  */
-export const restaurarDesdeDatos = async (data) => {
+export const restaurarDesdeDatos = async (dataInput) => {
+  let data = dataInput;
+  if (dataInput && dataInput.data && Array.isArray(dataInput.data)) {
+    data = dataInput.data;
+  }
   if (!data || !Array.isArray(data)) {
-    throw new Error('El formato de datos para restaurar es inválido. Debe proporcionar un arreglo de Empresas.');
+    throw new Error('El formato de datos para restaurar es inválido. Debe proporcionar un arreglo de Empresas o un objeto con la clave "data".');
   }
 
   await prisma.$transaction(async (tx) => {
@@ -373,31 +378,13 @@ export const restaurarDesdeDatos = async (data) => {
 };
 
 /**
- * GET /api/backup/export
+ * GET /api/backup/export o GET /api/backups/export
  * Obtiene la data completa de la base de datos usando Prisma, la convierte a JSON en memoria
- * y la envía directamente con headers de descarga HTTP sin tocar el sistema de archivos (fs).
+ * y la envía directamente con headers de descarga HTTP mediante Streams sin tocar el sistema de archivos (fs).
  */
 export const exportDatabase = async (req, res) => {
   try {
-    // 1. Obtener la data completa de la base de datos usando Prisma
-    const data = await generarSnapshotCompleto();
-
-    // 2. Convertir la data a un string JSON estructurado en memoria
-    const jsonString = JSON.stringify({
-      ok: true,
-      success: true,
-      version: '2.0',
-      timestamp: new Date().toISOString(),
-      data
-    }, null, 2);
-
-    // 3. Configurar cabeceras HTTP para forzar la descarga en el navegador
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="backup_tableros.json"');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-
-    // 4. Enviar directamente la respuesta en memoria
-    return res.status(200).send(jsonString);
+    await exportarBackupStream(res, req.user);
   } catch (error) {
     console.error('[BackupController] Error al exportar base de datos:', error);
     if (!res.headersSent) {
