@@ -3,12 +3,18 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 
-if (process.env.VERCEL && !process.env.DATABASE_URL) {
-  console.error('❌ ERROR CRÍTICO EN VERCEL: DATABASE_URL no está definida en Environment Variables del proyecto en Vercel.');
+let rawUrl = process.env.DATABASE_URL || 'postgresql://postgres:admin123@localhost:5432/inspecciones?schema=public';
+rawUrl = rawUrl.trim();
+if ((rawUrl.startsWith('"') && rawUrl.endsWith('"')) || (rawUrl.startsWith("'") && rawUrl.endsWith("'"))) {
+  rawUrl = rawUrl.slice(1, -1).trim();
 }
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:admin123@localhost:5432/inspecciones?schema=public';
+const connectionString = rawUrl;
 const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+
+if (process.env.VERCEL && (!process.env.DATABASE_URL || isLocalhost)) {
+  console.error('❌ ERROR CRÍTICO EN VERCEL: DATABASE_URL no está definida o apunta a localhost en Vercel.');
+}
 
 const globalForPrisma = globalThis;
 
