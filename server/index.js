@@ -5,11 +5,11 @@ process.on('uncaughtException', (error) => {
   console.error('❌ Excepción no capturada:', error);
 });
 
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -19,8 +19,6 @@ import tableroRoutes from './routes/tableroRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
 import { iniciarSchedulerBackups } from './services/backupScheduler.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

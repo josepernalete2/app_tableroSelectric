@@ -1,5 +1,5 @@
 import prisma from '../db.js';
-import { exportarBackupStream, guardarBackupLocalEnDisco, listarBackupsLocalesEnDisco } from '../services/backup.service.js';
+import { exportarBackupStream, guardarBackupLocalEnDisco } from '../services/backup.service.js';
 
 /**
  * Función auxiliar para generar el volcado completo y limpio de la base de datos.

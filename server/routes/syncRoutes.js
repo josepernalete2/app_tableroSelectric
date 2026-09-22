@@ -1,6 +1,6 @@
 import express from 'express';
 import { verificarToken } from '../middleware/authMiddleware.js';
-import { procesarSincronizacionBatch } from '../controllers/syncController.js';
+import { procesarSincronizacionBatch, generarBackupLocal } from '../controllers/syncController.js';
 import prisma from '../db.js';
 
 const router = express.Router();

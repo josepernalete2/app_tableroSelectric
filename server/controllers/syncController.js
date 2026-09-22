@@ -354,7 +354,7 @@ export const generarBackupLocal = async (req, res) => {
   }
 };
 
-contarRegistros = (data) => {
+const contarRegistros = (data) => {
   let count = 0;
   if (data.empresas) {
     data.empresas.forEach(emp => {
@@ -370,3 +370,4 @@ contarRegistros = (data) => {
   }
   return count;
 };
+
