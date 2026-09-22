@@ -142,13 +142,6 @@ export async function exportarBackupStream(res, usuario = {}) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
 
-  // Crear un stream de lectura a partir del Buffer y enviarlo mediante pipe a la respuesta
-  const readableStream = new Readable({
-    read() {
-      this.push(jsonBuffer);
-      this.push(null);
-    }
-  });
-
-  readableStream.pipe(res);
+  // Enviar el buffer en memoria directamente para máxima compatibilidad con funciones Serverless (Vercel)
+  return res.status(200).send(jsonBuffer);
 }

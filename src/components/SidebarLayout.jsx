@@ -147,28 +147,31 @@ export const SidebarLayout = () => {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       });
-      let result;
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        result = await res.json();
-      } else {
-        const text = await res.text();
-        result = { ok: false, error: text || `Error HTTP ${res.status}` };
+
+      if (!res.ok) {
+        let errorMsg = 'Error al exportar base de datos';
+        try {
+          const errData = await res.json();
+          errorMsg = errData.error || errorMsg;
+        } catch (_) {
+          errorMsg = `Error HTTP ${res.status}`;
+        }
+        showToast(errorMsg, "error");
+        return;
       }
 
-      if (res.ok && (result.ok || result.success)) {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result.data, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        const timestamp = new Date().toISOString().split('T')[0];
-        downloadAnchor.setAttribute("download", `respaldo_selectric_${timestamp}.json`);
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
-        showToast("Base de datos exportada con éxito en formato JSON.", "success");
-      } else {
-        showToast("Error al exportar base de datos: " + (result.error || result.message || 'Error desconocido'), "error");
-      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = downloadUrl;
+      const timestamp = new Date().toISOString().split('T')[0];
+      downloadAnchor.setAttribute("download", `respaldo_selectric_${timestamp}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      showToast("Base de datos exportada con éxito en formato JSON.", "success");
     } catch (err) {
       console.error(err);
       showToast("Error de conexión al servidor backend para exportar.", "error");
