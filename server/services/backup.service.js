@@ -1,7 +1,7 @@
 /**
  * Servidor / Servicios - backup.service.js
- * Servicio modular de exportación y gestión de copias de seguridad en entorno local y base de datos.
- * Extrae la información estructurada de la base de datos vía Prisma y la gestiona en disco (backups/) y Streams.
+ * Servicio modular de exportación y generación de copias de seguridad 100% en memoria.
+ * Diseñado para entornos Serverless (Vercel con FS Read-Only) y Contenedores (Railway).
  */
 
 import fs from 'fs';
@@ -10,12 +10,20 @@ import prisma from '../db.js';
 
 const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
 
-// Asegurar que el directorio local de respaldos exista
+/**
+ * Intenta asegurar la existencia del directorio local backups/ de forma tolerante a fallos.
+ * En entornos Read-Only (Vercel) no lanzará excepción.
+ */
 export function asegurarDirectorioBackups() {
-  if (!fs.existsSync(BACKUPS_DIR)) {
-    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+    return BACKUPS_DIR;
+  } catch (err) {
+    console.warn('⚠️ [BackupService] Sistema de archivos de solo lectura detectado (EROFS), no se puede crear directorio local:', err.message);
+    return null;
   }
-  return BACKUPS_DIR;
 }
 
 /**
@@ -124,79 +132,108 @@ export async function recopilarDatosCompletos() {
 }
 
 /**
- * Guarda una copia de seguridad en formato JSON en la carpeta local backups/.
- */
-export function guardarBackupLocalEnDisco(data, filenameCustom = null) {
-  asegurarDirectorioBackups();
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-  const filename = filenameCustom || `backup_selectric_${timestamp}.json`;
-  const filepath = path.resolve(BACKUPS_DIR, filename);
-
-  fs.writeFileSync(filepath, JSON.stringify(data, null, 2), 'utf-8');
-  console.log(`💾 Respaldo guardado en disco local: ${filepath}`);
-  return { filename, filepath };
-}
-
-/**
- * Lee y lista todos los respaldos JSON presentes en la carpeta local backups/.
- */
-export function listarBackupsLocalesEnDisco() {
-  asegurarDirectorioBackups();
-  const files = fs.readdirSync(BACKUPS_DIR)
-    .filter(f => f.endsWith('.json'))
-    .map(filename => {
-      const filepath = path.resolve(BACKUPS_DIR, filename);
-      const stats = fs.statSync(filepath);
-      return {
-        filename,
-        filepath,
-        sizeBytes: stats.size,
-        createdAt: stats.birthtime || stats.mtime,
-        mtime: stats.mtime
-      };
-    })
-    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-
-  return files;
-}
-
-/**
- * Transmite la exportación de respaldo en formato JSON directamente al stream de respuesta HTTP
- * y guarda una copia local en backups/.
+ * Genera el snapshot completo en memoria (Buffer / JSON) sin depender del disco.
  * 
- * @param {import('express').Response} res Objeto de respuesta de Express
- * @param {object} usuario Objeto del usuario autenticado solicitante
+ * @param {object} opciones Opciones adicionales (filenamePrefix, usuario, etc.)
+ * @returns {Promise<{ payload: object, jsonString: string, buffer: Buffer, filename: string, tamanoBytes: number, metadata: object }>}
  */
-export async function exportarBackupStream(res, usuario = {}) {
-  const backupCompleto = await recopilarDatosCompletos();
+export async function generarSnapshotMemoria(opciones = {}) {
+  const { filenamePrefix = 'backup_auto', usuario = null } = opciones;
+  const snapshot = await recopilarDatosCompletos();
 
-  // Agregar información de auditoría del usuario solicitante
-  backupCompleto.metadata.generadoPor = {
-    id: usuario.id || null,
-    email: usuario.email || usuario.username || 'ADMIN',
-    role: usuario.role || 'ADMIN'
-  };
-
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-  const filename = `backup_selectric_${timestamp}.json`;
-
-  const jsonString = JSON.stringify(backupCompleto, null, 2);
-  const jsonBuffer = Buffer.from(jsonString, 'utf-8');
-
-  // Guardar copia local en la carpeta backups/
-  try {
-    guardarBackupLocalEnDisco(backupCompleto, filename);
-  } catch (fsErr) {
-    console.error('⚠️ No se pudo guardar la copia local en disco:', fsErr.message);
+  if (usuario) {
+    snapshot.metadata.generadoPor = {
+      id: usuario.id || null,
+      username: usuario.username || usuario.email || 'ADMIN',
+      role: usuario.role || 'ADMIN'
+    };
   }
 
-  // Configuración de encabezados HTTP para forzar descarga segura
+  const isoTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `${filenamePrefix}_${isoTimestamp}.json`;
+  const jsonString = JSON.stringify(snapshot, null, 2);
+  const buffer = Buffer.from(jsonString, 'utf-8');
+  const tamanoBytes = buffer.length;
+
+  return {
+    payload: snapshot,
+    jsonString,
+    buffer,
+    filename,
+    tamanoBytes,
+    metadata: snapshot.metadata
+  };
+}
+
+/**
+ * Intenta guardar una copia en disco local de manera tolerante a fallos (solo en entornos con FS escribible).
+ * Nunca lanza excepciones si el sistema de archivos es Read-Only (Vercel).
+ */
+export function guardarBackupLocalEnDisco(data, filenameCustom = null) {
+  try {
+    const dir = asegurarDirectorioBackups();
+    if (!dir) return { guardado: false, error: 'Directorio no disponible (Read-Only)' };
+
+    const isoTimestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+    const filename = filenameCustom || `backup_selectric_${isoTimestamp}.json`;
+    const filepath = path.resolve(BACKUPS_DIR, filename);
+
+    fs.writeFileSync(filepath, typeof data === 'string' ? data : JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`💾 Respaldo guardado en disco local: ${filepath}`);
+    return { guardado: true, filename, filepath };
+  } catch (fsErr) {
+    console.warn(`⚠️ [BackupService] No se pudo guardar en disco local (${fsErr.code || fsErr.message}). Omitiendo escritura local de forma segura.`);
+    return { guardado: false, error: fsErr.message };
+  }
+}
+
+/**
+ * Lee y lista los respaldos JSON presentes en la carpeta local backups/ si está disponible.
+ */
+export function listarBackupsLocalesEnDisco() {
+  try {
+    asegurarDirectorioBackups();
+    if (!fs.existsSync(BACKUPS_DIR)) return [];
+
+    const files = fs.readdirSync(BACKUPS_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(filename => {
+        const filepath = path.resolve(BACKUPS_DIR, filename);
+        const stats = fs.statSync(filepath);
+        return {
+          filename,
+          filepath,
+          sizeBytes: stats.size,
+          createdAt: stats.birthtime || stats.mtime,
+          mtime: stats.mtime
+        };
+      })
+      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+
+    return files;
+  } catch (err) {
+    console.warn('⚠️ [BackupService] No se pudieron listar respaldos locales:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Transmite la exportación de respaldo en formato JSON directamente al stream HTTP en memoria.
+ */
+export async function exportarBackupStream(res, usuario = {}) {
+  const { buffer, filename, payload } = await generarSnapshotMemoria({
+    filenamePrefix: 'backup_selectric',
+    usuario
+  });
+
+  // Intento de guardado local silencioso (no bloqueante)
+  guardarBackupLocalEnDisco(payload, filename);
+
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Length', jsonBuffer.length);
+  res.setHeader('Content-Length', buffer.length);
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
 
-  return res.status(200).send(jsonBuffer);
+  return res.status(200).send(buffer);
 }
-

@@ -1,59 +1,157 @@
 import prisma from '../db.js';
-import { exportarBackupStream, guardarBackupLocalEnDisco } from '../services/backup.service.js';
+import { 
+  exportarBackupStream, 
+  guardarBackupLocalEnDisco, 
+  generarSnapshotMemoria, 
+  recopilarDatosCompletos 
+} from '../services/backup.service.js';
+import { subirBackupAR2 } from '../services/r2Backup.service.js';
+import { enviarBackupTelegram } from '../services/telegramBackup.service.js';
 
 /**
- * Función auxiliar para generar el volcado completo y limpio de la base de datos.
+ * Función auxiliar para generar el volcado completo y limpio de la base de datos (compatibilidad hacia atrás).
  */
 export const generarSnapshotCompleto = async () => {
-  return await prisma.empresa.findMany({
-    include: {
-      proyectos: {
-        include: {
-          tableros: {
-            include: {
-              circuitos: {
-                orderBy: {
-                  posicionPolo: 'asc'
-                }
-              },
-              alimentador: true
-            },
-            orderBy: {
-              createdAt: 'asc'
-            }
-          },
-          elementosUnifilares: true,
-          subestaciones: true,
-          puntosMedicion: true,
-          ccmList: true,
-          inspeccionesTermograficas: true,
-          inspeccionesAterramiento: true,
-          inspeccionesTanquesCombustible: true,
-          alarmas: true,
-          alimentadores: true
-        }
-      },
-      tableros: {
-        include: {
-          circuitos: {
-            orderBy: {
-              posicionPolo: 'asc'
-            }
-          }
+  const { data } = await recopilarDatosCompletos();
+  return data;
+};
+
+/**
+ * Ejecuta el pipeline completo de respaldo híbrido en memoria:
+ * 1. Generación de snapshot en memoria (Buffer / JSON)
+ * 2. Subida paralela a Cloudflare R2 y Telegram con Promise.allSettled
+ * 3. Copia local tolerante a fallos (sin bloquear en entornos Serverless)
+ * 4. Registro de metadatos livianos en PostgreSQL (sin saturar la BD) y rotación (20 máx)
+ */
+export async function ejecutarPipelineBackup({ origen = 'MANUAL', usuario = null, nombre = null, descripcion = null } = {}) {
+  const timestampVE = new Date().toLocaleString('es-VE', { 
+    timeZone: 'America/Caracas',
+    dateStyle: 'short', 
+    timeStyle: 'short' 
+  });
+
+  // 1. Generar Snapshot 100% en memoria
+  const { buffer, filename, tamanoBytes, metadata, payload } = await generarSnapshotMemoria({
+    filenamePrefix: 'backup_auto',
+    usuario
+  });
+
+  // 2. Ejecutar subidas externas en paralelo contra Timeouts
+  const [r2Settled, telegramSettled] = await Promise.allSettled([
+    subirBackupAR2(buffer, filename),
+    enviarBackupTelegram(buffer, filename, metadata)
+  ]);
+
+  const r2Result = r2Settled.status === 'fulfilled' 
+    ? r2Settled.value 
+    : { subido: false, error: r2Settled.reason?.message || 'Error desconocido en R2' };
+
+  const telegramResult = telegramSettled.status === 'fulfilled' 
+    ? telegramSettled.value 
+    : { enviado: false, error: telegramSettled.reason?.message || 'Error desconocido en Telegram' };
+
+  // 3. Intento de respaldo local condicional (fail-safe)
+  const localResult = guardarBackupLocalEnDisco(payload, filename);
+
+  // 4. Registrar únicamente metadatos livianos en la tabla `backups` de PostgreSQL
+  const creadoPor = usuario?.username || usuario?.email || origen;
+  const backupNombre = (nombre && nombre.trim()) || `Respaldo ${origen} ${timestampVE}`;
+  const backupDesc = descripcion || `Respaldo generado vía ${origen} (${(tamanoBytes / 1024).toFixed(1)} KB)`;
+
+  const nuevoBackup = await prisma.backup.create({
+    data: {
+      nombre: backupNombre,
+      descripcion: backupDesc,
+      data: {
+        filename,
+        tamanoBytes,
+        registros: metadata.counts,
+        totalRecords: metadata.totalRecords,
+        generadoPor: creadoPor,
+        origen,
+        cloudStorage: {
+          r2: r2Result
         },
-        orderBy: {
-          createdAt: 'asc'
-        }
+        notificaciones: {
+          telegram: telegramResult
+        },
+        guardadoLocal: localResult.guardado
       },
-      elementosUnifilares: true,
-      subestaciones: true,
-      puntosMedicion: true,
-      ccmList: true
+      tamanoBytes,
+      creadoPor
     },
-    orderBy: {
-      nombre: 'asc'
+    select: {
+      id: true,
+      nombre: true,
+      descripcion: true,
+      tamanoBytes: true,
+      creadoPor: true,
+      createdAt: true
     }
   });
+
+  // Mantener un máximo de 20 registros en la base de datos
+  try {
+    const totalBackups = await prisma.backup.findMany({
+      select: { id: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (totalBackups.length > 20) {
+      const aEliminar = totalBackups.slice(20).map((b) => b.id);
+      await prisma.backup.deleteMany({
+        where: { id: { in: aEliminar } }
+      });
+    }
+  } catch (rotErr) {
+    console.warn('⚠️ [BackupController] Error durante la rotación de registros en BD:', rotErr.message);
+  }
+
+  return {
+    ok: true,
+    success: true,
+    id: nuevoBackup.id,
+    filename,
+    tamanoBytes,
+    r2: r2Result,
+    telegram: telegramResult,
+    guardadoLocal: localResult.guardado,
+    metadata
+  };
+}
+
+/**
+ * Endpoint para Vercel Cron Jobs o triggers externos protegidos:
+ * GET o POST /api/cron/backup
+ */
+export const ejecutarCronBackup = async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+    const cronSecret = process.env.CRON_SECRET;
+
+    // Validación de seguridad con CRON_SECRET si está configurado
+    if (cronSecret && token !== cronSecret && req.query.secret !== cronSecret) {
+      console.warn('⚠️ [CronBackup] Intento de acceso no autorizado al trigger de cron de backups.');
+      return res.status(401).json({
+        ok: false,
+        success: false,
+        error: 'No autorizado: CRON_SECRET inválido o ausente'
+      });
+    }
+
+    console.log('⏰ [CronBackup] Iniciando ejecución programada de respaldo (Vercel Cron / Webhook)...');
+    const resultado = await ejecutarPipelineBackup({ origen: 'VERCEL_CRON' });
+
+    return res.status(200).json(resultado);
+  } catch (error) {
+    console.error('❌ [CronBackup] Error al ejecutar cron de backup:', error);
+    return res.status(500).json({
+      ok: false,
+      success: false,
+      error: error.message || 'Error al ejecutar respaldo cron'
+    });
+  }
 };
 
 /**
@@ -462,63 +560,24 @@ export const listarBackupsEnNube = async (req, res) => {
 
 /**
  * POST /api/backup/cloud
- * Genera un nuevo respaldo completo del estado actual y lo almacena en la tabla `backups`.
+ * Genera un nuevo respaldo completo usando el pipeline híbrido (R2, Telegram, BD y Local).
  */
 export const crearBackupEnNube = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   try {
     const { nombre, descripcion } = req.body || {};
-    const snapshot = await generarSnapshotCompleto();
-    const jsonString = JSON.stringify(snapshot);
-    const tamanoBytes = Buffer.byteLength(jsonString, 'utf8');
-
-    const timestamp = new Date().toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
-    const backupNombre = (nombre && nombre.trim()) || `Respaldo ${timestamp}`;
-    const creadoPor = req.user?.username || 'ADMIN';
-
-    const nuevoBackup = await prisma.backup.create({
-      data: {
-        nombre: backupNombre,
-        descripcion: descripcion || `Respaldo generado por ${creadoPor}`,
-        data: snapshot,
-        tamanoBytes,
-        creadoPor
-      },
-      select: {
-        id: true,
-        nombre: true,
-        descripcion: true,
-        tamanoBytes: true,
-        creadoPor: true,
-        createdAt: true
-      }
+    const resultado = await ejecutarPipelineBackup({
+      origen: 'MANUAL',
+      usuario: req.user,
+      nombre,
+      descripcion
     });
-
-    // Guardar también una copia local en disco (backups/)
-    try {
-      guardarBackupLocalEnDisco(snapshot);
-    } catch (fsErr) {
-      console.warn('⚠️ No se pudo guardar la copia en disco local:', fsErr.message);
-    }
-
-    // Mantener un máximo de 20 respaldos en la base de datos
-    const totalBackups = await prisma.backup.findMany({
-      select: { id: true },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    if (totalBackups.length > 20) {
-      const aEliminar = totalBackups.slice(20).map((b) => b.id);
-      await prisma.backup.deleteMany({
-        where: { id: { in: aEliminar } }
-      });
-    }
 
     return res.status(201).json({
       ok: true,
       success: true,
-      message: 'Respaldo guardado exitosamente en la nube.',
-      data: nuevoBackup
+      message: 'Respaldo generado y distribuido exitosamente.',
+      data: resultado
     });
   } catch (error) {
     console.error('Error al crear respaldo en la nube:', error);
@@ -587,7 +646,9 @@ export const restaurarBackupEnNube = async (req, res) => {
       });
     }
 
-    await restaurarDesdeDatos(backup.data);
+    // Si data contiene snapshot completo o data estructurada
+    const payloadRestaurar = backup.data.data ? backup.data.data : backup.data;
+    await restaurarDesdeDatos(payloadRestaurar);
 
     return res.status(200).json({
       ok: true,

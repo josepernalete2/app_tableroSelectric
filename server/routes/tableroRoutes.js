@@ -26,7 +26,8 @@ import {
   crearBackupEnNube, 
   descargarBackupEnNube, 
   restaurarBackupEnNube, 
-  eliminarBackupEnNube 
+  eliminarBackupEnNube,
+  ejecutarCronBackup 
 } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto, obtenerPotencialesAlimentadores } from '../controllers/jerarquiaController.js';
@@ -38,6 +39,10 @@ const router = Router();
 router.post('/login', loginUsuario);
 router.post('/users/request-reset', solicitarResetPassword);
 router.post('/users/verify-2fa', verificar2FA);
+
+// Endpoint de Cron Jobs (Vercel Cron / Webhook externo) - Protegido por CRON_SECRET dentro del controlador
+router.get('/cron/backup', ejecutarCronBackup);
+router.post('/cron/backup', ejecutarCronBackup);
 
 // A partir de aquí todas las rutas requieren autenticación JWT
 router.use(verificarToken);
