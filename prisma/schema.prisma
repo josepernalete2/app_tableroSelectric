@@ -54,6 +54,13 @@ model Empresa {
   inspeccionesTermograficas    InspeccionTermografica[]
   inspeccionesAterramiento     InspeccionAterramiento[]
   inspeccionesTanquesCombustible InspeccionTanqueCombustible[]
+
+  // Campos para Resguardo por Empresa y Notificaciones Seguras
+  telegramBackupPin   String?
+  telegramChatId      String?            @unique
+  ultimoBackupAt      DateTime?
+  ultimoBackupStatus  String?            @default("PENDIENTE")
+
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 

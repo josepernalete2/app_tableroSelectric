@@ -3,7 +3,11 @@ import {
   exportarBackupStream, 
   guardarBackupLocalEnDisco, 
   generarSnapshotMemoria, 
-  recopilarDatosCompletos 
+  recopilarDatosCompletos,
+  obtenerResumenTodasEmpresas,
+  obtenerEstadoRespaldoEmpresa,
+  generarPinResguardoEmpresa,
+  generarBackupEmpresaJson
 } from '../services/backup.service.js';
 import { subirBackupAR2 } from '../services/r2Backup.service.js';
 import { enviarBackupTelegram } from '../services/telegramBackup.service.js';
@@ -695,3 +699,126 @@ export const eliminarBackupEnNube = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/backup/resumen-empresas
+ * Devuelve un resumen de resguardo para todas las empresas del sistema.
+ */
+export const obtenerResumenEmpresasController = async (req, res) => {
+  try {
+    const empresas = await obtenerResumenTodasEmpresas();
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: empresas
+    });
+  } catch (error) {
+    console.error('❌ [BackupController] Error al obtener resumen de empresas:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Error al consultar resumen de empresas'
+    });
+  }
+};
+
+/**
+ * GET /api/backup/empresa/:empresaId/estado
+ * Devuelve la ficha técnica y certificado de resguardo de una empresa.
+ */
+export const obtenerEstadoEmpresaController = async (req, res) => {
+  try {
+    const { empresaId } = req.params;
+    const estado = await obtenerEstadoRespaldoEmpresa(empresaId);
+    if (!estado) {
+      return res.status(404).json({ ok: false, error: 'Empresa no encontrada' });
+    }
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: estado
+    });
+  } catch (error) {
+    console.error('❌ [BackupController] Error al obtener estado de empresa:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Error al consultar estado de la empresa'
+    });
+  }
+};
+
+/**
+ * POST /api/backup/generar-pin/:empresaId
+ * Genera o renueva el PIN de 6 dígitos para vincular la empresa por Telegram.
+ */
+export const generarPinEmpresaController = async (req, res) => {
+  try {
+    const { empresaId } = req.params;
+    const resultado = await generarPinResguardoEmpresa(empresaId);
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: resultado
+    });
+  } catch (error) {
+    console.error('❌ [BackupController] Error al generar PIN de empresa:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Error al generar PIN de resguardo'
+    });
+  }
+};
+
+/**
+ * POST /api/backup/empresa/:empresaId
+ * Ejecuta el respaldo individual en memoria de una empresa.
+ */
+export const ejecutarBackupEmpresaController = async (req, res) => {
+  try {
+    const { empresaId } = req.params;
+    const resultado = await generarBackupEmpresaJson(empresaId);
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: {
+        filename: resultado.filename,
+        tamanoBytes: resultado.tamanoBytes,
+        metadata: resultado.payload.metadata
+      }
+    });
+  } catch (error) {
+    console.error('❌ [BackupController] Error al ejecutar respaldo de empresa:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Error al respaldar la empresa'
+    });
+  }
+};
+
+/**
+ * GET /api/backup/empresa/:empresaId/export
+ * Descarga directamente el archivo JSON del snapshot aislado de la empresa.
+ */
+export const descargarBackupEmpresaController = async (req, res) => {
+  try {
+    const { empresaId } = req.params;
+    const { buffer, filename } = await generarBackupEmpresaJson(empresaId);
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+
+    return res.status(200).send(buffer);
+  } catch (error) {
+    console.error('❌ [BackupController] Error al descargar respaldo de empresa:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        ok: false,
+        error: error.message || 'Error al exportar respaldo de empresa'
+      });
+    }
+    return res.end();
+  }
+};
+
