@@ -571,6 +571,7 @@ export function App() {
           <Route element={<ProtectedRoute><SidebarLayout /></ProtectedRoute>}>
             <Route path="/" element={<DashboardView />} />
             <Route path="/reportes" element={<ReportesView />} />
+            <Route path="/backups" element={<BackupView />} />
             <Route path="/backup" element={<BackupView />} />
             <Route path="/empresa/:companyId" element={<EmpresaView />} />
             <Route path="/empresa/:companyId/proyecto/:proyectoId" element={<ProyectoView />} />

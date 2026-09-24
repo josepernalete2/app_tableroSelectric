@@ -64,13 +64,8 @@ export const SidebarLayout = () => {
   
   // Modales
   const [showReportsModal, setShowReportsModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showChatModal, setShowChatModal] = useState(false);
-
-  // Estados de Copia de Seguridad JSON
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
 
   // Estados de control de usuarios
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -136,107 +131,6 @@ export const SidebarLayout = () => {
     }
     logout();
     navigate('/login');
-  };
-
-  // Exportar DB PostgreSQL a archivo JSON local
-  const handleExportDb = async () => {
-    setIsExporting(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/backup/export`, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
-      });
-
-      if (!res.ok) {
-        let errorMsg = 'Error al exportar base de datos';
-        try {
-          const errData = await res.json();
-          errorMsg = errData.error || errorMsg;
-        } catch (_) {
-          errorMsg = `Error HTTP ${res.status}`;
-        }
-        showToast(errorMsg, "error");
-        return;
-      }
-
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.href = downloadUrl;
-      const timestamp = new Date().toISOString().split('T')[0];
-      downloadAnchor.setAttribute("download", `respaldo_selectric_${timestamp}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-
-      showToast("Base de datos exportada con éxito en formato JSON.", "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Error de conexión al servidor backend para exportar.", "error");
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  // Importar DB PostgreSQL desde archivo JSON local
-  const handleImportDb = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const ok = await confirm({
-      title: 'Restaurar Base de Datos desde JSON',
-      message: '¿Está seguro de que desea importar este archivo? Se SOBRESCRIBIRÁ por completo la base de datos actual con la información del respaldo.',
-      type: 'danger',
-      confirmText: 'Importar y Sobrescribir'
-    });
-
-    if (!ok) {
-      e.target.value = '';
-      return;
-    }
-
-    setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const parsed = JSON.parse(reader.result);
-        const res = await fetch(`${API_BASE_URL}/api/backup/import`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-          body: JSON.stringify({ data: parsed })
-        });
-        let result;
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          result = await res.json();
-        } else {
-          const text = await res.text();
-          result = { ok: false, error: text || `Error HTTP ${res.status}` };
-        }
-
-        if (res.ok && (result.ok || result.success)) {
-          showToast("Base de datos importada y restaurada con éxito.", "success");
-          importCompanies(parsed);
-          setTimeout(() => {
-            window.location.reload();
-          }, 1200);
-        } else {
-          showToast("Fallo al importar datos: " + (result.error || result.message || 'Error desconocido'), "error");
-        }
-      } catch (err) {
-        console.error(err);
-        showToast("El archivo seleccionado no contiene una estructura JSON de respaldo válida.", "error");
-      } finally {
-        setIsImporting(false);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
   };
 
   // Cerrar menú móvil al navegar
@@ -359,7 +253,7 @@ export const SidebarLayout = () => {
 
   navLinks.push(
     { name: 'Reportes y Auditoría', path: '/reportes', icon: FileText },
-    { name: 'Copia de Seguridad (JSON)', onClick: () => setShowSettingsModal(true), icon: Database }
+    { name: 'Copias de Seguridad', path: '/backups', icon: Database }
   );
 
 
@@ -403,7 +297,9 @@ export const SidebarLayout = () => {
               <div className="space-y-2">
                 {navLinks.map((link) => {
                   const Icon = link.icon;
-                  const isActive = link.path ? location.pathname === link.path : false;
+                  const isActive = link.path 
+                    ? (location.pathname === link.path || (link.path === '/backups' && location.pathname === '/backup'))
+                    : false;
                   return link.path ? (
                     <Link
                       key={link.name}
@@ -497,7 +393,9 @@ export const SidebarLayout = () => {
             )}
             {navLinks.map((link) => {
               const Icon = link.icon;
-              const isActive = link.path ? location.pathname === link.path : false;
+              const isActive = link.path 
+                ? (location.pathname === link.path || (link.path === '/backups' && location.pathname === '/backup'))
+                : false;
               return link.path ? (
                 <Link
                   key={link.name}
@@ -644,109 +542,6 @@ export const SidebarLayout = () => {
                   Entendido
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: COPIA DE SEGURIDAD Y RESTAURACIÓN (JSON) */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowSettingsModal(false)} />
-          
-          <div className="relative w-full max-w-xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-100 flex items-center gap-2">
-                    Copia de Seguridad y Restauración
-                  </h3>
-                  <p className="text-[10.5px] text-slate-400">
-                    Respaldo completo y portabilidad mediante archivos JSON
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowSettingsModal(false)}
-                className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-4 font-sans">
-              
-              {/* Opción 1: Exportar JSON */}
-              <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-3 hover:border-slate-800 transition-colors">
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 shrink-0">
-                    <Download className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1 flex-1">
-                    <h4 className="text-xs font-bold text-slate-200">Exportar Base de Datos a JSON</h4>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Genera y descarga un archivo <code className="text-amber-400 font-mono text-[10px]">.json</code> con todas tus empresas, proyectos, tableros, circuitos, inspecciones técnicas y auditorías.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleExportDb}
-                  disabled={isExporting}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-sky-950/40 text-sky-300 hover:text-sky-200 border border-slate-800 hover:border-sky-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-98 disabled:opacity-50 shadow-sm"
-                >
-                  <Download className={`w-4 h-4 ${isExporting ? 'animate-bounce' : ''}`} />
-                  <span>{isExporting ? 'Generando archivo de respaldo...' : '⬇ Descargar Respaldo JSON Ahora'}</span>
-                </button>
-              </div>
-
-              {/* Opción 2: Importar y Restaurar JSON */}
-              <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-850 space-y-3 hover:border-slate-800 transition-colors">
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
-                    <UploadCloud className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-1 flex-1">
-                    <h4 className="text-xs font-bold text-slate-200">Restaurar Base de Datos desde JSON</h4>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Carga un archivo <code className="text-amber-400 font-mono text-[10px]">.json</code> para restaurar todos los registros. Se te pedirá confirmación de seguridad antes de sobreescribir la base de datos.
-                    </p>
-                  </div>
-                </div>
-                <label className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs cursor-pointer transition-all active:scale-98 shadow-md">
-                  <UploadCloud className={`w-4 h-4 ${isImporting ? 'animate-spin' : ''}`} />
-                  <span>{isImporting ? 'Restaurando base de datos...' : '⬆ Seleccionar Archivo JSON para Restaurar'}</span>
-                  <input
-                    type="file"
-                    accept=".json"
-                    disabled={isImporting}
-                    onChange={handleImportDb}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              {/* Banner de Consejos y Buenas Prácticas */}
-              <div className="p-3 bg-slate-900/25 border border-slate-850 rounded-xl flex items-start gap-2.5 text-[10.5px] text-slate-400">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <strong className="text-slate-200">Almacenamiento Seguro:</strong> Puedes guardar tus respaldos <code className="text-slate-300 font-mono">.json</code> en tu disco duro, pendrive o enviarlos por correo electrónico para tener copias históricas y migrar de equipo cuando lo necesites.
-                </p>
-              </div>
-
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-slate-800 shrink-0 mt-4">
-              <button
-                type="button"
-                onClick={() => setShowSettingsModal(false)}
-                className="px-5 py-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 cursor-pointer transition-colors"
-              >
-                Cerrar
-              </button>
             </div>
           </div>
         </div>

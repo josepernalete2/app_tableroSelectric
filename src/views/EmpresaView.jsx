@@ -20,7 +20,8 @@ import {
   Cpu,
   ShieldAlert,
   RefreshCw,
-  CheckSquare
+  CheckSquare,
+  Database
 } from 'lucide-react';
 
 // Componente para renderizar Blobs de forma segura evitando fugas de memoria
@@ -486,25 +487,35 @@ export const EmpresaView = () => {
                 <Building className="w-5 h-5 text-amber-500" /> {company.nombre}
               </h2>
             </div>
-            {user?.role === 'ADMIN' && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {user?.role === 'ADMIN' && (
+                <button
+                  onClick={() => {
+                    setEditNombre(company.nombre);
+                    setEditRif(company.rif || '');
+                    setEditDireccionFiscal(company.direccionFiscal || '');
+                    setEditGerente1Nombre(company.gerente1Nombre || '');
+                    setEditGerente1Telefono(company.gerente1Telefono || '');
+                    setEditGerente1Email(company.gerente1Email || '');
+                    setEditGerente2Nombre(company.gerente2Nombre || '');
+                    setEditGerente2Telefono(company.gerente2Telefono || '');
+                    setEditGerente2Email(company.gerente2Email || '');
+                    setShowEditEmpresaModal(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold rounded-lg text-slate-200 hover:text-slate-100 flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                >
+                  Editar Empresa
+                </button>
+              )}
               <button
-                onClick={() => {
-                  setEditNombre(company.nombre);
-                  setEditRif(company.rif || '');
-                  setEditDireccionFiscal(company.direccionFiscal || '');
-                  setEditGerente1Nombre(company.gerente1Nombre || '');
-                  setEditGerente1Telefono(company.gerente1Telefono || '');
-                  setEditGerente1Email(company.gerente1Email || '');
-                  setEditGerente2Nombre(company.gerente2Nombre || '');
-                  setEditGerente2Telefono(company.gerente2Telefono || '');
-                  setEditGerente2Email(company.gerente2Email || '');
-                  setShowEditEmpresaModal(true);
-                }}
-                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold rounded-lg text-slate-200 hover:text-slate-100 flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                onClick={() => navigate('/backups')}
+                className="px-3.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-bold rounded-lg text-amber-400 hover:text-amber-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                title="Ir al Centro de Resguardo y Copias de Seguridad"
               >
-                Editar Empresa
+                <Database className="w-3.5 h-3.5" />
+                Resguardo & Backups
               </button>
-            )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-900">
