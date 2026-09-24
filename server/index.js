@@ -19,6 +19,7 @@ import tableroRoutes from './routes/tableroRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
 import { iniciarSchedulerBackups } from './services/backupScheduler.js';
+import { ejecutarCronBackup } from './controllers/backupController.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -169,6 +170,10 @@ app.use('/uploads', (req, res, next) => {
 
 // Endpoints de Notificaciones Push
 app.use('/api/notifications', pushRoutes);
+
+// Endpoint de Cron Jobs de Respaldos (Vercel Cron / Webhooks externos)
+// Excluido de JWT de usuarios y protegido internamente por CRON_SECRET
+app.all('/api/cron/backup', ejecutarCronBackup);
 
 // Endpoints Principales de la Inspección Eléctrica
 app.use('/api', tableroRoutes);

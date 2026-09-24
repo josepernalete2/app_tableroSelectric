@@ -1,0 +1,523 @@
+{
+  "metadata": {
+    "appName": "App Tableros Eléctricos (Selectric)",
+    "exportVersion": "2.1.0",
+    "schemaVersion": "1.0.0",
+    "generatedAt": "2026-09-24T17:05:50.314Z",
+    "environment": "development",
+    "counts": {
+      "empresas": 5,
+      "proyectos": 3,
+      "tableros": 1,
+      "circuitos": 0,
+      "elementosUnifilares": 2,
+      "subestaciones": 0,
+      "puntosMedicion": 0,
+      "ccm": 0,
+      "inspeccionesTermograficas": 0,
+      "inspeccionesAterramiento": 0,
+      "inspeccionesTanquesCombustible": 0,
+      "alarmas": 0,
+      "alimentadores": 1
+    },
+    "totalRecords": 12
+  },
+  "data": [
+    {
+      "id": "c-2",
+      "nombre": "Alimentos Polar Planta Turmero",
+      "rif": "J-98765432-1",
+      "direccionFiscal": "Carretera Nacional Turmero, Aragua",
+      "direccion": null,
+      "gerente1Nombre": null,
+      "gerente1Telefono": null,
+      "gerente1Email": null,
+      "gerente2Nombre": null,
+      "gerente2Telefono": null,
+      "gerente2Email": null,
+      "createdAt": "2026-07-31T18:49:10.197Z",
+      "updatedAt": "2026-09-22T22:24:27.904Z",
+      "proyectos": [],
+      "tableros": [],
+      "elementosUnifilares": [],
+      "subestaciones": [],
+      "puntosMedicion": [],
+      "ccmList": []
+    },
+    {
+      "id": "company-1787784006087",
+      "nombre": "bb",
+      "rif": "ccv",
+      "direccionFiscal": "ebge",
+      "direccion": "ebge",
+      "gerente1Nombre": null,
+      "gerente1Telefono": null,
+      "gerente1Email": null,
+      "gerente2Nombre": null,
+      "gerente2Telefono": null,
+      "gerente2Email": null,
+      "createdAt": "2026-08-26T22:40:06.400Z",
+      "updatedAt": "2026-08-26T22:40:06.400Z",
+      "proyectos": [
+        {
+          "id": "1a163ab9-31e8-40e5-a3e1-d3918457a48a",
+          "nombre": "fvvf",
+          "direccion": "",
+          "descripcion": null,
+          "empresaId": "company-1787784006087",
+          "responsableNombre": null,
+          "responsableTelefono": null,
+          "responsableEmail": null,
+          "createdAt": "2026-09-04T20:55:08.420Z",
+          "updatedAt": "2026-09-04T20:55:08.420Z",
+          "tableros": [],
+          "elementosUnifilares": [],
+          "subestaciones": [],
+          "puntosMedicion": [],
+          "ccmList": [],
+          "inspeccionesTermograficas": [],
+          "inspeccionesAterramiento": [],
+          "inspeccionesTanquesCombustible": [],
+          "alarmas": [],
+          "alimentadores": []
+        }
+      ],
+      "tableros": [],
+      "elementosUnifilares": [],
+      "subestaciones": [],
+      "puntosMedicion": [],
+      "ccmList": []
+    },
+    {
+      "id": "c-1",
+      "nombre": "Clínica Metropolitana de Caracas",
+      "rif": "J-12345678-9",
+      "direccionFiscal": "Av. Araure, Urb. San Román, Caracas",
+      "direccion": null,
+      "gerente1Nombre": null,
+      "gerente1Telefono": null,
+      "gerente1Email": null,
+      "gerente2Nombre": null,
+      "gerente2Telefono": null,
+      "gerente2Email": null,
+      "createdAt": "2026-07-31T18:49:10.048Z",
+      "updatedAt": "2026-09-22T22:24:27.770Z",
+      "proyectos": [],
+      "tableros": [],
+      "elementosUnifilares": [],
+      "subestaciones": [],
+      "puntosMedicion": [],
+      "ccmList": []
+    },
+    {
+      "id": "company-1785529096098",
+      "nombre": "Empresa company-1785529096098",
+      "rif": "J-AUTO-company-",
+      "direccionFiscal": "Registrada por Sincronización",
+      "direccion": "Registrada por Sincronización",
+      "gerente1Nombre": null,
+      "gerente1Telefono": null,
+      "gerente1Email": null,
+      "gerente2Nombre": null,
+      "gerente2Telefono": null,
+      "gerente2Email": null,
+      "createdAt": "2026-07-31T20:37:38.504Z",
+      "updatedAt": "2026-07-31T20:37:38.504Z",
+      "proyectos": [
+        {
+          "id": "null",
+          "nombre": "Proyecto null",
+          "direccion": "Registrado por Sincronización",
+          "descripcion": "Registrado automáticamente desde sincronización de elemento",
+          "empresaId": "company-1785529096098",
+          "responsableNombre": null,
+          "responsableTelefono": null,
+          "responsableEmail": null,
+          "createdAt": "2026-07-31T20:37:38.504Z",
+          "updatedAt": "2026-07-31T20:37:38.504Z",
+          "tableros": [
+            {
+              "id": "effdbeec-cb02-4a17-bd21-cb90cb2242e7",
+              "nombre": "v",
+              "ubicacion": "Sin ubicación",
+              "maxPolos": 24,
+              "tension": null,
+              "fases": 3,
+              "alimentadorId": null,
+              "proyectoId": "null",
+              "empresaId": "company-1785529096098",
+              "version": 1,
+              "deletedAt": null,
+              "createdAt": "2026-07-31T20:37:38.532Z",
+              "updatedAt": "2026-07-31T20:37:38.532Z",
+              "circuitos": [],
+              "alimentador": null
+            }
+          ],
+          "elementosUnifilares": [
+            {
+              "id": "effdbeec-cb02-4a17-bd21-cb90cb2242e7",
+              "nombre": "v",
+              "tipoElemento": "TABLERO",
+              "ubicacion": "Sin ubicación",
+              "alimentadoPor": "No definido",
+              "foto": null,
+              "observacionesGenerales": null,
+              "datosTecnicos": {
+                "voltaje": {
+                  "va": "208",
+                  "vb": "205",
+                  "vc": "205"
+                },
+                "circuits": [],
+                "maxPoles": 24,
+                "acometida": "",
+                "puestaTierra": {
+                  "calibre": "",
+                  "observaciones": ""
+                },
+                "neutroLlegada": {
+                  "calibre": "",
+                  "observaciones": ""
+                },
+                "breakerPrincipal": {
+                  "amp": "",
+                  "tipo": "",
+                  "marca": ""
+                },
+                "barrasPrincipales": {
+                  "ia": "0",
+                  "ib": "0",
+                  "ic": "0"
+                }
+              },
+              "alimentadoPorId": null,
+              "circuitoOrigen": null,
+              "calibreConductor": null,
+              "breakerAmperaje": null,
+              "breakerMarca": null,
+              "breakerTipo": null,
+              "potenciaEstimada": null,
+              "estadoVinculo": "ACTIVO",
+              "detallesFormato": null,
+              "version": 1,
+              "deletedAt": null,
+              "proyectoId": "null",
+              "empresaId": "company-1785529096098",
+              "createdAt": "2026-07-31T20:37:38.547Z",
+              "updatedAt": "2026-07-31T20:37:38.547Z"
+            }
+          ],
+          "subestaciones": [],
+          "puntosMedicion": [],
+          "ccmList": [],
+          "inspeccionesTermograficas": [],
+          "inspeccionesAterramiento": [],
+          "inspeccionesTanquesCombustible": [],
+          "alarmas": [],
+          "alimentadores": [
+            {
+              "id": "test-feeder-uuid-1",
+              "nombre": "Alimentador Prueba 1",
+              "origen": "Subestacion A",
+              "capacidadAmperios": 200,
+              "capacidadKVA": null,
+              "proyectoId": "null",
+              "createdAt": "2026-08-09T15:33:49.824Z",
+              "updatedAt": "2026-08-09T15:33:49.824Z"
+            }
+          ]
+        },
+        {
+          "id": "07cae68e-1c9e-4ac0-a095-2513ab63e225",
+          "nombre": "v",
+          "direccion": "",
+          "descripcion": null,
+          "empresaId": "company-1785529096098",
+          "responsableNombre": null,
+          "responsableTelefono": null,
+          "responsableEmail": null,
+          "createdAt": "2026-08-04T00:01:31.891Z",
+          "updatedAt": "2026-08-04T00:01:31.891Z",
+          "tableros": [],
+          "elementosUnifilares": [
+            {
+              "id": "e986c1e2-144e-4115-b207-87042c95e06d",
+              "nombre": "q",
+              "tipoElemento": "TRANSFORMADOR",
+              "ubicacion": "q",
+              "alimentadoPor": "q",
+              "foto": null,
+              "observacionesGenerales": null,
+              "datosTecnicos": {
+                "kva": "500 KVA",
+                "spt": {
+                  "resistencia": "",
+                  "fechaMedicion": "",
+                  "barillaCalibre": "",
+                  "barillaCantidad": "",
+                  "conductorCalibre": "",
+                  "conductorTipoSold": "",
+                  "barillaConfiguracion": ""
+                },
+                "seco": "",
+                "fases": "3",
+                "marca": "General Electric (GE)",
+                "aceite": "",
+                "conexion": "Estrella - Estrella (Aterrizado)",
+                "acometidas": {
+                  "neutro": {
+                    "tipo": "",
+                    "aerea": false,
+                    "calibre": "",
+                    "fusible": "",
+                    "terminal": "",
+                    "pararrayo": "",
+                    "subterranea": false,
+                    "observaciones": ""
+                  },
+                  "primaria": {
+                    "tipo": "",
+                    "aerea": false,
+                    "calibre": "",
+                    "fusible": "",
+                    "terminal": "",
+                    "pararrayo": "",
+                    "subterranea": false,
+                    "observaciones": ""
+                  },
+                  "secundaria": {
+                    "tipo": "",
+                    "aerea": false,
+                    "calibre": "",
+                    "fusible": "",
+                    "terminal": "",
+                    "pararrayo": "",
+                    "subterranea": false,
+                    "observaciones": ""
+                  }
+                },
+                "aislamiento": "",
+                "potenciaKva": "500 KVA",
+                "impedanciaAmp": "",
+                "impedanciaPct": "",
+                "impedanciaTemp": "",
+                "tensionPrimaria": "13.8 kV",
+                "voltajePrimario": "13.8 kV",
+                "amperiosPrimaria": "",
+                "tensionSecundaria": "208 / 120 V",
+                "tipoTransformador": "Pedestal",
+                "voltajeSecundario": "208 / 120 V",
+                "amperiosSecundaria": ""
+              },
+              "alimentadoPorId": null,
+              "circuitoOrigen": null,
+              "calibreConductor": null,
+              "breakerAmperaje": null,
+              "breakerMarca": null,
+              "breakerTipo": null,
+              "potenciaEstimada": null,
+              "estadoVinculo": "ACTIVO",
+              "detallesFormato": null,
+              "version": 1,
+              "deletedAt": null,
+              "proyectoId": "07cae68e-1c9e-4ac0-a095-2513ab63e225",
+              "empresaId": "company-1785529096098",
+              "createdAt": "2026-08-09T01:45:45.912Z",
+              "updatedAt": "2026-08-09T01:45:45.912Z"
+            }
+          ],
+          "subestaciones": [],
+          "puntosMedicion": [],
+          "ccmList": [],
+          "inspeccionesTermograficas": [],
+          "inspeccionesAterramiento": [],
+          "inspeccionesTanquesCombustible": [],
+          "alarmas": [],
+          "alimentadores": []
+        }
+      ],
+      "tableros": [
+        {
+          "id": "effdbeec-cb02-4a17-bd21-cb90cb2242e7",
+          "nombre": "v",
+          "ubicacion": "Sin ubicación",
+          "maxPolos": 24,
+          "tension": null,
+          "fases": 3,
+          "alimentadorId": null,
+          "proyectoId": "null",
+          "empresaId": "company-1785529096098",
+          "version": 1,
+          "deletedAt": null,
+          "createdAt": "2026-07-31T20:37:38.532Z",
+          "updatedAt": "2026-07-31T20:37:38.532Z",
+          "circuitos": []
+        }
+      ],
+      "elementosUnifilares": [
+        {
+          "id": "effdbeec-cb02-4a17-bd21-cb90cb2242e7",
+          "nombre": "v",
+          "tipoElemento": "TABLERO",
+          "ubicacion": "Sin ubicación",
+          "alimentadoPor": "No definido",
+          "foto": null,
+          "observacionesGenerales": null,
+          "datosTecnicos": {
+            "voltaje": {
+              "va": "208",
+              "vb": "205",
+              "vc": "205"
+            },
+            "circuits": [],
+            "maxPoles": 24,
+            "acometida": "",
+            "puestaTierra": {
+              "calibre": "",
+              "observaciones": ""
+            },
+            "neutroLlegada": {
+              "calibre": "",
+              "observaciones": ""
+            },
+            "breakerPrincipal": {
+              "amp": "",
+              "tipo": "",
+              "marca": ""
+            },
+            "barrasPrincipales": {
+              "ia": "0",
+              "ib": "0",
+              "ic": "0"
+            }
+          },
+          "alimentadoPorId": null,
+          "circuitoOrigen": null,
+          "calibreConductor": null,
+          "breakerAmperaje": null,
+          "breakerMarca": null,
+          "breakerTipo": null,
+          "potenciaEstimada": null,
+          "estadoVinculo": "ACTIVO",
+          "detallesFormato": null,
+          "version": 1,
+          "deletedAt": null,
+          "proyectoId": "null",
+          "empresaId": "company-1785529096098",
+          "createdAt": "2026-07-31T20:37:38.547Z",
+          "updatedAt": "2026-07-31T20:37:38.547Z"
+        },
+        {
+          "id": "e986c1e2-144e-4115-b207-87042c95e06d",
+          "nombre": "q",
+          "tipoElemento": "TRANSFORMADOR",
+          "ubicacion": "q",
+          "alimentadoPor": "q",
+          "foto": null,
+          "observacionesGenerales": null,
+          "datosTecnicos": {
+            "kva": "500 KVA",
+            "spt": {
+              "resistencia": "",
+              "fechaMedicion": "",
+              "barillaCalibre": "",
+              "barillaCantidad": "",
+              "conductorCalibre": "",
+              "conductorTipoSold": "",
+              "barillaConfiguracion": ""
+            },
+            "seco": "",
+            "fases": "3",
+            "marca": "General Electric (GE)",
+            "aceite": "",
+            "conexion": "Estrella - Estrella (Aterrizado)",
+            "acometidas": {
+              "neutro": {
+                "tipo": "",
+                "aerea": false,
+                "calibre": "",
+                "fusible": "",
+                "terminal": "",
+                "pararrayo": "",
+                "subterranea": false,
+                "observaciones": ""
+              },
+              "primaria": {
+                "tipo": "",
+                "aerea": false,
+                "calibre": "",
+                "fusible": "",
+                "terminal": "",
+                "pararrayo": "",
+                "subterranea": false,
+                "observaciones": ""
+              },
+              "secundaria": {
+                "tipo": "",
+                "aerea": false,
+                "calibre": "",
+                "fusible": "",
+                "terminal": "",
+                "pararrayo": "",
+                "subterranea": false,
+                "observaciones": ""
+              }
+            },
+            "aislamiento": "",
+            "potenciaKva": "500 KVA",
+            "impedanciaAmp": "",
+            "impedanciaPct": "",
+            "impedanciaTemp": "",
+            "tensionPrimaria": "13.8 kV",
+            "voltajePrimario": "13.8 kV",
+            "amperiosPrimaria": "",
+            "tensionSecundaria": "208 / 120 V",
+            "tipoTransformador": "Pedestal",
+            "voltajeSecundario": "208 / 120 V",
+            "amperiosSecundaria": ""
+          },
+          "alimentadoPorId": null,
+          "circuitoOrigen": null,
+          "calibreConductor": null,
+          "breakerAmperaje": null,
+          "breakerMarca": null,
+          "breakerTipo": null,
+          "potenciaEstimada": null,
+          "estadoVinculo": "ACTIVO",
+          "detallesFormato": null,
+          "version": 1,
+          "deletedAt": null,
+          "proyectoId": "07cae68e-1c9e-4ac0-a095-2513ab63e225",
+          "empresaId": "company-1785529096098",
+          "createdAt": "2026-08-09T01:45:45.912Z",
+          "updatedAt": "2026-08-09T01:45:45.912Z"
+        }
+      ],
+      "subestaciones": [],
+      "puntosMedicion": [],
+      "ccmList": []
+    },
+    {
+      "id": "company-1786247484782",
+      "nombre": "Farmatodo",
+      "rif": "123456789",
+      "direccionFiscal": "barquisimeto",
+      "direccion": "barquisimeto",
+      "gerente1Nombre": "jota",
+      "gerente1Telefono": "2422",
+      "gerente1Email": null,
+      "gerente2Nombre": null,
+      "gerente2Telefono": null,
+      "gerente2Email": null,
+      "createdAt": "2026-08-09T03:51:24.818Z",
+      "updatedAt": "2026-08-09T03:51:24.818Z",
+      "proyectos": [],
+      "tableros": [],
+      "elementosUnifilares": [],
+      "subestaciones": [],
+      "puntosMedicion": [],
+      "ccmList": []
+    }
+  ]
+}

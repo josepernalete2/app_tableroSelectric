@@ -126,18 +126,21 @@ export async function ejecutarPipelineBackup({ origen = 'MANUAL', usuario = null
  */
 export const ejecutarCronBackup = async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'] || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
-    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers['authorization'] || req.headers['x-cron-secret'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : authHeader.trim();
+    const cronSecret = process.env.CRON_SECRET ? process.env.CRON_SECRET.trim() : '';
 
-    // Validación de seguridad con CRON_SECRET si está configurado
-    if (cronSecret && token !== cronSecret && req.query.secret !== cronSecret) {
-      console.warn('⚠️ [CronBackup] Intento de acceso no autorizado al trigger de cron de backups.');
-      return res.status(401).json({
-        ok: false,
-        success: false,
-        error: 'No autorizado: CRON_SECRET inválido o ausente'
-      });
+    // Validación estricta con CRON_SECRET
+    if (cronSecret) {
+      const querySecret = typeof req.query.secret === 'string' ? req.query.secret.trim() : '';
+      if (token !== cronSecret && querySecret !== cronSecret) {
+        console.warn('⚠️ [CronBackup] Intento de acceso no autorizado al trigger de cron de backups.');
+        return res.status(401).json({
+          ok: false,
+          success: false,
+          error: 'No autorizado: CRON_SECRET inválido o ausente'
+        });
+      }
     }
 
     console.log('⏰ [CronBackup] Iniciando ejecución programada de respaldo (Vercel Cron / Webhook)...');
