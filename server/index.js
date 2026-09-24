@@ -20,6 +20,7 @@ import pushRoutes from './routes/pushRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
 import { iniciarSchedulerBackups } from './services/backupScheduler.js';
 import { ejecutarCronBackup } from './controllers/backupController.js';
+import { procesarWebhookTelegram, configurarWebhookEndpoint } from './controllers/telegramWebhookController.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -174,6 +175,11 @@ app.use('/api/notifications', pushRoutes);
 // Endpoint de Cron Jobs de Respaldos (Vercel Cron / Webhooks externos)
 // Excluido de JWT de usuarios y protegido internamente por CRON_SECRET
 app.all('/api/cron/backup', ejecutarCronBackup);
+
+// Endpoints de Webhook de Telegram (Comandos /backup, /status, /help)
+// Excluido de JWT de usuarios y validado por Chat ID
+app.post('/api/telegram/webhook', procesarWebhookTelegram);
+app.all('/api/telegram/setup-webhook', configurarWebhookEndpoint);
 
 // Endpoints Principales de la Inspección Eléctrica
 app.use('/api', tableroRoutes);
