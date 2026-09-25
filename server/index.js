@@ -163,6 +163,17 @@ io.on('connection', (socket) => {
   });
 });
 
+// Endpoint de Salud / Verificación Rápida de API Serverless (sin DB para latencia <5ms)
+app.get(['/api/health', '/health'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    env: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Servir archivos de uploads con encabezados de seguridad
 app.use('/uploads', (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -190,11 +201,6 @@ app.use('/api/sync', syncRoutes);
 // Manejo fallback para endpoints de API no encontrados
 app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: `Endpoint de API no encontrado: ${req.method} ${req.originalUrl}` });
-});
-
-// Endpoint de Health Check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', uptime: process.uptime(), date: new Date() });
 });
 
 // Servir archivos estáticos del frontend compilado (dist/)
@@ -226,11 +232,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Iniciar Servidor Express y Programador de Respaldos
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en http://localhost:${PORT}`);
-  iniciarSchedulerBackups();
-});
+// Iniciar Servidor Express y Programador de Respaldos (Standalone / Containers)
+if (!process.env.VERCEL) {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Servidor de Inspecciones Eléctricas con WebSockets corriendo en http://localhost:${PORT}`);
+    iniciarSchedulerBackups();
+  });
+}
 
 export { app, server, io };
 export default app;

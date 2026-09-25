@@ -280,15 +280,35 @@ export const useStore = create(
 
       limpiarConflictosCircuitos: () => set({ conflictosCircuitos: [] }),
 
-      handleAuthError: (status) => {
-        if (status === 401 || status === 403) {
+      handleAuthError: (status, errorMsg = '') => {
+        if (
+          status === 401 || 
+          status === 403 || 
+          errorMsg?.toLowerCase().includes('expirado') || 
+          errorMsg?.toLowerCase().includes('inválido') || 
+          errorMsg?.toLowerCase().includes('token')
+        ) {
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              localStorage.removeItem('usuario');
+              sessionStorage.clear();
+            }
+          } catch (e) {}
+
           set({ user: null, token: null });
+
+          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            window.location.replace('/login');
+          }
         }
       },
 
       fetchUsersList: async () => {
         try {
           const { token } = get();
+          if (!token || token === 'mock-offline-token') return;
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             headers: {
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -310,6 +330,7 @@ export const useStore = create(
       fetchMessagesList: async (userId) => {
         try {
           const { token } = get();
+          if (!token || token === 'mock-offline-token') return;
           const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`, {
             headers: {
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -334,7 +355,7 @@ export const useStore = create(
 
       pullInitialData: async () => {
         const { token, user } = get();
-        if (!token || !navigator.onLine) return;
+        if (!token || !navigator.onLine || token === 'mock-offline-token') return;
 
         try {
           // 1. Intentar descargar datos vía /api/sync/pull
@@ -343,6 +364,12 @@ export const useStore = create(
               'Authorization': `Bearer ${token}`
             }
           });
+
+          if (res.status === 401 || res.status === 403) {
+            get().handleAuthError(res.status);
+            return { success: false, error: 'Token expirado' };
+          }
+
           if (res.ok) {
             const data = await res.json();
             if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
@@ -358,6 +385,10 @@ export const useStore = create(
                 'Authorization': `Bearer ${token}`
               }
             });
+            if (resBackup.status === 401 || resBackup.status === 403) {
+              get().handleAuthError(resBackup.status);
+              return { success: false, error: 'Token expirado' };
+            }
             if (resBackup.ok) {
               const dataBackup = await resBackup.json();
               if (dataBackup.ok && Array.isArray(dataBackup.data) && dataBackup.data.length > 0) {
@@ -407,7 +438,6 @@ export const useStore = create(
 
         if (found) {
           set({ user: { id: found.id, username: found.username, role: found.role }, token: 'mock-offline-token' });
-          // Incluso en modo offline, intentamos pull inicial (usando mock data o vacío)
           get().pullInitialData();
           return { success: true, user: found };
         }
@@ -415,7 +445,18 @@ export const useStore = create(
       },
 
       logout: () => {
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('usuario');
+            sessionStorage.clear();
+          }
+        } catch (e) {}
         set({ user: null, token: null });
+        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+          window.location.replace('/login');
+        }
       },
 
       addUser: async (userObj) => {

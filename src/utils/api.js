@@ -1,41 +1,37 @@
-const getApiBaseUrl = () => {
-  // Permitir sobreescritura dinámica en tiempo de ejecución (útil para Capacitor/móvil)
+/**
+ * Configuración dinámica y desacoplada de la URL Base de la API
+ * Compatible con Vercel Serverless (HTTPS puerto 443 sin puerto :3001),
+ * Railway Containers y desarrollo local.
+ */
+const getBaseApiUrl = () => {
+  // 1. Sobreescritura manual en tiempo de ejecución (útil para pruebas y Capacitor)
   const storedUrl = typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('CUSTOM_API_BASE_URL') : null;
-  if (storedUrl) {
-    return storedUrl;
+  if (storedUrl && storedUrl.trim() !== '') {
+    return storedUrl.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
 
-  // Permitir configuración mediante variables de entorno de Vite
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  // 2. Si viene definida expresamente por variable de entorno Vite y no está vacía:
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
+    return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
-  }
-  
-  if (typeof window === 'undefined') {
-    return 'http://localhost:3001';
+  if (import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim() !== '') {
+    return import.meta.env.VITE_API_BASE_URL.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
 
-  const { protocol, hostname, origin } = window.location;
-  
-  // Verificación de Capacitor / App nativa
-  if (window.Capacitor || protocol === 'capacitor:') {
+  // 3. Verificación de Capacitor / App nativa móvil
+  if (typeof window !== 'undefined' && (window.Capacitor || window.location?.protocol === 'capacitor:')) {
     return 'http://10.0.2.2:3001';
   }
-  
-  // En servidor de desarrollo Vite, apuntar al puerto configurado (3001 o VITE_API_PORT)
-  if (import.meta.env.DEV) {
-    const apiPort = import.meta.env.VITE_API_PORT || '3001';
-    return `${protocol}//${hostname}:${apiPort}`;
+
+  // 4. En producción (Vercel u otro hosting web):
+  if (import.meta.env.PROD) {
+    return ''; // Ruta relativa directa: `${API_BASE_URL}/api/...` se resuelve como `/api/...`
   }
-  
-  // En despliegue local / producción, consumir desde el mismo origen
-  return origin;
+
+  // 5. En desarrollo local (Vite dev server con backend en puerto 3001):
+  return 'http://localhost:3001';
 };
 
-export const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getBaseApiUrl();
 
 export default API_BASE_URL;
-
-
