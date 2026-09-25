@@ -23,6 +23,7 @@ import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
 import DualPhotoUploader from './DualPhotoUploader';
+import useStore from '../store/useStore';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -49,6 +50,7 @@ export const ModalEdicionCircuito = ({
   modo = 'SALIDA'
 }) => {
   const { alert: customAlert } = useConfirm();
+  const { registrarConflictoCircuito, showToast, setPanelConflictosOpen } = useStore();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
   const [step, setStep] = useState('PREGUNTA_ES_ARTEFACTO');
@@ -228,10 +230,6 @@ export const ModalEdicionCircuito = ({
 
   // Reversión explícita a Reserva
   const handleRevertirAReserva = () => {
-    if (isTablero && !validation.isValid) {
-      customAlert(validation.conflictMessages.join('\n') || 'No se puede guardar debido a un conflicto de colisión de polos.');
-      return;
-    }
     onSave(circuitData.id, {
       equipo: 'RESERVA',
       tipoDestino: 'RESERVA',
@@ -432,11 +430,6 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveEquipment = (equipoName, tipoDestinoVal, extra = {}) => {
-    if (isTablero && !validation.isValid) {
-      customAlert(validation.conflictMessages.join('\n') || 'No se puede guardar debido a un conflicto de colisión de polos.');
-      return;
-    }
-
     let finalTipoDestino = tipoDestinoVal || selectedTipoElementoDestino || 'SUB_TABLERO';
     let finalDestinoId = selectedElementoDestinoId || extra.elementoDestinoId || extra.vinculadoId || selectedLink?.id || null;
 
@@ -445,6 +438,30 @@ export const ModalEdicionCircuito = ({
     }
 
     const finalEquipo = normalizeText(equipoName || extra.equipo || provisionalCustomName || rotulo || 'EQUIPO DE POTENCIA');
+
+    if (isTablero && !validation.isValid && validation.conflicts && validation.conflicts.length > 0) {
+      validation.conflicts.forEach(conf => {
+        registrarConflictoCircuito({
+          tableroId: circuitData?.tableroId || circuitData?.id || 'TABLERO',
+          tableroNombre: circuitData?.tableroNombre || 'Tablero Eléctrico',
+          polos: [conf.pole],
+          circuitoId: circuitData.id,
+          circuitoNombre: finalEquipo,
+          equipoExistente: conf.occupiedBy?.descripcion,
+          equipoNuevo: finalEquipo,
+          descripcion: `Polo ${conf.pole} ocupado por "${conf.occupiedBy?.descripcion || 'Circuito existente'}". Asignado a "${finalEquipo}".`,
+          tipo: 'SOLAPAMIENTO_POLOS'
+        });
+      });
+      showToast(
+        `Conflicto en Polo(s) [${validation.requiredPoles.join(', ')}]. Incidencia registrada en la cola.`,
+        'warning',
+        {
+          label: 'Ver Conflicto',
+          onClick: () => setPanelConflictosOpen(true)
+        }
+      );
+    }
 
     onSave(circuitData.id, {
       equipo: finalEquipo,

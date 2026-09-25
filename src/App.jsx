@@ -556,6 +556,7 @@ const TableroWrapper = () => {
 
 import SyncStatusBanner from './components/SyncStatusBanner';
 import ToastNotification from './components/ToastNotification';
+import PanelConflictosCircuitos from './components/PanelConflictosCircuitos';
 import { ConfirmProvider } from './context/ConfirmContext';
 
 export function App() {
@@ -564,6 +565,7 @@ export function App() {
       <ConfirmProvider>
         <SyncStatusBanner />
         <ToastNotification />
+        <PanelConflictosCircuitos />
         <Routes>
           <Route path="/login" element={<LoginView />} />
           

@@ -53,7 +53,9 @@ export default function SelectorAlimentadorJerarquico({
   placeholder = 'Seleccionar equipo o acometida de alimentación...',
   disabled = false,
   label = 'Alimentado Por (Procedencia / Jerarquía)',
-  className = ''
+  className = '',
+  allowQuickCreate = false,
+  onQuickCreate = null
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -482,8 +484,24 @@ export default function SelectorAlimentadorJerarquico({
                 )}
               </div>
 
-              {/* Opción: Entrada Manual / Acometida Externa */}
-              <div className="p-2 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between gap-2">
+              {/* Footer con opciones de creación rápida y entrada manual */}
+              <div className="p-2 border-t border-slate-800 bg-slate-950/80 space-y-1.5">
+                {(allowQuickCreate || onQuickCreate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      if (onQuickCreate) {
+                        onQuickCreate();
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-left flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40 transition-colors font-bold border border-emerald-500/30 cursor-pointer shadow-sm"
+                  >
+                    <span className="p-0.5 bg-emerald-500 text-slate-950 rounded font-black text-[10px] leading-none">+</span>
+                    <span>Crear nueva fuente / nodo en línea</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {

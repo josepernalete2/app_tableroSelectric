@@ -36,7 +36,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     tableroData?.elementosPorCrear || tableroData?.datosTecnicos?.elementosPorCrear || []
   );
 
-  const { companies, updateTableroAlimentador, crearElementoProvisional } = useStore();
+  const { 
+    companies, 
+    updateTableroAlimentador, 
+    crearElementoProvisional,
+    registrarConflictoCircuito,
+    showToast,
+    setPanelConflictosOpen
+  } = useStore();
   const { alert: customAlert } = useConfirm();
 
   const project = React.useMemo(() => {
@@ -427,7 +434,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     if (!circuit) return;
 
     if (circuit.poles.length >= 3) {
-      customAlert("El número máximo de polos agrupados es 3.");
+      showToast("El número máximo de polos agrupados es 3.", "warning");
       return;
     }
 
@@ -445,8 +452,23 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
     const targetOccupied = (tableroData.circuits || []).find(c => c.id !== circuitId && c.poles.includes(targetPole));
     if (targetOccupied && isOccupiedByRealCircuit(targetOccupied)) {
-      customAlert(`El polo ${targetPole} ya está ocupado por el circuito "${targetOccupied.equipo}".`);
-      return;
+      registrarConflictoCircuito({
+        tableroId: tableroData.id,
+        tableroNombre: tableroData.nombre || 'Tablero Eléctrico',
+        empresaId: project?.empresaId || project?.companyId || tableroData.empresaId,
+        proyectoId: project?.id || tableroData.proyectoId,
+        polos: [targetPole],
+        circuitoId: circuit.id,
+        circuitoNombre: circuit.equipo || `Circuito Polo ${circuit.poles[0]}`,
+        equipoExistente: targetOccupied.equipo,
+        equipoNuevo: circuit.equipo,
+        descripcion: `Unión de polos [${[...circuit.poles, targetPole].join(', ')}] absorbe el polo ${targetPole} ocupado previamente por "${targetOccupied.equipo}".`,
+        tipo: 'SOLAPAMIENTO_POLOS'
+      });
+      showToast(`Conflicto en polo ${targetPole}. Incidencia agregada a la cola.`, 'warning', {
+        label: 'Ver Conflicto',
+        onClick: () => setPanelConflictosOpen(true)
+      });
     }
 
     const newData = { ...tableroData };
@@ -463,7 +485,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     if (targetCircuit) {
       newData.circuits = existingCircuits.map(c => {
         if (c.id === circuitId) {
-          return { ...c, poles: newPoles };
+          return { ...c, poles: newPoles, numPolos: newPoles.length };
         }
         return c;
       });
@@ -474,9 +496,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
           id: `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
           side: circuit.side,
           poles: newPoles,
-          equipo: 'RESERVA',
-          breaker: { marca: '', tipo: '', amp: '' },
-          conductor: '',
+          numPolos: newPoles.length,
+          equipo: circuit.equipo || 'RESERVA',
+          breaker: circuit.breaker || { marca: '', tipo: '', amp: '' },
+          conductor: circuit.conductor || '',
         }
       ];
     }
@@ -484,11 +507,37 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     onUpdateTablero(newData);
   };
 
-  // Split a multi-pole circuit: simply deleting it restores individual single poles
+  // Split a multi-pole circuit: preserves the primary circuit on minPole and releases joined poles
   const splitCircuit = (circuitId) => {
     if (readOnly) return;
+    const circuit = normalizedCircuits.find(c => c.id === circuitId);
     const newData = { ...tableroData };
-    newData.circuits = (tableroData.circuits || []).filter(c => c.id !== circuitId);
+
+    if (circuit && Array.isArray(circuit.poles) && circuit.poles.length > 1) {
+      const minPole = Math.min(...circuit.poles);
+      const isCustomId = !circuit.id.startsWith('auto_');
+
+      if (isCustomId) {
+        newData.circuits = (tableroData.circuits || []).map(c => {
+          if (c.id === circuitId) {
+            return {
+              ...c,
+              poles: [minPole],
+              numPolos: 1,
+              posicionPolo: minPole
+            };
+          }
+          return c;
+        });
+      } else {
+        newData.circuits = (tableroData.circuits || []).filter(c => c.id !== circuitId);
+      }
+
+      showToast(`Circuito desacoplado. Se conservaron los datos en el polo principal ${minPole}.`, 'info');
+    } else {
+      newData.circuits = (tableroData.circuits || []).filter(c => c.id !== circuitId);
+    }
+
     onUpdateTablero(newData);
   };
 

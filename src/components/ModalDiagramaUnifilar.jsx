@@ -219,31 +219,78 @@ export default function ModalDiagramaUnifilar({
     showToast('Propiedades del elemento actualizadas.', 'success');
   };
 
-  // Eliminar elemento del diagrama
+  // Obtener elementos aguas abajo que quedarán huérfanos si se elimina el nodo
+  const getDownstreamOrphans = (node) => {
+    if (!node) return [];
+    return elementos.filter(el => {
+      if (el.id === node.id) return false;
+      const matchName = el.alimentadoPor && el.alimentadoPor.toLowerCase().trim() === (node.nombre || '').toLowerCase().trim();
+      const matchId = el.alimentadoPor && (el.alimentadoPor.includes(node.id) || el.alimentadoPor === node.id);
+      const matchDirectId = el.alimentadoPorId === node.id || el.origenId === node.id;
+      return matchName || matchId || matchDirectId;
+    });
+  };
+
+  // Eliminar elemento del diagrama con advertencia de huérfanos
   const handleDeleteElement = async () => {
     if (!selectedNode) return;
+
+    const orphans = getDownstreamOrphans(selectedNode);
+    let confirmMsg = `¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" (${selectedNode.id})?`;
+
+    if (orphans.length > 0) {
+      const orphanList = orphans.map(o => `• ${o.nombre} (${o.tipoElemento || 'EQUIPO'})`).join('\n');
+      confirmMsg += `\n\n⚠️ ADVERTENCIA DE DEPENDENCIAS AGUAS ABAJO:\nLos siguientes ${orphans.length} equipo(s) quedarán huérfanos (sin alimentación directa):\n${orphanList}\n\nSe desvincularán automáticamente de forma segura.`;
+    }
+
     const ok = await confirm({
       title: 'Eliminar Equipo del Diagrama',
-      message: `¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" y desvincular todas sus conexiones?`,
+      message: confirmMsg,
       type: 'danger',
-      confirmText: 'Eliminar'
+      confirmText: 'Eliminar Equipo'
     });
 
     if (ok) {
       const idToDelete = selectedNode.id;
       
       // Desconectar huérfanos antes de eliminar para mantener coherencia en cascada
-      elementos.forEach(async (el) => {
-        if (el.alimentadoPor === selectedNode.nombre || el.alimentadoPor === selectedNode.id) {
-          await updateElementoUnifilar(proyectoId || el.proyectoId, el.id, { alimentadoPor: '' });
+      for (const el of elementos) {
+        if (
+          el.alimentadoPor === selectedNode.nombre || 
+          el.alimentadoPor === selectedNode.id ||
+          el.alimentadoPor?.includes(selectedNode.id) ||
+          el.alimentadoPorId === selectedNode.id
+        ) {
+          await updateElementoUnifilar(proyectoId || el.proyectoId, el.id, { 
+            alimentadoPor: '',
+            alimentadoPorId: null
+          });
         }
-      });
+      }
 
       setSelectedNode(null);
       await deleteElementoUnifilar(proyectoId || selectedNode.proyectoId, idToDelete);
-      showToast('Equipo eliminado del diagrama.', 'info');
+      showToast(`Equipo "${selectedNode.nombre}" eliminado del diagrama.`, 'info');
     }
   };
+
+  // Atajo de teclado: Tecla Delete / Backspace para borrar nodo seleccionado
+  useEffect(() => {
+    if (!isOpen || !selectedNode) return;
+
+    const handleKeyDown = (e) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDeleteElement();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, selectedNode, elementos]);
 
   // Desconectar elemento seleccionado
   const handleDisconnectElement = async () => {
@@ -548,9 +595,10 @@ export default function ModalDiagramaUnifilar({
                     
                     <button
                       onClick={handleDeleteElement}
-                      className="w-full bg-red-950/20 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold transition-all px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs cursor-pointer"
+                      className="w-full bg-red-950/20 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold transition-all px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs cursor-pointer shadow-sm"
+                      title="Eliminar equipo (Atajo: Tecla Supr / Delete)"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Eliminar Equipo
+                      <Trash2 className="w-3.5 h-3.5" /> Eliminar Equipo (Supr)
                     </button>
                   </div>
                 </div>

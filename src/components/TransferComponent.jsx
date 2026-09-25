@@ -44,34 +44,91 @@ export default function TransferComponent({
   const companies = useStore((state) => state.companies || []);
 
   const [isEditing, setIsEditing] = useState(false);
+  const { addElementoUnifilar, showToast } = useStore();
 
-  // Lista de elementos de jerarquía del proyecto para alimentar los selectores
+  // Estados para creación rápida en línea de fuentes
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateTargetField, setQuickCreateTargetField] = useState('fuenteNormal'); // 'fuenteNormal' | 'fuenteEmergencia'
+  const [newSourceTipo, setNewSourceTipo] = useState('TRANSFORMADOR');
+  const [newSourceNombre, setNewSourceNombre] = useState('');
+  const [newSourceUbicacion, setNewSourceUbicacion] = useState('Sala Eléctrica');
+  const [newSourceCapacidad, setNewSourceCapacidad] = useState('');
+  const [newSourceTension, setNewSourceTension] = useState('208/120 V');
+
+  // Lista de elementos de jerarquía del proyecto para alimentar los selectores (completa con todos los activos)
   const projectElements = useMemo(() => {
     const list = [];
     const compId = data?.empresaId || data?.companyId;
     const company = companies.find(c => c.id === compId);
+
+    const extractFromProject = (p) => {
+      if (p.elementosUnifilares) list.push(...p.elementosUnifilares);
+      if (p.tableros) list.push(...p.tableros);
+      if (p.subestaciones) list.push(...p.subestaciones);
+      if (p.inspeccionesSubestacion) list.push(...p.inspeccionesSubestacion);
+      if (p.puntosMedicion) list.push(...p.puntosMedicion);
+      if (p.ccmList) list.push(...p.ccmList);
+    };
+
     if (!company) {
       companies.forEach(c => {
         if (c.elementosUnifilares) list.push(...c.elementosUnifilares);
-        if (c.proyectos) {
-          c.proyectos.forEach(p => {
-            const elList = p.elementosUnifilares || p.tableros || [];
-            list.push(...elList);
-          });
-        }
+        if (c.proyectos) c.proyectos.forEach(extractFromProject);
       });
-      return list.filter(e => e.id !== data?.id);
+    } else {
+      if (company.elementosUnifilares) list.push(...company.elementosUnifilares);
+      if (company.proyectos) company.proyectos.forEach(extractFromProject);
     }
 
-    if (company.elementosUnifilares) list.push(...company.elementosUnifilares);
-    if (company.proyectos) {
-      company.proyectos.forEach(p => {
-        const elList = p.elementosUnifilares || p.tableros || [];
-        list.push(...elList);
-      });
-    }
-    return list.filter(e => e.id !== data?.id);
+    // Deduplicar por ID y excluir al propio elemento transfer
+    const seen = new Set();
+    return list.filter(e => {
+      if (!e || !e.id || e.id === data?.id || seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
+    });
   }, [companies, data]);
+
+  // Handler para guardar nueva fuente rápida
+  const handleCreateQuickSource = async (e) => {
+    if (e) e.preventDefault();
+    if (!newSourceNombre.trim()) {
+      showToast('Por favor introduce un nombre para la fuente.', 'error');
+      return;
+    }
+
+    const targetProjId = data.proyectoId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
+
+    const payload = {
+      nombre: newSourceNombre.trim(),
+      tipoElemento: newSourceTipo,
+      ubicacion: newSourceUbicacion.trim() || 'Sala Eléctrica',
+      datosTecnicos: {
+        kva: newSourceCapacidad.trim(),
+        amperaje: newSourceCapacidad.trim(),
+        tensionNominal: newSourceTension
+      }
+    };
+
+    const res = await addElementoUnifilar(targetProjId, payload);
+    if (res && res.success) {
+      const createdElem = res.elemento;
+      const createdName = createdElem.nombre || newSourceNombre;
+      
+      if (quickCreateTargetField === 'fuenteNormal') {
+        handleDtChange('fuenteNormalNombre', createdName);
+        if (newSourceTension) handleDtChange('fuenteNormalTension', newSourceTension);
+      } else {
+        handleDtChange('fuenteEmergenciaNombre', createdName);
+        if (newSourceTension) handleDtChange('fuenteEmergenciaTension', newSourceTension);
+      }
+
+      showToast(`Fuente "${createdName}" creada y asignada exitosamente.`, 'success');
+      setQuickCreateOpen(false);
+    } else {
+      showToast(res?.error || 'Error al crear la fuente.', 'error');
+    }
+  };
 
   // Estados locales editables - Sin datos demo quemados
   const [nombre, setNombre] = useState(data?.nombre || '');
@@ -466,6 +523,15 @@ export default function TransferComponent({
                       placeholder="Seleccionar Subestación, Transformador..."
                       className="text-xs"
                       label=""
+                      allowQuickCreate={true}
+                      onQuickCreate={() => {
+                        setQuickCreateTargetField('fuenteNormal');
+                        setNewSourceTipo('TRANSFORMADOR');
+                        setNewSourceNombre(`Transformador Alimentador ${projectElements.filter(e => e.tipoElemento === 'TRANSFORMADOR').length + 1}`);
+                        setNewSourceCapacidad(dt.amperaje || '500');
+                        setNewSourceTension(dt.tensionNominal || '208/120 V');
+                        setQuickCreateOpen(true);
+                      }}
                     />
                   ) : (
                     <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteNormalNombre}>
@@ -545,6 +611,15 @@ export default function TransferComponent({
                       placeholder="Seleccionar Generador / Planta..."
                       className="text-xs"
                       label=""
+                      allowQuickCreate={true}
+                      onQuickCreate={() => {
+                        setQuickCreateTargetField('fuenteEmergencia');
+                        setNewSourceTipo('GENERADOR');
+                        setNewSourceNombre(`Generador Emergencia ${projectElements.filter(e => e.tipoElemento === 'GENERADOR').length + 1}`);
+                        setNewSourceCapacidad(dt.amperaje || '500');
+                        setNewSourceTension(dt.tensionNominal || '208/120 V');
+                        setQuickCreateOpen(true);
+                      }}
                     />
                   ) : (
                     <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteEmergenciaNombre}>
@@ -852,6 +927,134 @@ export default function TransferComponent({
         </div>
 
       </div>
+
+      {/* Modal Rápido de Creación de Fuente / Generador en Línea */}
+      {quickCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm no-print animate-in fade-in">
+          <div className="relative w-full max-w-md bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl p-5 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase text-slate-100 font-mono">
+                    Crear Fuente de Alimentación
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-sans">
+                    {quickCreateTargetField === 'fuenteNormal' ? 'Fuente Normal (Prioridad 1)' : 'Fuente Emergencia (Prioridad 2)'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickCreateOpen(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuickSource} className="space-y-3.5 text-xs font-mono">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Tipo de Fuente
+                </label>
+                <select
+                  value={newSourceTipo}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    setNewSourceTipo(t);
+                    if (t === 'GENERADOR') setNewSourceNombre(`Generador Emergencia ${projectElements.filter(el => el.tipoElemento === 'GENERADOR').length + 1}`);
+                    else if (t === 'TRANSFORMADOR') setNewSourceNombre(`Transformador Principal ${projectElements.filter(el => el.tipoElemento === 'TRANSFORMADOR').length + 1}`);
+                    else if (t === 'SUBESTACION') setNewSourceNombre(`Subestación ${projectElements.filter(el => el.tipoElemento === 'SUBESTACION').length + 1}`);
+                    else if (t === 'PUNTO_SUMINISTRO' || t === 'PUNTO_MEDICION') setNewSourceNombre('Punto de Suministro CORPOELEC');
+                  }}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="TRANSFORMADOR">Transformador</option>
+                  <option value="GENERADOR">Generador / Planta Eléctrica</option>
+                  <option value="SUBESTACION">Subestación / Celda MT</option>
+                  <option value="PUNTO_SUMINISTRO">Punto de Suministro / Acometida</option>
+                  <option value="TABLERO">Tablero de Distribución</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Nombre / Identificador de la Fuente
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newSourceNombre}
+                  onChange={(e) => setNewSourceNombre(e.target.value)}
+                  placeholder="Ej. Generador Planta Diésel 150 kVA"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 font-sans"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Capacidad (kVA / A)
+                  </label>
+                  <input
+                    type="text"
+                    value={newSourceCapacidad}
+                    onChange={(e) => setNewSourceCapacidad(e.target.value)}
+                    placeholder="Ej. 150 kVA"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                    Tensión Normalizada
+                  </label>
+                  <select
+                    value={newSourceTension}
+                    onChange={(e) => setNewSourceTension(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2 text-slate-100 text-xs font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    {TENSIONES_COVENIN_159_BT.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
+                  Ubicación Física
+                </label>
+                <input
+                  type="text"
+                  value={newSourceUbicacion}
+                  onChange={(e) => setNewSourceUbicacion(e.target.value)}
+                  placeholder="Ej. Caseta de Generación / Sala Eléctrica"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 font-sans"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setQuickCreateOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" /> Crear y Vincular
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

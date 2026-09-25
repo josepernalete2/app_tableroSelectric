@@ -56,9 +56,24 @@ export default function ToastNotification() {
         <Icon className="w-5 h-5 shrink-0 mt-0.5" />
         
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold leading-relaxed break-words font-sans text-slate-100 pr-4">
+          <p className="text-xs font-semibold leading-relaxed break-words font-sans text-slate-100 pr-2">
             {toast.message}
           </p>
+          {toast.action && (
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (typeof toast.action.onClick === 'function') {
+                    toast.action.onClick();
+                  }
+                  hideToast();
+                }}
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] rounded-lg shadow transition-all cursor-pointer flex items-center gap-1"
+              >
+                {toast.action.label || 'Ver Detalles'}
+              </button>
+            </div>
+          )}
         </div>
 
         <button 

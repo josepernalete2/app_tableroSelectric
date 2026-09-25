@@ -249,11 +249,36 @@ export const useStore = create(
       subestacionesLocales: [],
       syncQueue: [],
       socket: null,
-      toast: { show: false, message: '', type: 'success' },
+      toast: { show: false, message: '', type: 'success', action: null },
+      conflictosCircuitos: [],
+      isPanelConflictosOpen: false,
 
-      showToast: (message, type = 'success') => set({ toast: { show: true, message, type } }),
+      showToast: (message, type = 'success', action = null) => set({ toast: { show: true, message, type, action } }),
       hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
       setSocket: (socket) => set({ socket }),
+      setPanelConflictosOpen: (isOpen) => set({ isPanelConflictosOpen: isOpen }),
+
+      registrarConflictoCircuito: (conflicto) => set((state) => {
+        const nuevoConflicto = {
+          id: conflicto.id || `conf_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          timestamp: new Date().toISOString(),
+          resuelto: false,
+          ...conflicto
+        };
+        // Evitar duplicados idénticos en cola
+        const filtered = (state.conflictosCircuitos || []).filter(c => 
+          !(c.tableroId === nuevoConflicto.tableroId && JSON.stringify(c.polos) === JSON.stringify(nuevoConflicto.polos))
+        );
+        return {
+          conflictosCircuitos: [nuevoConflicto, ...filtered]
+        };
+      }),
+
+      resolverConflictoCircuito: (id) => set((state) => ({
+        conflictosCircuitos: (state.conflictosCircuitos || []).filter(c => c.id !== id)
+      })),
+
+      limpiarConflictosCircuitos: () => set({ conflictosCircuitos: [] }),
 
       handleAuthError: (status) => {
         if (status === 401 || status === 403) {
@@ -1825,6 +1850,7 @@ export const useStore = create(
         proyectosLocales: state.proyectosLocales || [],
         elementosLocales: state.elementosLocales || [],
         subestacionesLocales: state.subestacionesLocales || [],
+        conflictosCircuitos: state.conflictosCircuitos || [],
         syncQueue: state.syncQueue
       })
     }

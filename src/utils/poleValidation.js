@@ -50,6 +50,13 @@ export const buildPolesOccupancyMap = (circuits = [], excludeCircuitId = null) =
       return;
     }
 
+    // Ignorar circuitos que son puramente RESERVA o DISPONIBLE sin equipo real asignado
+    const isReserva = !circ.equipo || circ.equipo === 'RESERVA' || circ.equipo === 'DISPONIBLE' || circ.tipoDestino === 'RESERVA';
+    const hasRealLoad = circ.equipo && circ.equipo !== 'RESERVA' && circ.equipo !== 'DISPONIBLE' && !circ.equipo.startsWith('RESERVA');
+    if (isReserva && !hasRealLoad && !circ.vinculadoId && !circ.elementoDestinoId) {
+      return;
+    }
+
     // Determinar los polos ocupados por este circuito
     let occupiedPoles = [];
     if (Array.isArray(circ.poles) && circ.poles.length > 0) {

@@ -24,28 +24,139 @@ export default function DiagramaUnifilarBlueprint({
   const [dragStartNodePos, setDragStartNodePos] = useState({ x: 0, y: 0 });
   const [tempNodePositions, setTempNodePositions] = useState({}); // { [nodeId]: { x, y } }
 
-  // 1. Procesar jerarquía y niveles (para auto-layout inicial)
-  const { nodes, levels, maxNodesInLevel, depth } = useMemo(() => {
+  // 1. Procesar jerarquía, enlaces SSOT y fuentes de emergencia para ATS
+  const { nodes, levels, maxNodesInLevel, depth, emergencyLinks } = useMemo(() => {
     if (!elementos || elementos.length === 0) {
-      return { nodes: [], levels: {}, maxNodesInLevel: 0, depth: 0 };
+      return { nodes: [], levels: {}, maxNodesInLevel: 0, depth: 0, emergencyLinks: [] };
     }
 
     const nameToNodeMap = new Map();
+    const idToNodeMap = new Map();
+
     elementos.forEach((el) => {
       if (el.nombre) {
         nameToNodeMap.set(el.nombre.toLowerCase().trim(), el);
       }
       if (el.id) {
+        idToNodeMap.set(el.id.toLowerCase().trim(), el);
         nameToNodeMap.set(el.id.toLowerCase().trim(), el);
       }
     });
 
+    // Helper para extraer ID de un texto con formato "Nombre (ID: TAB-1)"
+    const extractIdFromText = (text) => {
+      if (!text || typeof text !== 'string') return null;
+      const match = text.match(/\((?:ID:\s*)?([A-Z0-9_-]+)\)/i);
+      return match ? match[1].toLowerCase().trim() : null;
+    };
+
+    // Mapa de enlaces derivados de circuitos (ej. Tablero Principal alimenta Tablero Hidroneumático)
+    const circuitFeedsMap = new Map(); // childId -> parentId
+    elementos.forEach((parentEl) => {
+      const circuits = parentEl.circuits || parentEl.datosTecnicos?.circuits || [];
+      if (Array.isArray(circuits)) {
+        circuits.forEach((c) => {
+          const destId = c.elementoDestinoId || c.vinculadoId || extractIdFromText(c.equipo);
+          if (destId) {
+            circuitFeedsMap.set(destId.toLowerCase().trim(), parentEl.id);
+          }
+          if (c.equipo && typeof c.equipo === 'string') {
+            const cleanEquipo = c.equipo.toLowerCase().trim();
+            const matchingNode = nameToNodeMap.get(cleanEquipo);
+            if (matchingNode) {
+              circuitFeedsMap.set(matchingNode.id.toLowerCase().trim(), parentEl.id);
+            }
+          }
+        });
+      }
+    });
+
+    const emergencyLinksList = [];
+
     const processedNodes = elementos.map((el) => {
-      const parentName = el.alimentadoPor ? el.alimentadoPor.toLowerCase().trim() : null;
-      const parent = parentName ? nameToNodeMap.get(parentName) : null;
+      const dt = typeof el.datosTecnicos === 'string'
+        ? JSON.parse(el.datosTecnicos || '{}')
+        : (el.datosTecnicos || {});
+
+      // Resolución jerárquica de alimentación primaria (SSOT)
+      let resolvedParentId = null;
+
+      // 1. Verificar si el elemento tiene ID de alimentador directo
+      if (el.alimentadoPorId && idToNodeMap.has(el.alimentadoPorId.toLowerCase().trim())) {
+        resolvedParentId = idToNodeMap.get(el.alimentadoPorId.toLowerCase().trim()).id;
+      } else if (el.origenId && idToNodeMap.has(el.origenId.toLowerCase().trim())) {
+        resolvedParentId = idToNodeMap.get(el.origenId.toLowerCase().trim()).id;
+      }
+
+      // 2. Verificar por campo alimentadoPor (nombre o ID incrustado)
+      if (!resolvedParentId && el.alimentadoPor) {
+        const idFromAlim = extractIdFromText(el.alimentadoPor);
+        if (idFromAlim && idToNodeMap.has(idFromAlim)) {
+          resolvedParentId = idToNodeMap.get(idFromAlim).id;
+        } else {
+          const cleanAlim = el.alimentadoPor.toLowerCase().trim();
+          const parentByName = nameToNodeMap.get(cleanAlim);
+          if (parentByName) {
+            resolvedParentId = parentByName.id;
+          }
+        }
+      }
+
+      // 3. Para ATS/Transferencia: verificar fuente normal
+      const isTransfer = el.tipoElemento === 'TRANSFER' || el.tipo === 'TRANSFER';
+      if (isTransfer) {
+        const fuenteNormal = dt.fuenteNormalNombre || dt.fuenteNormalId || el.fuenteNormal;
+        if (fuenteNormal) {
+          const idFromNorm = extractIdFromText(fuenteNormal);
+          if (idFromNorm && idToNodeMap.has(idFromNorm)) {
+            resolvedParentId = idToNodeMap.get(idFromNorm).id;
+          } else {
+            const parentNorm = nameToNodeMap.get(String(fuenteNormal).toLowerCase().trim());
+            if (parentNorm) resolvedParentId = parentNorm.id;
+          }
+        }
+
+        // Resolución de la fuente de Emergencia (Generador -> ATS) (Observación 18)
+        const fuenteEmergencia = dt.fuenteEmergenciaNombre || dt.fuenteEmergenciaId || dt.generadorId || dt.alimentacionGenerador1;
+        let genNode = null;
+        if (fuenteEmergencia) {
+          const idFromEmerg = extractIdFromText(fuenteEmergencia);
+          if (idFromEmerg && idToNodeMap.has(idFromEmerg)) {
+            genNode = idToNodeMap.get(idFromEmerg);
+          } else {
+            genNode = nameToNodeMap.get(String(fuenteEmergencia).toLowerCase().trim());
+          }
+        }
+
+        // Fallback: Si no está explícito en el ATS, buscar si existe un Generador en el proyecto
+        if (!genNode) {
+          genNode = elementos.find(e => (e.tipoElemento === 'GENERADOR' || e.tipo === 'GENERADOR') && e.id !== el.id);
+        }
+
+        if (genNode && genNode.id !== el.id) {
+          emergencyLinksList.push({
+            id: `emerg-${genNode.id}-${el.id}`,
+            sourceId: genNode.id,
+            targetId: el.id,
+            label: 'EMERGENCIA (GEN)'
+          });
+        }
+      }
+
+      // 4. Si aún no tiene padre, verificar si está derivado de un circuito aguas arriba (Obs 25 - Hidroneumático)
+      if (!resolvedParentId && circuitFeedsMap.has(el.id.toLowerCase().trim())) {
+        resolvedParentId = circuitFeedsMap.get(el.id.toLowerCase().trim());
+      }
+
+      // Evitar auto-referencias circulares
+      if (resolvedParentId === el.id) {
+        resolvedParentId = null;
+      }
+
       return {
         ...el,
-        parentId: parent ? parent.id : null,
+        datosTecnicos: dt,
+        parentId: resolvedParentId,
         children: []
       };
     });
@@ -93,7 +204,8 @@ export default function DiagramaUnifilarBlueprint({
       nodes: finalNodes,
       levels: levelsMap,
       maxNodesInLevel: maxCount,
-      depth: Object.keys(levelsMap).length
+      depth: Object.keys(levelsMap).length,
+      emergencyLinks: emergencyLinksList
     };
   }, [elementos]);
 
@@ -439,6 +551,17 @@ export default function DiagramaUnifilarBlueprint({
                 >
                   <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748b" />
                 </marker>
+                <marker 
+                  id="arrow-amber" 
+                  viewBox="0 0 10 10" 
+                  refX="22" 
+                  refY="5" 
+                  markerWidth="5" 
+                  markerHeight="5" 
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b" />
+                </marker>
               </defs>
 
               {/* Fondo Rejilla CAD */}
@@ -446,7 +569,7 @@ export default function DiagramaUnifilarBlueprint({
                 <rect width={width} height={height} fill="url(#cad-grid)" rx="8" />
               )}
 
-              {/* 1. Líneas Conectoras (CAD Ortogonal con flechas) */}
+              {/* 1. Líneas Conectoras Primarias / Normales (CAD Ortogonal con flechas) */}
               {nodes.map((node) => {
                 if (!node.parentId) return null;
                 const parentCoords = getNodeCoords(node.parentId);
@@ -458,14 +581,12 @@ export default function DiagramaUnifilarBlueprint({
 
                 return (
                   <g key={`link-${node.id}`}>
-                    {/* Línea interactiva gruesa invisible para facilitar el click/hover si se requiriera */}
                     <path 
                       d={pathData} 
                       fill="none" 
                       stroke="transparent" 
                       strokeWidth="10" 
                     />
-                    {/* Línea visual */}
                     <path 
                       d={pathData} 
                       fill="none" 
@@ -473,6 +594,53 @@ export default function DiagramaUnifilarBlueprint({
                       strokeWidth={isDarkTheme ? '2.5' : '1.5'} 
                       markerEnd={isDarkTheme ? 'url(#arrow-slate)' : 'url(#arrow-black)'}
                     />
+                  </g>
+                );
+              })}
+
+              {/* 1.2 Líneas Conectoras de Emergencia (Generador -> ATS/MTS) (Observación 18) */}
+              {emergencyLinks.map((link) => {
+                const genCoords = getNodeCoords(link.sourceId);
+                const atsCoords = getNodeCoords(link.targetId);
+                
+                // Conectar desde el lado derecho del Generador hacia la entrada de emergencia del ATS
+                const midX = (genCoords.x + atsCoords.x) / 2;
+                const midY = (genCoords.y + atsCoords.y) / 2;
+                const pathData = `M ${genCoords.x} ${genCoords.y} L ${midX} ${genCoords.y} L ${midX} ${atsCoords.y} L ${atsCoords.x} ${atsCoords.y}`;
+
+                return (
+                  <g key={link.id}>
+                    {/* Línea discontinua de emergencia */}
+                    <path 
+                      d={pathData} 
+                      fill="none" 
+                      stroke={isDarkTheme ? '#f59e0b' : '#d97706'} 
+                      strokeWidth={isDarkTheme ? '2.5' : '2'} 
+                      strokeDasharray="6,4"
+                      markerEnd="url(#arrow-amber)"
+                    />
+                    {/* Badge de Emergencia */}
+                    <rect 
+                      x={midX - 38} 
+                      y={midY - 8} 
+                      width="76" 
+                      height="16" 
+                      rx="4" 
+                      fill={isDarkTheme ? '#1e1b4b' : '#fef3c7'} 
+                      stroke="#f59e0b" 
+                      strokeWidth="1" 
+                    />
+                    <text 
+                      x={midX} 
+                      y={midY + 3} 
+                      textAnchor="middle" 
+                      fontSize="7.5" 
+                      fontWeight="black" 
+                      fill="#f59e0b" 
+                      className="font-mono select-none"
+                    >
+                      EMERGENCIA (G)
+                    </text>
                   </g>
                 );
               })}
