@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Backups & Data Dumps
+backups/
+backups/*.json
+*.backup
+
+
 # Environment Variables & Secrets
 .env
 .env.local

@@ -576,14 +576,13 @@ export function listarBackupsLocalesEnDisco() {
 
 /**
  * Transmite la exportación de respaldo en formato JSON directamente al stream HTTP en memoria.
+ * No genera archivos duplicados en disco durante la descarga.
  */
 export async function exportarBackupStream(res, usuario = {}) {
-  const { buffer, filename, payload } = await generarSnapshotMemoria({
+  const { buffer, filename } = await generarSnapshotMemoria({
     filenamePrefix: 'backup_selectric',
     usuario
   });
-
-  guardarBackupLocalEnDisco(payload, filename);
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -593,3 +592,4 @@ export async function exportarBackupStream(res, usuario = {}) {
 
   return res.status(200).send(buffer);
 }
+

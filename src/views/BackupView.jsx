@@ -62,6 +62,11 @@ export const BackupView = () => {
   // Estado de descarga aislada por empresa
   const [downloadingEmpresaId, setDownloadingEmpresaId] = useState(null);
 
+  // Candado de tiempo contra clicks dobles / rápidos (<1500ms)
+  const lastActionTimestampRef = useRef(0);
+
+  const isAnyProcessing = isExecutingGlobalPipeline || isExportingGlobal || isImporting || Boolean(downloadingEmpresaId);
+
   /**
    * Cargar listado de empresas con métricas de resguardo desde la API
    */
@@ -111,7 +116,9 @@ export const BackupView = () => {
    * Dispara el pipeline global de respaldo (R2 + Telegram + PostgreSQL + Memoria)
    */
   const handleTriggerGlobalPipeline = async () => {
-    if (isExecutingGlobalPipeline) return;
+    const now = Date.now();
+    if (isExecutingGlobalPipeline || (now - lastActionTimestampRef.current < 2000)) return;
+    lastActionTimestampRef.current = now;
     setIsExecutingGlobalPipeline(true);
 
     try {
@@ -148,7 +155,9 @@ export const BackupView = () => {
    * Exportar y descargar el volcado JSON maestro en memoria
    */
   const handleExportGlobalJson = async () => {
-    if (isExportingGlobal) return;
+    const now = Date.now();
+    if (isExportingGlobal || (now - lastActionTimestampRef.current < 2000)) return;
+    lastActionTimestampRef.current = now;
     setIsExportingGlobal(true);
     setExportStats(null);
 
@@ -238,6 +247,9 @@ export const BackupView = () => {
    * Descargar snapshot aislado de una sola empresa
    */
   const handleDownloadEmpresaSnapshot = async (empresaId, empresaNombre) => {
+    const now = Date.now();
+    if (downloadingEmpresaId || (now - lastActionTimestampRef.current < 2000)) return;
+    lastActionTimestampRef.current = now;
     setDownloadingEmpresaId(empresaId);
     try {
       const response = await fetch(`${API_BASE_URL}/api/backup/empresa/${empresaId}/export`, {
@@ -368,8 +380,8 @@ export const BackupView = () => {
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleTriggerGlobalPipeline}
-              disabled={isExecutingGlobalPipeline}
-              className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] disabled:opacity-50 text-slate-950 font-bold rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer text-sm"
+              disabled={isAnyProcessing}
+              className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-bold rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer text-sm"
             >
               {isExecutingGlobalPipeline ? (
                 <>
@@ -386,8 +398,8 @@ export const BackupView = () => {
 
             <button
               onClick={fetchEmpresasResumen}
-              disabled={isLoadingEmpresas}
-              className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition-all cursor-pointer"
+              disabled={isLoadingEmpresas || isAnyProcessing}
+              className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
               title="Refrescar métricas"
             >
               <RefreshCw className={`w-4 h-4 ${isLoadingEmpresas ? 'animate-spin' : ''}`} />
@@ -623,8 +635,8 @@ export const BackupView = () => {
 
                       <button
                         onClick={() => handleDownloadEmpresaSnapshot(emp.id, emp.nombre)}
-                        disabled={downloadingEmpresaId === emp.id}
-                        className="flex items-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:opacity-50"
+                        disabled={isAnyProcessing}
+                        className="flex items-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
                         title="Descargar snapshot JSON aislado"
                       >
                         {downloadingEmpresaId === emp.id ? (
@@ -693,8 +705,8 @@ export const BackupView = () => {
               <div className="mt-8 pt-6 border-t border-slate-800">
                 <button
                   onClick={handleExportGlobalJson}
-                  disabled={isExportingGlobal}
-                  className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] disabled:opacity-50 text-slate-950 font-bold rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer text-sm"
+                  disabled={isAnyProcessing}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-bold rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer text-sm"
                 >
                   {isExportingGlobal ? (
                     <>
@@ -751,8 +763,8 @@ export const BackupView = () => {
               <div className="mt-8 pt-6 border-t border-slate-800">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isImporting}
-                  className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-slate-800 hover:bg-slate-700 hover:text-cyan-300 active:scale-[0.98] disabled:opacity-50 text-slate-200 font-bold rounded-2xl border border-slate-700 transition-all cursor-pointer text-sm"
+                  disabled={isAnyProcessing}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-slate-800 hover:bg-slate-700 hover:text-cyan-300 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-slate-200 font-bold rounded-2xl border border-slate-700 transition-all cursor-pointer text-sm"
                 >
                   {isImporting ? (
                     <>

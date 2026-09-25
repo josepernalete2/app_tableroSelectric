@@ -20,108 +20,147 @@ export const generarSnapshotCompleto = async () => {
   return data;
 };
 
+// Candado y control de debounce para evitar ejecuciones concurrentes o duplicadas en < 5 segundos
+let backupLockPromise = null;
+let lastBackupExecutionTimestamp = 0;
+let lastBackupExecutionResult = null;
+const BACKUP_DEBOUNCE_WINDOW_MS = 5000;
+
 /**
  * Ejecuta el pipeline completo de respaldo híbrido en memoria:
- * 1. Generación de snapshot en memoria (Buffer / JSON)
- * 2. Subida paralela a Cloudflare R2 y Telegram con Promise.allSettled
- * 3. Copia local tolerante a fallos (sin bloquear en entornos Serverless)
- * 4. Registro de metadatos livianos en PostgreSQL (sin saturar la BD) y rotación (20 máx)
+ * 1. Control de concurrencia y debounce (5s) para evitar volcados idénticos casi simultáneos.
+ * 2. Generación de snapshot en memoria (Buffer / JSON reutilizado).
+ * 3. Subida paralela a Cloudflare R2 y Telegram con Promise.allSettled.
+ * 4. Copia local tolerante a fallos (sin bloquear en entornos Serverless).
+ * 5. Registro de metadatos livianos en PostgreSQL (sin saturar la BD) y rotación (20 máx).
  */
 export async function ejecutarPipelineBackup({ origen = 'MANUAL', usuario = null, nombre = null, descripcion = null } = {}) {
-  const timestampVE = new Date().toLocaleString('es-VE', { 
-    timeZone: 'America/Caracas',
-    dateStyle: 'short', 
-    timeStyle: 'short' 
-  });
+  const ahora = Date.now();
 
-  // 1. Generar Snapshot 100% en memoria
-  const { buffer, filename, tamanoBytes, metadata, payload } = await generarSnapshotMemoria({
-    filenamePrefix: 'backup_auto',
-    usuario
-  });
-
-  // 2. Ejecutar subidas externas en paralelo contra Timeouts
-  const [r2Settled, telegramSettled] = await Promise.allSettled([
-    subirBackupAR2(buffer, filename),
-    enviarBackupTelegram(buffer, filename, metadata)
-  ]);
-
-  const r2Result = r2Settled.status === 'fulfilled' 
-    ? r2Settled.value 
-    : { subido: false, error: r2Settled.reason?.message || 'Error desconocido en R2' };
-
-  const telegramResult = telegramSettled.status === 'fulfilled' 
-    ? telegramSettled.value 
-    : { enviado: false, error: telegramSettled.reason?.message || 'Error desconocido en Telegram' };
-
-  // 3. Intento de respaldo local condicional (fail-safe)
-  const localResult = guardarBackupLocalEnDisco(payload, filename);
-
-  // 4. Registrar únicamente metadatos livianos en la tabla `backups` de PostgreSQL
-  const creadoPor = usuario?.username || usuario?.email || origen;
-  const backupNombre = (nombre && nombre.trim()) || `Respaldo ${origen} ${timestampVE}`;
-  const backupDesc = descripcion || `Respaldo generado vía ${origen} (${(tamanoBytes / 1024).toFixed(1)} KB)`;
-
-  const nuevoBackup = await prisma.backup.create({
-    data: {
-      nombre: backupNombre,
-      descripcion: backupDesc,
-      data: {
-        filename,
-        tamanoBytes,
-        registros: metadata.counts,
-        totalRecords: metadata.totalRecords,
-        generadoPor: creadoPor,
-        origen,
-        cloudStorage: {
-          r2: r2Result
-        },
-        notificaciones: {
-          telegram: telegramResult
-        },
-        guardadoLocal: localResult.guardado
-      },
-      tamanoBytes,
-      creadoPor
-    },
-    select: {
-      id: true,
-      nombre: true,
-      descripcion: true,
-      tamanoBytes: true,
-      creadoPor: true,
-      createdAt: true
-    }
-  });
-
-  // Mantener un máximo de 20 registros en la base de datos
-  try {
-    const totalBackups = await prisma.backup.findMany({
-      select: { id: true },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    if (totalBackups.length > 20) {
-      const aEliminar = totalBackups.slice(20).map((b) => b.id);
-      await prisma.backup.deleteMany({
-        where: { id: { in: aEliminar } }
-      });
-    }
-  } catch (rotErr) {
-    console.warn('⚠️ [BackupController] Error durante la rotación de registros en BD:', rotErr.message);
+  // Si hay una ejecución en curso, esperar y reutilizar su resultado para evitar volcados duplicados
+  if (backupLockPromise) {
+    console.log('⏳ [BackupController] Operación de respaldo en curso. Esperando resultado compartido...');
+    return await backupLockPromise;
   }
 
-  return {
-    ok: true,
-    success: true,
-    id: nuevoBackup.id,
-    filename,
-    tamanoBytes,
-    r2: r2Result,
-    telegram: telegramResult,
-    guardadoLocal: localResult.guardado,
-    metadata
-  };
+  // Si se ejecutó hace menos de 5 segundos, devolver el resultado reciente para evitar spam
+  if (lastBackupExecutionResult && (ahora - lastBackupExecutionTimestamp) < BACKUP_DEBOUNCE_WINDOW_MS) {
+    console.log('⚡ [BackupController] Solicitud dentro de la ventana de debounce (5s). Reutilizando último respaldo.');
+    return {
+      ...lastBackupExecutionResult,
+      debounced: true,
+      mensaje: 'Respaldo reciente reutilizado (debounce de 5 segundos activo).'
+    };
+  }
+
+  // Iniciar ejecución protegida
+  backupLockPromise = (async () => {
+    try {
+      const timestampVE = new Date().toLocaleString('es-VE', { 
+        timeZone: 'America/Caracas',
+        dateStyle: 'short', 
+        timeStyle: 'short' 
+      });
+
+      // 1. Generar Snapshot 100% en memoria
+      const { buffer, filename, tamanoBytes, metadata, payload } = await generarSnapshotMemoria({
+        filenamePrefix: 'backup_auto',
+        usuario
+      });
+
+      // 2. Ejecutar subidas externas en paralelo reutilizando el buffer en memoria
+      const [r2Settled, telegramSettled] = await Promise.allSettled([
+        subirBackupAR2(buffer, filename),
+        enviarBackupTelegram(buffer, filename, metadata)
+      ]);
+
+      const r2Result = r2Settled.status === 'fulfilled' 
+        ? r2Settled.value 
+        : { subido: false, error: r2Settled.reason?.message || 'Error desconocido en R2' };
+
+      const telegramResult = telegramSettled.status === 'fulfilled' 
+        ? telegramSettled.value 
+        : { enviado: false, error: telegramSettled.reason?.message || 'Error desconocido en Telegram' };
+
+      // 3. Intento de respaldo local condicional en disco (fail-safe)
+      const localResult = guardarBackupLocalEnDisco(payload, filename);
+
+      // 4. Registrar únicamente metadatos livianos en la tabla `backups` de PostgreSQL
+      const creadoPor = usuario?.username || usuario?.email || origen;
+      const backupNombre = (nombre && nombre.trim()) || `Respaldo ${origen} ${timestampVE}`;
+      const backupDesc = descripcion || `Respaldo generado vía ${origen} (${(tamanoBytes / 1024).toFixed(1)} KB)`;
+
+      const nuevoBackup = await prisma.backup.create({
+        data: {
+          nombre: backupNombre,
+          descripcion: backupDesc,
+          data: {
+            filename,
+            tamanoBytes,
+            registros: metadata.counts,
+            totalRecords: metadata.totalRecords,
+            generadoPor: creadoPor,
+            origen,
+            cloudStorage: {
+              r2: r2Result
+            },
+            notificaciones: {
+              telegram: telegramResult
+            },
+            guardadoLocal: localResult.guardado
+          },
+          tamanoBytes,
+          creadoPor
+        },
+        select: {
+          id: true,
+          nombre: true,
+          descripcion: true,
+          tamanoBytes: true,
+          creadoPor: true,
+          createdAt: true
+        }
+      });
+
+      // Mantener un máximo de 20 registros en la base de datos
+      try {
+        const totalBackups = await prisma.backup.findMany({
+          select: { id: true },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        if (totalBackups.length > 20) {
+          const aEliminar = totalBackups.slice(20).map((b) => b.id);
+          await prisma.backup.deleteMany({
+            where: { id: { in: aEliminar } }
+          });
+        }
+      } catch (rotErr) {
+        console.warn('⚠️ [BackupController] Error durante la rotación de registros en BD:', rotErr.message);
+      }
+
+      const finalResult = {
+        ok: true,
+        success: true,
+        id: nuevoBackup.id,
+        filename,
+        tamanoBytes,
+        r2: r2Result,
+        telegram: telegramResult,
+        guardadoLocal: localResult.guardado,
+        metadata
+      };
+
+      lastBackupExecutionTimestamp = Date.now();
+      lastBackupExecutionResult = finalResult;
+
+      return finalResult;
+    } finally {
+      backupLockPromise = null;
+    }
+  })();
+
+  return await backupLockPromise;
 }
 
 /**
