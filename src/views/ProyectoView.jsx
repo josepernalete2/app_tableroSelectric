@@ -245,27 +245,27 @@ export const ProyectoView = () => {
       if (editingElemento.tipoElemento === 'TABLERO') {
         setMaxPoles(tech.maxPoles || 24);
       } else if (editingElemento.tipoElemento === 'TRANSFORMADOR') {
-        setKvaTrafo(tech.kva || '500 KVA');
+        setKvaTrafo(tech.kva || '');
         setMarcaTrafo(tech.marca || '');
         setTipoTrafo(tech.tipoTransformador || 'Pedestal');
         setConexionTrafo(tech.conexion || '');
-        setVoltajePrimario(tech.voltajePrimario || '13.8 kV');
-        setVoltajeSecundario(tech.voltajeSecundario || '208 / 120 V');
+        setVoltajePrimario(tech.voltajePrimario || '');
+        setVoltajeSecundario(tech.voltajeSecundario || '');
       } else if (editingElemento.tipoElemento === 'GENERADOR') {
-        setKvaGen(tech.kva || '580 kVA');
+        setKvaGen(tech.kva || '');
         setCombustibleGen(tech.combustible || 'DIESEL');
-        setVoltajeGen(tech.voltajeGeneracion || '208 / 120 V');
-        setPotenciaKwGen(tech.potenciaKw || '464 kW');
-        setAmperajeGen(tech.amperaje || '1600 A');
+        setVoltajeGen(tech.voltajeGeneracion || '');
+        setPotenciaKwGen(tech.potenciaKw || '');
+        setAmperajeGen(tech.amperaje || '');
       } else if (editingElemento.tipoElemento === 'PUESTA_TIERRA') {
-        setResistenciaOhmios(tech.resistenciaOhmios || '0.5 Ω');
-        setCorrienteFuga(tech.corrienteFugaAmperios || '6.4 A');
+        setResistenciaOhmios(tech.resistenciaOhmios || '');
+        setCorrienteFuga(tech.corrienteFugaAmperios || '');
         setTipoMalla(tech.tipoMalla || '');
         setCableAcometidaTierra(tech.cableAcometida || '');
       } else if (editingElemento.tipoElemento === 'TRANSFER') {
-        setCapacidadAmperios(tech.capacidadAmperios || '3200 A');
+        setCapacidadAmperios(tech.capacidadAmperios || '');
         setTipoTransferencia(tech.tipoTransferencia || 'AUTOMATICA');
-        setTensionOperativa(tech.tensionOperativa || '208 V');
+        setTensionOperativa(tech.tensionOperativa || '');
       } else {
         setDescripcionOtro(tech.descripcionEspecificaciones || '');
       }
@@ -276,6 +276,31 @@ export const ProyectoView = () => {
       setObservacionesGenerales('');
       setTipoElemento('TABLERO');
       setMaxPoles(24);
+      setKvaTrafo('');
+      setMarcaTrafo('');
+      setConexionTrafo('');
+      setVoltajePrimario('');
+      setVoltajeSecundario('');
+      setKvaGen('');
+      setVoltajeGen('');
+      setPotenciaKwGen('');
+      setAmperajeGen('');
+      setResistenciaOhmios('');
+      setCorrienteFuga('');
+      setTipoMalla('');
+      setCableAcometidaTierra('');
+      setCapacidadAmperios('');
+      setTensionOperativa('');
+      setKvarTotal('');
+      setPasosCondensador('');
+      setTensionBanco('');
+      setSuministroTension('');
+      setSuministroEmpresa('');
+      setSuministroCapacidad('');
+      setCcmCapacidadBarra('');
+      setCcmTension('');
+      setCcmBreakerPrincipal('');
+      setDescripcionOtro('');
     }
   }, [editingElemento]);
 
@@ -297,47 +322,47 @@ export const ProyectoView = () => {
   const [maxPoles, setMaxPoles] = useState(24);
 
   // Campos de Transformador
-  const [kvaTrafo, setKvaTrafo] = useState('500 KVA');
-  const [marcaTrafo, setMarcaTrafo] = useState('General Electric (GE)');
+  const [kvaTrafo, setKvaTrafo] = useState('');
+  const [marcaTrafo, setMarcaTrafo] = useState('');
   const [tipoTrafo, setTipoTrafo] = useState('Pedestal'); // 'Pedestal' | 'Seco' | 'Poste'
-  const [conexionTrafo, setConexionTrafo] = useState('Estrella - Estrella (Aterrizado)');
-  const [voltajePrimario, setVoltajePrimario] = useState('13.8 kV');
-  const [voltajeSecundario, setVoltajeSecundario] = useState('208 / 120 V');
+  const [conexionTrafo, setConexionTrafo] = useState('');
+  const [voltajePrimario, setVoltajePrimario] = useState('');
+  const [voltajeSecundario, setVoltajeSecundario] = useState('');
 
   // Campos de Generador
-  const [kvaGen, setKvaGen] = useState('580 kVA');
+  const [kvaGen, setKvaGen] = useState('');
   const [combustibleGen, setCombustibleGen] = useState('DIESEL');
-  const [voltajeGen, setVoltajeGen] = useState('208 / 120 V');
-  const [potenciaKwGen, setPotenciaKwGen] = useState('464 kW');
-  const [amperajeGen, setAmperajeGen] = useState('1600 A');
+  const [voltajeGen, setVoltajeGen] = useState('');
+  const [potenciaKwGen, setPotenciaKwGen] = useState('');
+  const [amperajeGen, setAmperajeGen] = useState('');
 
   // Campos de Puesta a Tierra
-  const [resistenciaOhmios, setResistenciaOhmios] = useState('0.5 Ω');
-  const [corrienteFuga, setCorrienteFuga] = useState('6.4 A');
-  const [tipoMalla, setTipoMalla] = useState('Malla Subestación Concreto');
-  const [cableAcometidaTierra, setCableAcometidaTierra] = useState('Sólido #4 Desnudo');
+  const [resistenciaOhmios, setResistenciaOhmios] = useState('');
+  const [corrienteFuga, setCorrienteFuga] = useState('');
+  const [tipoMalla, setTipoMalla] = useState('');
+  const [cableAcometidaTierra, setCableAcometidaTierra] = useState('');
 
   // Campos de Transfer
-  const [capacidadAmperios, setCapacidadAmperios] = useState('3200 A');
+  const [capacidadAmperios, setCapacidadAmperios] = useState('');
   const [tipoTransferencia, setTipoTransferencia] = useState('AUTOMATICA');
-  const [tensionOperativa, setTensionOperativa] = useState('208 V');
+  const [tensionOperativa, setTensionOperativa] = useState('');
 
   // Campos de Banco de Condensadores
-  const [kvarTotal, setKvarTotal] = useState('150 kVAR');
-  const [pasosCondensador, setPasosCondensador] = useState('6');
+  const [kvarTotal, setKvarTotal] = useState('');
+  const [pasosCondensador, setPasosCondensador] = useState('');
   const [tipoBanco, setTipoBanco] = useState('AUTOMATICO');
-  const [tensionBanco, setTensionBanco] = useState('208 V');
+  const [tensionBanco, setTensionBanco] = useState('');
 
   // Campos de Punto de Suministro
-  const [suministroTension, setSuministroTension] = useState('13.8 kV');
+  const [suministroTension, setSuministroTension] = useState('');
   const [suministroEmpresa, setSuministroEmpresa] = useState('');
   const [suministroTipoAcometida, setSuministroTipoAcometida] = useState('Subterránea');
-  const [suministroCapacidad, setSuministroCapacidad] = useState('1000 kVA');
+  const [suministroCapacidad, setSuministroCapacidad] = useState('');
 
   // Campos de CCM Elemento
-  const [ccmCapacidadBarra, setCcmCapacidadBarra] = useState('1200 A');
-  const [ccmTension, setCcmTension] = useState('480 V');
-  const [ccmBreakerPrincipal, setCcmBreakerPrincipal] = useState('1200A 3P');
+  const [ccmCapacidadBarra, setCcmCapacidadBarra] = useState('');
+  const [ccmTension, setCcmTension] = useState('');
+  const [ccmBreakerPrincipal, setCcmBreakerPrincipal] = useState('');
   const [ccmNumeroGavetas, setCcmNumeroGavetas] = useState(8);
 
   // Campos de Otro

@@ -1,16 +1,25 @@
-import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw } from 'lucide-react';
+import { useConfirm } from '../context/ConfirmContext';
+import MetrologiaElectricaSection from './MetrologiaElectricaSection';
+import DualPhotoUploader from './DualPhotoUploader';
+import { TENSIONES_COVENIN_159_MT, TENSIONES_COVENIN_TODAS } from '../utils/constants';
 
 export default function SubestacionComponent({ subestacionData, onUpdate, readOnly }) {
+  const { alert: customAlert, confirm: customConfirm } = useConfirm();
   if (!subestacionData) return <div className="text-center p-8 text-slate-400">No hay datos de subestación seleccionados.</div>;
 
   const {
     id,
-    nombre,
-    ubicacion,
-    fecha,
-    hora,
-    inspector,
-    nivelTension,
+    nombre = '',
+    ubicacion = '',
+    fecha = '',
+    hora = '',
+    inspector = '',
+    nivelTension = '',
+    fotoBlob = null,
+    foto = null,
+    mediciones = {},
     estadoEntorno = {},
     obrasCiviles = {},
     equiposPrincipales = {},
@@ -20,12 +29,39 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
     firmaSupervisor = ""
   } = subestacionData;
 
+  const [previewUrl, setPreviewUrl] = useState(null);
+
   const updateField = (field, value) => {
     if (readOnly) return;
     onUpdate({
       ...subestacionData,
       [field]: value
     });
+  };
+
+  const handleLimpiarFormulario = async () => {
+    if (readOnly) return;
+    const confirmed = await customConfirm("¿Deseas reiniciar todos los campos de esta inspección de subestación a blanco?");
+    if (!confirmed) return;
+
+    onUpdate({
+      ...subestacionData,
+      ubicacion: '',
+      inspector: '',
+      nivelTension: '',
+      fotoBlob: null,
+      foto: null,
+      mediciones: {},
+      estadoEntorno: {},
+      obrasCiviles: {},
+      equiposPrincipales: {},
+      puestaTierra: {},
+      edificioControl: {},
+      firmaInspector: '',
+      firmaSupervisor: ''
+    });
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   };
 
   const updateSectionItem = (section, elementKey, type, value) => {
@@ -122,9 +158,20 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-slate-800 print:border-gray-200">
         <div>
           <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-widest print:text-amber-600">Inspección de Subestación Eléctrica</span>
-          <h2 className="text-xl md:text-2xl font-extrabold text-slate-100 tracking-wide mt-1 print:text-slate-900">{nombre}</h2>
+          <h2 className="text-xl md:text-2xl font-extrabold text-slate-100 tracking-wide mt-1 print:text-slate-900">{nombre || 'Subestación Eléctrica'}</h2>
         </div>
         <div className="flex items-center gap-3">
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleLimpiarFormulario}
+              className="no-print bg-slate-900 hover:bg-red-950/60 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-800 font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs transition-all cursor-pointer"
+              title="Reiniciar todos los campos a blanco"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Limpiar Formulario</span>
+            </button>
+          )}
           <button
             onClick={() => window.print()}
             className="no-print bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3.5 py-2 rounded-lg flex items-center gap-2 text-xs transition-all cursor-pointer shadow-sm"
@@ -157,16 +204,28 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
             />
           </div>
 
-          {/* Nivel de Tensión */}
+          {/* Nivel de Tensión Normalizado (COVENIN 159) */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Nivel de Tensión (kV)</span>
-            <input
-              type="text"
-              value={nivelTension}
-              onChange={(e) => updateField('nivelTension', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 print:placeholder-transparent"
-              placeholder="Ej. 13.8 kV"
-            />
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Nivel de Tensión (COVENIN 159)</span>
+            <div className="flex gap-2">
+              <select
+                value={nivelTension}
+                onChange={(e) => updateField('nivelTension', e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono font-bold"
+              >
+                <option value="">-- Seleccionar Nivel de Tensión --</option>
+                <optgroup label="Media Tensión (MT - COVENIN 159)">
+                  {TENSIONES_COVENIN_159_MT.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Baja Tensión (BT - COVENIN 159)">
+                  {TENSIONES_COVENIN_TODAS.filter(v => !TENSIONES_COVENIN_159_MT.includes(v)).map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
           </div>
 
           {/* Inspector */}
@@ -208,6 +267,15 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           </div>
         </div>
       </div>
+
+      {/* Metrología Eléctrica de la Subestación */}
+      <MetrologiaElectricaSection
+        mediciones={mediciones}
+        onChange={(nuevasMediciones) => updateField('mediciones', nuevasMediciones)}
+        readOnly={readOnly}
+        titulo="Metrología Eléctrica en Subestación (COVENIN 159)"
+        subtitulo="Medición de voltajes de línea L-L, fase L-N y 5 canales de corriente en celda o barraje"
+      />
 
       {/* Bloques de Evaluación Visual */}
       <div className="space-y-8">
@@ -284,6 +352,29 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
             </div>
           );
         })}
+      </div>
+
+      {/* Carga Dual de Fotografías de la Subestación */}
+      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5">
+        <DualPhotoUploader
+          fotoBlob={fotoBlob}
+          fotoSrc={foto}
+          previewUrl={previewUrl}
+          onImageSelected={(file) => {
+            updateField('fotoBlob', file);
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(URL.createObjectURL(file));
+          }}
+          onRemove={() => {
+            updateField('fotoBlob', null);
+            updateField('foto', null);
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(null);
+          }}
+          readOnly={readOnly}
+          label="Fotografía de la Subestación / Patio de Transformadores"
+          sublabel="Cámara en vivo o selección desde galería"
+        />
       </div>
 
       {/* Cierre / Firmas */}

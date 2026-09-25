@@ -12,9 +12,12 @@ import {
   Clock, 
   CheckSquare,
   Activity,
-  Settings
+  Settings,
+  RotateCcw
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
+import MetrologiaElectricaSection from './MetrologiaElectricaSection';
+import { TENSIONES_COVENIN_TODAS } from '../utils/constants';
 import useStore from '../store/useStore';
 
 export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }) {
@@ -76,6 +79,42 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
     });
   };
 
+  const handleLimpiarFormulario = () => {
+    if (readOnly) return;
+    onUpdate({
+      id: puntoData.id,
+      nombre: puntoData.nombre || '',
+      fecha: '',
+      hora: '',
+      inspector: '',
+      nombreUsuario: '',
+      numeroContrato: '',
+      empresaDistribuidora: '',
+      nivelTensionContrato: '',
+      tensionNominal: '',
+      potenciaContratada: '',
+      tarifaAplicable: '',
+      codigoElementoPrincipal: '',
+      tipoAcometida: '',
+      puntoConexionPCC: '',
+      conductorAcometida: '',
+      longitudAcometida: '',
+      elementoManiobra: '',
+      capacidadInterrupcion: '',
+      ubicacionTransformador: '',
+      propiedadTransformador: '',
+      usoTransformador: '',
+      ubicacionMedidor: '',
+      tipoMedicion: '',
+      marcaModeloMedidor: '',
+      numeroSerieAno: '',
+      mediciones: {},
+      observaciones: '',
+      firmaInspector: '',
+      firmaSupervisor: ''
+    });
+  };
+
   return (
     <div className={`w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl mx-auto space-y-8 print-card print:bg-white print:text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
       
@@ -94,7 +133,17 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleLimpiarFormulario}
+              className="no-print bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs transition-all border border-slate-700 cursor-pointer"
+              title="Reiniciar todos los campos del formulario a blanco"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-500" /> Limpiar
+            </button>
+          )}
           <button
             onClick={() => window.print()}
             className="no-print bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl flex items-center gap-2 text-xs transition-all cursor-pointer shadow-md"
@@ -217,14 +266,18 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
 
           {/* Tensión Nominal de Suministro */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tensión Nominal de Suministro (kV / V)</label>
+            <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tensión Nominal de Suministro (COVENIN 159)</label>
             <input
               type="text"
+              list="covenin-voltajes-medicion"
               value={tensionNominal}
               onChange={(e) => updateField('tensionNominal', e.target.value)}
               className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300"
-              placeholder="Ej. 13.8 kV / 208 V"
+              placeholder="Ej. 13.8 kV o 120/208 V (3Φ - 4 hilos)"
             />
+            <datalist id="covenin-voltajes-medicion">
+              {TENSIONES_COVENIN_TODAS.map(v => <option key={v} value={v}>{v}</option>)}
+            </datalist>
           </div>
 
           {/* Potencia Contratada / Conectada */}
@@ -560,6 +613,20 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
           </div>
         </div>
       </div>
+
+      {/* SECCIÓN 4.1: Metrología Eléctrica y Tensiones Normalizadas */}
+      <MetrologiaElectricaSection
+        mediciones={puntoData.mediciones || {}}
+        onChange={(field, val) => {
+          updateField('mediciones', {
+            ...(puntoData.mediciones || {}),
+            [field]: val
+          });
+        }}
+        titulo="4.1 Metrología Eléctrica en Punto de Suministro"
+        subtitulo="Tensiones Línea-Línea, Línea-Neutro y 5 Canales de Corriente (COVENIN 159)"
+        readOnly={readOnly}
+      />
 
       {/* SECCIÓN 5: Anomalías u observaciones */}
       <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-white print:border-gray-300">

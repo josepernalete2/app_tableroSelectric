@@ -1,0 +1,31 @@
+{
+  "metadata": {
+    "appName": "App Tableros Eléctricos (Selectric)",
+    "exportVersion": "2.2.0",
+    "schemaVersion": "1.2.0",
+    "generatedAt": "2026-09-25T20:27:42.345Z",
+    "environment": "development",
+    "counts": {
+      "empresas": 0,
+      "proyectos": 0,
+      "tableros": 0,
+      "circuitos": 0,
+      "elementosUnifilares": 0,
+      "subestaciones": 0,
+      "puntosMedicion": 0,
+      "ccm": 0,
+      "inspeccionesTermograficas": 0,
+      "inspeccionesAterramiento": 0,
+      "inspeccionesTanquesCombustible": 0,
+      "alarmas": 0,
+      "alimentadores": 0
+    },
+    "totalRecords": 0,
+    "generadoPor": {
+      "id": "u-1",
+      "username": "admin1",
+      "role": "ADMIN"
+    }
+  },
+  "data": []
+}

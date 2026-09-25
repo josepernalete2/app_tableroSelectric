@@ -28,7 +28,7 @@ const SafeImage = ({ blob, src, alt, className }) => {
 };
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
-import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
+import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS, TENSIONES_COVENIN_159_BT } from '../utils/constants';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
   const [editingCircuit, setEditingCircuit] = useState(null);
@@ -701,13 +701,19 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Tensión Nominal:</span>
-                  <EditableCell
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Tensión Nominal (COVENIN 159):</span>
+                  <input
+                    type="text"
+                    list="covenin-voltajes-tablero"
                     value={tableroData.tension || ''}
-                    onSave={(val) => updateField('tension', val)}
-                    placeholder="Ej: 208/120V"
-                    className="font-bold inline-block w-24 px-1"
+                    disabled={readOnly}
+                    onChange={(e) => updateField('tension', e.target.value)}
+                    placeholder="Ej: 120/208 V (3Φ - 4 hilos)"
+                    className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-[11px] focus:outline-none w-56 font-mono"
                   />
+                  <datalist id="covenin-voltajes-tablero">
+                    {TENSIONES_COVENIN_159_BT.map(v => <option key={v} value={v}>{v}</option>)}
+                  </datalist>
                 </div>
               </div>
             </td>
@@ -907,13 +913,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             </button>
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-800 border-dashed rounded cursor-pointer bg-slate-900/30 hover:bg-slate-900/50 hover:border-slate-700 transition-all select-none">
-              <div className="flex flex-col items-center justify-center p-4 text-center">
-                <Camera className="w-7 h-7 text-slate-500 mb-1" />
-                <span className="text-[10px] font-bold text-slate-400">Tomar Foto</span>
-                <span className="text-[9px] text-slate-500">o subir archivo</span>
-              </div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 p-1">
+            <label className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-sm">
+              <Camera className="w-4 h-4 text-amber-400" />
+              <span>Cámara en Vivo</span>
               <input
                 type="file"
                 accept="image/*"
@@ -921,12 +924,32 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 onChange={(e) => {
                   const file = e.target.files[0];
                   if (!file) return;
-                  
                   if (file.size > 10 * 1024 * 1024) {
                     customAlert("La imagen es demasiado grande. Máximo 10MB.");
                     return;
                   }
-                  
+                  onUpdateTablero({
+                    ...tableroData,
+                    fotoBlob: file,
+                    foto: null
+                  });
+                }}
+                className="hidden"
+              />
+            </label>
+            <label className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded-xl text-xs font-semibold cursor-pointer transition-all active:scale-95">
+              <Image className="w-4 h-4 text-slate-400" />
+              <span>Galería / Archivos</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  if (file.size > 10 * 1024 * 1024) {
+                    customAlert("La imagen es demasiado grande. Máximo 10MB.");
+                    return;
+                  }
                   onUpdateTablero({
                     ...tableroData,
                     fotoBlob: file,

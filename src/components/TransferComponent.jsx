@@ -18,33 +18,20 @@ import {
   CheckCircle2,
   Clock,
   Settings,
-  Info
+  Info,
+  RotateCcw
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
-
-// Componente para renderizar Blobs o URLs de imagen de forma segura
-const SafeImage = ({ blob, src, alt, className, style }) => {
-  const [objectUrl, setObjectUrl] = useState(null);
-
-  useEffect(() => {
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      setObjectUrl(url);
-      return () => {
-        URL.revokeObjectURL(url);
-      };
-    } else {
-      setObjectUrl(null);
-    }
-  }, [blob]);
-
-  const finalSrc = objectUrl || src;
-  if (!finalSrc) return null;
-
-  return <img src={finalSrc} alt={alt} className={className} style={style} />;
-};
+import MetrologiaElectricaSection from './MetrologiaElectricaSection';
+import DualPhotoUploader from './DualPhotoUploader';
+import { 
+  TENSIONES_COVENIN_159_BT, 
+  TENSIONES_COVENIN_TODAS, 
+  FRECUENCIAS_NORMALIZADAS, 
+  POLOS_TRANSFERENCIA 
+} from '../utils/constants';
 
 export default function TransferComponent({ 
   transferData, 
@@ -53,7 +40,7 @@ export default function TransferComponent({
   readOnly = false 
 }) {
   const data = transferData || elementoData;
-  const { alert: customAlert } = useConfirm();
+  const { alert: customAlert, confirm: customConfirm } = useConfirm();
   const companies = useStore((state) => state.companies || []);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -86,11 +73,11 @@ export default function TransferComponent({
     return list.filter(e => e.id !== data?.id);
   }, [companies, data]);
 
-  // Estados locales editables
-  const [nombre, setNombre] = useState(data?.nombre || 'ATS-1 - Transferencia Principal');
-  const [ubicacion, setUbicacion] = useState(data?.ubicacion || 'SALA TÉCNICA / SÓTANO');
+  // Estados locales editables - Sin datos demo quemados
+  const [nombre, setNombre] = useState(data?.nombre || '');
+  const [ubicacion, setUbicacion] = useState(data?.ubicacion || '');
   const [observaciones, setObservaciones] = useState(
-    data?.observacionesGenerales || data?.datosTecnicos?.observacionTransferencia || 'TRANSFERENCIA AUTOMÁTICA CON ENCLAVAMIENTO MECÁNICO Y ELÉCTRICO.'
+    data?.observacionesGenerales || data?.datosTecnicos?.observacionTransferencia || ''
   );
 
   // Datos Técnicos JSON
@@ -123,7 +110,6 @@ export default function TransferComponent({
     );
   }
 
-
   const handleDtChange = (key, value) => {
     if (readOnly) return;
     setDt(prev => ({ ...prev, [key]: value }));
@@ -138,19 +124,6 @@ export default function TransferComponent({
         [key]: value
       }
     }));
-  };
-
-  const handleImageChange = (e) => {
-    if (readOnly) return;
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      customAlert("La imagen seleccionada supera los 10MB. Por favor elija un archivo más liviano.");
-      return;
-    }
-    setFotoBlob(file);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
   };
 
   const handleSave = () => {
@@ -172,45 +145,46 @@ export default function TransferComponent({
     setIsEditing(false);
   };
 
+  const handleLimpiarFormulario = async () => {
+    if (readOnly) return;
+    const confirmed = await customConfirm("¿Deseas reiniciar todos los campos de esta transferencia a valores en blanco?");
+    if (!confirmed) return;
+
+    setNombre('');
+    setUbicacion('');
+    setObservaciones('');
+    setDt({});
+    setFotoBlob(null);
+    setFotoSrc(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  };
+
   // Valores de configuración operativa
   const modoOperativo = dt.modoOperativo || dt.tipoTransferenciaOperativa || (dt.tipoTransferencia?.toUpperCase().includes('MANUAL') || dt.tipoTransferencia?.toUpperCase().includes('MTS') ? 'MTS' : 'ATS');
+  const estadoServicio = dt.estadoServicio || 'En Servicio'; // 'En Servicio' | 'Fuera de Servicio'
   const tipoTransicion = dt.tipoTransicion || 'ABIERTA'; // 'ABIERTA' | 'CERRADA' | 'RETARDADA'
   const tipoEnclavamiento = dt.tipoEnclavamiento || 'MECANICO_ELECTRICO';
+  const polos = dt.polos || '4P';
+  const frecuencia = dt.frecuencia || '60 Hz';
 
   // Valores de Fuente Normal (Fuente A)
-  const fuenteNormalNombre = dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || 'RED COMERCIAL / CORPOELEC (TRAFO 1)';
-  const fuenteNormalTension = dt.fuenteNormalTension || '208 / 120 V';
-  const fuenteNormalAmperaje = dt.fuenteNormalAmperaje || dt.amperaje || '3200 A';
-  const fuenteNormalConductor = dt.fuenteNormalConductor || dt.conductorFuenteNormal || '2(3X500 MCM)';
+  const fuenteNormalNombre = dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || '';
+  const fuenteNormalTension = dt.fuenteNormalTension || '';
+  const fuenteNormalAmperaje = dt.fuenteNormalAmperaje || dt.amperaje || '';
+  const fuenteNormalConductor = dt.fuenteNormalConductor || dt.conductorFuenteNormal || '';
 
   // Valores de Fuente Emergencia (Fuente B)
-  const fuenteEmergenciaNombre = dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || 'PLANTA ELÉCTRICA DE EMERGENCIA (GEN-1)';
-  const fuenteEmergenciaTension = dt.fuenteEmergenciaTension || '208 / 120 V';
-  const fuenteEmergenciaAmperaje = dt.fuenteEmergenciaAmperaje || dt.amperaje || '3200 A';
-  const fuenteEmergenciaConductor = dt.fuenteEmergenciaConductor || dt.conductorFuenteEmergencia || '2(3X500 MCM)';
+  const fuenteEmergenciaNombre = dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || '';
+  const fuenteEmergenciaTension = dt.fuenteEmergenciaTension || '';
+  const fuenteEmergenciaAmperaje = dt.fuenteEmergenciaAmperaje || dt.amperaje || '';
+  const fuenteEmergenciaConductor = dt.fuenteEmergenciaConductor || dt.conductorFuenteEmergencia || '';
 
   // Salida a Carga
-  const salidaCargaNombre = dt.salidaCargaNombre || dt.carga || 'TABLERO PRINCIPAL DE EMERGENCIA (TPE)';
-  const salidaCargaConductor = dt.salidaCargaConductor || '2(3X500 MCM)';
-  const neutroConductor = dt.neutroConductor || dt.neutro || '1X500 MCM (BARRA DIRECTA)';
-  const tierraConductor = dt.tierraConductor || dt.tierra || '1X4/0 AWG (SPT)';
-
-  // Mediciones de voltajes y corrientes
-  const v_ab = dt.mediciones?.v_ab || dt.voltaje?.vab || dt.vab || '208';
-  const v_bc = dt.mediciones?.v_bc || dt.voltaje?.vbc || dt.vbc || '209';
-  const v_ca = dt.mediciones?.v_ca || dt.voltaje?.vac || dt.vac || '208';
-  const v_an = dt.mediciones?.v_an || '120';
-  const v_bn = dt.mediciones?.v_bn || '120';
-  const v_cn = dt.mediciones?.v_cn || '121';
-
-  const i_l1 = dt.mediciones?.i_l1 || '640';
-  const i_l2 = dt.mediciones?.i_l2 || '625';
-  const i_l3 = dt.mediciones?.i_l3 || '630';
-  const i_n = dt.mediciones?.i_n || '45';
-
-  const frecuenciaHz = dt.mediciones?.frecuencia || '60.0';
-  const factorPotencia = dt.mediciones?.fp || '0.92';
-  const potenciaKw = dt.mediciones?.potenciaKw || '215';
+  const salidaCargaNombre = dt.salidaCargaNombre || dt.carga || '';
+  const salidaCargaConductor = dt.salidaCargaConductor || '';
+  const neutroConductor = dt.neutroConductor || dt.neutro || '';
+  const tierraConductor = dt.tierraConductor || dt.tierra || '';
 
   return (
     <div className={`max-w-6xl mx-auto space-y-6 animate-fade-in font-sans pb-16 print-card print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-95' : ''}`}>
@@ -228,12 +202,15 @@ export default function TransferComponent({
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 {modoOperativo === 'ATS' ? '🔄 TRANSFERENCIA AUTOMÁTICA (ATS)' : '🔀 TRANSFERENCIA MANUAL (MTS)'}
               </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${estadoServicio === 'En Servicio' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'}`}>
+                {estadoServicio}
+              </span>
               <span className="font-mono text-xs font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                 ID: {data.id}
               </span>
             </div>
             <h1 className="text-lg font-black text-slate-100 mt-0.5">
-              {nombre}
+              {nombre || 'Unidad de Transferencia'}
             </h1>
           </div>
         </div>
@@ -250,6 +227,18 @@ export default function TransferComponent({
 
           {!readOnly && (
             <>
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={handleLimpiarFormulario}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-red-950/60 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-800 rounded-xl transition-all font-bold text-xs cursor-pointer flex items-center gap-1.5"
+                  title="Reiniciar todos los campos a blanco"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Limpiar Formulario</span>
+                </button>
+              )}
+
               {isEditing ? (
                 <button
                   onClick={handleSave}
@@ -288,19 +277,30 @@ export default function TransferComponent({
                     type="text"
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold"
+                    placeholder="Ej. ATS-1 - Transferencia Principal Sótano"
+                    className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold placeholder-slate-600"
                   />
                 ) : (
-                  nombre
+                  nombre || 'ATS - Transferencia'
                 )}
               </h2>
             </div>
             
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono font-bold text-slate-400">Capacidad Nominal:</span>
-              <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg font-mono font-black text-sm">
-                {dt.amperaje || dt.capacidadAmperios || '3200 A'}
-              </span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={dt.amperaje || dt.capacidadAmperios || ''}
+                  onChange={(e) => handleDtChange('amperaje', e.target.value)}
+                  placeholder="Ej. 3200 A"
+                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono font-bold text-amber-400 text-center w-28"
+                />
+              ) : (
+                <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg font-mono font-black text-sm">
+                  {dt.amperaje || dt.capacidadAmperios ? `${dt.amperaje || dt.capacidadAmperios}` : '—'}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -323,10 +323,11 @@ export default function TransferComponent({
                     type="text"
                     value={ubicacion}
                     onChange={(e) => setUbicacion(e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right text-xs"
+                    placeholder="Ej. Sala Técnica / Sótano"
+                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right text-xs placeholder-slate-600"
                   />
                 ) : (
-                  <span className="text-slate-200 font-semibold">{ubicacion || 'SALA TÉCNICA SÓTANO'}</span>
+                  <span className="text-slate-200 font-semibold">{ubicacion || '—'}</span>
                 )}
               </div>
 
@@ -337,55 +338,91 @@ export default function TransferComponent({
                     type="text"
                     value={dt.modelo || ''}
                     onChange={(e) => handleDtChange('modelo', e.target.value)}
-                    placeholder="Ej. YUYE-YES1 3200/4P / Socomec"
-                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right text-xs"
+                    placeholder="Ej. Socomec ATyS / YUYE-YES1"
+                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right text-xs placeholder-slate-600"
                   />
                 ) : (
-                  <span className="text-slate-200 font-semibold">{dt.modelo || dt.tipoTransferencia || 'YUYE-YES1 3200/4P'}</span>
+                  <span className="text-slate-200 font-semibold">{dt.modelo || dt.tipoTransferencia || '—'}</span>
                 )}
               </div>
 
+              {/* Tensión Nominal Normalizada (COVENIN 159) */}
+              <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-400 block font-bold">TENSIÓN NOMINAL (COVENIN 159):</span>
+                {isEditing ? (
+                  <select
+                    value={dt.tensionNominal || ''}
+                    onChange={(e) => handleDtChange('tensionNominal', e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-bold"
+                  >
+                    <option value="">-- Seleccionar Tensión Normalizada --</option>
+                    {TENSIONES_COVENIN_159_BT.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-emerald-400 font-bold text-sm block mt-0.5">{dt.tensionNominal || '—'}</span>
+                )}
+              </div>
+
+              {/* Polos y Frecuencia desacoplados */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block font-bold">TENSIÓN NOMINAL:</span>
+                  <span className="text-[10px] text-slate-400 block font-bold">N° DE POLOS:</span>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.tensionNominal || '208 / 120 V'}
-                      onChange={(e) => handleDtChange('tensionNominal', e.target.value)}
-                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
-                    />
+                    <select
+                      value={polos}
+                      onChange={(e) => handleDtChange('polos', e.target.value)}
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-bold"
+                    >
+                      {POLOS_TRANSFERENCIA.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
                   ) : (
-                    <span className="text-emerald-400 font-bold text-sm block mt-0.5">{dt.tensionNominal || '208 / 120 V'}</span>
+                    <span className="text-amber-400 font-bold text-sm block mt-0.5">{polos}</span>
                   )}
                 </div>
 
                 <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block font-bold">POLOS Y FRECUENCIA:</span>
+                  <span className="text-[10px] text-slate-400 block font-bold">FRECUENCIA:</span>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.polosFrecuencia || '4P (Neutro) • 60 Hz'}
-                      onChange={(e) => handleDtChange('polosFrecuencia', e.target.value)}
-                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
-                    />
+                    <select
+                      value={frecuencia}
+                      onChange={(e) => handleDtChange('frecuencia', e.target.value)}
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-bold"
+                    >
+                      {FRECUENCIAS_NORMALIZADAS.map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
                   ) : (
-                    <span className="text-amber-400 font-bold text-sm block mt-0.5">{dt.polosFrecuencia || '4P (Neutro) • 60 Hz'}</span>
+                    <span className="text-sky-400 font-bold text-sm block mt-0.5">{frecuencia}</span>
                   )}
                 </div>
               </div>
 
-              <div className="flex justify-between items-center bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
-                <span className="text-slate-400 font-bold">CONTROLADOR ATS:</span>
+              {/* Controlador ATS: Bloqueado y deshabilitado si tipo es MANUAL (MTS) */}
+              <div className={`flex justify-between items-center p-2.5 rounded-xl border ${modoOperativo === 'MTS' ? 'bg-slate-950/40 border-slate-850 opacity-60' : 'bg-slate-900/80 border-slate-800'}`}>
+                <div className="flex flex-col">
+                  <span className="text-slate-400 font-bold">CONTROLADOR ATS:</span>
+                  {modoOperativo === 'MTS' && (
+                    <span className="text-[9px] text-amber-500 font-semibold">(No Aplica en modo Manual)</span>
+                  )}
+                </div>
                 {isEditing ? (
                   <input
                     type="text"
-                    value={dt.controladorAts || 'Módulo Automático Digital Integrado'}
+                    disabled={modoOperativo === 'MTS'}
+                    value={modoOperativo === 'MTS' ? 'No Aplica (Transferencia Manual)' : (dt.controladorAts || '')}
                     onChange={(e) => handleDtChange('controladorAts', e.target.value)}
-                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right text-xs"
+                    placeholder="Ej. Deep Sea DSE 334 / ComAp"
+                    className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-right text-xs placeholder-slate-600 disabled:bg-slate-900 disabled:text-slate-500"
                   />
                 ) : (
-                  <span className="text-slate-300 font-semibold">{dt.controladorAts || 'Módulo Automático Digital Integrado'}</span>
+                  <span className="text-slate-300 font-semibold">
+                    {modoOperativo === 'MTS' ? 'No Aplica (Transferencia Manual)' : (dt.controladorAts || '—')}
+                  </span>
                 )}
               </div>
             </div>
@@ -432,23 +469,24 @@ export default function TransferComponent({
                     />
                   ) : (
                     <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteNormalNombre}>
-                      {fuenteNormalNombre}
+                      {fuenteNormalNombre || '—'}
                     </p>
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1 border-t border-slate-800/80">
                   <div>
-                    <span className="text-slate-500 block font-bold">TENSIÓN NOMINAL:</span>
+                    <span className="text-slate-500 block font-bold">TENSIÓN:</span>
                     {isEditing ? (
                       <input
                         type="text"
                         value={fuenteNormalTension}
                         onChange={(e) => handleDtChange('fuenteNormalTension', e.target.value)}
+                        placeholder="Ej. 208/120V"
                         className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100 text-[10px]"
                       />
                     ) : (
-                      <span className="text-emerald-400 font-bold">{fuenteNormalTension}</span>
+                      <span className="text-slate-300 font-bold">{fuenteNormalTension || '—'}</span>
                     )}
                   </div>
                   <div>
@@ -458,42 +496,44 @@ export default function TransferComponent({
                         type="text"
                         value={fuenteNormalAmperaje}
                         onChange={(e) => handleDtChange('fuenteNormalAmperaje', e.target.value)}
+                        placeholder="Ej. 3200 A"
                         className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100 text-[10px]"
                       />
                     ) : (
-                      <span className="text-slate-200 font-bold">{fuenteNormalAmperaje}</span>
+                      <span className="text-slate-300 font-bold">{fuenteNormalAmperaje || '—'}</span>
                     )}
                   </div>
                 </div>
 
-                <div className="text-[10px] font-mono bg-slate-950/70 p-2 rounded-lg border border-slate-800">
-                  <span className="text-slate-400 block font-bold">CONDUCTOR ACOMETIDA NORMAL:</span>
+                <div className="text-[10px] font-mono pt-1 border-t border-slate-800/80">
+                  <span className="text-slate-500 block font-bold">CONDUCTOR DE ACOMETIDA:</span>
                   {isEditing ? (
                     <input
                       type="text"
                       value={fuenteNormalConductor}
                       onChange={(e) => handleDtChange('fuenteNormalConductor', e.target.value)}
+                      placeholder="Ej. 2(3X500 MCM)"
                       className="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs"
                     />
                   ) : (
-                    <span className="text-slate-200 font-bold block mt-0.5">{fuenteNormalConductor}</span>
+                    <span className="text-slate-200 font-bold block mt-0.5">{fuenteNormalConductor || '—'}</span>
                   )}
                 </div>
               </div>
 
-              {/* Tarjeta 2: FUENTE DE EMERGENCIA / RESPALDO (ÁMBAR/NARANJA) */}
+              {/* Tarjeta 2: FUENTE EMERGENCIA (ÁMBAR/ROJO) */}
               <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative overflow-hidden">
                 <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40">
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                    Fuente Emergencia (Respaldo)
+                    Fuente Emergencia (Prioridad 2)
                   </span>
                   <span className="text-[10px] font-mono font-bold text-amber-400">GEN</span>
                 </div>
 
                 <div>
                   <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Origen / Planta de Respaldo:
+                    Origen / Planta Generador:
                   </label>
                   {isEditing ? (
                     <SelectorAlimentadorJerarquico
@@ -502,29 +542,30 @@ export default function TransferComponent({
                       proyectoId={data.proyectoId}
                       tableroActualId={data.id}
                       elementosList={projectElements}
-                      placeholder="Seleccionar Generador, Planta, UPS..."
+                      placeholder="Seleccionar Generador / Planta..."
                       className="text-xs"
                       label=""
                     />
                   ) : (
                     <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteEmergenciaNombre}>
-                      {fuenteEmergenciaNombre}
+                      {fuenteEmergenciaNombre || '—'}
                     </p>
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1 border-t border-slate-800/80">
                   <div>
-                    <span className="text-slate-500 block font-bold">TENSIÓN NOMINAL:</span>
+                    <span className="text-slate-500 block font-bold">TENSIÓN:</span>
                     {isEditing ? (
                       <input
                         type="text"
                         value={fuenteEmergenciaTension}
                         onChange={(e) => handleDtChange('fuenteEmergenciaTension', e.target.value)}
+                        placeholder="Ej. 208/120V"
                         className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100 text-[10px]"
                       />
                     ) : (
-                      <span className="text-amber-400 font-bold">{fuenteEmergenciaTension}</span>
+                      <span className="text-slate-300 font-bold">{fuenteEmergenciaTension || '—'}</span>
                     )}
                   </div>
                   <div>
@@ -534,25 +575,27 @@ export default function TransferComponent({
                         type="text"
                         value={fuenteEmergenciaAmperaje}
                         onChange={(e) => handleDtChange('fuenteEmergenciaAmperaje', e.target.value)}
+                        placeholder="Ej. 3200 A"
                         className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100 text-[10px]"
                       />
                     ) : (
-                      <span className="text-slate-200 font-bold">{fuenteEmergenciaAmperaje}</span>
+                      <span className="text-slate-300 font-bold">{fuenteEmergenciaAmperaje || '—'}</span>
                     )}
                   </div>
                 </div>
 
-                <div className="text-[10px] font-mono bg-slate-950/70 p-2 rounded-lg border border-slate-800">
-                  <span className="text-slate-400 block font-bold">CONDUCTOR ACOMETIDA EMERGENCIA:</span>
+                <div className="text-[10px] font-mono pt-1 border-t border-slate-800/80">
+                  <span className="text-slate-500 block font-bold">CONDUCTOR DE ACOMETIDA:</span>
                   {isEditing ? (
                     <input
                       type="text"
                       value={fuenteEmergenciaConductor}
                       onChange={(e) => handleDtChange('fuenteEmergenciaConductor', e.target.value)}
+                      placeholder="Ej. 2(3X500 MCM)"
                       className="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs"
                     />
                   ) : (
-                    <span className="text-slate-200 font-bold block mt-0.5">{fuenteEmergenciaConductor}</span>
+                    <span className="text-slate-200 font-bold block mt-0.5">{fuenteEmergenciaConductor || '—'}</span>
                   )}
                 </div>
               </div>
@@ -562,16 +605,16 @@ export default function TransferComponent({
         </div>
 
         {/* ========================================================================= */}
-        {/* 3. ENCLAVAMIENTO, MODO OPERATIVO Y TIPO DE TRANSICIÓN */}
+        {/* 3. ENCLAVAMIENTO, MODO OPERATIVO Y ESTADO DE SERVICIO */}
         {/* ========================================================================= */}
         <div className="p-4 bg-slate-900/90 border-b-2 border-slate-800">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             
-            {/* Selector de Modo Operativo */}
+            {/* Modo Operativo (ATS / MTS) */}
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
                 <Sliders className="w-4 h-4 text-amber-400" />
-                Estado Operativo:
+                Modo de Operación:
               </span>
               {isEditing ? (
                 <div className="flex gap-2">
@@ -605,11 +648,37 @@ export default function TransferComponent({
               )}
             </div>
 
+            {/* Selector de Estado de Servicio (En Servicio / Fuera de Servicio) */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <Shield className="w-4 h-4 text-emerald-400" />
+                Estado de Operatividad:
+              </span>
+              {isEditing ? (
+                <select
+                  value={estadoServicio}
+                  onChange={(e) => handleDtChange('estadoServicio', e.target.value)}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="En Servicio">🟢 En Servicio</option>
+                  <option value="Fuera de Servicio">🔴 Fuera de Servicio</option>
+                </select>
+              ) : (
+                <span className={`px-3 py-1 rounded-lg text-xs font-bold font-mono ${
+                  estadoServicio === 'En Servicio' 
+                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' 
+                    : 'bg-red-950 text-red-400 border border-red-800'
+                }`}>
+                  {estadoServicio === 'En Servicio' ? '🟢 En Servicio' : '🔴 Fuera de Servicio'}
+                </span>
+              )}
+            </div>
+
             {/* Selector de Tipo de Transición */}
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                <ArrowRightLeft className="w-4 h-4 text-emerald-400" />
-                Tipo de Transición:
+                <ArrowRightLeft className="w-4 h-4 text-sky-400" />
+                Transición:
               </span>
               {isEditing ? (
                 <select
@@ -617,37 +686,15 @@ export default function TransferComponent({
                   onChange={(e) => handleDtChange('tipoTransicion', e.target.value)}
                   className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
                 >
-                  <option value="ABIERTA">Transición Abierta (Break-Before-Make / I-0-II)</option>
-                  <option value="CERRADA">Transición Cerrada (Make-Before-Break / Sin Corte)</option>
-                  <option value="RETARDADA">Transición Retardada (Pausa Programada en Cero)</option>
+                  <option value="ABIERTA">Abierta (Break-Before-Make / I-0-II)</option>
+                  <option value="CERRADA">Cerrada (Make-Before-Break / Sin Corte)</option>
+                  <option value="RETARDADA">Retardada (Pausa Programada en Cero)</option>
                 </select>
               ) : (
-                <span className="px-3 py-1 bg-slate-900 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold font-mono">
-                  {tipoTransicion === 'CERRADA' ? '⚡ Transición Cerrada (Make-Before-Break)' :
-                   tipoTransicion === 'RETARDADA' ? '⏱️ Transición Retardada con Pausa' :
-                   '🔌 Transición Abierta (Break-Before-Make)'}
-                </span>
-              )}
-            </div>
-
-            {/* Tipo de Enclavamiento */}
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-slate-400 font-semibold">Enclavamiento:</span>
-              {isEditing ? (
-                <select
-                  value={tipoEnclavamiento}
-                  onChange={(e) => handleDtChange('tipoEnclavamiento', e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-100 font-semibold"
-                >
-                  <option value="MECANICO_ELECTRICO">Mecánico + Eléctrico (Interlocked)</option>
-                  <option value="SOLO_MECANICO">Solo Mecánico</option>
-                  <option value="MOTORIZADO_ELECTRONICO">Motorizado con Lógica Electrónica</option>
-                </select>
-              ) : (
-                <span className="text-xs font-bold text-slate-200 font-mono">
-                  {tipoEnclavamiento === 'SOLO_MECANICO' ? 'Solo Mecánico' :
-                   tipoEnclavamiento === 'MOTORIZADO_ELECTRONICO' ? 'Motorizado Electrónico' :
-                   'Mecánico + Eléctrico'}
+                <span className="px-3 py-1 bg-slate-900 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold font-mono">
+                  {tipoTransicion === 'CERRADA' ? '⚡ Cerrada' :
+                   tipoTransicion === 'RETARDADA' ? '⏱️ Retardada' :
+                   '🔌 Abierta'}
                 </span>
               )}
             </div>
@@ -656,228 +703,16 @@ export default function TransferComponent({
         </div>
 
         {/* ========================================================================= */}
-        {/* 4. CUADRO DE MEDICIÓN Y FASES LIMPIAS (ESTANDARIZADAS SIN "(red normal)") */}
+        {/* 4. METROLOGÍA ELÉCTRICA COMPLETA (COVENIN 159) */}
         {/* ========================================================================= */}
-        <div className="border-b-2 border-slate-800">
-          <div className="bg-slate-900 p-3 text-center border-b border-slate-800">
-            <h3 className="text-xs md:text-sm font-black text-amber-400 uppercase tracking-wider font-mono">
-              ⚡ PARÁMETROS DE MEDICIÓN EN BARRA DE CARGA COMÚN
-            </h3>
-            <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-              Barra de conmutación común para Fuente Normal y Fuente de Emergencia
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left border-collapse font-mono print:border-black">
-              <thead>
-                <tr className="bg-slate-900/80 border-b border-slate-800 text-slate-300 font-bold uppercase text-[11px]">
-                  <th className="p-3 border-r border-slate-800 w-1/4">FASE / LÍNEA (ESTÁNDAR)</th>
-                  <th className="p-3 border-r border-slate-800 text-center w-1/5">VOLTAJE L-L (V)</th>
-                  <th className="p-3 border-r border-slate-800 text-center w-1/5">VOLTAJE L-N (V)</th>
-                  <th className="p-3 border-r border-slate-800 text-center w-1/5">CORRIENTE EN CARGA (A)</th>
-                  <th className="p-3 text-center w-1/5">ESTADO / BALANCE</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/80 text-slate-100">
-                
-                {/* FASE A / L1 */}
-                <tr className="hover:bg-slate-900/40 transition-colors">
-                  <td className="p-3 font-black text-amber-400 border-r border-slate-800 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                    Fase A / L1
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={v_ab}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'v_ab', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1"
-                      />
-                    ) : (
-                      `V_AB: ${v_ab} V`
-                    )}
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-slate-300">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={v_an}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'v_an', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1"
-                      />
-                    ) : (
-                      `V_AN: ${v_an} V`
-                    )}
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-emerald-400">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={i_l1}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'i_l1', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1 text-emerald-400"
-                      />
-                    ) : (
-                      `${i_l1} A`
-                    )}
-                  </td>
-                  <td className="p-3 text-center text-[10px] font-bold text-emerald-400">
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      <CheckCircle2 className="w-3 h-3" /> Nominal
-                    </span>
-                  </td>
-                </tr>
-
-                {/* FASE B / L2 */}
-                <tr className="hover:bg-slate-900/40 transition-colors">
-                  <td className="p-3 font-black text-amber-400 border-r border-slate-800 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                    Fase B / L2
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={v_bc}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'v_bc', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1"
-                      />
-                    ) : (
-                      `V_BC: ${v_bc} V`
-                    )}
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-slate-300">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={v_bn}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'v_bn', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1"
-                      />
-                    ) : (
-                      `V_BN: ${v_bn} V`
-                    )}
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-emerald-400">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={i_l2}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'i_l2', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1 text-emerald-400"
-                      />
-                    ) : (
-                      `${i_l2} A`
-                    )}
-                  </td>
-                  <td className="p-3 text-center text-[10px] font-bold text-emerald-400">
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      <CheckCircle2 className="w-3 h-3" /> Nominal
-                    </span>
-                  </td>
-                </tr>
-
-                {/* FASE C / L3 */}
-                <tr className="hover:bg-slate-900/40 transition-colors">
-                  <td className="p-3 font-black text-amber-400 border-r border-slate-800 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                    Fase C / L3
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={v_ca}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'v_ca', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1"
-                      />
-                    ) : (
-                      `V_CA: ${v_ca} V`
-                    )}
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-slate-300">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={v_cn}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'v_cn', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1"
-                      />
-                    ) : (
-                      `V_CN: ${v_cn} V`
-                    )}
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-emerald-400">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={i_l3}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'i_l3', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1 text-emerald-400"
-                      />
-                    ) : (
-                      `${i_l3} A`
-                    )}
-                  </td>
-                  <td className="p-3 text-center text-[10px] font-bold text-emerald-400">
-                    <span className="inline-flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      <CheckCircle2 className="w-3 h-3" /> Nominal
-                    </span>
-                  </td>
-                </tr>
-
-                {/* NEUTRO (N) */}
-                <tr className="bg-slate-900/20">
-                  <td className="p-3 font-bold text-slate-300 border-r border-slate-800 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-500"></span>
-                    Neutro (N)
-                  </td>
-                  <td className="p-3 text-center border-r border-slate-800 text-slate-500 font-semibold">—</td>
-                  <td className="p-3 text-center border-r border-slate-800 text-slate-500 font-semibold">—</td>
-                  <td className="p-3 text-center border-r border-slate-800 font-bold text-cyan-400">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={i_n}
-                        onChange={(e) => handleNestedDtChange('mediciones', 'i_n', e.target.value)}
-                        className="w-20 bg-slate-950 border border-slate-700 rounded text-center text-xs py-1 text-cyan-400"
-                      />
-                    ) : (
-                      `${i_n} A`
-                    )}
-                  </td>
-                  <td className="p-3 text-center text-[10px] font-bold text-slate-400 font-mono">
-                    Corriente Desbalance
-                  </td>
-                </tr>
-
-              </tbody>
-            </table>
-          </div>
-
-          {/* Barra de Totales y Potencias */}
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-slate-800 bg-slate-900/60 p-3 text-xs font-mono border-t border-slate-800">
-            <div className="p-2 text-center">
-              <span className="text-[10px] text-slate-400 block font-bold">FRECUENCIA:</span>
-              <span className="text-amber-400 font-extrabold text-sm">{frecuenciaHz} Hz</span>
-            </div>
-            <div className="p-2 text-center">
-              <span className="text-[10px] text-slate-400 block font-bold">FACTOR DE POTENCIA (FP):</span>
-              <span className="text-emerald-400 font-extrabold text-sm">{factorPotencia}</span>
-            </div>
-            <div className="p-2 text-center">
-              <span className="text-[10px] text-slate-400 block font-bold">POTENCIA ACTIVA ESTIMADA:</span>
-              <span className="text-slate-100 font-extrabold text-sm">{potenciaKw} kW</span>
-            </div>
-            <div className="p-2 text-center">
-              <span className="text-[10px] text-slate-400 block font-bold">ESTADO DE TRANSFERENCIA:</span>
-              <span className="text-emerald-400 font-extrabold text-xs inline-flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> Alimentando Carga
-              </span>
-            </div>
-          </div>
+        <div className="p-4 bg-slate-950 border-b-2 border-slate-800">
+          <MetrologiaElectricaSection
+            mediciones={dt.mediciones || {}}
+            onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
+            readOnly={!isEditing}
+            titulo="Parámetros de Medición en Barra de Carga Común (COVENIN 159)"
+            subtitulo="Tensiones L-L, L-N y 5 canales de corriente (Fases A, B, C, Neutro N y Tierra PE)"
+          />
         </div>
 
         {/* ========================================================================= */}
@@ -907,10 +742,23 @@ export default function TransferComponent({
                 />
               ) : (
                 <p className="text-slate-100 font-black text-sm truncate" title={salidaCargaNombre}>
-                  {salidaCargaNombre}
+                  {salidaCargaNombre || '—'}
                 </p>
               )}
-              <span className="text-[10px] text-slate-500 block">Conductor Salida: {salidaCargaConductor}</span>
+              <div className="pt-1">
+                <span className="text-[10px] text-slate-500 block">Conductor Salida:</span>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={salidaCargaConductor}
+                    onChange={(e) => handleDtChange('salidaCargaConductor', e.target.value)}
+                    placeholder="Ej. 2(3X500 MCM)"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs mt-0.5"
+                  />
+                ) : (
+                  <span className="text-slate-300 font-bold text-xs">{salidaCargaConductor || '—'}</span>
+                )}
+              </div>
             </div>
 
             <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
@@ -922,10 +770,11 @@ export default function TransferComponent({
                   type="text"
                   value={neutroConductor}
                   onChange={(e) => handleDtChange('neutroConductor', e.target.value)}
+                  placeholder="Ej. 1X500 MCM (Barra directa)"
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
                 />
               ) : (
-                <p className="text-slate-200 font-bold text-xs">{neutroConductor}</p>
+                <p className="text-slate-200 font-bold text-xs">{neutroConductor || '—'}</p>
               )}
               <span className="text-[10px] text-slate-500 block">Configuración: Barra sólida pasante</span>
             </div>
@@ -939,10 +788,11 @@ export default function TransferComponent({
                   type="text"
                   value={tierraConductor}
                   onChange={(e) => handleDtChange('tierraConductor', e.target.value)}
+                  placeholder="Ej. 1X4/0 AWG (SPT)"
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
                 />
               ) : (
-                <p className="text-slate-200 font-bold text-xs">{tierraConductor}</p>
+                <p className="text-slate-200 font-bold text-xs">{tierraConductor || '—'}</p>
               )}
               <span className="text-[10px] text-slate-500 block">Conexión directa a barra de equipotencialidad</span>
             </div>
@@ -966,8 +816,8 @@ export default function TransferComponent({
                 rows={5}
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
-                placeholder="Indique notas de conmutación, secuencias de arranque de generadores, etc."
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-amber-500"
+                placeholder="Indique notas de conmutación, secuencias de arranque de generadores, hallazgos, etc."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-amber-500 placeholder-slate-600"
               />
             ) : (
               <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 text-xs font-mono text-slate-300 leading-relaxed whitespace-pre-wrap">
@@ -976,48 +826,27 @@ export default function TransferComponent({
             )}
           </div>
 
-          {/* Fotografía de la Transferencia (5 columnas) */}
-          <div className="lg:col-span-5 p-5 text-center flex flex-col justify-center items-center">
-            {fotoBlob || fotoSrc || previewUrl ? (
-              <div className="w-full max-w-sm rounded-xl overflow-hidden border border-slate-700 shadow-xl print:border-black">
-                <SafeImage 
-                  blob={fotoBlob} 
-                  src={previewUrl || fotoSrc} 
-                  alt="Transferencia Eléctrica" 
-                  className="w-full object-cover rounded-xl"
-                  style={{ maxHeight: `${dt.fotoScale || 260}px` }}
-                />
-              </div>
-            ) : (
-              <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 w-full no-print bg-slate-950/40">
-                <Camera className="w-8 h-8 text-slate-600 mx-auto" />
-                <span className="text-xs text-slate-500 font-mono block">Sin fotografía de la transferencia</span>
-                {!readOnly && (
-                  <label className="inline-block px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold rounded-lg cursor-pointer transition-colors">
-                    Adjuntar Foto
-                    <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                  </label>
-                )}
-              </div>
-            )}
-
-            {/* Ajuste de escala de foto */}
-            {(fotoBlob || fotoSrc || previewUrl) && !readOnly && (
-              <div className="no-print mt-3 w-full max-w-xs space-y-1">
-                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 font-mono uppercase">
-                  <span>Ajustar altura</span>
-                  <span className="text-amber-400">{dt.fotoScale || 260}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="140"
-                  max="380"
-                  value={dt.fotoScale || 260}
-                  onChange={(e) => handleDtChange('fotoScale', parseInt(e.target.value, 10))}
-                  className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                />
-              </div>
-            )}
+          {/* Fotografía de la Transferencia con Carga Dual (5 columnas) */}
+          <div className="lg:col-span-5 p-5">
+            <DualPhotoUploader
+              fotoBlob={fotoBlob}
+              fotoSrc={fotoSrc}
+              previewUrl={previewUrl}
+              onImageSelected={(file) => {
+                setFotoBlob(file);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(URL.createObjectURL(file));
+              }}
+              onRemove={() => {
+                setFotoBlob(null);
+                setFotoSrc(null);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+              }}
+              readOnly={!isEditing}
+              label="Fotografía de la Transferencia"
+              sublabel="Cámara en vivo o selección de galería"
+            />
           </div>
 
         </div>

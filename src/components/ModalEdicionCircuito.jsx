@@ -16,11 +16,13 @@ import {
   Layers, 
   Building2, 
   Gauge, 
-  Radio 
+  Radio,
+  RotateCcw
 } from 'lucide-react';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
+import DualPhotoUploader from './DualPhotoUploader';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -206,23 +208,59 @@ export const ModalEdicionCircuito = ({
   };
 
   // Campos Equipos de Potencia / Trafo / Gen / ATS / CCM / Punto Medicion / Puesta Tierra
-  const [nivelMT, setNivelMT] = useState('13.8 kV');
+  const [nivelMT, setNivelMT] = useState('');
   const [fusibleMT, setFusibleMT] = useState('');
-  const [pararrayos, setPararrayos] = useState('Sí');
-  const [canalizacion, setCanalizacion] = useState('Bandeja Portacables');
-  const [esquemaArranque, setEsquemaArranque] = useState('Directo (DOL)');
-  const [hpKw, setHpKw] = useState('25 HP');
-  const [corrienteNominal, setCorrienteNominal] = useState('32 A');
-  const [proteccion, setProteccion] = useState('Guardamotor 32A + Contactor');
-  const [redComms, setRedComms] = useState('Modbus RTU');
-  const [tipoConmutador, setTipoConmutador] = useState('Motorizado Interlocked');
-  const [relacionTc, setRelacionTc] = useState('800/5A');
-  const [relacionTp, setRelacionTp] = useState('N/A (Medición Directa)');
-  const [resistenciaOhms, setResistenciaOhms] = useState('2.5 Ω');
-  const [senalArranque, setSenalArranque] = useState('Sí - Cableado 24VDC');
-  const [potenciaKvaKw, setPotenciaKvaKw] = useState('500 kVA / 400 kW');
-  const [tensionSecundaria, setTensionSecundaria] = useState('208/120V');
-  const [interruptorAguasAbajo, setInterruptorAguasAbajo] = useState('1600 A');
+  const [pararrayos, setPararrayos] = useState('');
+  const [canalizacion, setCanalizacion] = useState('');
+  const [esquemaArranque, setEsquemaArranque] = useState('');
+  const [hpKw, setHpKw] = useState('');
+  const [corrienteNominal, setCorrienteNominal] = useState('');
+  const [proteccion, setProteccion] = useState('');
+  const [redComms, setRedComms] = useState('');
+  const [tipoConmutador, setTipoConmutador] = useState('');
+  const [relacionTc, setRelacionTc] = useState('');
+  const [relacionTp, setRelacionTp] = useState('');
+  const [resistenciaOhms, setResistenciaOhms] = useState('');
+  const [senalArranque, setSenalArranque] = useState('');
+  const [potenciaKvaKw, setPotenciaKvaKw] = useState('');
+  const [tensionSecundaria, setTensionSecundaria] = useState('');
+  const [interruptorAguasAbajo, setInterruptorAguasAbajo] = useState('');
+
+  // Reversión explícita a Reserva
+  const handleRevertirAReserva = () => {
+    if (isTablero && !validation.isValid) {
+      customAlert(validation.conflictMessages.join('\n') || 'No se puede guardar debido a un conflicto de colisión de polos.');
+      return;
+    }
+    onSave(circuitData.id, {
+      equipo: 'RESERVA',
+      tipoDestino: 'RESERVA',
+      vinculadoId: null,
+      elementoDestinoId: null,
+      tipoElementoDestino: null,
+      tipoElementoProvisional: undefined,
+      nombreProvisional: undefined,
+      breaker: {
+        amp: '',
+        marca: '',
+        tipo: ''
+      },
+      conductor: '',
+      poles: isTablero ? validation.requiredPoles : [1, 2, 3],
+      numPolos: isTablero ? numPolos : 1,
+      posicionPolo: isTablero ? posicionPolo : 1,
+      codigoPolo: circuitData?.codigoPolo || circuitData?.polo_label || '',
+      polo_label: circuitData?.polo_label || circuitData?.codigoPolo || '',
+      estado: 'RESERVA',
+      ficha: {
+        descripcion: '',
+        potenciaWatts: null,
+      },
+      fotografia: null,
+      detallesTecnicos: {}
+    });
+    onClose();
+  };
 
   // Cargar datos al abrir modal
   useEffect(() => {
@@ -680,12 +718,25 @@ export const ModalEdicionCircuito = ({
               </p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isTablero && (circuitData.tipoDestino === 'ARTEFACTO' || circuitData.tipoDestino === 'SUB_TABLERO' || circuitData.equipo !== 'RESERVA') && (
+              <button
+                type="button"
+                onClick={handleRevertirAReserva}
+                className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-500/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Desvincular carga/equipo y restablecer este circuito a estado Reserva"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Revertir a Reserva</span>
+              </button>
+            )}
+            <button 
+              onClick={onClose}
+              className="p-2 hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         {/* Contenido principal */}
@@ -872,6 +923,18 @@ export const ModalEdicionCircuito = ({
                   <span className="text-[10px] text-slate-400 mt-1">Sub-tableros, reservas, derivaciones</span>
                 </button>
               </div>
+
+              {/* Botón explícito para desvincular y revertir a Reserva */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={handleRevertirAReserva}
+                  className="w-full py-3 px-4 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4 text-amber-400" />
+                  <span>Revertir Circuito a "Reserva" (Liberar Carga y Elemento)</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -993,13 +1056,21 @@ export const ModalEdicionCircuito = ({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={handleRevertirAReserva}
+                  className="px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-amber-400 font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Revertir a Reserva</span>
+                </button>
                 <button
                   onClick={handleSaveArtefacto}
                   disabled={isTablero && !validation.isValid}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
+                  className="flex-1 px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors cursor-pointer"
                 >
-                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos para Guardar' : 'Guardar Ficha'}
+                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos' : 'Guardar Ficha'}
                 </button>
               </div>
             </div>
@@ -1980,33 +2051,13 @@ export const ModalEdicionCircuito = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-2">
-                  Agregar Fotografía
+                  Fotografía de Evidencia / Circuito
                 </label>
-                
-                {fotoUrl ? (
-                  <div className="relative rounded-xl overflow-hidden border border-slate-800 max-h-48 flex justify-center items-center bg-slate-950">
-                    <img 
-                      src={fotoUrl} 
-                      alt="Circuito" 
-                      className="object-contain max-h-48 w-full"
-                    />
-                    <button
-                      onClick={() => setFotoUrl(null)}
-                      className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full shadow-lg transition-colors cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={simularCapturaFoto}
-                    className="w-full h-32 border-2 border-dashed border-slate-800 rounded-xl hover:border-amber-500 flex flex-col items-center justify-center text-slate-400 hover:text-amber-400 transition-all cursor-pointer bg-slate-950/40"
-                  >
-                    <Camera className="w-8 h-8 mb-2 text-amber-500" />
-                    <span className="text-xs font-semibold">Capturar o Subir Foto</span>
-                    <span className="text-[9px] mt-0.5 text-slate-500">Captura directa desde la tableta</span>
-                  </button>
-                )}
+                <DualPhotoUploader
+                  value={fotoUrl}
+                  onChange={(val) => setFotoUrl(val)}
+                  label="Fotografía del Circuito o Breaker"
+                />
               </div>
 
               <div className="pt-4 border-t border-slate-800 flex justify-end">

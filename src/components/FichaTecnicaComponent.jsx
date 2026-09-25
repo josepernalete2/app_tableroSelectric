@@ -5,13 +5,21 @@ import {
   Camera, 
   Printer,
   Settings,
-  Zap
+  Zap,
+  RotateCcw
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import TransferComponent from './TransferComponent';
+import MetrologiaElectricaSection from './MetrologiaElectricaSection';
+import DualPhotoUploader from './DualPhotoUploader';
+import { 
+  TENSIONES_COVENIN_159_BT, 
+  TENSIONES_COVENIN_159_MT, 
+  TENSIONES_COVENIN_TODAS 
+} from '../utils/constants';
 
 // Componente para renderizar Blobs de imagen de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -37,7 +45,7 @@ const SafeImage = ({ blob, src, alt, className }) => {
 
 export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly }) {
   const [isEditing, setIsEditing] = useState(false);
-  const { alert: customAlert } = useConfirm();
+  const { alert: customAlert, confirm: customConfirm } = useConfirm();
   const companies = useStore((state) => state.companies || []);
 
   const allFeeders = React.useMemo(() => {
@@ -168,6 +176,21 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     setIsEditing(false);
   };
 
+  const handleLimpiarFormulario = async () => {
+    if (readOnly) return;
+    const confirmed = await customConfirm("¿Deseas reiniciar todos los campos técnicos de este elemento a blanco?");
+    if (!confirmed) return;
+    setNombre('');
+    setUbicacion('');
+    setAlimentadoPor('');
+    setObservacionesGenerales('');
+    setDt({});
+    setFotoBlob(null);
+    setFotoSrc(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  };
+
   const renderElementWithId = (nombreText, fallbackId) => {
     if (!nombreText) return <span className="opacity-40">—</span>;
     let cleanName = nombreText;
@@ -232,6 +255,18 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
           {!readOnly && (
             <>
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={handleLimpiarFormulario}
+                  className="bg-slate-900 hover:bg-red-950/60 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-800 font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 text-xs transition-all cursor-pointer"
+                  title="Reiniciar todos los campos a blanco"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Limpiar Formulario</span>
+                </button>
+              )}
+
               {isEditing ? (
                 <button
                   onClick={handleSave}
@@ -459,10 +494,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   type="text"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold"
+                  placeholder="Ej. GENERADOR DE EMERGENCIA No. 1"
+                  className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold placeholder-slate-600"
                 />
               ) : (
-                nombre || 'GENERADOR No. 1 DOMOSA 580 KVA'
+                nombre || 'GENERADOR DE EMERGENCIA'
               )}
             </h2>
           </div>
@@ -482,7 +518,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                         nombre: 'Salida del Generador',
                         equipo: alimentadoPor || '',
                         poles: [3],
-                        breaker: { amp: dt.amperaje || '1600', marca: dt.marca || '', tipo: '' }
+                        breaker: { amp: dt.amperaje || '', marca: dt.marca || '', tipo: '' }
                       });
                       setModalJerarquiaOpen(true);
                     }}
@@ -498,10 +534,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       type="text"
                       value={alimentadoPor}
                       onChange={(e) => setAlimentadoPor(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
+                      placeholder="Ej. TRANSFERENCIA PRINCIPAL (ATS-1)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
                     />
                   ) : (
-                    renderElementWithId(alimentadoPor || 'TRANSFERENCIA DOMOSA (ID: ATS-1)')
+                    renderElementWithId(alimentadoPor || '—')
                   )}
                 </td>
               </tr>
@@ -515,10 +552,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       type="text"
                       value={ubicacion}
                       onChange={(e) => setUbicacion(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
+                      placeholder="Ej. Caseta de Generación / Estacionamiento"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
                     />
                   ) : (
-                    ubicacion || 'ESTACIONAMIENTO'
+                    ubicacion || '—'
                   )}
                 </td>
               </tr>
@@ -543,58 +581,97 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">MARCA</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.marca || ''} onChange={(e) => handleDtChange('marca', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.marca || 'DOMOSA')}
+                  {isEditing ? <input type="text" value={dt.marca || ''} onChange={(e) => handleDtChange('marca', e.target.value)} placeholder="Ej. CATERPILLAR / DOMOSA / CUMMINS" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.marca || '—')}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">PLACA</td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">FASES</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.fases || ''} onChange={(e) => handleDtChange('fases', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.fases || '3')}
+                  {isEditing ? (
+                    <select
+                      value={dt.fases || '3'}
+                      onChange={(e) => handleDtChange('fases', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100"
+                    >
+                      <option value="1">1 (Monofásico)</option>
+                      <option value="2">2 (Bifásico)</option>
+                      <option value="3">3 (Trifásico)</option>
+                    </select>
+                  ) : (
+                    dt.fases || '—'
+                  )}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">FASE</td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">POTENCIA</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-extrabold text-amber-400 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.kva || dt.potenciaKva || ''} onChange={(e) => handleDtChange('kva', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-amber-400" /> : (dt.kva || dt.potenciaKva || '580')}
+                  {isEditing ? <input type="text" value={dt.kva || dt.potenciaKva || ''} onChange={(e) => handleDtChange('kva', e.target.value)} placeholder="Ej. 580" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-amber-400 placeholder-slate-600" /> : (dt.kva || dt.potenciaKva || '—')}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">KVA</td>
               </tr>
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">VOLTAJE</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">VOLTAJE NOMINAL (COVENIN 159)</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.voltajeGeneracion || dt.voltaje || ''} onChange={(e) => handleDtChange('voltajeGeneracion', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.voltajeGeneracion || dt.voltaje || '208')}
+                  {isEditing ? (
+                    <select
+                      value={dt.voltajeGeneracion || dt.voltaje || ''}
+                      onChange={(e) => handleDtChange('voltajeGeneracion', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs"
+                    >
+                      <option value="">-- Seleccionar Tensión --</option>
+                      {TENSIONES_COVENIN_159_BT.map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    dt.voltajeGeneracion || dt.voltaje || '—'
+                  )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">VOL</td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">VOLTIOS</td>
               </tr>
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERAJE</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERAJE NOMINAL</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.amperaje || ''} onChange={(e) => handleDtChange('amperaje', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.amperaje || '800')}
+                  {isEditing ? <input type="text" value={dt.amperaje || ''} onChange={(e) => handleDtChange('amperaje', e.target.value)} placeholder="Ej. 1600" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.amperaje || '—')}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">FP (FACTOR POTENCIA)</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.fp || ''} onChange={(e) => handleDtChange('fp', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.fp || '-')}
+                  {isEditing ? <input type="text" value={dt.fp || ''} onChange={(e) => handleDtChange('fp', e.target.value)} placeholder="Ej. 0.8" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.fp || '—')}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">%</td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">cos φ</td>
               </tr>
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">COMBUSTIBLE</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TIPO DE COMBUSTIBLE</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.combustible || ''} onChange={(e) => handleDtChange('combustible', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.combustible || 'DIÉSEL / GASOIL')}
+                  {isEditing ? (
+                    <select
+                      value={dt.combustible || 'DIÉSEL'}
+                      onChange={(e) => handleDtChange('combustible', e.target.value)}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100"
+                    >
+                      <option value="DIÉSEL">DIÉSEL / GASOIL</option>
+                      <option value="GAS_NATURAL">GAS NATURAL</option>
+                      <option value="GLP">GAS LICUADO (GLP)</option>
+                      <option value="GASOLINA">GASOLINA</option>
+                      <option value="DUAL_FUEL">DUAL FUEL (GAS / DIÉSEL)</option>
+                    </select>
+                  ) : (
+                    dt.combustible || '—'
+                  )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">GALONES</td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">TIPO</td>
               </tr>
             </tbody>
           </table>
 
           {/* Sub-Header: Interruptor Generador */}
           <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-amber-400 font-mono print:bg-gray-200 print:text-black print:border-black">
-            INTERRUPTOR GENERADOR
+            INTERRUPTOR PRINCIPAL DEL GENERADOR
           </div>
 
           {/* Cuadro del Interruptor */}
@@ -613,27 +690,38 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               <tr>
                 <td className="p-3 font-bold text-slate-300 border-r border-slate-800 bg-slate-900/40 print:bg-gray-50 print:text-black print:border-gray-300">GENERADOR</td>
                 <td className="p-3 font-bold text-slate-100 border-r border-slate-800 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.interruptor?.marca || dt.interruptorMarca || ''} onChange={(e) => handleNestedDtChange('interruptor', 'marca', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.interruptor?.marca || dt.interruptorMarca || 'CHINT')}
+                  {isEditing ? <input type="text" value={dt.interruptor?.marca || dt.interruptorMarca || ''} onChange={(e) => handleNestedDtChange('interruptor', 'marca', e.target.value)} placeholder="Ej. CHINT / ABB" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.interruptor?.marca || dt.interruptorMarca || '—')}
                 </td>
                 <td className="p-3 font-bold text-slate-100 border-r border-slate-800 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.interruptor?.tipo || dt.interruptorTipo || ''} onChange={(e) => handleNestedDtChange('interruptor', 'tipo', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.interruptor?.tipo || dt.interruptorTipo || '-')}
+                  {isEditing ? <input type="text" value={dt.interruptor?.tipo || dt.interruptorTipo || ''} onChange={(e) => handleNestedDtChange('interruptor', 'tipo', e.target.value)} placeholder="Ej. Termomagnético" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.interruptor?.tipo || dt.interruptorTipo || '—')}
                 </td>
                 <td className="p-3 font-extrabold text-amber-400 border-r border-slate-800 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.interruptor?.amp || dt.interruptorAmp || ''} onChange={(e) => handleNestedDtChange('interruptor', 'amp', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-amber-400" /> : (dt.interruptor?.amp || dt.interruptorAmp || '1600')}
+                  {isEditing ? <input type="text" value={dt.interruptor?.amp || dt.interruptorAmp || ''} onChange={(e) => handleNestedDtChange('interruptor', 'amp', e.target.value)} placeholder="Ej. 1600 A" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-amber-400 placeholder-slate-600" /> : (dt.interruptor?.amp || dt.interruptorAmp || '—')}
                 </td>
                 <td className="p-3 font-bold text-slate-100 border-r border-slate-800 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.interruptor?.condFase || dt.condFase || ''} onChange={(e) => handleNestedDtChange('interruptor', 'condFase', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.interruptor?.condFase || dt.condFase || '2(3X500)')}
+                  {isEditing ? <input type="text" value={dt.interruptor?.condFase || dt.condFase || ''} onChange={(e) => handleNestedDtChange('interruptor', 'condFase', e.target.value)} placeholder="Ej. 2(3X500 MCM)" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.interruptor?.condFase || dt.condFase || '—')}
                 </td>
                 <td className="p-3 font-bold text-slate-100 print:text-black">
-                  {isEditing ? <input type="text" value={dt.interruptor?.condNeutro || dt.condNeutro || ''} onChange={(e) => handleNestedDtChange('interruptor', 'condNeutro', e.target.value)} className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100" /> : (dt.interruptor?.condNeutro || dt.condNeutro || '500')}
+                  {isEditing ? <input type="text" value={dt.interruptor?.condNeutro || dt.condNeutro || ''} onChange={(e) => handleNestedDtChange('interruptor', 'condNeutro', e.target.value)} placeholder="Ej. 1X500 MCM" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.interruptor?.condNeutro || dt.condNeutro || '—')}
                 </td>
               </tr>
             </tbody>
           </table>
 
+          {/* Metrología Eléctrica del Generador (COVENIN 159) */}
+          <div className="p-4 bg-slate-950 border-b-2 border-slate-700">
+            <MetrologiaElectricaSection
+              mediciones={dt.mediciones || {}}
+              onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
+              readOnly={!isEditing}
+              titulo="Metrología Eléctrica y Medición de Generación (COVENIN 159)"
+              subtitulo="Lectura de voltajes desglosados L-L, L-N y 5 canales de corriente en bornes de generación"
+            />
+          </div>
+
           {/* Sub-Header: Tanque de Combustible, Autonomía y Dique */}
           <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-amber-400 font-mono print:bg-gray-200 print:text-black print:border-black">
-            INSPECCIÓN DE TANQUE DE COMBUSTIBLE Y AUTONOMÍA (CAPA 2)
+            INSPECCIÓN DE TANQUE DE COMBUSTIBLE Y AUTONOMÍA (SISTEMA MÉTRICO LITROS / GALONES)
           </div>
 
           <div className="p-4 bg-slate-950 border-b border-slate-700 space-y-4 font-mono text-xs">
@@ -647,20 +735,20 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       value={dt.tanqueCapacidad || ''}
                       onChange={(e) => handleDtChange('tanqueCapacidad', e.target.value)}
                       placeholder="Ej. 1000"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:border-amber-500"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:border-amber-500 placeholder-slate-600"
                     />
                     <select
                       value={dt.tanqueUnidad || 'Litros'}
                       onChange={(e) => handleDtChange('tanqueUnidad', e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs px-1"
+                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs px-1 font-bold"
                     >
-                      <option value="Litros">Litros</option>
-                      <option value="Galones">Galones</option>
+                      <option value="Litros">Litros (L)</option>
+                      <option value="Galones">Galones (gal)</option>
                     </select>
                   </div>
                 ) : (
                   <span className="text-slate-100 font-bold bg-slate-900/60 px-2.5 py-1 rounded block">
-                    {dt.tanqueCapacidad ? `${dt.tanqueCapacidad} ${dt.tanqueUnidad || 'Litros'}` : '—'}
+                    {dt.tanqueCapacidad ? `${dt.tanqueCapacidad} ${dt.tanqueUnidad === 'Galones' ? 'Galones (gal)' : 'Litros (L)'}` : '—'}
                   </span>
                 )}
               </div>
@@ -673,24 +761,24 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       type="range"
                       min="0"
                       max="100"
-                      value={dt.tanqueNivelPct || 75}
+                      value={dt.tanqueNivelPct !== undefined ? dt.tanqueNivelPct : 50}
                       onChange={(e) => handleDtChange('tanqueNivelPct', parseInt(e.target.value))}
                       className="w-full h-2 bg-slate-800 rounded appearance-none accent-amber-500"
                     />
-                    <span className="font-bold text-amber-400 w-10 text-right">{dt.tanqueNivelPct || 75}%</span>
+                    <span className="font-bold text-amber-400 w-10 text-right">{dt.tanqueNivelPct !== undefined ? dt.tanqueNivelPct : 50}%</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
                       <div
                         className={`h-full ${
-                          (dt.tanqueNivelPct || 75) < 25 ? 'bg-red-500' :
-                          (dt.tanqueNivelPct || 75) < 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                          (dt.tanqueNivelPct || 0) < 25 ? 'bg-red-500' :
+                          (dt.tanqueNivelPct || 0) < 50 ? 'bg-amber-500' : 'bg-emerald-500'
                         }`}
-                        style={{ width: `${dt.tanqueNivelPct || 75}%` }}
+                        style={{ width: `${dt.tanqueNivelPct || 0}%` }}
                       ></div>
                     </div>
-                    <span className="font-bold text-slate-200">{dt.tanqueNivelPct || 75}%</span>
+                    <span className="font-bold text-slate-200">{dt.tanqueNivelPct !== undefined ? `${dt.tanqueNivelPct}%` : '—'}</span>
                   </div>
                 )}
               </div>
@@ -703,7 +791,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     value={dt.consumoLh || ''}
                     onChange={(e) => handleDtChange('consumoLh', e.target.value)}
                     placeholder="Ej. 35"
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:border-amber-500"
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs focus:border-amber-500 placeholder-slate-600"
                   />
                 ) : (
                   <span className="text-slate-100 font-bold bg-slate-900/60 px-2.5 py-1 rounded block">
@@ -716,10 +804,10 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <span className="text-slate-400 block font-bold mb-1">AUTONOMÍA ESTIMADA:</span>
                 {(() => {
                   const cap = parseFloat(dt.tanqueCapacidad) || 0;
-                  const nivel = (parseFloat(dt.tanqueNivelPct) || 75) / 100;
+                  const nivel = (parseFloat(dt.tanqueNivelPct !== undefined ? dt.tanqueNivelPct : 50)) / 100;
                   const cons = parseFloat(dt.consumoLh) || 0;
                   const litrosDisponibles = dt.tanqueUnidad === 'Galones' ? (cap * 3.78541 * nivel) : (cap * nivel);
-                  const horasAutonomia = cons > 0 ? (litrosDisponibles / cons).toFixed(1) : null;
+                  const horasAutonomia = cons > 0 && cap > 0 ? (litrosDisponibles / cons).toFixed(1) : null;
 
                   return (
                     <span className={`px-2.5 py-1 rounded block font-bold font-mono text-center ${
@@ -727,7 +815,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       horasAutonomia && parseFloat(horasAutonomia) >= 6 ? 'bg-amber-950 text-amber-400 border border-amber-800' :
                       'bg-slate-900 text-slate-300 border border-slate-800'
                     }`}>
-                      {horasAutonomia ? `⏱️ ~${horasAutonomia} Horas` : (dt.autonomiaHoras ? `${dt.autonomiaHoras} h` : '—')}
+                      {horasAutonomia ? `⏱️ ~${horasAutonomia} Horas` : '—'}
                     </span>
                   );
                 })()}
@@ -750,7 +838,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   </select>
                 ) : (
                   <span className={`font-bold ${dt.diqueContencion === 'Sin Dique' ? 'text-red-400' : 'text-emerald-400'}`}>
-                    {dt.diqueContencion || 'Conforme'}
+                    {dt.diqueContencion || '—'}
                   </span>
                 )}
               </div>
@@ -768,7 +856,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     <option value="Requiere Reemplazo">Requiere Reemplazo</option>
                   </select>
                 ) : (
-                  <span className="font-bold text-slate-200">{dt.filtroRacor || 'Operativo'}</span>
+                  <span className="font-bold text-slate-200">{dt.filtroRacor || '—'}</span>
                 )}
               </div>
 
@@ -786,7 +874,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     <option value="Inoperativa">Inoperativa</option>
                   </select>
                 ) : (
-                  <span className="font-bold text-slate-200">{dt.bombaTrasiego || 'Manual y Eléctrica'}</span>
+                  <span className="font-bold text-slate-200">{dt.bombaTrasiego || '—'}</span>
                 )}
               </div>
 
@@ -803,28 +891,33 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     <option value="No Posee">No Posee</option>
                   </select>
                 ) : (
-                  <span className="font-bold text-slate-200">{dt.valvulaCorte || 'Operativa'}</span>
+                  <span className="font-bold text-slate-200">{dt.valvulaCorte || '—'}</span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Imagen del Generador (Parte inferior del cuadro) */}
-          <div className="p-4 bg-slate-900/30 text-center print:bg-white">
-            {fotoBlob || fotoSrc || previewUrl ? (
-              <div className="max-w-md mx-auto rounded-xl overflow-hidden border border-slate-700 shadow-lg print:border-black">
-                <SafeImage blob={fotoBlob} src={previewUrl || fotoSrc} alt="Generador de Emergencia" className="w-full h-auto max-h-96 object-cover" />
-              </div>
-            ) : (
-              <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
-                <Camera className="w-8 h-8 text-slate-600 mx-auto" />
-                <span className="text-xs text-slate-500 font-mono block">Sin fotografía adjunta del generador</span>
-                <label className="inline-block px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold rounded-lg cursor-pointer transition-colors">
-                  Adjuntar Foto
-                  <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                </label>
-              </div>
-            )}
+          {/* Carga Dual de Fotografías del Generador */}
+          <div className="p-5 bg-slate-900/30">
+            <DualPhotoUploader
+              fotoBlob={fotoBlob}
+              fotoSrc={fotoSrc}
+              previewUrl={previewUrl}
+              onImageSelected={(file) => {
+                setFotoBlob(file);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(URL.createObjectURL(file));
+              }}
+              onRemove={() => {
+                setFotoBlob(null);
+                setFotoSrc(null);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+              }}
+              readOnly={!isEditing}
+              label="Fotografía del Generador y Grupo Electrógeno"
+              sublabel="Cámara en vivo o selección desde galería"
+            />
           </div>
 
         </div>
