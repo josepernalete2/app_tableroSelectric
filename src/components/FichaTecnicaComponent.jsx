@@ -226,6 +226,10 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚡ BANCO DE CONDENSADORES</span>;
       case 'PUESTA_TIERRA':
         return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">🛡️ MALLA PUESTA A TIERRA</span>;
+      case 'PUNTO_SUMINISTRO':
+        return <span className="px-3.5 py-1 bg-blue-950/90 text-blue-400 border border-blue-800/50 rounded-full text-xs font-bold font-mono">🔌 PUNTO DE SUMINISTRO / ACOMETIDA</span>;
+      case 'CCM':
+        return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚙️ CENTRO DE CONTROL DE MOTORES (CCM)</span>;
       case 'TABLERO':
       default:
         return <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-xs font-bold font-mono">⚡ PANEL ELÉCTRICO</span>;
@@ -2916,6 +2920,240 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               )}
             </div>
 
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. PLANTILLA: PUNTO DE SUMINISTRO / ACOMETIDA */}
+      {/* ========================================================================= */}
+      {tipoElemento === 'PUNTO_SUMINISTRO' && (
+        <div className="bg-slate-950 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl print:border-black print:bg-white print:text-black">
+          
+          {/* Header oficial del cuadro */}
+          <div className="bg-slate-900 border-b-2 border-slate-700 p-3.5 text-center print:bg-gray-200 print:border-black">
+            <h2 className="text-base md:text-lg font-black tracking-wide text-slate-100 uppercase font-mono print:text-black">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Ej. PUNTO DE SUMINISTRO PRINCIPAL"
+                  className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold placeholder-slate-600"
+                />
+              ) : (
+                `PLANILLA DE LEVANTAMIENTO TÉCNICO: ${nombre || 'PUNTO DE SUMINISTRO / ACOMETIDA'}`
+              )}
+            </h2>
+          </div>
+
+          {/* Cuadro de Información General */}
+          <table className="w-full text-xs text-left border-collapse border-b border-slate-700 font-mono print:border-black">
+            <tbody>
+              <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="w-1/3 bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  UBICACIÓN / PCC (PUNTO CONEXIÓN):
+                </td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={ubicacion}
+                      onChange={(e) => setUbicacion(e.target.value)}
+                      placeholder="Ej. Límite de Propiedad / Caseta de Medición"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
+                    />
+                  ) : (
+                    ubicacion || '—'
+                  )}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  CARGA CONTRATADA (kVA):
+                </td>
+                <td className="p-3 text-amber-400 font-bold print:text-black font-mono">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.cargaContratadaKva || dt.capacidadContratadaKva || ''}
+                      onChange={(e) => {
+                        handleDtChange('cargaContratadaKva', e.target.value);
+                        handleDtChange('capacidadContratadaKva', e.target.value);
+                      }}
+                      placeholder="Ej. 1000 kVA"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
+                    />
+                  ) : (
+                    dt.cargaContratadaKva || dt.capacidadContratadaKva || '—'
+                  )}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  TIPO DE MEDICIÓN ELÉCTRICA:
+                </td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoMedicion || 'Medición Directa (Baja Tensión)'}
+                      onChange={(e) => handleDtChange('tipoMedicion', e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
+                    >
+                      <option value="Medición Directa (Baja Tensión)">Medición Directa (Baja Tensión)</option>
+                      <option value="Medición Indirecta BT">Medición Indirecta BT (con TCs)</option>
+                      <option value="Medición Indirecta AT/MT">Medición Indirecta AT/MT (con TCs y TPs)</option>
+                    </select>
+                  ) : (
+                    <span className="font-bold text-sky-400 print:text-black">{dt.tipoMedicion || 'Medición Directa (Baja Tensión)'}</span>
+                  )}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  TENSIÓN DE SERVICIO (COVENIN 159:1997):
+                </td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <div className="flex gap-2">
+                      <select
+                        value={TENSIONES_COVENIN_TODAS.includes(dt.nivelTension || dt.tensionNominal) ? (dt.nivelTension || dt.tensionNominal) : ((dt.nivelTension || dt.tensionNominal) ? 'CUSTOM' : '')}
+                        onChange={(e) => {
+                          if (e.target.value !== 'CUSTOM') {
+                            handleDtChange('nivelTension', e.target.value);
+                            handleDtChange('tensionNominal', e.target.value);
+                          }
+                        }}
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-1/2"
+                      >
+                        <option value="">Seleccione tensión...</option>
+                        <optgroup label="Baja Tensión (BT)">
+                          {TENSIONES_COVENIN_159_BT.map(v => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Media Tensión (MT)">
+                          {TENSIONES_COVENIN_159_MT.map(v => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </optgroup>
+                        <option value="CUSTOM">Otra tensión...</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={dt.nivelTension || dt.tensionNominal || ''}
+                        onChange={(e) => {
+                          handleDtChange('nivelTension', e.target.value);
+                          handleDtChange('tensionNominal', e.target.value);
+                        }}
+                        placeholder="Ej. 13.8 kV o 208/120 V"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-1/2 font-mono"
+                      />
+                    </div>
+                  ) : (
+                    dt.nivelTension || dt.tensionNominal || '—'
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  RED PÚBLICA / ENLACE CORPOELEC:
+                </td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={dt.empresaDistribuidora || 'CORPOELEC'}
+                        onChange={(e) => handleDtChange('empresaDistribuidora', e.target.value)}
+                        placeholder="Distribuidora (CORPOELEC)"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100"
+                      />
+                      <input
+                        type="text"
+                        value={dt.numeroContrato || ''}
+                        onChange={(e) => handleDtChange('numeroContrato', e.target.value)}
+                        placeholder="N° Contrato / NIC"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={dt.nic || ''}
+                        onChange={(e) => handleDtChange('nic', e.target.value)}
+                        placeholder="N° Medidor"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={dt.posteTransformador || ''}
+                        onChange={(e) => handleDtChange('posteTransformador', e.target.value)}
+                        placeholder="Poste / Trafo Servicio"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 font-mono"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-xs">
+                      <div><strong className="text-slate-400">Distribuidora:</strong> {dt.empresaDistribuidora || 'CORPOELEC'} | <strong className="text-slate-400">Acometida:</strong> {dt.tipoAcometida || 'Subterránea'}</div>
+                      <div><strong className="text-slate-400">N° Contrato / NIC:</strong> <span className="font-mono text-amber-400 font-bold">{dt.numeroContrato || '—'}</span> | <strong className="text-slate-400">N° Medidor:</strong> <span className="font-mono">{dt.nic || '—'}</span></div>
+                      <div><strong className="text-slate-400">Poste / Trafo Suministro:</strong> {dt.posteTransformador || '—'}</div>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Sub-Header: Metrología Eléctrica y Parámetros Operativos */}
+          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-amber-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+            Metrología Eléctrica en Punto de Suministro (COVENIN 159:1997)
+          </div>
+
+          <div className="p-4 border-b border-slate-700 bg-slate-900/30">
+            <MetrologiaElectricaSection
+              datosTecnicos={dt}
+              isEditing={isEditing}
+              onChange={handleDtChange}
+              onNestedChange={handleNestedDtChange}
+            />
+          </div>
+
+          {/* Observaciones */}
+          <div className="bg-amber-950/40 border-b-2 border-amber-800/60 p-4 font-mono text-xs text-amber-200 print:bg-yellow-100 print:text-black print:border-black">
+            <span className="font-black uppercase text-amber-400 block mb-1 print:text-black">OBSERVACIÓN GENERAL:</span>
+            {isEditing ? (
+              <textarea
+                value={observacionesGenerales}
+                onChange={(e) => setObservacionesGenerales(e.target.value)}
+                rows={2}
+                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
+                placeholder="Indique hallazgos, estado del medidor o condiciones de la acometida..."
+              />
+            ) : (
+              <p>{observacionesGenerales || 'NINGUNA OBSERVACION'}</p>
+            )}
+          </div>
+
+          {/* Fotos / Evidencia */}
+          <div className="p-4 bg-slate-900/60 text-center font-mono print:bg-white print:border-black">
+            <DualPhotoUploader
+              fotoPrincipal={fotoBlob}
+              fotoPrincipalSrc={previewUrl || fotoSrc}
+              fotoTermica={dt.fotoTermicaBlob}
+              fotoTermicaSrc={dt.fotoTermicaUrl || dt.fotoTermica}
+              isEditing={isEditing}
+              onFotoPrincipalChange={(blob, src) => {
+                setFotoBlob(blob);
+                setFotoSrc(src);
+              }}
+              onFotoTermicaChange={(blob, src) => {
+                handleDtChange('fotoTermicaBlob', blob);
+                handleDtChange('fotoTermica', src);
+                handleDtChange('fotoTermicaUrl', src);
+              }}
+              labelPrincipal="Foto del Medidor / Punto de Suministro"
+              labelTermica="Foto Termográfica del Medidor / Acometida"
+            />
           </div>
 
         </div>

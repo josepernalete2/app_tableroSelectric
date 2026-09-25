@@ -4,6 +4,13 @@ import useStore, { getNextElementId, PREFIX_MAP, formatElementTitleWithId } from
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import SelectorAlimentadorJerarquico from '../components/SelectorAlimentadorJerarquico';
+import AvanceProgressBar from '../components/AvanceProgressBar';
+import ElementoCardActions from '../components/ElementoCardActions';
+import { 
+  TENSIONES_COVENIN_159_BT, 
+  TENSIONES_COVENIN_159_MT, 
+  TENSIONES_COVENIN_TODAS 
+} from '../utils/constants';
 import { 
   ArrowLeft, 
   Layers, 
@@ -23,7 +30,8 @@ import {
   FileText,
   CheckSquare,
   Settings,
-  HelpCircle
+  HelpCircle,
+  Plus
 } from 'lucide-react';
 import HelpModal from '../components/HelpModal';
 
@@ -245,17 +253,17 @@ export const ProyectoView = () => {
       if (editingElemento.tipoElemento === 'TABLERO') {
         setMaxPoles(tech.maxPoles || 24);
       } else if (editingElemento.tipoElemento === 'TRANSFORMADOR') {
-        setKvaTrafo(tech.kva || '');
+        setKvaTrafo(tech.kva || tech.potenciaKva || '');
         setMarcaTrafo(tech.marca || '');
         setTipoTrafo(tech.tipoTransformador || 'Pedestal');
         setConexionTrafo(tech.conexion || '');
-        setVoltajePrimario(tech.voltajePrimario || '');
-        setVoltajeSecundario(tech.voltajeSecundario || '');
+        setVoltajePrimario(tech.voltajePrimario || tech.tensionPrimaria || '');
+        setVoltajeSecundario(tech.voltajeSecundario || tech.tensionSecundaria || '');
       } else if (editingElemento.tipoElemento === 'GENERADOR') {
         setKvaGen(tech.kva || '');
-        setCombustibleGen(tech.combustible || 'DIESEL');
+        setCombustibleGen(tech.combustible || tech.tipoCombustible || 'DIESEL');
         setVoltajeGen(tech.voltajeGeneracion || '');
-        setPotenciaKwGen(tech.potenciaKw || '');
+        setPotenciaKwGen(tech.potenciaKw || tech.kw || '');
         setAmperajeGen(tech.amperaje || '');
       } else if (editingElemento.tipoElemento === 'PUESTA_TIERRA') {
         setResistenciaOhmios(tech.resistenciaOhmios || '');
@@ -266,6 +274,26 @@ export const ProyectoView = () => {
         setCapacidadAmperios(tech.capacidadAmperios || '');
         setTipoTransferencia(tech.tipoTransferencia || 'AUTOMATICA');
         setTensionOperativa(tech.tensionOperativa || '');
+      } else if (editingElemento.tipoElemento === 'BANCO_CONDENSADOR') {
+        setKvarTotal(tech.potenciaReactivaTotal || tech.kvarTotal || '');
+        setPasosCondensador(tech.numPasos || tech.pasosCondensador || '');
+        setTipoBanco(tech.tipoCompensacion === 'Fija' ? 'FIJO' : 'AUTOMATICO');
+        setTensionBanco(tech.tensionNominal || tech.tensionBanco || '');
+      } else if (editingElemento.tipoElemento === 'PUNTO_SUMINISTRO') {
+        setSuministroTension(tech.nivelTension || tech.tensionNominal || '');
+        setSuministroEmpresa(tech.empresaDistribuidora || 'CORPOELEC');
+        setSuministroTipoAcometida(tech.tipoAcometida || 'Subterránea');
+        setSuministroCapacidad(tech.capacidadContratadaKva || tech.cargaContratadaKva || tech.capacidadKva || '');
+        setSuministroTipoMedicion(tech.tipoMedicion || 'Medición Directa (Baja Tensión)');
+        setSuministroEnlaceCorpoelec(tech.enlaceCorpoelec !== undefined ? tech.enlaceCorpoelec : true);
+        setSuministroNumeroContrato(tech.numeroContrato || tech.contrato || '');
+        setSuministroNic(tech.nic || tech.numeroMedidor || '');
+        setSuministroPosteTrafo(tech.posteTransformador || tech.posteTrafo || '');
+      } else if (editingElemento.tipoElemento === 'CCM') {
+        setCcmCapacidadBarra(tech.capacidadBarraAmperios || '');
+        setCcmTension(tech.tensionOperativa || '');
+        setCcmBreakerPrincipal(tech.breakerPrincipal || '');
+        setCcmNumeroGavetas(tech.numeroGavetas || 8);
       } else {
         setDescripcionOtro(tech.descripcionEspecificaciones || '');
       }
@@ -295,8 +323,14 @@ export const ProyectoView = () => {
       setPasosCondensador('');
       setTensionBanco('');
       setSuministroTension('');
-      setSuministroEmpresa('');
+      setSuministroEmpresa('CORPOELEC');
+      setSuministroTipoAcometida('Subterránea');
       setSuministroCapacidad('');
+      setSuministroTipoMedicion('Medición Directa (Baja Tensión)');
+      setSuministroEnlaceCorpoelec(true);
+      setSuministroNumeroContrato('');
+      setSuministroNic('');
+      setSuministroPosteTrafo('');
       setCcmCapacidadBarra('');
       setCcmTension('');
       setCcmBreakerPrincipal('');
@@ -308,7 +342,7 @@ export const ProyectoView = () => {
   const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Selector de plantilla / tipo de elemento
-  const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'OTRO'
+  const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'PUNTO_SUMINISTRO' | 'CCM' | 'BANCO_CONDENSADOR' | 'OTRO'
 
   // Campos comunes
   const [nombre, setNombre] = useState('');
@@ -355,9 +389,14 @@ export const ProyectoView = () => {
 
   // Campos de Punto de Suministro
   const [suministroTension, setSuministroTension] = useState('');
-  const [suministroEmpresa, setSuministroEmpresa] = useState('');
+  const [suministroEmpresa, setSuministroEmpresa] = useState('CORPOELEC');
   const [suministroTipoAcometida, setSuministroTipoAcometida] = useState('Subterránea');
   const [suministroCapacidad, setSuministroCapacidad] = useState('');
+  const [suministroTipoMedicion, setSuministroTipoMedicion] = useState('Medición Directa (Baja Tensión)');
+  const [suministroEnlaceCorpoelec, setSuministroEnlaceCorpoelec] = useState(true);
+  const [suministroNumeroContrato, setSuministroNumeroContrato] = useState('');
+  const [suministroNic, setSuministroNic] = useState('');
+  const [suministroPosteTrafo, setSuministroPosteTrafo] = useState('');
 
   // Campos de CCM Elemento
   const [ccmCapacidadBarra, setCcmCapacidadBarra] = useState('');
@@ -583,10 +622,18 @@ export const ProyectoView = () => {
       };
     } else if (tipoElemento === 'PUNTO_SUMINISTRO') {
       datosTecnicos = {
+        ...(editingElemento?.datosTecnicos || {}),
         nivelTension: suministroTension || '13.8 kV',
-        empresaDistribuidora: suministroEmpresa || 'Compañía Eléctrica',
+        tensionNominal: suministroTension || '13.8 kV',
+        empresaDistribuidora: suministroEmpresa || 'CORPOELEC',
         tipoAcometida: suministroTipoAcometida || 'Subterránea',
-        capacidadContratadaKva: suministroCapacidad || '1000 kVA'
+        capacidadContratadaKva: suministroCapacidad || '',
+        cargaContratadaKva: suministroCapacidad || '',
+        tipoMedicion: suministroTipoMedicion || 'Medición Directa (Baja Tensión)',
+        enlaceCorpoelec: Boolean(suministroEnlaceCorpoelec),
+        numeroContrato: suministroNumeroContrato || '',
+        nic: suministroNic || '',
+        posteTransformador: suministroPosteTrafo || ''
       };
     } else if (tipoElemento === 'CCM') {
       datosTecnicos = {
@@ -952,7 +999,7 @@ export const ProyectoView = () => {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
             >
-              <Building className="w-4 h-4" /> Inspección Estructural
+              <Building className="w-4 h-4" /> Inspecciones
             </button>
           </div>
 
@@ -1024,7 +1071,7 @@ export const ProyectoView = () => {
                     </>
                   )}
 
-                  {/* Controles para Inspección Estructural */}
+                  {/* Controles para Inspecciones */}
                   {activeTab === 'ESTRUCTURAL' && (
                     <button
                       onClick={() => setShowInspeccionModal(true)}
@@ -1081,12 +1128,12 @@ export const ProyectoView = () => {
           </div>
         )}
 
-        {/* CONTENIDO DE PESTAÑA A: INSPECCIÓN ESTRUCTURAL */}
+        {/* CONTENIDO DE PESTAÑA A: INSPECCIONES */}
         {activeTab === 'ESTRUCTURAL' && (
           <div>
             <div className="mb-4">
-              <h2 className="text-md font-bold text-slate-200">Fichas de Inspección Estructural y Entorno</h2>
-              <p className="text-xs text-slate-500">Inspección de obras civiles, cerramiento y condiciones perimetrales de subestaciones.</p>
+              <h2 className="text-md font-bold text-slate-200">Fichas de Inspecciones Técnicas</h2>
+              <p className="text-xs text-slate-500">Inspecciones de obras civiles, termografía, sistema de aterramiento (SPAT) y tanques de combustible.</p>
             </div>
 
             {filteredInspecciones.length > 0 ? (
@@ -1111,11 +1158,13 @@ export const ProyectoView = () => {
                     >
                       <div className="h-32 w-full bg-gradient-to-br from-slate-900 to-slate-900/40 relative flex flex-col items-center justify-center border-b border-slate-900/50 select-none">
                         <Building className="w-9 h-9 text-amber-500/70 group-hover:scale-105 transition-transform duration-500" />
-                        <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">Inspección Visual</span>
+                        <span className="text-[9px] uppercase font-bold tracking-widest opacity-35 mt-2">
+                          {item.tipoElemento === 'TERMOGRAFICA' ? 'Inspección Termográfica' : item.tipoElemento === 'SISTEMA_ATERRAMIENTO' ? 'Puesta a Tierra (SPAT)' : item.tipoElemento === 'TANQUE_COMBUSTIBLE' ? 'Tanque de Combustible' : 'Inspección Visual / Civil'}
+                        </span>
                         
                         <div className="absolute top-3 left-3">
                           <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                            🏢 INSPECCIÓN SUBESTACIÓN
+                            {item.tipoElemento === 'TERMOGRAFICA' ? '🔥 TERMOGRAFÍA' : item.tipoElemento === 'SISTEMA_ATERRAMIENTO' ? '🛡️ SPAT ATERRAMIENTO' : item.tipoElemento === 'TANQUE_COMBUSTIBLE' ? '⛽ TANQUE COMBUSTIBLE' : '🏢 SUBESTACIÓN'}
                           </span>
                         </div>
 
@@ -1124,26 +1173,6 @@ export const ProyectoView = () => {
                             <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
                               ID: {item.id}
                             </span>
-                            {user?.role !== 'CLIENT' && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  const ok = await confirm({
-                                    title: 'Eliminar Inspección',
-                                    message: `¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`,
-                                    type: 'danger',
-                                    confirmText: 'Eliminar'
-                                  });
-                                  if (ok) {
-                                    deleteSubestacion(proyectoId, item.id);
-                                  }
-                                }}
-                                className="p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                                title="Eliminar Inspección"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
                           </div>
                         )}
                       </div>
@@ -1161,9 +1190,29 @@ export const ProyectoView = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
-                        <span className="text-slate-400 font-medium">Evaluación:</span>
-                        <span className="font-bold text-amber-500">6 Secciones Estructurales</span>
+                      {/* Barra de Avance y Porcentaje de Completitud (Obs 4) */}
+                      <div className="mt-4 pt-3 border-t border-slate-900/80">
+                        <AvanceProgressBar elemento={item} tipoElemento={item.tipoElemento || 'SUBESTACION'} />
+                      </div>
+
+                      {/* Acciones CRUD Directas en Tarjeta (Obs 2 y 24) */}
+                      <div className="mt-3">
+                        <ElementoCardActions
+                          onEdit={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
+                          onNewInspection={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
+                          onDelete={async () => {
+                            const ok = await confirm({
+                              title: 'Eliminar Inspección',
+                              message: `¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`,
+                              type: 'danger',
+                              confirmText: 'Eliminar'
+                            });
+                            if (ok) {
+                              deleteSubestacion(proyectoId, item.id);
+                            }
+                          }}
+                          readOnly={user?.role === 'CLIENT'}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1174,9 +1223,9 @@ export const ProyectoView = () => {
               <div className="p-16 border-2 border-dashed border-slate-800 rounded-2xl text-center space-y-4 bg-slate-950/20">
                 <Building className="w-12 h-12 text-slate-700 mx-auto" />
                 <div className="space-y-1 font-sans">
-                  <h3 className="text-sm font-bold text-slate-400">No hay inspecciones civiles</h3>
+                  <h3 className="text-sm font-bold text-slate-400">No hay inspecciones técnicas</h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Crea una ficha de Inspección Estructural de Subestación para evaluar obras civiles.
+                    Crea una ficha de Inspección Técnica (Subestación, Termografía, SPAT o Tanque de Combustible).
                   </p>
                 </div>
               </div>
@@ -1190,7 +1239,7 @@ export const ProyectoView = () => {
             <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-md font-bold text-slate-200">Equipos Registrados en el Diagrama Unifilar</h2>
-                <p className="text-xs text-slate-500">Tableros, Transformadores, Generadores, Malla de Puesta a Tierra y Unidades de Transferencia.</p>
+                <p className="text-xs text-slate-500">Tableros, Transformadores, Generadores, Puntos de Suministro, Mallas de Tierra y Transferencias.</p>
               </div>
               <button
                 type="button"
@@ -1321,40 +1370,6 @@ export const ProyectoView = () => {
                             </span>
                           </div>
                         )}
-
-                        {user?.role !== 'CLIENT' && !isMultiSelectMode && (
-                          <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingElemento(item);
-                                setShowElementoModal(true);
-                              }}
-                              className="p-1.5 bg-slate-950/80 hover:bg-slate-900 text-slate-400 hover:text-amber-500 rounded-lg transition-all cursor-pointer shadow-md"
-                              title="Editar Elemento"
-                            >
-                              <Settings className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const ok = await confirm({
-                                  title: 'Eliminar Elemento',
-                                  message: `¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`,
-                                  type: 'danger',
-                                  confirmText: 'Eliminar'
-                                });
-                                if (ok) {
-                                  deleteElementoUnifilar(proyectoId, item.id);
-                                }
-                              }}
-                              className="p-1.5 bg-slate-950/80 hover:bg-red-955/20 text-slate-400 hover:text-red-400 rounded-lg transition-all cursor-pointer shadow-md"
-                              title="Eliminar Elemento"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
                       </div>
 
                       {/* Contenido de Tarjeta */}
@@ -1394,23 +1409,51 @@ export const ProyectoView = () => {
                                 🔄 {item.datosTecnicos?.capacidadAmperios || '3200 A'} | {item.datosTecnicos?.tipoTransferencia || 'ATS YUYE-YES1'}
                               </p>
                             )}
+                            {isPuntoSuministro && (
+                              <p className="text-blue-400 font-mono font-semibold text-[10px] bg-blue-950/40 p-1.5 rounded-lg border border-blue-900/40">
+                                🔌 {item.datosTecnicos?.nivelTension || '13.8 kV'} | {item.datosTecnicos?.cargaContratadaKva || item.datosTecnicos?.capacidadContratadaKva || '1000 kVA'} | {item.datosTecnicos?.tipoMedicion || 'Medición Directa BT'}
+                              </p>
+                            )}
+                            {isCcm && (
+                              <p className="text-amber-400 font-mono font-semibold text-[10px] bg-amber-950/40 p-1.5 rounded-lg border border-amber-900/40">
+                                ⚙️ Barra: {item.datosTecnicos?.capacidadBarraAmperios || '1200 A'} | {item.datosTecnicos?.numeroGavetas || 8} Gavetas ({item.datosTecnicos?.tensionOperativa || '480 V'})
+                              </p>
+                            )}
+                            {isBanco && (
+                              <p className="text-emerald-400 font-mono font-semibold text-[10px] bg-emerald-950/40 p-1.5 rounded-lg border border-emerald-900/40">
+                                ⚡ {item.datosTecnicos?.potenciaReactivaTotal || '150 kVAR'} | {item.datosTecnicos?.numPasos || 6} Pasos ({item.datosTecnicos?.tensionNominal || '208 V'})
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        {/* Footer */}
-                        {isTablero ? (
-                          <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
-                            <span className="text-slate-400 font-medium">Circuitos Registrados:</span>
-                            <span className="font-bold text-sky-400 font-mono">
-                              {item.datosTecnicos?.circuits?.length || 0} de {item.datosTecnicos?.maxPoles || 24}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between mt-5 text-[10px] bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/60">
-                            <span className="text-slate-400 font-medium">Ficha Técnica:</span>
-                            <span className="font-bold text-amber-500">Ficha Completa 2025</span>
-                          </div>
-                        )}
+                        {/* Barra de Avance y Porcentaje de Completitud (Obs 4) */}
+                        <div className="mt-4 pt-3 border-t border-slate-900/80">
+                          <AvanceProgressBar elemento={item} tipoElemento={item.tipoElemento || 'TABLERO'} />
+                        </div>
+
+                        {/* Acciones CRUD Directas en Tarjeta (Obs 2 y 24) */}
+                        <div className="mt-3">
+                          <ElementoCardActions
+                            onEdit={() => {
+                              setEditingElemento(item);
+                              setShowElementoModal(true);
+                            }}
+                            onNewInspection={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
+                            onDelete={async () => {
+                              const ok = await confirm({
+                                title: 'Eliminar Elemento',
+                                message: `¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`,
+                                type: 'danger',
+                                confirmText: 'Eliminar'
+                              });
+                              if (ok) {
+                                deleteElementoUnifilar(proyectoId, item.id);
+                              }
+                            }}
+                            readOnly={user?.role === 'CLIENT'}
+                          />
+                        </div>
                       </div>
                     </div>
                   );
@@ -1702,28 +1745,149 @@ export const ProyectoView = () => {
 
               {/* PUNTO DE SUMINISTRO */}
               {tipoElemento === 'PUNTO_SUMINISTRO' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-4">
+                  {/* Tension y Carga Contratada */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nivel de Tensión</label>
-                      <input type="text" value={suministroTension} onChange={(e) => setSuministroTension(e.target.value)} placeholder="Ej. 13.8 kV" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Tensión de Suministro (COVENIN 159:1997)
+                      </label>
+                      <div className="flex gap-2">
+                        <select
+                          value={TENSIONES_COVENIN_TODAS.includes(suministroTension) ? suministroTension : (suministroTension ? 'CUSTOM' : '')}
+                          onChange={(e) => {
+                            if (e.target.value !== 'CUSTOM') {
+                              setSuministroTension(e.target.value);
+                            }
+                          }}
+                          className="w-1/2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10"
+                        >
+                          <option value="">Seleccione tensión...</option>
+                          <optgroup label="Baja Tensión (BT)">
+                            {TENSIONES_COVENIN_159_BT.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Media Tensión (MT)">
+                            {TENSIONES_COVENIN_159_MT.map(v => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </optgroup>
+                          <option value="CUSTOM">Otra tensión...</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={suministroTension}
+                          onChange={(e) => setSuministroTension(e.target.value)}
+                          placeholder="Ej. 13.8 kV o 208/120 V"
+                          className="w-1/2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono"
+                        />
+                      </div>
                     </div>
+
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad (kVA)</label>
-                      <input type="text" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value)} placeholder="Ej. 1000 kVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Carga Contratada (kVA)
+                      </label>
+                      <input
+                        type="text"
+                        value={suministroCapacidad}
+                        onChange={(e) => setSuministroCapacidad(e.target.value)}
+                        placeholder="Ej. 1000 kVA o 500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono"
+                      />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Empresa Distribuidora</label>
-                      <input type="text" value={suministroEmpresa} onChange={(e) => setSuministroEmpresa(e.target.value)} placeholder="Ej. CORPOELEC / Compañía Eléctrica" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+
+                  {/* Tipo de Medición Eléctrica (Obs 23) */}
+                  <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80 space-y-2">
+                    <label className="block text-[10px] font-bold text-amber-400 uppercase tracking-wide">
+                      ⚡ Tipo de Medición Eléctrica (Obligatorio)
+                    </label>
+                    <select
+                      value={suministroTipoMedicion}
+                      onChange={(e) => setSuministroTipoMedicion(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 h-10 focus:border-amber-500 font-semibold"
+                    >
+                      <option value="Medición Directa (Baja Tensión)">1. Medición Directa (Baja Tensión)</option>
+                      <option value="Medición Indirecta BT">2. Medición Indirecta BT (con transformadores de corriente TCs)</option>
+                      <option value="Medición Indirecta AT/MT">3. Medición Indirecta AT/MT (con TCs y TPs para media/alta tensión)</option>
+                    </select>
+                  </div>
+
+                  {/* Bloque Enlace Corpoelec / Red Pública (Obs 20) */}
+                  <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
+                      <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wide flex items-center gap-2">
+                        <Gauge className="w-4 h-4 text-blue-400" /> Acometida de Servicio / Red Corpoelec
+                      </span>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={suministroEnlaceCorpoelec}
+                          onChange={(e) => setSuministroEnlaceCorpoelec(e.target.checked)}
+                          className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 h-4 w-4 bg-slate-900"
+                        />
+                        <span className="text-[10px] font-semibold">Enlace Activo</span>
+                      </label>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Acometida</label>
-                      <select value={suministroTipoAcometida} onChange={(e) => setSuministroTipoAcometida(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                        <option value="Subterránea">Subterránea</option>
-                        <option value="Aérea">Aérea</option>
-                      </select>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Empresa Distribuidora</label>
+                        <input
+                          type="text"
+                          value={suministroEmpresa}
+                          onChange={(e) => setSuministroEmpresa(e.target.value)}
+                          placeholder="Ej. CORPOELEC"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Tipo de Acometida</label>
+                        <select
+                          value={suministroTipoAcometida}
+                          onChange={(e) => setSuministroTipoAcometida(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9"
+                        >
+                          <option value="Subterránea">Subterránea</option>
+                          <option value="Aérea">Aérea</option>
+                          <option value="Mixta">Mixta (Aéreo - Subterráneo)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">N° Contrato / NIC</label>
+                        <input
+                          type="text"
+                          value={suministroNumeroContrato}
+                          onChange={(e) => setSuministroNumeroContrato(e.target.value)}
+                          placeholder="Ej. 1000284759"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">N° Medidor</label>
+                        <input
+                          type="text"
+                          value={suministroNic}
+                          onChange={(e) => setSuministroNic(e.target.value)}
+                          placeholder="Ej. MED-883921"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Poste / Trafo Servicio</label>
+                        <input
+                          type="text"
+                          value={suministroPosteTrafo}
+                          onChange={(e) => setSuministroPosteTrafo(e.target.value)}
+                          placeholder="Ej. P-142 / Trafo 50kVA"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9 font-mono"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
