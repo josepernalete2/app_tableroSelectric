@@ -84,9 +84,8 @@ export default function ModalDiagramaUnifilar({
     setEditObservaciones('');
   };
 
-  if (!isOpen) return null;
-
   // Catálogo de símbolos eléctricos para el panel izquierdo
+
   const catalogOfSymbols = [
     { 
       type: 'TABLERO', 
@@ -333,6 +332,8 @@ export default function ModalDiagramaUnifilar({
 
   // Lista de posibles alimentadores (excluye al nodo mismo para evitar bucles)
   const potentialFeeders = elementos.filter(el => selectedNode && el.id !== selectedNode.id);
+
+  if (!isOpen) return null;
 
   return (
     <>
