@@ -132,25 +132,29 @@ router.put('/alarmas/:id/estado', requireRoles('ADMIN', 'WORKER'), cambiarEstado
 // Endpoint de Sincronización Offline Batch
 router.post('/sync/batch', requireRoles('ADMIN', 'WORKER'), procesarSincronizacionBatch);
 
-// Endpoints de Respaldo e Importación/Exportación Global (Solo ADMIN)
-router.get('/backup/export', requireRoles('ADMIN'), exportDatabase);
-router.get('/backups/export', requireRoles('ADMIN'), exportDatabase);
+// Endpoints de Respaldo e Importación/Exportación Global
+router.get('/backup/export', requireRoles('ADMIN', 'WORKER'), exportDatabase);
+router.get('/backups/export', requireRoles('ADMIN', 'WORKER'), exportDatabase);
 router.post('/backup/import', requireRoles('ADMIN'), importDatabase);
 router.post('/backups/import', requireRoles('ADMIN'), importDatabase);
 
 // Endpoints de Respaldo en la Nube (PostgreSQL / Sin Tokens)
-router.get('/backup/cloud', requireRoles('ADMIN'), listarBackupsEnNube);
-router.post('/backup/cloud', requireRoles('ADMIN'), crearBackupEnNube);
-router.get('/backup/cloud/:id/download', requireRoles('ADMIN'), descargarBackupEnNube);
+router.get('/backup', requireRoles('ADMIN', 'WORKER'), listarBackupsEnNube);
+router.post('/backup', requireRoles('ADMIN', 'WORKER'), crearBackupEnNube);
+router.get('/backups', requireRoles('ADMIN', 'WORKER'), listarBackupsEnNube);
+router.post('/backups', requireRoles('ADMIN', 'WORKER'), crearBackupEnNube);
+router.get('/backup/cloud', requireRoles('ADMIN', 'WORKER'), listarBackupsEnNube);
+router.post('/backup/cloud', requireRoles('ADMIN', 'WORKER'), crearBackupEnNube);
+router.get('/backup/cloud/:id/download', requireRoles('ADMIN', 'WORKER'), descargarBackupEnNube);
 router.post('/backup/cloud/:id/restore', requireRoles('ADMIN'), restaurarBackupEnNube);
 router.delete('/backup/cloud/:id', requireRoles('ADMIN'), eliminarBackupEnNube);
 
 // Endpoints de Resguardo y Auditoría por Empresa
-router.get('/backup/resumen-empresas', requireRoles('ADMIN'), obtenerResumenEmpresasController);
+router.get('/backup/resumen-empresas', requireRoles('ADMIN', 'WORKER'), obtenerResumenEmpresasController);
 router.get('/backup/empresa/:empresaId/estado', requireRoles('ADMIN', 'WORKER'), obtenerEstadoEmpresaController);
-router.post('/backup/generar-pin/:empresaId', requireRoles('ADMIN'), generarPinEmpresaController);
-router.post('/backup/empresa/:empresaId', requireRoles('ADMIN'), ejecutarBackupEmpresaController);
-router.get('/backup/empresa/:empresaId/export', requireRoles('ADMIN'), descargarBackupEmpresaController);
+router.post('/backup/generar-pin/:empresaId', requireRoles('ADMIN', 'WORKER'), generarPinEmpresaController);
+router.post('/backup/empresa/:empresaId', requireRoles('ADMIN', 'WORKER'), ejecutarBackupEmpresaController);
+router.get('/backup/empresa/:empresaId/export', requireRoles('ADMIN', 'WORKER'), descargarBackupEmpresaController);
 
 // Rutas de Gestión de Usuarios (Solo ADMIN)
 router.get('/users', requireRoles('ADMIN'), obtenerUsuarios);
