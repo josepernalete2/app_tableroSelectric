@@ -33,5 +33,7 @@ const getBaseApiUrl = () => {
 };
 
 export const API_BASE_URL = getBaseApiUrl();
+export const API_URL = import.meta.env.PROD ? '/api' : (API_BASE_URL ? `${API_BASE_URL}/api` : '/api');
 
 export default API_BASE_URL;
+

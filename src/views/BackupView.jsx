@@ -37,6 +37,20 @@ export const BackupView = () => {
   const { user, token, companies, importCompanies, showToast } = useStore();
   const fileInputRef = useRef(null);
 
+  // Obtener el token más reciente disponible para evitar fallos de 403
+  const getFreshToken = () => {
+    return useStore.getState().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '') || '';
+  };
+
+  const getAuthHeaders = (extra = {}) => {
+    const t = getFreshToken();
+    return {
+      'Content-Type': 'application/json',
+      ...(t ? { 'Authorization': `Bearer ${t}` } : {}),
+      ...extra
+    };
+  };
+
   // Estados de Navegación y Pestañas
   const [activeTab, setActiveTab] = useState('empresas'); // 'empresas' | 'global'
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,15 +82,77 @@ export const BackupView = () => {
   const isAnyProcessing = isExecutingGlobalPipeline || isExportingGlobal || isImporting || Boolean(downloadingEmpresaId);
 
   /**
+   * Rescate Inmediato Offline / Local Directo (.json)
+   * Extrae el 100% de los datos residentes en el almacenamiento local y Zustand
+   * sin peticiones HTTP, sin backend ni validación de token.
+   */
+  const descargarCopiaLocalDirecta = () => {
+    try {
+      const estado = useStore.getState();
+      const listadoEmpresas = estado.companies || estado.empresas || [];
+      const listadoProyectos = estado.proyectos || estado.projects || [];
+      
+      const backupData = {
+        appName: 'App Tableros Eléctricos (Selectric)',
+        tipoExportacion: 'OFFLINE_LOCAL_DIRECT_SNAP',
+        version: '2.2.0',
+        fechaGeneracion: new Date().toISOString(),
+        dispositivo: typeof navigator !== 'undefined' ? navigator.userAgent : 'Desconocido',
+        metadata: {
+          generadoEnCliente: true,
+          totalEmpresas: listadoEmpresas.length,
+          totalProyectos: listadoProyectos.length,
+          totalTableros: (estado.tableros || []).length,
+          totalCircuitos: (estado.circuitos || []).length,
+          fechaLocal: new Date().toLocaleString('es-VE')
+        },
+        data: listadoEmpresas,
+        datos: {
+          empresas: listadoEmpresas,
+          proyectos: listadoProyectos,
+          subestaciones: estado.subestaciones || [],
+          tableros: estado.tableros || [],
+          circuitos: estado.circuitos || [],
+          mediciones: estado.mediciones || estado.puntosMedicion || [],
+          ccm: estado.ccmList || estado.ccm || [],
+          inspeccionesTermograficas: estado.inspeccionesTermograficas || [],
+          inspeccionesAterramiento: estado.inspeccionesAterramiento || [],
+          inspeccionesTanquesCombustible: estado.inspeccionesTanquesCombustible || [],
+          alarmas: estado.alarmas || [],
+          alimentadores: estado.alimentadores || []
+        }
+      };
+
+      const jsonString = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `respaldo_local_inmediato_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      if (showToast) {
+        showToast('¡Copia de seguridad local descargada exitosamente en este dispositivo!', 'success');
+      }
+    } catch (err) {
+      console.error('Error al exportar respaldo local directo:', err);
+      if (showToast) {
+        showToast('Error al exportar respaldo local: ' + err.message, 'error');
+      }
+    }
+  };
+
+  /**
    * Cargar listado de empresas con métricas de resguardo desde la API
    */
   const fetchEmpresasResumen = async () => {
     setIsLoadingEmpresas(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/backup/resumen-empresas`, {
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        }
+        headers: getAuthHeaders()
       });
       const data = await response.json();
       if (response.ok && data.ok) {
@@ -124,10 +200,7 @@ export const BackupView = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/backup/cloud`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           nombre: `Respaldo Ejecutivo ${new Date().toLocaleDateString('es-VE')}`,
           descripcion: 'Respaldo maestro disparado desde el Centro de Control Web'
@@ -163,7 +236,7 @@ export const BackupView = () => {
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/backups/export`, {
-        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+        headers: getAuthHeaders()
       });
 
       if (!response.ok) throw new Error('Error al generar archivo JSON maestro');
@@ -209,7 +282,7 @@ export const BackupView = () => {
         setSelectedPinModal(prev => ({ ...prev, isGenerating: true }));
         const response = await fetch(`${API_BASE_URL}/api/backup/generar-pin/${empresa.id}`, {
           method: 'POST',
-          headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+          headers: getAuthHeaders()
         });
         const resData = await response.json();
         if (response.ok && resData.ok) {
@@ -229,7 +302,7 @@ export const BackupView = () => {
     setSelectedCertModal({ ficha: null, isLoading: true });
     try {
       const response = await fetch(`${API_BASE_URL}/api/backup/empresa/${empresa.id}/estado`, {
-        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+        headers: getAuthHeaders()
       });
       const data = await response.json();
       if (response.ok && data.ok) {
@@ -253,7 +326,7 @@ export const BackupView = () => {
     setDownloadingEmpresaId(empresaId);
     try {
       const response = await fetch(`${API_BASE_URL}/api/backup/empresa/${empresaId}/export`, {
-        headers: { ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+        headers: getAuthHeaders()
       });
 
       if (!response.ok) throw new Error('Error al exportar datos de la empresa');
@@ -317,10 +390,7 @@ export const BackupView = () => {
 
       const response = await fetch(`${API_BASE_URL}/api/backups/import`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ data: payloadData })
       });
 
@@ -378,6 +448,16 @@ export const BackupView = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {/* Botón de Rescate Inmediato Offline / Local Directo */}
+            <button
+              onClick={descargarCopiaLocalDirecta}
+              className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.98] text-slate-950 font-bold rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer text-sm"
+              title="Descarga directa instantánea desde el navegador (sin requerir red ni backend)"
+            >
+              <Download className="w-4 h-4 stroke-[2.5]" />
+              <span>Descarga Inmediata Local (.json)</span>
+            </button>
+
             <button
               onClick={handleTriggerGlobalPipeline}
               disabled={isAnyProcessing}
@@ -391,7 +471,7 @@ export const BackupView = () => {
               ) : (
                 <>
                   <Zap className="w-4 h-4 fill-slate-950" />
-                  <span>Respaldo Inmediato del Sistema</span>
+                  <span>Respaldo Servidor / Nube</span>
                 </>
               )}
             </button>
@@ -672,8 +752,37 @@ export const BackupView = () => {
       {/* ========================================================================= */}
       {activeTab === 'global' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Tarjeta: Exportar Maestro */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Tarjeta 1: Rescate Inmediato Local Directo (Offline) */}
+            <div className="bg-slate-900 border border-emerald-500/30 rounded-3xl p-6 md:p-8 flex flex-col justify-between shadow-xl relative overflow-hidden group hover:border-emerald-500/50 transition-all">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold shadow-lg shadow-emerald-500/10">
+                    <Download className="w-6 h-6 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-white">Descarga Local Inmediata</h3>
+                    <p className="text-xs text-emerald-400 font-medium">100% Offline • Sin backend • Rescate directo</p>
+                  </div>
+                </div>
+
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Exporta instantáneamente al navegador todos los datos cargados en memoria y almacenamiento local (empresas, tableros, circuitos, mediciones) en formato JSON. Funciona aún con token vencido o sin conexión.
+                </p>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-slate-800">
+                <button
+                  onClick={descargarCopiaLocalDirecta}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.98] text-slate-950 font-black rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer text-sm"
+                >
+                  <Download className="w-5 h-5 stroke-[2.5]" />
+                  <span>Descarga Inmediata Local (.json)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Tarjeta 2: Exportar Maestro Servidor */}
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 flex flex-col justify-between shadow-xl relative overflow-hidden">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
@@ -716,14 +825,14 @@ export const BackupView = () => {
                   ) : (
                     <>
                       <Download className="w-5 h-5" />
-                      <span>Descargar Snapshot Maestro (.json)</span>
+                      <span>Descargar Snapshot Nube (.json)</span>
                     </>
                   )}
                 </button>
               </div>
             </div>
 
-            {/* Tarjeta: Importación / Restauración */}
+            {/* Tarjeta 3: Importación / Restauración */}
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 flex flex-col justify-between shadow-xl relative overflow-hidden">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
