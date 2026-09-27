@@ -1,12 +1,24 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import crypto from 'crypto';
 
-const uploadDir = path.resolve(process.cwd(), 'public', 'uploads');
+// Determinar si estamos en Vercel o entorno Serverless con FS de solo lectura
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production');
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// En Vercel / Serverless, solo se puede escribir en /tmp
+const uploadDir = isServerless
+  ? path.join(os.tmpdir(), 'uploads')
+  : path.resolve(process.cwd(), 'public', 'uploads');
+
+// Crear directorio de forma segura sin romper el arranque de la aplicación
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (error) {
+  console.warn('⚠️ [UploadMiddleware] No se pudo crear directorio físico de subidas en disco:', error.message);
 }
 
 const storage = multer.diskStorage({
@@ -17,7 +29,8 @@ const storage = multer.diskStorage({
       }
       cb(null, uploadDir);
     } catch (e) {
-      cb(e, uploadDir);
+      console.warn('⚠️ Error accediendo a uploadDir:', e.message);
+      cb(null, os.tmpdir());
     }
   },
   filename: (req, file, cb) => {
@@ -46,3 +59,4 @@ export const uploadFotoInspeccion = multer({
 });
 
 export default uploadFotoInspeccion;
+

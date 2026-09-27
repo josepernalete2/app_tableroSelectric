@@ -175,10 +175,14 @@ app.get(['/api/health', '/health'], (req, res) => {
 });
 
 // Servir archivos de uploads con encabezados de seguridad
+const uploadsStaticDir = (process.env.VERCEL || process.env.NODE_ENV === 'production')
+  ? path.join(os.tmpdir(), 'uploads')
+  : path.resolve(process.cwd(), 'public', 'uploads');
+
 app.use('/uploads', (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   next();
-}, express.static(path.resolve(process.cwd(), 'public', 'uploads')));
+}, express.static(uploadsStaticDir));
 
 // Endpoints de Notificaciones Push
 app.use('/api/notifications', pushRoutes);
