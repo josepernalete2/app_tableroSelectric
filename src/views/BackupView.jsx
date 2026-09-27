@@ -509,39 +509,49 @@ export const BackupView = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-start gap-4">
             {/* Botón de Rescate Inmediato Offline / Local Directo */}
-            <button
-              onClick={descargarCopiaLocalDirecta}
-              className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.98] text-slate-950 font-bold rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer text-sm"
-              title="Descarga directa instantánea desde el navegador (sin requerir red ni backend)"
-            >
-              <Download className="w-4 h-4 stroke-[2.5]" />
-              <span>Descarga Inmediata Local (.json)</span>
-            </button>
+            <div className="flex flex-col items-center">
+              <button
+                onClick={descargarCopiaLocalDirecta}
+                className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.98] text-slate-950 font-bold rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer text-sm"
+                title="Descarga directa instantánea desde el navegador (sin requerir red ni backend)"
+              >
+                <Download className="w-4 h-4 stroke-[2.5]" />
+                <span>Descarga Inmediata Local (.json)</span>
+              </button>
+              <span className="text-[11px] text-emerald-400/90 mt-1.5 font-medium text-center max-w-[260px]">
+                Ruta destino: Almacenamiento local (Carpeta de Descargas / Downloads)
+              </span>
+            </div>
 
-            <button
-              onClick={handleTriggerGlobalPipeline}
-              disabled={isAnyProcessing}
-              className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-bold rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer text-sm"
-            >
-              {isExecutingGlobalPipeline ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Ejecutando Respaldo Maestro...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-4 h-4 fill-slate-950" />
-                  <span>Respaldo Servidor / Nube</span>
-                </>
-              )}
-            </button>
+            <div className="flex flex-col items-center">
+              <button
+                onClick={handleTriggerGlobalPipeline}
+                disabled={isAnyProcessing}
+                className="flex items-center gap-2.5 py-3 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-slate-950 font-bold rounded-2xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer text-sm"
+              >
+                {isExecutingGlobalPipeline ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Ejecutando Respaldo Nube...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 fill-slate-950" />
+                    <span>Respaldo Servidor / Nube</span>
+                  </>
+                )}
+              </button>
+              <span className="text-[11px] text-amber-400/90 mt-1.5 font-medium text-center max-w-[260px]">
+                Ruta destino: Base de Datos Central PostgreSQL (/api/backup/cloud)
+              </span>
+            </div>
 
             <button
               onClick={fetchEmpresasResumen}
               disabled={isLoadingEmpresas || isAnyProcessing}
-              className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+              className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition-all cursor-pointer disabled:opacity-50 mt-0.5"
               title="Refrescar métricas"
             >
               <RefreshCw className={`w-4 h-4 ${isLoadingEmpresas ? 'animate-spin' : ''}`} />
@@ -833,7 +843,7 @@ export const BackupView = () => {
                 </p>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-slate-800">
+              <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col items-center">
                 <button
                   onClick={descargarCopiaLocalDirecta}
                   className="w-full flex items-center justify-center gap-2.5 py-3.5 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-[0.98] text-slate-950 font-black rounded-2xl shadow-lg shadow-emerald-500/20 transition-all cursor-pointer text-sm"
@@ -841,6 +851,9 @@ export const BackupView = () => {
                   <Download className="w-5 h-5 stroke-[2.5]" />
                   <span>Descarga Inmediata Local (.json)</span>
                 </button>
+                <span className="text-xs text-emerald-400/90 mt-2 text-center font-medium">
+                  Ruta destino: Almacenamiento local (Carpeta de Descargas / Downloads)
+                </span>
               </div>
             </div>
 
@@ -873,7 +886,7 @@ export const BackupView = () => {
                 )}
               </div>
 
-              <div className="mt-8 pt-6 border-t border-slate-800">
+              <div className="mt-8 pt-6 border-t border-slate-800 flex flex-col items-center">
                 <button
                   onClick={handleExportGlobalJson}
                   disabled={isAnyProcessing}
@@ -891,6 +904,9 @@ export const BackupView = () => {
                     </>
                   )}
                 </button>
+                <span className="text-xs text-amber-400/90 mt-2 text-center font-medium">
+                  Ruta destino: Base de Datos Central PostgreSQL (/api/backup/cloud)
+                </span>
               </div>
             </div>
 

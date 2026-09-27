@@ -1,7 +1,7 @@
 /**
  * Configuración dinámica y desacoplada de la URL Base de la API
- * Compatible con Vercel Serverless (HTTPS puerto 443 sin puerto :3001),
- * Railway Containers y desarrollo local.
+ * Totalmente agnóstica de hosting (Vercel, Railway, Docker, LAN y Vite Dev Proxy).
+ * Utiliza rutas relativas para resolver siempre contra el host actual sin CORS.
  */
 const getBaseApiUrl = () => {
   // 1. Sobreescritura manual en tiempo de ejecución (útil para pruebas y Capacitor)
@@ -18,22 +18,18 @@ const getBaseApiUrl = () => {
     return import.meta.env.VITE_API_BASE_URL.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
 
-  // 3. Verificación de Capacitor / App nativa móvil
+  // 3. Verificación de Capacitor / Emulador Android nativo
   if (typeof window !== 'undefined' && (window.Capacitor || window.location?.protocol === 'capacitor:')) {
     return 'http://10.0.2.2:3001';
   }
 
-  // 4. En producción (Vercel u otro hosting web):
-  if (import.meta.env.PROD) {
-    return ''; // Ruta relativa directa: `${API_BASE_URL}/api/...` se resuelve como `/api/...`
-  }
-
-  // 5. En desarrollo local (Vite dev server con backend en puerto 3001):
-  return 'http://localhost:3001';
+  // 4. Por defecto en todos los entornos web (Vercel, Railway, LAN, Tablets, Dev Server con Proxy):
+  // Usar ruta relativa para que las peticiones vayan al mismo origen sin errores de CORS
+  return '';
 };
 
 export const API_BASE_URL = getBaseApiUrl();
-export const API_URL = import.meta.env.PROD ? '/api' : (API_BASE_URL ? `${API_BASE_URL}/api` : '/api');
+export const API_URL = API_BASE_URL ? `${API_BASE_URL}/api` : '/api';
 
 export default API_BASE_URL;
 
