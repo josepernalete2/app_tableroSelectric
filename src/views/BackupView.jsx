@@ -195,22 +195,38 @@ export const BackupView = () => {
   }, [empresasResumen, searchQuery, statusFilter]);
 
   /**
-   * Dispara el pipeline global de respaldo (R2 + Telegram + PostgreSQL + Memoria)
+   * Dispara el respaldo maestro en servidor / nube
+   * Petición HTTP POST estándar y silenciosa (sin solicitar permisos de sistema, credenciales ni sync nativo)
    */
-  const handleTriggerGlobalPipeline = async () => {
+  const handleRespaldoServidor = async () => {
     const now = Date.now();
     if (isExecutingGlobalPipeline || (now - lastActionTimestampRef.current < 2000)) return;
     lastActionTimestampRef.current = now;
     setIsExecutingGlobalPipeline(true);
 
     try {
+      const token = getFreshToken();
+      const state = useStore.getState();
+      
+      const payload = {
+        fecha: new Date().toISOString(),
+        nombre: `Respaldo Servidor ${new Date().toLocaleDateString('es-VE')}`,
+        descripcion: 'Respaldo maestro disparado desde el Centro de Control Web',
+        empresas: state.companies || state.empresas || [],
+        proyectos: state.proyectos || state.projects || [],
+        subestaciones: state.subestaciones || [],
+        tableros: state.tableros || [],
+        circuitos: state.circuitos || [],
+        mediciones: state.mediciones || state.puntosMedicion || []
+      };
+
       const response = await fetch(`${API_BASE_URL}/api/backup/cloud`, {
         method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          nombre: `Respaldo Ejecutivo ${new Date().toLocaleDateString('es-VE')}`,
-          descripcion: 'Respaldo maestro disparado desde el Centro de Control Web'
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
       });
 
       if (response.status === 401 || response.status === 403) {
@@ -219,26 +235,29 @@ export const BackupView = () => {
         return;
       }
 
-      const resData = await response.json();
-      if (!response.ok || !resData.ok) {
-        throw new Error(resData.error || 'Error al ejecutar el respaldo');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error en el servidor: ${response.status}`);
       }
 
+      const resData = await response.json().catch(() => ({ ok: true }));
       if (showToast) {
-        showToast('Respaldo maestro generado y distribuido exitosamente.', 'success');
+        showToast('Respaldo en la nube generado exitosamente.', 'success');
       }
       fetchEmpresasResumen();
-    } catch (err) {
-      console.error('[BackupView] Error en pipeline maestro:', err);
-      const isNetworkError = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError');
+    } catch (error) {
+      console.error('Error en respaldo servidor:', error);
+      const isNetworkError = error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError');
       const mensajeError = isNetworkError 
         ? 'No se pudo conectar con el servidor central. Puedes usar "Descarga Inmediata Local (.json)" mientras tanto.'
-        : (err.message || 'Fallo en la ejecución del respaldo');
+        : (error.message || 'Fallo en la ejecución del respaldo');
       if (showToast) showToast(mensajeError, 'error');
     } finally {
       setIsExecutingGlobalPipeline(false);
     }
   };
+
+  const handleTriggerGlobalPipeline = handleRespaldoServidor;
 
   /**
    * Exportar y descargar el volcado JSON maestro en memoria
