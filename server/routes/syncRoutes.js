@@ -93,6 +93,8 @@ router.get('/pull', verificarToken, async (req, res) => {
 // ENDPOINT PUSH: Recibir batch de creaciones/actualizaciones de la tablet
 // Procesa operaciones en lote usando transacción Prisma
 router.post('/', verificarToken, procesarSincronizacionBatch);
+router.post('/push', verificarToken, procesarSincronizacionBatch);
+router.post('/batch', verificarToken, procesarSincronizacionBatch);
 
 // ENDPOINT LOCAL BACKUP: Generar backup JSON para descarga local
 router.post('/backup/local', verificarToken, generarBackupLocal);

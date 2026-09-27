@@ -154,6 +154,12 @@ export const BackupView = () => {
       const response = await fetch(`${API_BASE_URL}/api/backup/resumen-empresas`, {
         headers: getAuthHeaders()
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return;
+      }
+
       const data = await response.json();
       if (response.ok && data.ok) {
         setEmpresasResumen(data.data || []);
@@ -207,6 +213,12 @@ export const BackupView = () => {
         })
       });
 
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        if (showToast) showToast('Tu sesión ha expirado o no tienes permisos de Administrador.', 'error');
+        return;
+      }
+
       const resData = await response.json();
       if (!response.ok || !resData.ok) {
         throw new Error(resData.error || 'Error al ejecutar el respaldo');
@@ -218,7 +230,11 @@ export const BackupView = () => {
       fetchEmpresasResumen();
     } catch (err) {
       console.error('[BackupView] Error en pipeline maestro:', err);
-      if (showToast) showToast(err.message || 'Fallo en la ejecución del respaldo', 'error');
+      const isNetworkError = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError');
+      const mensajeError = isNetworkError 
+        ? 'No se pudo conectar con el servidor central. Puedes usar "Descarga Inmediata Local (.json)" mientras tanto.'
+        : (err.message || 'Fallo en la ejecución del respaldo');
+      if (showToast) showToast(mensajeError, 'error');
     } finally {
       setIsExecutingGlobalPipeline(false);
     }
@@ -238,6 +254,12 @@ export const BackupView = () => {
       const response = await fetch(`${API_BASE_URL}/api/backups/export`, {
         headers: getAuthHeaders()
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        if (showToast) showToast('Tu sesión ha expirado o no tienes permisos de Administrador.', 'error');
+        return;
+      }
 
       if (!response.ok) throw new Error('Error al generar archivo JSON maestro');
 
@@ -266,7 +288,11 @@ export const BackupView = () => {
 
       if (showToast) showToast('Archivo de respaldo maestro descargado.', 'success');
     } catch (err) {
-      if (showToast) showToast(err.message || 'Error al descargar respaldo', 'error');
+      const isNetworkError = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError');
+      const mensajeError = isNetworkError 
+        ? 'Error de conexión con el servidor. Utiliza "Descarga Inmediata Local (.json)".'
+        : (err.message || 'Error al descargar respaldo');
+      if (showToast) showToast(mensajeError, 'error');
     } finally {
       setIsExportingGlobal(false);
     }
@@ -284,6 +310,12 @@ export const BackupView = () => {
           method: 'POST',
           headers: getAuthHeaders()
         });
+
+        if (response.status === 401 || response.status === 403) {
+          useStore.getState().handleAuthError?.(response.status);
+          return;
+        }
+
         const resData = await response.json();
         if (response.ok && resData.ok) {
           setSelectedPinModal({ empresa, pin: resData.data.telegramBackupPin, isGenerating: false });
@@ -304,6 +336,12 @@ export const BackupView = () => {
       const response = await fetch(`${API_BASE_URL}/api/backup/empresa/${empresa.id}/estado`, {
         headers: getAuthHeaders()
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return;
+      }
+
       const data = await response.json();
       if (response.ok && data.ok) {
         setSelectedCertModal({ ficha: data.data, isLoading: false });
@@ -328,6 +366,11 @@ export const BackupView = () => {
       const response = await fetch(`${API_BASE_URL}/api/backup/empresa/${empresaId}/export`, {
         headers: getAuthHeaders()
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return;
+      }
 
       if (!response.ok) throw new Error('Error al exportar datos de la empresa');
 

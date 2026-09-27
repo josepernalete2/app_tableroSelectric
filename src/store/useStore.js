@@ -1625,14 +1625,14 @@ export const useStore = create(
 
       processSyncQueue: async () => {
         const { syncQueue, token } = get();
-        if (!token || syncQueue.length === 0) return;
+        if (!token || syncQueue.length === 0) return { success: true };
 
         try {
-          const res = await fetch(`${API_BASE_URL}/api/sync`, {
+          const res = await fetch(`${API_BASE_URL}/api/sync/push`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
             },
             body: JSON.stringify({ mutations: syncQueue.map(item => ({
               entity: item.tipo,
@@ -1641,18 +1641,32 @@ export const useStore = create(
               data: item.payload
             })) })
           });
+
+          if (res.status === 401 || res.status === 403) {
+            get().handleAuthError(res.status);
+            return { success: false, error: 'Token expirado' };
+          }
+
           const data = await res.json();
-          if (data.ok) {
+          if (res.ok && data.ok) {
             // Limpiar la cola localmente tras confirmación exitosa
             set({ syncQueue: [] });
-            get().showToast('Sincronización completada', 'success');
+            get().pullInitialData();
+            get().showToast('Sincronización completada exitosamente', 'success');
+            return { success: true };
           } else {
             get().showToast('Error en sincronización: ' + (data.error || 'unknown'), 'error');
+            return { success: false, error: data.error };
           }
         } catch (e) {
           console.error('Error al procesar cola de sincronización:', e);
           get().showToast('Error de red al sincronizar', 'error');
+          return { success: false, error: e.message };
         }
+      },
+
+      syncPendingData: async () => {
+        return get().processSyncQueue();
       },
 
       backupDatos: async (tipo = 'completo') => {
@@ -1893,7 +1907,14 @@ export const useStore = create(
         subestacionesLocales: state.subestacionesLocales || [],
         conflictosCircuitos: state.conflictosCircuitos || [],
         syncQueue: state.syncQueue
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.token && state.token !== 'mock-offline-token' && typeof navigator !== 'undefined' && navigator.onLine) {
+          // Descarga automática transparente desde PostgreSQL tras restaurar sesión persistida
+          state.pullInitialData?.();
+          state.fetchUsersList?.();
+        }
+      }
     }
   )
 );

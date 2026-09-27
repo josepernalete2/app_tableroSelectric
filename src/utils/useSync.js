@@ -4,14 +4,34 @@ import { API_BASE_URL } from './api';
 
 export function useSync() {
   const { syncQueue, removeFromQueue } = useStore();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isSyncing, setIsSyncing] = useState(false);
   
   // Semáforo de bloqueo para impedir la ejecución concurrente de la cola de sincronización
   const isSyncingRef = useRef(false);
 
+  const getFreshToken = () => {
+    return useStore.getState().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
+  };
+
+  const getAuthHeaders = (extra = {}) => {
+    const token = getFreshToken();
+    return {
+      'Content-Type': 'application/json',
+      ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...extra
+    };
+  };
+
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Al recuperar conexión, intentar sincronizar pendientes y descargar cambios del servidor
+      const state = useStore.getState();
+      if (state.token && state.token !== 'mock-offline-token') {
+        state.pullInitialData?.();
+      }
+    };
     const handleOffline = () => setIsOnline(false);
 
     window.addEventListener('online', handleOnline);
@@ -32,13 +52,9 @@ export function useSync() {
 
   const sincronizarLote = async (mutaciones) => {
     try {
-      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/sync/batch`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ mutations: mutaciones })
       });
 
@@ -54,13 +70,19 @@ export function useSync() {
       const json = await response.json();
       return { success: true, data: json };
     } catch (err) {
-      console.error('Error en sincronizarLote:', err);
+      console.error('Error de red en sincronizarLote:', err);
       return { success: false, status: 'NETWORK_ERROR' };
     }
   };
 
   const procesarColaSincronizacion = async () => {
     if (isSyncingRef.current) return;
+
+    const token = getFreshToken();
+    if (!token || token === 'mock-offline-token') {
+      // Modo offline local sin backend configurado
+      return;
+    }
 
     isSyncingRef.current = true;
     setIsSyncing(true);
@@ -106,13 +128,13 @@ export function useSync() {
 
       if (batchRes.success) {
         // Remover del queue local los elementos procesados exitosamente
-        (batchRes.data.applied || []).forEach(appItem => {
+        (batchRes.data?.applied || []).forEach(appItem => {
           const queueId = queueItemsMap.get(appItem.id);
           if (queueId) removeFromQueue(queueId);
         });
 
         // Notificar en consola si hubo conflictos OCC
-        if (batchRes.data.conflicts && batchRes.data.conflicts.length > 0) {
+        if (batchRes.data?.conflicts && batchRes.data.conflicts.length > 0) {
           console.warn('⚠️ Se detectaron conflictos OCC al sincronizar:', batchRes.data.conflicts);
         }
       } else if (batchRes.status === 401 || batchRes.status === 403) {
@@ -152,12 +174,20 @@ export function useSync() {
           removeFromQueue(item.id);
         } else {
           if (res.status === 'NETWORK_ERROR') break;
-          if (res.status === 401 || res.status === 403) break;
+          if (res.status === 401 || res.status === 403) {
+            useStore.getState().handleAuthError?.(res.status);
+            break;
+          }
           removeFromQueue(item.id);
         }
       } else {
         removeFromQueue(item.id);
       }
+    }
+
+    // Si la cola se vació por completo, actualizar datos desde el servidor
+    if (useStore.getState().syncQueue.length === 0) {
+      useStore.getState().pullInitialData?.();
     }
 
     setIsSyncing(false);
@@ -173,15 +203,16 @@ export function useSync() {
         empresaId
       };
 
-      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/proyectos`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return { success: false, status: response.status };
+      }
 
       if (!response.ok) {
         return { success: false, status: response.status };
@@ -217,14 +248,19 @@ export function useSync() {
         formData.append('fotoUrl', elemento.foto);
       }
 
-      const token = useStore.getState().token;
+      const token = getFreshToken();
       const response = await fetch(`${API_BASE_URL}/api/elementos-unifilares`, {
         method: 'POST',
         headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: formData
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return { success: false, status: response.status };
+      }
 
       if (!response.ok) {
         return { success: false, status: response.status };
@@ -266,15 +302,16 @@ export function useSync() {
         empresaId
       };
 
-      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/subestaciones`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return { success: false, status: response.status };
+      }
 
       if (!response.ok) {
         return { success: false, status: response.status };
@@ -294,15 +331,16 @@ export function useSync() {
         empresaId
       };
 
-      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/puntos-medicion`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return { success: false, status: response.status };
+      }
 
       if (!response.ok) {
         return { success: false, status: response.status };
@@ -322,15 +360,16 @@ export function useSync() {
         empresaId
       };
 
-      const token = useStore.getState().token;
       const response = await fetch(`${API_BASE_URL}/api/ccm`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
+
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return { success: false, status: response.status };
+      }
 
       if (!response.ok) {
         return { success: false, status: response.status };
@@ -343,7 +382,15 @@ export function useSync() {
     }
   };
 
-  return { isOnline, isSyncing, pendingCount: syncQueue.length, triggerSync: procesarColaSincronizacion };
+  return {
+    isOnline,
+    isSyncing,
+    pendingCount: syncQueue.length,
+    triggerSync: procesarColaSincronizacion,
+    syncPendingData: procesarColaSincronizacion,
+    pullInitialData: () => useStore.getState().pullInitialData?.()
+  };
 }
 
 export default useSync;
+
