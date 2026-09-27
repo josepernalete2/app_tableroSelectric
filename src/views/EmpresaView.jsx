@@ -725,18 +725,18 @@ export const EmpresaView = () => {
                         e.stopPropagation();
                         handleDeleteProyecto(proj.id, proj.nombre);
                       }}
-                      className="absolute top-4 right-4 p-2 bg-slate-900 hover:bg-red-950 border border-slate-850 hover:border-red-900/60 text-slate-500 hover:text-red-400 rounded-xl transition-all shadow-md z-10 cursor-pointer"
+                      className="absolute top-4 right-4 p-2 bg-slate-900/90 hover:bg-red-950/40 border border-slate-800 hover:border-red-900/60 text-slate-400 hover:text-red-400 rounded-xl transition-all shadow-md z-10 cursor-pointer opacity-100"
                       title="Eliminar Proyecto"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <div className="space-y-4">
+                  <div className="space-y-4 pr-12 min-w-0">
                     <div className="p-3 bg-slate-900 border border-slate-850 rounded-xl w-max shadow-inner text-amber-500 group-hover:scale-105 transition-transform">
                       <FolderOpen className="w-6 h-6" />
                     </div>
                     
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors tracking-tight truncate">
                         {proj.nombre}
                       </h3>

@@ -102,7 +102,7 @@ export const EditablePoleCell = ({
           setIsEditing(true);
         }}
         title="Editar código de polo"
-        className="no-print opacity-0 group-hover/polecell:opacity-100 transition-opacity ml-1 p-0.5 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 hover:bg-amber-200/50 dark:hover:bg-amber-900/40 rounded cursor-pointer"
+        className="no-print opacity-70 hover:opacity-100 transition-opacity ml-1 p-0.5 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 hover:bg-amber-200/50 dark:hover:bg-amber-900/40 rounded cursor-pointer"
       >
         <Pencil className="w-2.5 h-2.5" />
       </button>

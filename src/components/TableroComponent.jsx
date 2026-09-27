@@ -1112,7 +1112,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                               splitCircuit(cLeft.id);
                             }}
                             title="Separar Polos"
-                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-0 group-hover/cell:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
+                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-80 hover:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
@@ -1190,7 +1190,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         <button
                           onClick={() => groupWithNext(cLeft.id, 'left')}
                           title="Agrupar con siguiente polo"
-                          className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-0 group-hover/pole:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
+                          className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-80 hover:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
                         >
                           <Plus className="w-2.5 h-2.5" />
                         </button>
@@ -1208,7 +1208,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         <button
                           onClick={() => groupWithNext(cRight.id, 'right')}
                           title="Agrupar con siguiente polo"
-                          className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-0 group-hover/pole-right:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
+                          className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-80 hover:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
                         >
                           <Plus className="w-2.5 h-2.5" />
                         </button>
@@ -1302,7 +1302,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                               splitCircuit(cRight.id);
                             }}
                             title="Separar Polos"
-                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-0 group-hover/cell:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
+                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-80 hover:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
                           >
                             <Minus className="w-3 h-3" />
                           </button>

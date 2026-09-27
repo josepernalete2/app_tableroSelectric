@@ -125,23 +125,24 @@ export const DashboardView = () => {
                     onClick={() => navigate(`/empresa/${company.id}`)}
                     className="bg-slate-950 border border-slate-800 hover:border-slate-700 p-5 rounded-2xl shadow-md hover:shadow-lg flex items-center justify-between cursor-pointer transition-all hover:translate-y-[-2px] group"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:bg-amber-500 group-hover:text-slate-950 transition-colors">
+                    <div className="flex items-center gap-4 min-w-0 flex-1 mr-3">
+                      <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:bg-amber-500 group-hover:text-slate-950 transition-colors shrink-0">
                         <Folder className="w-8 h-8 fill-transparent group-hover:fill-slate-950" />
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-400 transition-colors truncate">
                           {company.nombre}
                         </h3>
-                        <p className="text-[10px] text-slate-400 mt-1">
+                        <p className="text-[10px] text-slate-400 mt-1 truncate">
                           {(company.elementosUnifilares || []).length + (company.proyectos || []).reduce((acc, p) => acc + (p.elementosUnifilares || []).length, 0)} Equipos Registrados
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {user?.role !== 'CLIENT' && (
                         <button
+                          type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
                             const ok = await confirm({
@@ -154,7 +155,7 @@ export const DashboardView = () => {
                               deleteCompany(company.id);
                             }
                           }}
-                          className="p-2 hover:bg-red-955/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer animate-in fade-in duration-200"
+                          className="p-2 bg-slate-900/90 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-900/60 rounded-xl transition-all cursor-pointer opacity-100 shadow-xs"
                           title="Eliminar Empresa"
                         >
                           <Trash2 className="w-4 h-4" />
