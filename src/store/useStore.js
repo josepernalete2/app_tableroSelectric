@@ -403,45 +403,102 @@ export const useStore = create(
       },
 
       login: async (username, password) => {
-        if (navigator.onLine) {
+        const cleanUsername = (username || '').trim();
+        let networkFailed = false;
+
+        if (typeof navigator === 'undefined' || navigator.onLine) {
           try {
             const res = await fetch(`${API_BASE_URL}/api/login`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username, password })
+              body: JSON.stringify({ username: cleanUsername, password })
             });
-            const data = await res.json();
-            if (data.ok) {
-              set({ user: data.user, token: data.token });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.ok) {
+              // Cachear usuario para soporte offline posterior
+              const currentUsers = get().usersList || [];
+              const userIndex = currentUsers.findIndex(
+                u => (u.username || '').toLowerCase() === data.user.username.toLowerCase()
+              );
+              let updatedUsers = [...currentUsers];
+              const userEntry = {
+                id: data.user.id,
+                username: data.user.username,
+                role: data.user.role,
+                companyId: data.user.companyId,
+                cachedAt: new Date().toISOString()
+              };
+
+              if (userIndex >= 0) {
+                updatedUsers[userIndex] = { ...updatedUsers[userIndex], ...userEntry };
+              } else {
+                updatedUsers.push(userEntry);
+              }
+
+              set({ 
+                user: data.user, 
+                token: data.token,
+                usersList: updatedUsers
+              });
+
               get().fetchMessagesList(data.user.id);
               get().fetchUsersList();
-              // NUEVA RUTINA: hidratación inicial de datos al login
               get().pullInitialData();
               return { success: true, user: data.user };
-            } else {
-              return { success: false, error: data.error || 'Usuario o contraseña incorrectos.' };
+            }
+
+            // Si el servidor respondió con error de credenciales explícito (401, 400, 403)
+            if (res.status === 401 || res.status === 400 || res.status === 403) {
+              return { 
+                success: false, 
+                error: data.error || 'Usuario o contraseña incorrectos.' 
+              };
+            }
+
+            if (res.status >= 500) {
+              return {
+                success: false,
+                error: data.error || `Error en el servidor (${res.status}). Intente nuevamente.`
+              };
             }
           } catch (e) {
-            console.error('Error de red al iniciar sesión:', e);
+            console.warn('⚠️ Error de conexión con el servidor central al iniciar sesión:', e);
+            networkFailed = true;
           }
+        } else {
+          networkFailed = true;
         }
 
-        // Fallback offline seguro para desarrollo sin contraseñas expuestas
-        let list = get().usersList || [];
-        const found = list.find((u) => {
-          const userKey = (u.username || u.email || '').toLowerCase().trim();
-          const inputKey = username.toLowerCase().trim();
-          return userKey === inputKey ||
-                 (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
-                 (userKey === 'admin1@selectric.com' && inputKey === 'admin1');
-        });
+        // Fallback offline: solo si la red falló o el dispositivo está desconectado
+        if (networkFailed) {
+          const list = get().usersList || [];
+          const inputKey = cleanUsername.toLowerCase();
+          const found = list.find((u) => {
+            const userKey = (u.username || u.email || '').toLowerCase().trim();
+            return userKey === inputKey ||
+                   (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
+                   (userKey === 'admin1@selectric.com' && inputKey === 'admin1');
+          });
 
-        if (found) {
-          set({ user: { id: found.id, username: found.username, role: found.role }, token: 'mock-offline-token' });
-          get().pullInitialData();
-          return { success: true, user: found };
+          if (found) {
+            set({ 
+              user: { id: found.id, username: found.username, role: found.role, companyId: found.companyId }, 
+              token: 'mock-offline-token' 
+            });
+            get().pullInitialData();
+            return { success: true, user: found, isOffline: true };
+          }
+
+          return { 
+            success: false, 
+            error: 'Sin conexión al servidor central. Inicie sesión con internet por primera vez para habilitar el modo offline para este usuario.',
+            isNetworkError: true 
+          };
         }
-        return { success: false, error: 'Usuario o contraseña incorrectos en modo offline.' };
+
+        return { success: false, error: 'Usuario o contraseña incorrectos.' };
       },
 
       logout: () => {

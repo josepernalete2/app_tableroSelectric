@@ -42,6 +42,8 @@ const router = Router();
 
 // Endpoints Públicos de Autenticación y Recuperación
 router.post('/login', loginUsuario);
+router.post('/auth/login', loginUsuario);
+router.post('/users/login', loginUsuario);
 router.post('/users/request-reset', solicitarResetPassword);
 router.post('/users/verify-2fa', verificar2FA);
 

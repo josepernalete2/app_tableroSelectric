@@ -1,28 +1,41 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useStore from '../store/useStore';
-import { Zap, ShieldCheck } from 'lucide-react';
+import { Zap, ShieldCheck, Loader2, AlertCircle, WifiOff } from 'lucide-react';
 
 export const LoginView = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isNetworkError, setIsNetworkError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const login = useStore((state) => state.login);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setIsNetworkError(false);
+
     if (!username || !password) {
       setError('Por favor, ingresa tus credenciales.');
       return;
     }
     
     if (username.trim().length >= 3 && password.length >= 4) {
-      const result = await login(username.trim(), password);
-      if (result.success) {
-        navigate('/');
-      } else {
-        setError(result.error);
+      setIsLoading(true);
+      try {
+        const result = await login(username.trim(), password);
+        if (result.success) {
+          navigate('/');
+        } else {
+          setError(result.error);
+          setIsNetworkError(Boolean(result.isNetworkError));
+        }
+      } catch (err) {
+        setError(err.message || 'Error inesperado al iniciar sesión.');
+      } finally {
+        setIsLoading(false);
       }
     } else {
       setError('El usuario debe tener al menos 3 caracteres y la contraseña al menos 4 caracteres.');
@@ -50,8 +63,20 @@ export const LoginView = () => {
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="p-3 bg-red-955/20 border border-red-800 rounded-xl text-xs text-red-400 text-center font-medium">
-              ⚠️ {error}
+            <div className={`p-4 rounded-xl text-xs flex items-start gap-2.5 leading-relaxed ${
+              isNetworkError 
+                ? 'bg-amber-950/40 border border-amber-800/80 text-amber-300' 
+                : 'bg-red-950/40 border border-red-800/80 text-red-400'
+            }`}>
+              {isNetworkError ? (
+                <WifiOff className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+              )}
+              <div className="flex-1">
+                <p className="font-bold mb-0.5">{isNetworkError ? 'Aviso de Conectividad' : 'Error de Autenticación'}</p>
+                <p>{error}</p>
+              </div>
             </div>
           )}
 
@@ -66,7 +91,8 @@ export const LoginView = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="ej. admin1, inspector1"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm focus:outline-none text-slate-100 placeholder-slate-500 h-12"
+                disabled={isLoading}
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm focus:outline-none text-slate-100 placeholder-slate-500 h-12 disabled:opacity-50"
               />
             </div>
 
@@ -80,16 +106,25 @@ export const LoginView = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm focus:outline-none text-slate-100 placeholder-slate-500 h-12"
+                disabled={isLoading}
+                className="w-full px-4 py-3 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm focus:outline-none text-slate-100 placeholder-slate-500 h-12 disabled:opacity-50"
               />
             </div>
           </div>
 
           <button
             type="submit"
-            className="w-full h-12 bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 font-bold rounded-xl shadow-lg hover:shadow-amber-500/15 transition-all text-sm cursor-pointer"
+            disabled={isLoading}
+            className="w-full h-12 bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 font-bold rounded-xl shadow-lg hover:shadow-amber-500/15 transition-all text-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            Iniciar Sesión
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                <span>Verificando credenciales...</span>
+              </>
+            ) : (
+              <span>Iniciar Sesión</span>
+            )}
           </button>
         </form>
 
