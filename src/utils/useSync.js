@@ -106,12 +106,15 @@ export function useSync() {
         continue;
       }
 
-      let entityName = 'Tablero';
+      let entityName = 'ElementoUnifilar';
       if (item.tipo === 'PROYECTO') entityName = 'Proyecto';
       else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') entityName = 'ElementoUnifilar';
       else if (item.tipo === 'SUBESTACION') entityName = 'Subestacion';
       else if (item.tipo === 'PUNTO_MEDICION') entityName = 'PuntoMedicion';
       else if (item.tipo === 'CCM') entityName = 'Ccm';
+      else if (item.tipo === 'INSPECCION_TERMOGRAFICA') entityName = 'InspeccionTermografica';
+      else if (item.tipo === 'INSPECCION_ATERRAMIENTO') entityName = 'InspeccionAterramiento';
+      else if (item.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE') entityName = 'InspeccionTanqueCombustible';
 
       jsonMutations.push({
         entity: entityName,

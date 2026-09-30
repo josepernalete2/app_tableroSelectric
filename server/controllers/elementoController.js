@@ -179,6 +179,13 @@ export const crearElementoUnifilar = async (req, res, next) => {
         });
       }
 
+      const updateFotoData = {};
+      if (finalFoto !== null && finalFoto !== undefined) {
+        updateFotoData.foto = finalFoto;
+      } else if (req.body.eliminarFoto === 'true' || req.body.deletePhoto === 'true') {
+        updateFotoData.foto = null;
+      }
+
       return await tx.elementoUnifilar.upsert({
         where: { id: id || '' },
         update: {
@@ -186,7 +193,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           tipoElemento,
           ubicacion: ubicacion || null,
           alimentadoPor: alimentadoPor || null,
-          foto: finalFoto,
+          ...updateFotoData,
           observacionesGenerales: observacionesGenerales || null,
           datosTecnicos: parsedDatosTecnicos,
           version: { increment: 1 },
@@ -201,7 +208,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           tipoElemento,
           ubicacion: ubicacion || null,
           alimentadoPor: alimentadoPor || null,
-          foto: finalFoto,
+          foto: finalFoto || null,
           observacionesGenerales: observacionesGenerales || null,
           datosTecnicos: parsedDatosTecnicos,
           version: 1,

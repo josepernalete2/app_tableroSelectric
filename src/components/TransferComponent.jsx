@@ -909,6 +909,11 @@ export default function TransferComponent({
               previewUrl={previewUrl}
               onImageSelected={(file) => {
                 setFotoBlob(file);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  setFotoSrc(reader.result);
+                };
+                reader.readAsDataURL(file);
                 if (previewUrl) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(URL.createObjectURL(file));
               }}

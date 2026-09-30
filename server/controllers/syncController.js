@@ -10,7 +10,10 @@ const ALLOWED_SYNC_ENTITIES = new Set([
   'ccm',
   'alimentador',
   'proyecto',
-  'empresa'
+  'empresa',
+  'inspeccionTermografica',
+  'inspeccionAterramiento',
+  'inspeccionTanqueCombustible'
 ]);
 
 // Jerarquía de dependencias relacionales para garantizar orden de inserción/borrado correcto (CONC-01)
@@ -23,7 +26,58 @@ const ENTITY_PRIORITY = {
   puntoMedicion: 4,
   tablero: 4,
   elementoUnifilar: 4,
+  inspeccionTermografica: 4,
+  inspeccionAterramiento: 4,
+  inspeccionTanqueCombustible: 4,
   circuito: 5
+};
+
+// Mapeo exhaustivo y seguro de nombres de entidades del frontend a delegates de Prisma
+export const mapEntityToPrismaModel = (entity) => {
+  if (!entity) return '';
+  const clean = String(entity).trim();
+  const mapping = {
+    'empresa': 'empresa',
+    'Empresa': 'empresa',
+    'EMPRESA': 'empresa',
+    'proyecto': 'proyecto',
+    'Proyecto': 'proyecto',
+    'PROYECTO': 'proyecto',
+    'alimentador': 'alimentador',
+    'Alimentador': 'alimentador',
+    'ALIMENTADOR': 'alimentador',
+    'tablero': 'tablero',
+    'Tablero': 'tablero',
+    'TABLERO': 'tablero',
+    'circuito': 'circuito',
+    'Circuito': 'circuito',
+    'CIRCUITO': 'circuito',
+    'elementoUnifilar': 'elementoUnifilar',
+    'ElementoUnifilar': 'elementoUnifilar',
+    'ELEMENTO_UNIFILAR': 'elementoUnifilar',
+    'subestacion': 'subestacion',
+    'Subestacion': 'subestacion',
+    'SUBESTACION': 'subestacion',
+    'INSPECCION_SUBESTACION': 'subestacion',
+    'puntoMedicion': 'puntoMedicion',
+    'PuntoMedicion': 'puntoMedicion',
+    'PUNTO_MEDICION': 'puntoMedicion',
+    'ccm': 'ccm',
+    'Ccm': 'ccm',
+    'CCM': 'ccm',
+    'inspeccionTermografica': 'inspeccionTermografica',
+    'InspeccionTermografica': 'inspeccionTermografica',
+    'INSPECCION_TERMOGRAFICA': 'inspeccionTermografica',
+    'inspeccionAterramiento': 'inspeccionAterramiento',
+    'InspeccionAterramiento': 'inspeccionAterramiento',
+    'INSPECCION_ATERRAMIENTO': 'inspeccionAterramiento',
+    'inspeccionTanqueCombustible': 'inspeccionTanqueCombustible',
+    'InspeccionTanqueCombustible': 'inspeccionTanqueCombustible',
+    'INSPECCION_TANQUE_COMBUSTIBLE': 'inspeccionTanqueCombustible'
+  };
+
+  if (mapping[clean]) return mapping[clean];
+  return clean.charAt(0).toLowerCase() + clean.slice(1);
 };
 
 // Campos del sistema restringidos que nunca deben ser mutados vía sync batch (SEC-02)
@@ -41,8 +95,8 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
     // CREATE/UPDATE: Padres primero -> Hijos después
     // DELETE: Hijos primero -> Padres después
     const sortedMutations = [...mutations].sort((a, b) => {
-      const modelA = (a.entity || '').charAt(0).toLowerCase() + (a.entity || '').slice(1);
-      const modelB = (b.entity || '').charAt(0).toLowerCase() + (b.entity || '').slice(1);
+      const modelA = mapEntityToPrismaModel(a.entity);
+      const modelB = mapEntityToPrismaModel(b.entity);
       const priorityA = ENTITY_PRIORITY[modelA] || 99;
       const priorityB = ENTITY_PRIORITY[modelB] || 99;
 
@@ -65,7 +119,7 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           continue;
         }
 
-        const modelName = entity.charAt(0).toLowerCase() + entity.slice(1);
+        const modelName = mapEntityToPrismaModel(entity);
 
         // Control de Seguridad: Solo permitir entidades en lista blanca
         if (!ALLOWED_SYNC_ENTITIES.has(modelName)) {
@@ -161,7 +215,7 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           } else {
             // Crear registro nuevo
             const createPayload = { ...sanitizedPayload, id };
-            if (['elementoUnifilar', 'subestacion', 'tablero', 'circuito', 'puntoMedicion', 'ccm'].includes(modelName)) {
+            if (['elementoUnifilar', 'subestacion', 'tablero', 'circuito', 'puntoMedicion', 'ccm', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
               createPayload.version = 1;
             }
 
@@ -213,7 +267,7 @@ export const pullData = async (req, res) => {
       where.updatedAt = { gte: ts };
     }
 
-    // Traer empresas con todas sus relaciones anidadas
+    // Traer empresas con todas sus relaciones anidadas válidas de schema.prisma
     const companies = await prisma.empresa.findMany({
       where,
       include: {
@@ -224,17 +278,14 @@ export const pullData = async (req, res) => {
                 circuitos: true
               }
             },
-            elementosUnifilares: {
-              include: {
-                inspeccionesSubestacion: true,
-                puntosMedicion: true,
-                ccmList: true
-              }
-            },
-            inspeccionesSubestacion: true,
+            elementosUnifilares: true,
+            subestaciones: true,
             puntosMedicion: true,
             ccmList: true,
-            alimentadores: true
+            alimentadores: true,
+            inspeccionesTermograficas: true,
+            inspeccionesAterramiento: true,
+            inspeccionesTanquesCombustible: true
           }
         }
       }
@@ -243,30 +294,34 @@ export const pullData = async (req, res) => {
     // Formatear datos para el frontend
     const formattedCompanies = companies.map(company => ({
       ...company,
-      proyectos: company.proyectos.map(proyecto => ({
+      proyectos: (company.proyectos || []).map(proyecto => ({
         ...proyecto,
-        tableros: proyecto.tableros.map(tablero => ({
+        tableros: (proyecto.tableros || []).map(tablero => ({
           ...tablero,
           circuitos: tablero.circuitos || []
         })),
-        elementosUnifilares: proyecto.elementosUnifilares.map(elem => ({
+        elementosUnifilares: (proyecto.elementosUnifilares || []).map(elem => ({
           ...elem,
-          foto: elem.foto ? elem.foto.toString('base64') : null,
-          fotoBlob: elem.fotoBlob
+          foto: elem.foto || null,
+          fotoBlob: null
         })),
-        inspeccionesSubestacion: proyecto.inspeccionesSubestacion.map(sub => ({
+        inspeccionesSubestacion: (proyecto.subestaciones || []).map(sub => ({
           ...sub,
-          foto: sub.foto ? sub.foto.toString('base64') : null
+          foto: sub.foto || null
         })),
-        puntosMedicion: proyecto.puntosMedicion.map(pm => ({
+        subestaciones: (proyecto.subestaciones || []),
+        puntosMedicion: (proyecto.puntosMedicion || []).map(pm => ({
           ...pm,
-          foto: pm.foto ? pm.foto.toString('base64') : null
+          foto: pm.foto || null
         })),
-        ccmList: proyecto.ccmList.map(ccm => ({
+        ccmList: (proyecto.ccmList || []).map(ccm => ({
           ...ccm,
-          foto: ccm.foto ? ccm.foto.toString('base64') : null
+          foto: ccm.foto || null
         })),
-        alimentadores: proyecto.alimentadores || []
+        alimentadores: proyecto.alimentadores || [],
+        inspeccionesTermograficas: proyecto.inspeccionesTermograficas || [],
+        inspeccionesAterramiento: proyecto.inspeccionesAterramiento || [],
+        inspeccionesTanquesCombustible: proyecto.inspeccionesTanquesCombustible || []
       }))
     }));
 

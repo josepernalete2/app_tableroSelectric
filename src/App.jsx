@@ -22,7 +22,8 @@ import { ArrowLeft, User, LogOut, Printer } from 'lucide-react';
 // Wrapper para Rutas Protegidas
 const ProtectedRoute = ({ children }) => {
   const user = useStore((state) => state.user);
-  if (!user) {
+  const hasToken = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+  if (!user && !hasToken) {
     return <Navigate to="/login" replace />;
   }
   return children;

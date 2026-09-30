@@ -13,12 +13,23 @@ export const SafePreviewImage = ({ blob, src, alt, className }) => {
       return () => {
         URL.revokeObjectURL(url);
       };
+    } else if (blob && (blob instanceof ArrayBuffer || ArrayBuffer.isView(blob))) {
+      try {
+        const b = new Blob([blob]);
+        const url = URL.createObjectURL(b);
+        setObjectUrl(url);
+        return () => {
+          URL.revokeObjectURL(url);
+        };
+      } catch (err) {
+        setObjectUrl(null);
+      }
     } else {
       setObjectUrl(null);
     }
   }, [blob]);
 
-  const finalSrc = objectUrl || src;
+  const finalSrc = objectUrl || (typeof src === 'string' ? src : null);
   if (!finalSrc) return null;
 
   return <img src={finalSrc} alt={alt || "Evidencia fotográfica"} className={className} />;

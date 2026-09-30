@@ -3138,22 +3138,28 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           {/* Fotos / Evidencia */}
           <div className="p-4 bg-slate-900/60 text-center font-mono print:bg-white print:border-black">
             <DualPhotoUploader
-              fotoPrincipal={fotoBlob}
-              fotoPrincipalSrc={previewUrl || fotoSrc}
-              fotoTermica={dt.fotoTermicaBlob}
-              fotoTermicaSrc={dt.fotoTermicaUrl || dt.fotoTermica}
-              isEditing={isEditing}
-              onFotoPrincipalChange={(blob, src) => {
-                setFotoBlob(blob);
-                setFotoSrc(src);
+              fotoBlob={fotoBlob}
+              fotoSrc={fotoSrc}
+              previewUrl={previewUrl}
+              onImageSelected={(file) => {
+                setFotoBlob(file);
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  setFotoSrc(reader.result);
+                };
+                reader.readAsDataURL(file);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(URL.createObjectURL(file));
               }}
-              onFotoTermicaChange={(blob, src) => {
-                handleDtChange('fotoTermicaBlob', blob);
-                handleDtChange('fotoTermica', src);
-                handleDtChange('fotoTermicaUrl', src);
+              onRemove={() => {
+                setFotoBlob(null);
+                setFotoSrc(null);
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
               }}
-              labelPrincipal="Foto del Medidor / Punto de Suministro"
-              labelTermica="Foto Termográfica del Medidor / Acometida"
+              readOnly={!isEditing}
+              label="Foto del Medidor / Punto de Suministro"
+              sublabel="Cámara en vivo o selección de galería"
             />
           </div>
 

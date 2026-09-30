@@ -55,27 +55,33 @@ export const crearInspeccionSubestacion = async (req, res, next) => {
       });
     }
 
-    // Inserción de inspección visual de subestación en PostgreSQL
-    const nuevaInspeccion = await prisma.subestacion.create({
-      data: {
+    const payloadData = {
+      nombre,
+      ubicacion: ubicacion || '',
+      fecha: fecha || '',
+      hora: hora || '',
+      inspector: inspector || '',
+      nivelTension: nivelTension || '',
+      estadoEntorno: estadoEntorno || {},
+      obrasCiviles: obrasCiviles || {},
+      equiposPrincipales: equiposPrincipales || {},
+      puestaTierra: puestaTierra || {},
+      edificioControl: edificioControl || {},
+      firmaInspector: firmaInspector || null,
+      firmaSupervisor: firmaSupervisor || null,
+      proyecto: {
+        connect: { id: proyectoId }
+      },
+      ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
+    };
+
+    // Inserción o actualización de inspección visual de subestación en PostgreSQL
+    const nuevaInspeccion = await prisma.subestacion.upsert({
+      where: { id: id || '' },
+      update: payloadData,
+      create: {
         id,
-        nombre,
-        ubicacion: ubicacion || '',
-        fecha: fecha || '',
-        hora: hora || '',
-        inspector: inspector || '',
-        nivelTension: nivelTension || '',
-        estadoEntorno: estadoEntorno || {},
-        obrasCiviles: obrasCiviles || {},
-        equiposPrincipales: equiposPrincipales || {},
-        puestaTierra: puestaTierra || {},
-        edificioControl: edificioControl || {},
-        firmaInspector: firmaInspector || null,
-        firmaSupervisor: firmaSupervisor || null,
-        proyecto: {
-          connect: { id: proyectoId }
-        },
-        ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
+        ...payloadData
       }
     });
 

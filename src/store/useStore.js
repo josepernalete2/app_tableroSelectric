@@ -234,11 +234,28 @@ const initialCompanies = [
   }
 ];
 
+const getInitialUser = () => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('user') : null;
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const getInitialToken = () => {
+  try {
+    return typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || null) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const useStore = create(
   persist(
     (set, get) => ({
-      user: null,
-      token: null,
+      user: getInitialUser(),
+      token: getInitialToken(),
       usersList: [
         { id: 'u-1', username: 'admin1', role: 'ADMIN' },
         { id: 'u-2', username: 'admin2', role: 'ADMIN' }
@@ -436,6 +453,13 @@ export const useStore = create(
               } else {
                 updatedUsers.push(userEntry);
               }
+
+              try {
+                if (typeof localStorage !== 'undefined') {
+                  localStorage.setItem('user', JSON.stringify(data.user));
+                  localStorage.setItem('token', data.token);
+                }
+              } catch (e) {}
 
               set({ 
                 user: data.user, 
@@ -914,6 +938,53 @@ export const useStore = create(
         set((state) => ({
           companies: state.companies.filter((c) => c.id !== companyId)
         }));
+      },
+
+      updateProyecto: async (companyId, proyectoId, updatedData) => {
+        set((state) => ({
+          companies: state.companies.map((c) => {
+            if (c.id === companyId) {
+              return {
+                ...c,
+                proyectos: (c.proyectos || []).map((p) => {
+                  if (p.id === proyectoId) {
+                    return { ...p, ...updatedData };
+                  }
+                  return p;
+                })
+              };
+            }
+            return c;
+          }),
+          proyectosLocales: (state.proyectosLocales || []).map((p) => {
+            if (p.id === proyectoId) {
+              return { ...p, ...updatedData };
+            }
+            return p;
+          }),
+          syncQueue: [...state.syncQueue, {
+            id: proyectoId,
+            tipo: 'PROYECTO',
+            companyId,
+            payload: { id: proyectoId, ...updatedData, empresaId: companyId }
+          }]
+        }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/proyectos/${proyectoId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(updatedData)
+            });
+          } catch (e) {
+            console.error('Error al actualizar proyecto en el servidor:', e);
+          }
+        }
       },
 
       deleteProyecto: async (companyId, proyectoId) => {
