@@ -3111,10 +3111,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
           <div className="p-4 border-b border-slate-700 bg-slate-900/30">
             <MetrologiaElectricaSection
-              datosTecnicos={dt}
-              isEditing={isEditing}
-              onChange={handleDtChange}
-              onNestedChange={handleNestedDtChange}
+              mediciones={dt.mediciones || {}}
+              onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
+              readOnly={!isEditing}
+              titulo="Metrología Eléctrica en Punto de Suministro (COVENIN 159:1997)"
+              subtitulo="Tensiones L-L, L-N y 5 Canales de Corriente (Fases, Neutro y Tierra)"
             />
           </div>
 

@@ -1456,20 +1456,31 @@ export const useStore = create(
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
-            proyectos: (c.proyectos || []).map((p) => {
-              if (p.id === proyectoId) {
-                const puntos = p.puntosMedicion || [];
-                return {
-                  ...p,
-                  puntosMedicion: puntos.map((item) => {
-                    if (item.id === puntoId) {
-                      return { ...item, ...updatedData };
-                    }
-                    return item;
-                  })
-                };
+            elementosUnifilares: (c.elementosUnifilares || []).map((item) => {
+              if (item.id === puntoId) {
+                return { ...item, ...updatedData };
               }
-              return p;
+              return item;
+            }),
+            proyectos: (c.proyectos || []).map((p) => {
+              const matchesProj = !proyectoId || p.id === proyectoId;
+              const puntos = p.puntosMedicion || [];
+              const elementos = p.elementosUnifilares || [];
+              return {
+                ...p,
+                puntosMedicion: puntos.map((item) => {
+                  if (item.id === puntoId) {
+                    return { ...item, ...updatedData };
+                  }
+                  return item;
+                }),
+                elementosUnifilares: matchesProj ? elementos.map((item) => {
+                  if (item.id === puntoId) {
+                    return { ...item, ...updatedData };
+                  }
+                  return item;
+                }) : elementos
+              };
             })
           }));
 
@@ -1481,7 +1492,7 @@ export const useStore = create(
           });
 
           const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === puntoId && item.tipo === 'PUNTO_MEDICION') {
+            if (item.id === puntoId && (item.tipo === 'PUNTO_MEDICION' || item.tipo === 'ELEMENTO_UNIFILAR')) {
               return { ...item, payload: { ...item.payload, ...updatedData } };
             }
             return item;

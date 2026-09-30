@@ -3,35 +3,55 @@ import { Activity, Zap, Shield, Gauge } from 'lucide-react';
 
 export default function MetrologiaElectricaSection({
   mediciones = {},
+  datosTecnicos,
   onChange,
+  onNestedChange,
   readOnly = false,
+  isEditing,
   titulo = "Metrología Eléctrica y Medición de Red (COVENIN 159)",
   subtitulo = "Lectura de tensiones desglosadas L-L, L-N y 5 canales de corriente de servicio"
 }) {
+  const isReadOnly = isEditing !== undefined ? !isEditing : Boolean(readOnly);
+
+  // Extraer mediciones desde prop directa o desde datosTecnicos
+  const currentMediciones = (mediciones && typeof mediciones === 'object')
+    ? mediciones
+    : (datosTecnicos?.mediciones && typeof datosTecnicos.mediciones === 'object')
+      ? datosTecnicos.mediciones
+      : (datosTecnicos || {});
+
   const handleChange = (field, val) => {
-    if (readOnly || !onChange) return;
-    onChange({
-      ...mediciones,
+    if (isReadOnly) return;
+    const updated = {
+      ...currentMediciones,
       [field]: val
-    });
+    };
+
+    if (typeof onNestedChange === 'function') {
+      onNestedChange('mediciones', field, val);
+    }
+
+    if (typeof onChange === 'function') {
+      onChange(updated, field, val);
+    }
   };
 
   // Voltajes Línea-Línea (L-L)
-  const v_l1_l2 = mediciones.v_l1_l2 ?? mediciones.v_ab ?? mediciones.vab ?? '';
-  const v_l1_l3 = mediciones.v_l1_l3 ?? mediciones.v_ca ?? mediciones.vac ?? '';
-  const v_l2_l3 = mediciones.v_l2_l3 ?? mediciones.v_bc ?? mediciones.vbc ?? '';
+  const v_l1_l2 = currentMediciones.v_l1_l2 ?? currentMediciones.v_ab ?? currentMediciones.vab ?? '';
+  const v_l1_l3 = currentMediciones.v_l1_l3 ?? currentMediciones.v_ca ?? currentMediciones.vac ?? currentMediciones.v_l3_l1 ?? '';
+  const v_l2_l3 = currentMediciones.v_l2_l3 ?? currentMediciones.v_bc ?? currentMediciones.vbc ?? '';
 
   // Voltajes Línea-Neutro (L-N)
-  const v_l1_n = mediciones.v_l1_n ?? mediciones.v_an ?? mediciones.van ?? '';
-  const v_l2_n = mediciones.v_l2_n ?? mediciones.v_bn ?? mediciones.vbn ?? '';
-  const v_l3_n = mediciones.v_l3_n ?? mediciones.v_cn ?? mediciones.vcn ?? '';
+  const v_l1_n = currentMediciones.v_l1_n ?? currentMediciones.v_an ?? currentMediciones.van ?? '';
+  const v_l2_n = currentMediciones.v_l2_n ?? currentMediciones.v_bn ?? currentMediciones.vbn ?? '';
+  const v_l3_n = currentMediciones.v_l3_n ?? currentMediciones.v_cn ?? currentMediciones.vcn ?? '';
 
   // 5 Canales de Corriente (A)
-  const i_l1 = mediciones.i_l1 ?? mediciones.ia ?? mediciones.il1 ?? '';
-  const i_l2 = mediciones.i_l2 ?? mediciones.ib ?? mediciones.il2 ?? '';
-  const i_l3 = mediciones.i_l3 ?? mediciones.ic ?? mediciones.il3 ?? '';
-  const i_n = mediciones.i_n ?? mediciones.in ?? '';
-  const i_pe = mediciones.i_pe ?? mediciones.ipe ?? mediciones.itierra ?? '';
+  const i_l1 = currentMediciones.i_l1 ?? currentMediciones.ia ?? currentMediciones.il1 ?? '';
+  const i_l2 = currentMediciones.i_l2 ?? currentMediciones.ib ?? currentMediciones.il2 ?? '';
+  const i_l3 = currentMediciones.i_l3 ?? currentMediciones.ic ?? currentMediciones.il3 ?? '';
+  const i_n = currentMediciones.i_n ?? currentMediciones.in ?? currentMediciones.ineutro ?? '';
+  const i_pe = currentMediciones.i_pe ?? currentMediciones.ipe ?? currentMediciones.itierra ?? '';
 
   return (
     <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 md:p-5 space-y-4 print:bg-white print:border-gray-300 print:text-black font-sans">
@@ -66,33 +86,33 @@ export default function MetrologiaElectricaSection({
               <label className="block text-[10px] font-bold text-slate-400 mb-1">V L1-L2</label>
               <input
                 type="text"
-                disabled={readOnly}
+                disabled={isReadOnly}
                 value={v_l1_l2}
                 onChange={(e) => handleChange('v_l1_l2', e.target.value)}
                 placeholder="Ej. 208"
-                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-400 mb-1">V L1-L3</label>
               <input
                 type="text"
-                disabled={readOnly}
+                disabled={isReadOnly}
                 value={v_l1_l3}
                 onChange={(e) => handleChange('v_l1_l3', e.target.value)}
                 placeholder="Ej. 208"
-                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-400 mb-1">V L2-L3</label>
               <input
                 type="text"
-                disabled={readOnly}
+                disabled={isReadOnly}
                 value={v_l2_l3}
                 onChange={(e) => handleChange('v_l2_l3', e.target.value)}
                 placeholder="Ej. 208"
-                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -111,33 +131,33 @@ export default function MetrologiaElectricaSection({
               <label className="block text-[10px] font-bold text-slate-400 mb-1">V L1-N</label>
               <input
                 type="text"
-                disabled={readOnly}
+                disabled={isReadOnly}
                 value={v_l1_n}
                 onChange={(e) => handleChange('v_l1_n', e.target.value)}
                 placeholder="Ej. 120"
-                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-400 mb-1">V L2-N</label>
               <input
                 type="text"
-                disabled={readOnly}
+                disabled={isReadOnly}
                 value={v_l2_n}
                 onChange={(e) => handleChange('v_l2_n', e.target.value)}
                 placeholder="Ej. 120"
-                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-slate-400 mb-1">V L3-N</label>
               <input
                 type="text"
-                disabled={readOnly}
+                disabled={isReadOnly}
                 value={v_l3_n}
                 onChange={(e) => handleChange('v_l3_n', e.target.value)}
                 placeholder="Ej. 120"
-                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all"
+                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2.5 py-1.5 text-slate-100 text-center text-xs outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -159,11 +179,11 @@ export default function MetrologiaElectricaSection({
             </label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={i_l1}
               onChange={(e) => handleChange('i_l1', e.target.value)}
               placeholder="Ej. 650"
-              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2 py-1.5 text-slate-100 text-center text-xs outline-none font-bold"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2 py-1.5 text-slate-100 text-center text-xs outline-none font-bold disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -172,11 +192,11 @@ export default function MetrologiaElectricaSection({
             </label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={i_l2}
               onChange={(e) => handleChange('i_l2', e.target.value)}
               placeholder="Ej. 630"
-              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2 py-1.5 text-slate-100 text-center text-xs outline-none font-bold"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2 py-1.5 text-slate-100 text-center text-xs outline-none font-bold disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -185,11 +205,11 @@ export default function MetrologiaElectricaSection({
             </label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={i_l3}
               onChange={(e) => handleChange('i_l3', e.target.value)}
               placeholder="Ej. 640"
-              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2 py-1.5 text-slate-100 text-center text-xs outline-none font-bold"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-lg px-2 py-1.5 text-slate-100 text-center text-xs outline-none font-bold disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
           <div>
@@ -198,11 +218,11 @@ export default function MetrologiaElectricaSection({
             </label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={i_n}
               onChange={(e) => handleChange('i_n', e.target.value)}
               placeholder="Ej. 35"
-              className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2 py-1.5 text-cyan-300 text-center text-xs outline-none font-bold"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-2 py-1.5 text-cyan-300 text-center text-xs outline-none font-bold disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
           <div className="col-span-2 sm:col-span-1">
@@ -211,11 +231,11 @@ export default function MetrologiaElectricaSection({
             </label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={isReadOnly}
               value={i_pe}
               onChange={(e) => handleChange('i_pe', e.target.value)}
               placeholder="Ej. 0.5"
-              className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-emerald-300 text-center text-xs outline-none font-bold"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-emerald-300 text-center text-xs outline-none font-bold disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
         </div>
