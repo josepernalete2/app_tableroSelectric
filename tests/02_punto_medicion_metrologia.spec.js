@@ -14,32 +14,44 @@ test.describe('Suite 02: Punto de Medición y Metrología Eléctrica', () => {
   });
 
   test('Debe ingresar a una ficha técnica con Metrología, editar valores y persistir tras recargar', async ({ page }) => {
-    // 1. Entrar a la primera empresa
-    const empresaCard = page.locator('div[class*="cursor-pointer"]:has(h3)').first();
-    await expect(empresaCard).toBeVisible({ timeout: 10000 });
-    await empresaCard.click();
+    const uniqueSuffix = Date.now().toString().slice(-4);
+    const nombreEmpresa = `EMPRESA METROLOGIA ${uniqueSuffix}`;
+    const nombreProyecto = `PROYECTO METROLOGIA ${uniqueSuffix}`;
 
-    // 2. Entrar al primer proyecto
-    await page.waitForURL(/\/empresa\/[^\/]+$/, { timeout: 10000 });
-    const projectCard = page.locator('div[class*="cursor-pointer"]:has(h3)').first();
-    await expect(projectCard).toBeVisible({ timeout: 10000 });
-    await projectCard.click();
+    // 1. Crear empresa dedicada
+    await page.locator('button:has-text("Registrar Empresa")').first().click();
+    await page.locator('input[placeholder*="Farmatodo" i], form input[type="text"]').first().fill(nombreEmpresa);
+    await page.locator('input[placeholder*="J-12345678-9" i]').first().fill(`J-3344${uniqueSuffix}-0`);
+    await page.locator('input[placeholder*="Av. Araure" i]').first().fill('Av. Libertador, Edif. Torre B, Piso 4');
+    await page.locator('button[type="submit"]:has-text("Registrar")').first().click();
+    await page.waitForTimeout(1000);
 
+    // Entrar a la empresa
+    const cardEmpresa = page.locator(`text=${nombreEmpresa}`).first();
+    await expect(cardEmpresa).toBeVisible({ timeout: 10000 });
+    await cardEmpresa.click();
+    await page.waitForURL(/\/empresa\//, { timeout: 10000 });
+
+    // 2. Crear proyecto dedicado
+    await page.locator('button:has-text("Crear Proyecto")').first().click();
+    await page.locator('form input[type="text"]').first().fill(nombreProyecto);
+    await page.locator('button[type="submit"]:has-text("Crear Proyecto")').first().click();
+    await page.waitForTimeout(1000);
+
+    // Entrar al proyecto
+    const cardProj = page.locator(`text=${nombreProyecto}`).first();
+    await expect(cardProj).toBeVisible({ timeout: 10000 });
+    await cardProj.click();
     await page.waitForURL(/\/proyecto\//, { timeout: 10000 });
-    await page.waitForTimeout(500);
 
-    // 3. Localizar elemento Punto de Suministro o crear uno
-    let ptoCard = page.locator('div[class*="cursor-pointer"]:has-text("SUM-"), div[class*="cursor-pointer"]:has-text("SUMINISTRO")').first();
-    if (!(await ptoCard.isVisible())) {
-      const btnCrear = page.locator('button:has-text("Crear Elemento")').first();
-      await btnCrear.click();
-      await page.locator('button:has-text("PTO. SUMINISTRO")').first().click();
-      await page.locator('form input[type="text"]').first().fill('PTO SUMINISTRO METROLOGIA E2E');
-      await page.locator('button[type="submit"]:has-text("Guardar Plantilla")').first().click();
-      await page.waitForTimeout(1000);
-      ptoCard = page.locator('text=PTO SUMINISTRO METROLOGIA E2E').first();
-    }
+    // 3. Crear Punto de Medición / Suministro
+    await page.locator('button:has-text("Crear Elemento")').first().click();
+    await page.locator('button:has-text("PTO. SUMINISTRO")').first().click();
+    await page.locator('form input[type="text"]').first().fill('PTO SUMINISTRO PRINCIPAL E2E');
+    await page.locator('button[type="submit"]:has-text("Guardar Plantilla")').first().click();
+    await page.waitForTimeout(1000);
 
+    const ptoCard = page.locator('text=PTO SUMINISTRO PRINCIPAL E2E').first();
     await expect(ptoCard).toBeVisible({ timeout: 10000 });
     await ptoCard.click();
 

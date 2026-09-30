@@ -14,22 +14,44 @@ test.describe('Suite 03: Tableros y Circuitos Eléctricos', () => {
   });
 
   test('Debe ingresar a un tablero, editar un circuito con ModalEdicionCircuito y persistir tras recargar', async ({ page }) => {
-    // 1. Entrar a la primera empresa
-    const empresaCard = page.locator('div[class*="cursor-pointer"]:has(h3)').first();
-    await expect(empresaCard).toBeVisible({ timeout: 10000 });
-    await empresaCard.click();
+    const uniqueSuffix = Date.now().toString().slice(-4);
+    const nombreEmpresa = `EMPRESA TABLEROS ${uniqueSuffix}`;
+    const nombreProyecto = `PROYECTO TABLEROS ${uniqueSuffix}`;
 
-    // 2. Entrar al primer proyecto
-    await page.waitForURL(/\/empresa\/[^\/]+$/, { timeout: 10000 });
-    const projectCard = page.locator('div[class*="cursor-pointer"]:has(h3)').first();
-    await expect(projectCard).toBeVisible({ timeout: 10000 });
-    await projectCard.click();
+    // 1. Crear empresa dedicada
+    await page.locator('button:has-text("Registrar Empresa")').first().click();
+    await page.locator('input[placeholder*="Farmatodo" i], form input[type="text"]').first().fill(nombreEmpresa);
+    await page.locator('input[placeholder*="J-12345678-9" i]').first().fill(`J-8899${uniqueSuffix}-0`);
+    await page.locator('input[placeholder*="Av. Araure" i]').first().fill('Av. Francisco de Miranda, Torre Este, Piso 3');
+    await page.locator('button[type="submit"]:has-text("Registrar")').first().click();
+    await page.waitForTimeout(1000);
 
+    // Entrar a la empresa
+    const cardEmpresa = page.locator(`text=${nombreEmpresa}`).first();
+    await expect(cardEmpresa).toBeVisible({ timeout: 10000 });
+    await cardEmpresa.click();
+    await page.waitForURL(/\/empresa\//, { timeout: 10000 });
+
+    // 2. Crear proyecto dedicado
+    await page.locator('button:has-text("Crear Proyecto")').first().click();
+    await page.locator('form input[type="text"]').first().fill(nombreProyecto);
+    await page.locator('button[type="submit"]:has-text("Crear Proyecto")').first().click();
+    await page.waitForTimeout(1000);
+
+    // Entrar al proyecto
+    const cardProj = page.locator(`text=${nombreProyecto}`).first();
+    await expect(cardProj).toBeVisible({ timeout: 10000 });
+    await cardProj.click();
     await page.waitForURL(/\/proyecto\//, { timeout: 10000 });
-    await page.waitForTimeout(500);
 
-    // 3. Seleccionar el Tablero Eléctrico existente
-    const tableroCard = page.locator('div[class*="cursor-pointer"]:has-text("TAB-"), div[class*="cursor-pointer"]:has-text("Hola1"), div[class*="cursor-pointer"]:has-text("PANEL")').first();
+    // 3. Crear Tablero Eléctrico
+    await page.locator('button:has-text("Crear Elemento")').first().click();
+    await page.locator('button:has-text("PANEL ELÉCTRICO")').first().click();
+    await page.locator('form input[type="text"]').first().fill('TABLERO GENERAL SUITE 03');
+    await page.locator('button[type="submit"]:has-text("Guardar Plantilla")').first().click();
+    await page.waitForTimeout(1000);
+
+    const tableroCard = page.locator('text=TABLERO GENERAL SUITE 03').first();
     await expect(tableroCard).toBeVisible({ timeout: 10000 });
     await tableroCard.click();
 
@@ -41,33 +63,32 @@ test.describe('Suite 03: Tableros y Circuitos Eléctricos', () => {
     await circuitCell.click();
 
     // 5. En el ModalEdicionCircuito:
-    // Paso 1: Seleccionar "Sí, es un Artefacto"
-    const btnArtefacto = page.locator('button').filter({ hasText: /Artefacto/i }).first();
+    const modalCircuito = page.locator('div[role="dialog"], div.fixed').filter({ hasText: 'Configurar Salida' }).first();
+    await expect(modalCircuito).toBeVisible({ timeout: 5000 });
+
+    // Seleccionar "Sí, es un Artefacto"
+    const btnArtefacto = modalCircuito.locator('button:has-text("Sí, es un Artefacto")').first();
     await expect(btnArtefacto).toBeVisible({ timeout: 5000 });
     await btnArtefacto.click();
 
-    // Paso 2: Llenar formulario de Artefacto
-    const inputNombreArtefacto = page.locator('input[placeholder*="Extractor" i], input[placeholder*="Nombre" i]').first();
+    await expect(modalCircuito.locator('text=Llenar Ficha del Artefacto')).toBeVisible({ timeout: 5000 });
+
+    // Llenar formulario de Artefacto
+    const inputNombreArtefacto = modalCircuito.locator('input[placeholder*="Extractor" i]').first();
     await expect(inputNombreArtefacto).toBeVisible({ timeout: 5000 });
     await inputNombreArtefacto.fill('ILUMINACION PLANTA PRINCIPAL E2E');
 
-    const inputAmp = page.locator('input[placeholder*="20, 30" i], input[placeholder*="Ej. 20" i]').first();
-    if (await inputAmp.isVisible()) {
-      await inputAmp.fill('20');
-    }
+    const inputAmp = modalCircuito.locator('input[placeholder*="20, 30" i]').first();
+    if (await inputAmp.isVisible()) await inputAmp.fill('20');
 
-    const inputCond = page.locator('input[placeholder*="12, 10" i], input[placeholder*="Ej. 12" i]').first();
-    if (await inputCond.isVisible()) {
-      await inputCond.fill('12 AWG');
-    }
+    const inputCond = modalCircuito.locator('input[placeholder*="12, 10" i]').first();
+    if (await inputCond.isVisible()) await inputCond.fill('12 AWG');
 
-    const inputMarca = page.locator('input[placeholder*="GE, EATON" i], input[placeholder*="Ej. GE" i]').first();
-    if (await inputMarca.isVisible()) {
-      await inputMarca.fill('CHINT');
-    }
+    const inputMarca = modalCircuito.locator('input[placeholder*="GE, EATON" i]').first();
+    if (await inputMarca.isVisible()) await inputMarca.fill('CHINT');
 
-    // Paso 3: Guardar Ficha dentro del modal
-    const btnGuardarFicha = page.locator('button:has-text("Guardar Ficha")').first();
+    // Guardar Ficha dentro del modal
+    const btnGuardarFicha = modalCircuito.locator('button:has-text("Guardar Ficha")').first();
     await expect(btnGuardarFicha).toBeVisible({ timeout: 5000 });
     await btnGuardarFicha.click();
     await page.waitForTimeout(1500);

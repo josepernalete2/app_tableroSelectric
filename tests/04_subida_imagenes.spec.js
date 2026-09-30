@@ -15,49 +15,61 @@ test.describe('Suite 04: Subida y Persistencia de Imágenes', () => {
   });
 
   test('Debe cargar una imagen de evidencia fotográfica, guardar y verificar su persistencia tras recargar', async ({ page }) => {
-    // 1. Navegar a la primera empresa
-    const empresaCard = page.locator('div[class*="cursor-pointer"]:has(h3)').first();
-    await expect(empresaCard).toBeVisible({ timeout: 10000 });
-    await empresaCard.click();
+    const uniqueSuffix = Date.now().toString().slice(-4);
+    const nombreEmpresa = `EMPRESA FOTOS ${uniqueSuffix}`;
+    const nombreProyecto = `PROYECTO FOTOS ${uniqueSuffix}`;
 
-    // 2. Entrar al primer proyecto
-    await page.waitForURL(/\/empresa\/[^\/]+$/, { timeout: 10000 });
-    const projectCard = page.locator('div[class*="cursor-pointer"]:has(h3)').first();
-    await expect(projectCard).toBeVisible({ timeout: 10000 });
-    await projectCard.click();
+    // 1. Crear empresa dedicada
+    await page.locator('button:has-text("Registrar Empresa")').first().click();
+    await page.locator('input[placeholder*="Farmatodo" i], form input[type="text"]').first().fill(nombreEmpresa);
+    await page.locator('input[placeholder*="J-12345678-9" i]').first().fill(`J-7788${uniqueSuffix}-0`);
+    await page.locator('input[placeholder*="Av. Araure" i]').first().fill('Av. Principal, Torre Oeste, Piso 1');
+    await page.locator('button[type="submit"]:has-text("Registrar")').first().click();
+    await page.waitForTimeout(1000);
 
+    // Entrar a la empresa
+    const cardEmpresa = page.locator(`text=${nombreEmpresa}`).first();
+    await expect(cardEmpresa).toBeVisible({ timeout: 10000 });
+    await cardEmpresa.click();
+    await page.waitForURL(/\/empresa\//, { timeout: 10000 });
+
+    // 2. Crear proyecto dedicado
+    await page.locator('button:has-text("Crear Proyecto")').first().click();
+    await page.locator('form input[type="text"]').first().fill(nombreProyecto);
+    await page.locator('button[type="submit"]:has-text("Crear Proyecto")').first().click();
+    await page.waitForTimeout(1000);
+
+    // Entrar al proyecto
+    const cardProj = page.locator(`text=${nombreProyecto}`).first();
+    await expect(cardProj).toBeVisible({ timeout: 10000 });
+    await cardProj.click();
     await page.waitForURL(/\/proyecto\//, { timeout: 10000 });
-    await page.waitForTimeout(500);
 
-    // 3. Entrar al elemento con Ficha Técnica
-    const elementCard = page.locator('div[class*="cursor-pointer"]:has-text("SUM-"), div[class*="cursor-pointer"]:has-text("SUMINISTRO")').first();
-    await expect(elementCard).toBeVisible({ timeout: 10000 });
-    await elementCard.click();
+    // 3. Crear Tablero Eléctrico
+    await page.locator('button:has-text("Crear Elemento")').first().click();
+    await page.locator('button:has-text("PANEL ELÉCTRICO")').first().click();
+    await page.locator('form input[type="text"]').first().fill('TABLERO FOTOGRAFICO SUITE 04');
+    await page.locator('button[type="submit"]:has-text("Guardar Plantilla")').first().click();
+    await page.waitForTimeout(1000);
+
+    const tableroCard = page.locator('text=TABLERO FOTOGRAFICO SUITE 04').first();
+    await expect(tableroCard).toBeVisible({ timeout: 10000 });
+    await tableroCard.click();
 
     await page.waitForURL(/\/tablero\//, { timeout: 10000 });
 
-    // 4. Activar modo de edición "Editar Plantilla"
-    const btnEditarPlantilla = page.locator('button:has-text("Editar Plantilla")').first();
-    await expect(btnEditarPlantilla).toBeVisible({ timeout: 10000 });
-    await btnEditarPlantilla.click();
-
-    // 5. Localizar el input de archivo para subir fotografía
+    // 4. Localizar el input de archivo para subir fotografía
     const fileInput = page.locator('input[type="file"][accept*="image"]').first();
     await expect(fileInput).toBeAttached({ timeout: 10000 });
 
     const fixturePath = path.resolve(process.cwd(), 'tests', 'fixtures', 'test_image.png');
     await fileInput.setInputFiles(fixturePath);
-    await page.waitForTimeout(500);
-
-    // 6. Guardar cambios
-    const btnGuardar = page.locator('button:has-text("Guardar Cambios")').first();
-    await btnGuardar.click();
     await page.waitForTimeout(1500);
 
-    // 7. Recargar la página (F5) para confirmar persistencia real
+    // 5. Recargar la página (F5) para confirmar persistencia real en Postgres
     await page.reload();
 
-    // 8. Validar que la imagen siga presente y renderizada en la vista
+    // 6. Validar que la imagen siga presente y renderizada en la vista
     const uploadedImg = page.locator('img[src*="data:image"], img[src*="blob:"], img[src*="/uploads/"]').first();
     await expect(uploadedImg).toBeVisible({ timeout: 10000 });
   });
