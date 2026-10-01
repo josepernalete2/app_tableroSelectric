@@ -468,6 +468,8 @@ const TableroWrapper = () => {
     foto: element?.foto || null,
     fotoBlob: element?.fotoBlob || null,
     observacionesGenerales: element?.observacionesGenerales || '',
+    proyectoId: targetProyecto?.id || element?.proyectoId || null,
+    empresaId: company?.id || null,
     ...(element?.datosTecnicos || {}),
     circuits: Array.isArray(element?.datosTecnicos?.circuits)
       ? element.datosTecnicos.circuits

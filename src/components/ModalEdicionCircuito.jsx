@@ -54,6 +54,7 @@ export const ModalEdicionCircuito = ({
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
   const [step, setStep] = useState('PREGUNTA_ES_ARTEFACTO');
+  const [alimentaOtro, setAlimentaOtro] = useState(false);
 
   // Campos Tablero / Artefacto
   const [breakerAmp, setBreakerAmp] = useState('');
@@ -230,6 +231,9 @@ export const ModalEdicionCircuito = ({
 
   // Reversión explícita a Reserva
   const handleRevertirAReserva = () => {
+    setAlimentaOtro(false);
+    setIsCreatingNewProvisional(false);
+    setProvisionalCustomName('');
     onSave(circuitData.id, {
       equipo: 'RESERVA',
       tipoDestino: 'RESERVA',
@@ -327,8 +331,10 @@ export const ModalEdicionCircuito = ({
       // Selección de paso según tipoOrigen y modo
       if (isTablero) {
         if (circuitData.tipoDestino === 'ARTEFACTO') {
+          setAlimentaOtro(false);
           setStep('FORMULARIO_ARTEFACTO');
         } else if (circuitData.tipoDestino === 'SUB_TABLERO' || circuitData.tipoDestino === 'ELEMENTO') {
+          setAlimentaOtro(true);
           setStep('VINCULAR_EXISTENTE');
           const found = elementosCreados.find(el => el.nombre === circuitData.equipo || el.id === circuitData.vinculadoId);
           if (found) {
@@ -338,8 +344,13 @@ export const ModalEdicionCircuito = ({
             setSearchQuery(circuitData.equipo || '');
           }
         } else if (circuitData.tipoDestino === 'SUB_TABLERO_PENDIENTE' || circuitData.tipoDestino === 'ELEMENTO_PENDIENTE') {
+          setAlimentaOtro(true);
+          setIsCreatingNewProvisional(true);
+          setProvisionalCustomName(circuitData.nombreProvisional || circuitData.equipo || '');
+          setProvisionalTipo(circuitData.tipoElementoProvisional || 'TABLERO');
           setStep('ALIMENTAR_POR_CREAR');
         } else {
+          setAlimentaOtro(false);
           setStep('PREGUNTA_ES_ARTEFACTO');
         }
       } else {
@@ -363,7 +374,7 @@ export const ModalEdicionCircuito = ({
         }
       }
     }
-  }, [circuitData, isOpen, elementosCreados, isTablero, tipoOrigen, modo]);
+  }, [circuitData?.id, isOpen]);
 
   // Validación de colisión y ocupación de polos en tiempo real
   const validation = useMemo(() => {
@@ -532,7 +543,18 @@ export const ModalEdicionCircuito = ({
 
   const handleSavePorCrear = () => {
     const calculatedPoles = validation?.requiredPoles || getPolesArray(posicionPolo, numPolos);
-    const pendingName = `Equipo / Sub-Elemento (${isTablero ? `Polo ${calculatedPoles.join(', ')}` : 'Provisional'})`;
+    const defaultPendingName = `Nuevo ${provisionalTipo === 'CCM' ? 'CCM' : provisionalTipo === 'TRANSFER' ? 'ATS' : 'Sub-Tablero'} (${isTablero ? `Polo ${calculatedPoles.join(', ')}` : 'Provisional'})`;
+    const pendingName = provisionalCustomName?.trim() || defaultPendingName;
+
+    if (onAgregarPorCrear) {
+      onAgregarPorCrear({
+        nombre: pendingName,
+        tipo: provisionalTipo || 'TABLERO',
+        circuitoId: circuitData.id,
+        polos: isTablero ? (validation?.requiredPoles || calculatedPoles) : [1, 2, 3]
+      });
+    }
+
     handleSaveEquipment(pendingName, 'SUB_TABLERO_PENDIENTE', {
       nombreProvisional: pendingName,
       tipoElementoProvisional: provisionalTipo || 'TABLERO',
@@ -553,7 +575,7 @@ export const ModalEdicionCircuito = ({
     setFotoUrl(randomPhoto);
   };
 
-  const renderUniversalElementSelector = () => (
+  const renderUniversalElementSelector = (showCreateOptions = false) => (
     <div className="bg-slate-950/80 p-3.5 border border-slate-800 rounded-xl space-y-2.5 text-xs font-sans">
       <div className="flex items-center justify-between">
         <label className="text-slate-300 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
@@ -564,7 +586,7 @@ export const ModalEdicionCircuito = ({
           <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
             ID: {selectedElementoDestinoId}
           </span>
-        ) : isCreatingNewProvisional ? (
+        ) : isCreatingNewProvisional && showCreateOptions ? (
           <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
             NUEVO ({provisionalTipo})
           </span>
@@ -578,17 +600,19 @@ export const ModalEdicionCircuito = ({
       >
         <option value="">-- Carga directa / Sin vinculación específica --</option>
         
-        {/* SECCIÓN 1: NUEVO ELEMENTO POR CREAR (RESERVA FUTURA) */}
-        <optgroup label="➕ NUEVO ELEMENTO POR CREAR (RESERVA FUTURA)">
-          <option value="NEW_TABLERO">➕ Crear Nuevo Sub-Tablero / Panel</option>
-          <option value="NEW_TRANSFER">➕ Crear Nueva Transferencia Automática (ATS/MTS)</option>
-          <option value="NEW_CCM">➕ Crear Nuevo Centro de Control de Motores (CCM)</option>
-          <option value="NEW_GENERADOR">➕ Crear Nuevo Generador / Planta Eléctrica</option>
-          <option value="NEW_TRANSFORMADOR">➕ Crear Nuevo Transformador de Potencia</option>
-          <option value="NEW_SUBESTACION">➕ Crear Nueva Subestación Eléctrica</option>
-          <option value="NEW_PUNTO_MEDICION">➕ Crear Nuevo Punto de Medición / Analizador</option>
-          <option value="NEW_CARGA">➕ Crear Carga Directa (Bomba, Motor, etc.)</option>
-        </optgroup>
+        {/* SECCIÓN 1: NUEVO ELEMENTO POR CREAR (SOLO SI showCreateOptions ES TRUE) */}
+        {showCreateOptions && (
+          <optgroup label="➕ NUEVO ELEMENTO POR CREAR (RESERVA FUTURA)">
+            <option value="NEW_TABLERO">➕ Crear Nuevo Sub-Tablero / Panel</option>
+            <option value="NEW_TRANSFER">➕ Crear Nueva Transferencia Automática (ATS/MTS)</option>
+            <option value="NEW_CCM">➕ Crear Nuevo Centro de Control de Motores (CCM)</option>
+            <option value="NEW_GENERADOR">➕ Crear Nuevo Generador / Planta Eléctrica</option>
+            <option value="NEW_TRANSFORMADOR">➕ Crear Nuevo Transformador de Potencia</option>
+            <option value="NEW_SUBESTACION">➕ Crear Nueva Subestación Eléctrica</option>
+            <option value="NEW_PUNTO_MEDICION">➕ Crear Nuevo Punto de Medición / Analizador</option>
+            <option value="NEW_CARGA">➕ Crear Carga Directa (Bomba, Motor, etc.)</option>
+          </optgroup>
+        )}
 
         {/* SECCIÓN 2: ELEMENTOS EXISTENTES REGISTRADOS EN EL PROYECTO */}
         {groupedElements.TABLERO.length > 0 && (
@@ -666,7 +690,7 @@ export const ModalEdicionCircuito = ({
       </select>
 
       {/* Input contextual si se elige crear un elemento nuevo como reserva futura */}
-      {isCreatingNewProvisional && (
+      {showCreateOptions && isCreatingNewProvisional && (
         <div className="pt-2 border-t border-slate-800/80 space-y-1.5 animate-in fade-in duration-200">
           <label className="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
             <span>📝</span> Nombre / Rótulo provisional para el nuevo elemento ({provisionalTipo}):
@@ -698,7 +722,10 @@ export const ModalEdicionCircuito = ({
         onClick={onClose} 
       />
 
-      <div className="relative w-full max-w-lg bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col max-h-[90vh] text-slate-100 font-sans">
+      <div 
+        className="relative w-full max-w-lg bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-hidden flex flex-col max-h-[90vh] text-slate-100 font-sans"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Cabecera */}
         <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-amber-500/10 to-amber-600/10 border-b border-slate-800">
@@ -707,9 +734,15 @@ export const ModalEdicionCircuito = ({
               <button 
                 onClick={() => {
                   if (isTablero) {
-                    if (step === 'FORMULARIO_ARTEFACTO' || step === 'PREGUNTA_ALIMENTA_OTRO') setStep('PREGUNTA_ES_ARTEFACTO');
-                    else if (step === 'PREGUNTA_CREADO' || step === 'ROTULAR_Y_FOTO') setStep('PREGUNTA_ALIMENTA_OTRO');
-                    else if (step === 'VINCULAR_EXISTENTE' || step === 'ALIMENTAR_POR_CREAR') setStep('PREGUNTA_CREADO');
+                    if (step === 'FORMULARIO_ARTEFACTO' || step === 'PREGUNTA_ALIMENTA_OTRO') {
+                      setStep('PREGUNTA_ES_ARTEFACTO');
+                      setAlimentaOtro(false);
+                    } else if (step === 'PREGUNTA_CREADO' || step === 'ROTULAR_Y_FOTO') {
+                      setStep('PREGUNTA_ALIMENTA_OTRO');
+                      setAlimentaOtro(false);
+                    } else if (step === 'VINCULAR_EXISTENTE' || step === 'ALIMENTAR_POR_CREAR') {
+                      setStep('PREGUNTA_CREADO');
+                    }
                   } else {
                     if (step === 'FORMULARIO_POTENCIA_TRANSFO_MT') setStep('PREGUNTA_ORIGEN_MT');
                     else if (step === 'FORMULARIO_POTENCIA_TRANSFO_BT') setStep('PREGUNTA_DESTINO_BT');
@@ -1106,7 +1139,10 @@ export const ModalEdicionCircuito = ({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => setStep('PREGUNTA_CREADO')}
+                  onClick={() => {
+                    setAlimentaOtro(true);
+                    setStep('PREGUNTA_CREADO');
+                  }}
                   className="flex flex-col items-center justify-center p-6 h-32 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all cursor-pointer active:scale-95"
                 >
                   <span className="text-2xl mb-1">🏢</span>
@@ -1114,12 +1150,21 @@ export const ModalEdicionCircuito = ({
                   <span className="text-[10px] text-slate-400 mt-1">Como un Sub-Tablero</span>
                 </button>
                 <button
-                  onClick={() => setStep('ROTULAR_Y_FOTO')}
+                  onClick={() => {
+                    setAlimentaOtro(false);
+                    setIsCreatingNewProvisional(false);
+                    setProvisionalCustomName('');
+                    setSelectorValue('');
+                    setSelectedElementoDestinoId('');
+                    setSelectedTipoElementoDestino('');
+                    setSelectedLink(null);
+                    setStep('ROTULAR_Y_FOTO');
+                  }}
                   className="flex flex-col items-center justify-center p-6 h-32 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all cursor-pointer active:scale-95"
                 >
                   <span className="text-2xl mb-1">🏷️</span>
                   <span className="font-bold text-sm text-slate-200">No, no alimenta otro elemento</span>
-                  <span className="text-[10px] text-slate-400 mt-1">Es reserva o vacío</span>
+                  <span className="text-[10px] text-slate-400 mt-1">Es reserva o carga directa</span>
                 </button>
               </div>
             </div>
@@ -1138,7 +1183,11 @@ export const ModalEdicionCircuito = ({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => setStep('VINCULAR_EXISTENTE')}
+                  onClick={() => {
+                    setAlimentaOtro(true);
+                    setIsCreatingNewProvisional(false);
+                    setStep('VINCULAR_EXISTENTE');
+                  }}
                   className="flex flex-col items-center justify-center p-6 h-32 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all cursor-pointer active:scale-95"
                 >
                   <span className="text-2xl mb-1">🔗</span>
@@ -1146,7 +1195,15 @@ export const ModalEdicionCircuito = ({
                   <span className="text-[10px] text-slate-400 mt-1">Buscar y vincular</span>
                 </button>
                 <button
-                  onClick={() => setStep('ALIMENTAR_POR_CREAR')}
+                  onClick={() => {
+                    setAlimentaOtro(true);
+                    setIsCreatingNewProvisional(true);
+                    if (!provisionalCustomName) {
+                      const calculatedPoles = validation?.requiredPoles || getPolesArray(posicionPolo, numPolos);
+                      setProvisionalCustomName(`Nuevo Sub-Tablero (Polo ${calculatedPoles.join(', ')})`);
+                    }
+                    setStep('ALIMENTAR_POR_CREAR');
+                  }}
                   className="flex flex-col items-center justify-center p-6 h-32 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all cursor-pointer active:scale-95"
                 >
                   <span className="text-2xl mb-1">📝</span>
@@ -2005,40 +2062,94 @@ export const ModalEdicionCircuito = ({
           )}
 
           {/* ============================================================== */}
-          {/* AGREGAR A LA LISTA POR CREAR (COMPARTIDO) */}
+          {/* FLUJO B: SÍ ALIMENTA A OTRO ELEMENTO Y NO ESTÁ CREADO */}
           {/* ============================================================== */}
-          {step === 'ALIMENTAR_POR_CREAR' && (
-            <div className="space-y-6 text-center">
-              <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto border border-amber-500/30">
-                <PlusCircle className="w-10 h-10 text-amber-500" />
+          {alimentaOtro && step === 'ALIMENTAR_POR_CREAR' && (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Sección exclusiva para ingresar el nombre del nuevo panel eléctrico o sub-elemento */}
+              <div className="bg-slate-950/80 p-4 border border-slate-800 rounded-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <PlusCircle className="w-4 h-4 text-amber-500" />
+                    Nuevo Sub-Elemento por Crear
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                    PENDIENTE
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Nombre del Nuevo Tablero / Sub-Elemento
+                  </label>
+                  <input
+                    type="text"
+                    value={provisionalCustomName}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setProvisionalCustomName(v);
+                      setNombreArtefacto(v);
+                      setRotulo(v);
+                    }}
+                    placeholder="Ej. SUB-TABLERO PISO 2, TABLERO BOMBAS..."
+                    className="w-full px-3 py-2 text-sm border border-amber-500/40 rounded-lg bg-slate-900 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Tipo de Sub-Elemento
+                  </label>
+                  <select
+                    value={provisionalTipo}
+                    onChange={(e) => setProvisionalTipo(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-900 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="TABLERO">🏢 Sub-Tablero / Panel Eléctrico</option>
+                    <option value="TRANSFER">🔄 Transferencia Automática (ATS/MTS)</option>
+                    <option value="CCM">⚙️ Centro de Control de Motores (CCM)</option>
+                    <option value="GENERADOR">⚡ Generador / Planta Eléctrica</option>
+                    <option value="TRANSFORMADOR">🔌 Transformador de Potencia</option>
+                    <option value="SUBESTACION">🏛️ Subestación Eléctrica</option>
+                    <option value="PUNTO_MEDICION">📊 Punto de Medición / Analizador</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <h4 className="text-base font-bold text-slate-100">
-                  ¿Agregar a la Lista de Elementos por Crear?
-                </h4>
-                <p className="text-xs text-slate-400 mt-2 px-4 leading-relaxed">
-                  Al confirmar, se registrará una tarea pendiente para crear este nuevo Sub-Elemento en el proyecto.
-                </p>
-              </div>
-              <div className="pt-4 border-t border-slate-800">
-                <button
-                  onClick={handleSavePorCrear}
-                  disabled={isTablero && !validation.isValid}
-                  className="px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer active:scale-[0.98]"
-                >
-                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos' : 'Agregar a la Lista de Pendientes'}
-                </button>
+
+              {/* Opción interactiva de confirmación */}
+              <div className="space-y-4 text-center p-4 bg-slate-950/40 rounded-2xl border border-slate-800">
+                <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto border border-amber-500/30">
+                  <PlusCircle className="w-10 h-10 text-amber-500" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-slate-100">
+                    ¿Agregar a la Lista de Elementos por Crear?
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-2 px-4 leading-relaxed">
+                    Al confirmar, se registrará una tarea pendiente para crear este nuevo Sub-Elemento en el proyecto.
+                  </p>
+                </div>
+                <div className="pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={handleSavePorCrear}
+                    disabled={isTablero && !validation.isValid}
+                    className="px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer active:scale-[0.98]"
+                  >
+                    {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos' : 'Agregar a la Lista de Pendientes'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* ============================================================== */}
-          {/* ROTULAR Y FOTO (COMPARTIDO PARA TABLEROS) */}
+          {/* FLUJO A: NO ALIMENTA A OTRO ELEMENTO (CARGA DIRECTA / RESERVA ESTÁNDAR) */}
           {/* ============================================================== */}
-          {isTablero && step === 'ROTULAR_Y_FOTO' && (
-            <div className="space-y-5">
-              {/* Selector Universal de Elementos */}
-              {renderUniversalElementSelector()}
+          {isTablero && (!alimentaOtro || step === 'ROTULAR_Y_FOTO') && step === 'ROTULAR_Y_FOTO' && (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Selector Universal sin opciones de creación de nuevos sub-elementos */}
+              {renderUniversalElementSelector(false)}
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
@@ -2048,7 +2159,7 @@ export const ModalEdicionCircuito = ({
                   type="text"
                   value={rotulo}
                   onChange={(e) => setRotulo(e.target.value)}
-                  placeholder="Ej. RESERVA, VACÍO, ALIMENTACIÓN A CCM-01"
+                  placeholder="Ej. RESERVA, VACÍO, ILUMINACIÓN"
                   className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
@@ -2079,6 +2190,7 @@ export const ModalEdicionCircuito = ({
 
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
+                  type="button"
                   onClick={handleSaveRotuloFoto}
                   disabled={isTablero && !validation.isValid}
                   className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"

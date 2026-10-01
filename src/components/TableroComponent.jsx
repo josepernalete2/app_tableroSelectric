@@ -39,7 +39,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const { 
     companies, 
     updateTableroAlimentador, 
-    crearElementoProvisional,
+    addElementoUnifilar,
     registrarConflictoCircuito,
     showToast,
     setPanelConflictosOpen
@@ -47,10 +47,13 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const { alert: customAlert } = useConfirm();
 
   const project = React.useMemo(() => {
-    if (!tableroData?.id) return null;
+    if (!tableroData) return null;
     for (const c of companies) {
       if (c.proyectos) {
         for (const p of c.proyectos) {
+          if (tableroData.proyectoId && p.id === tableroData.proyectoId) {
+            return p;
+          }
           const tableros = p.elementosUnifilares || p.tableros || [];
           if (tableros.some(t => t.id === tableroData.id)) {
             return p;
@@ -59,7 +62,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       }
     }
     return null;
-  }, [companies, tableroData?.id]);
+  }, [companies, tableroData?.id, tableroData?.proyectoId]);
 
   const alimentadores = React.useMemo(() => {
     if (!project) return [];
@@ -350,14 +353,15 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const saveCircuitFromModal = (circuitId, updatedFields) => {
     if (readOnly) return;
     const newData = { ...tableroData };
+    const projId = project?.id || tableroData?.proyectoId;
 
-    if (updatedFields && (updatedFields.tipoDestino === 'SUB_TABLERO_PENDIENTE' || updatedFields.tipoDestino === 'ELEMENTO_PENDIENTE') && project?.id) {
+    if (updatedFields && (updatedFields.tipoDestino === 'SUB_TABLERO_PENDIENTE' || updatedFields.tipoDestino === 'ELEMENTO_PENDIENTE')) {
       const existingProvId = updatedFields.elementoDestinoId || updatedFields.vinculadoId;
       let prov = null;
-      if (existingProvId) {
+      if (existingProvId && project) {
         prov = (project.elementosUnifilares || project.tableros || []).find(e => e.id === existingProvId);
       }
-      if (!prov) {
+      if (!prov && projId) {
         const polesStr = Array.isArray(updatedFields.poles) && updatedFields.poles.length > 0
           ? updatedFields.poles.join(', ')
           : (updatedFields.posicionPolo || circuitId);
@@ -366,11 +370,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         const defaultName = `${provType} Alimentado (Polo ${polesStr})`;
         const provName = updatedFields.nombreProvisional || updatedFields.equipo || defaultName;
 
-        prov = crearElementoProvisional(project.id, {
-          nombre: provName && provName !== 'RESERVA (Pendiente por Crear)' ? provName : defaultName,
-          tipoElemento: provType,
-          circuitoOrigen: circuitId
-        });
+        if (addElementoUnifilar) {
+          const res = addElementoUnifilar(projId, {
+            nombre: provName && provName !== 'RESERVA (Pendiente por Crear)' ? provName : defaultName,
+            tipoElemento: provType,
+            circuitoOrigen: circuitId
+          });
+          prov = res?.elemento || null;
+        }
       }
 
       if (prov) {
@@ -380,11 +387,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         updatedFields.equipo = `${prov.nombre} (ID: ${prov.id})`;
         updatedFields.tipoDestino = prov.tipoElemento === 'TABLERO' ? 'SUB_TABLERO' : 'ELEMENTO_VINCULADO';
 
-        const pendingItem = { id: prov.id, nombre: prov.nombre, tipoElemento: prov.tipoElemento, circuitoId };
+        const pendingItem = { id: prov.id, nombre: prov.nombre, tipoElemento: prov.tipoElemento, circuitoId: circuitId };
         const filteredPendientes = (elementosPorCrear || []).filter(item => item.circuitoId !== circuitId && item.id !== prov.id);
         const updatedList = [...filteredPendientes, pendingItem];
         setElementosPorCrear(updatedList);
         newData.elementosPorCrear = updatedList;
+      } else {
+        const provName = updatedFields.nombreProvisional || updatedFields.equipo || 'Sub-Tablero Pendiente';
+        updatedFields.equipo = provName;
       }
     }
 

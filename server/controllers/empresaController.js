@@ -153,8 +153,8 @@ export const eliminarEmpresa = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    if (req.user.role !== 'ADMIN') {
-      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'WORKER') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores o trabajadores.' });
     }
 
     const empresa = await prisma.empresa.findUnique({
@@ -217,7 +217,19 @@ export const eliminarEmpresa = async (req, res, next) => {
         });
       }
 
-      // 7. Eliminar elementos unifilares
+      // 7. Desvincular jerarquías unifilares autorreferenciales
+      await tx.elementoUnifilar.updateMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ],
+          alimentadoPorId: { not: null }
+        },
+        data: { alimentadoPorId: null }
+      });
+
+      // 8. Eliminar elementos unifilares
       await tx.elementoUnifilar.deleteMany({
         where: {
           OR: [

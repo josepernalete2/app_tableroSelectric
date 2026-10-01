@@ -59,7 +59,7 @@ router.get('/empresas', obtenerEmpresas);
 router.get('/empresas/:id', obtenerEmpresaPorId);
 router.post('/empresas', requireRoles('ADMIN', 'WORKER'), crearEmpresa);
 router.put('/empresas/:id', requireRoles('ADMIN', 'WORKER'), actualizarEmpresa);
-router.delete('/empresas/:id', requireRoles('ADMIN'), eliminarEmpresa);
+router.delete('/empresas/:id', requireRoles('ADMIN', 'WORKER'), eliminarEmpresa);
 
 // Rutas de Proyectos
 router.get('/proyectos', obtenerProyectos);

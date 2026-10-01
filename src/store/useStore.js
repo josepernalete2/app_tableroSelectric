@@ -1120,7 +1120,7 @@ export const useStore = create(
 
         let uuidId = elementoData.id;
         if (!uuidId || !uuidId.includes('-')) {
-          uuidId = getNextElementId(elementoData.tipoElemento || 'TABLERO', get());
+          uuidId = crypto.randomUUID();
         }
 
         const nombreFinal = (elementoData.nombre && elementoData.nombre.trim())
@@ -1351,7 +1351,7 @@ export const useStore = create(
 
         let uuidId = payload.id;
         if (!uuidId || !uuidId.includes('-')) {
-          uuidId = getNextElementId('SUBESTACION', get());
+          uuidId = crypto.randomUUID();
         }
 
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
@@ -1493,7 +1493,7 @@ export const useStore = create(
 
         let uuidId = payload.id;
         if (!uuidId || !uuidId.includes('-')) {
-          uuidId = getNextElementId('PUNTO_MEDICION', get());
+          uuidId = crypto.randomUUID();
         }
 
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
@@ -1646,7 +1646,7 @@ export const useStore = create(
 
         let uuidId = payload.id;
         if (!uuidId || !uuidId.includes('-')) {
-          uuidId = getNextElementId('CCM', get());
+          uuidId = crypto.randomUUID();
         }
 
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
