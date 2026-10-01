@@ -6,7 +6,8 @@ import {
   Printer,
   Settings,
   Zap,
-  RotateCcw
+  RotateCcw,
+  X
 } from 'lucide-react';
 import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';

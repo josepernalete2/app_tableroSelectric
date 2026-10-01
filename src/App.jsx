@@ -449,11 +449,13 @@ const TableroWrapper = () => {
 
         {/* Ficha Técnica del Elemento */}
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
-          <FichaTecnicaComponent
-            elementoData={element}
-            onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto?.id || null, tableroId, updatedData)}
-            readOnly={user?.role === 'CLIENT'}
-          />
+          <ErrorBoundary title="Error al cargar la ficha técnica del elemento">
+            <FichaTecnicaComponent
+              elementoData={element}
+              onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto?.id || null, tableroId, updatedData)}
+              readOnly={user?.role === 'CLIENT'}
+            />
+          </ErrorBoundary>
         </main>
       </div>
     );
@@ -547,11 +549,13 @@ const TableroWrapper = () => {
 
       {/* Renders Tablero Component */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
-        <TableroComponent
-          tableroData={enrichedTablero}
-          onUpdateTablero={handleUpdateTablero}
-          readOnly={user?.role === 'CLIENT'}
-        />
+        <ErrorBoundary title="Error al cargar la planilla del tablero">
+          <TableroComponent
+            tableroData={enrichedTablero}
+            onUpdateTablero={handleUpdateTablero}
+            readOnly={user?.role === 'CLIENT'}
+          />
+        </ErrorBoundary>
       </main>
     </div>
   );
@@ -560,15 +564,17 @@ const TableroWrapper = () => {
 import SyncStatusBanner from './components/SyncStatusBanner';
 import ToastNotification from './components/ToastNotification';
 import PanelConflictosCircuitos from './components/PanelConflictosCircuitos';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './context/ConfirmContext';
 
 export function App() {
   return (
-    <BrowserRouter>
-      <ConfirmProvider>
-        <SyncStatusBanner />
-        <ToastNotification />
-        <PanelConflictosCircuitos />
+    <ErrorBoundary title="Error general en la aplicación">
+      <BrowserRouter>
+        <ConfirmProvider>
+          <SyncStatusBanner />
+          <ToastNotification />
+          <PanelConflictosCircuitos />
         <Routes>
           <Route path="/login" element={<LoginView />} />
           
@@ -588,6 +594,7 @@ export function App() {
         </Routes>
       </ConfirmProvider>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
