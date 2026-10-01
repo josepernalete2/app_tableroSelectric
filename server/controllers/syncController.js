@@ -181,6 +181,30 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           FORBIDDEN_MUTATION_FIELDS.forEach(field => delete sanitizedPayload[field]);
           delete sanitizedPayload.id;
           delete sanitizedPayload.createdAt;
+          delete sanitizedPayload.fotoBlob;
+          delete sanitizedPayload.previewUrl;
+          delete sanitizedPayload.elementosPorCrear;
+
+          // Detección explícita de eliminación de foto
+          const isPhotoRemoval = (
+            sanitizedPayload.foto === null ||
+            sanitizedPayload.foto === '' ||
+            sanitizedPayload.foto === 'null' ||
+            sanitizedPayload.fotoUrl === null ||
+            sanitizedPayload.fotoUrl === '' ||
+            sanitizedPayload.deletePhoto === true ||
+            sanitizedPayload.deletePhoto === 'true' ||
+            sanitizedPayload.eliminarFoto === true ||
+            sanitizedPayload.eliminarFoto === 'true' ||
+            ('foto' in sanitizedPayload && !sanitizedPayload.foto && !data?.fotoBlob)
+          );
+
+          if (isPhotoRemoval) {
+            sanitizedPayload.foto = null;
+          }
+          delete sanitizedPayload.fotoUrl;
+          delete sanitizedPayload.deletePhoto;
+          delete sanitizedPayload.eliminarFoto;
 
           // Operación CREATE, UPDATE o UPSERT
           if (existingRecord) {
@@ -188,8 +212,8 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
             const currentVersion = existingRecord.version || 1;
             const targetBaseVersion = baseVersion !== undefined ? baseVersion : currentVersion;
 
-            if (currentVersion > targetBaseVersion) {
-              // Conflicto de versión
+            // Si es eliminación de foto, NO bloquear con OCC_CONFLICT para permitir limpieza inmediata
+            if (currentVersion > targetBaseVersion && !isPhotoRemoval) {
               conflicts.push({
                 id,
                 entity,

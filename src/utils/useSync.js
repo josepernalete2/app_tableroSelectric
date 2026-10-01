@@ -116,12 +116,18 @@ export function useSync() {
       else if (item.tipo === 'INSPECCION_ATERRAMIENTO') entityName = 'InspeccionAterramiento';
       else if (item.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE') entityName = 'InspeccionTanqueCombustible';
 
+      const mutationData = { ...(item.payload || {}) };
+      if (!mutationData.foto && !mutationData.fotoBlob) {
+        mutationData.foto = null;
+        mutationData.eliminarFoto = true;
+      }
+
       jsonMutations.push({
         entity: entityName,
         id: item.payload?.id || item.id,
         operation: item.operation || 'UPSERT',
         baseVersion: item.payload?.version || 1,
-        data: item.payload
+        data: mutationData
       });
       queueItemsMap.set(item.payload?.id || item.id, item.id);
     }
@@ -130,10 +136,17 @@ export function useSync() {
       const batchRes = await sincronizarLote(jsonMutations);
 
       if (batchRes.success) {
-        // Remover del queue local los elementos procesados exitosamente
+        // Remover del queue local los elementos procesados exitosamente y actualizar version/foto en store
         (batchRes.data?.applied || []).forEach(appItem => {
           const queueId = queueItemsMap.get(appItem.id);
           if (queueId) removeFromQueue(queueId);
+          if (appItem.record && (appItem.entity === 'ElementoUnifilar' || appItem.entity === 'Tablero')) {
+            useStore.getState().updateElementoUnifilar(appItem.record.proyectoId, appItem.id, {
+              foto: appItem.record.foto || null,
+              fotoBlob: null,
+              version: appItem.record.version
+            });
+          }
         });
 
         // Notificar en consola si hubo conflictos OCC
@@ -249,6 +262,9 @@ export function useSync() {
         formData.append('foto', elemento.fotoBlob, `foto_${elemento.id}.${fileExt}`);
       } else if (elemento.foto) {
         formData.append('fotoUrl', elemento.foto);
+      } else {
+        formData.append('eliminarFoto', 'true');
+        formData.append('foto', '');
       }
 
       const token = getFreshToken();
@@ -270,15 +286,18 @@ export function useSync() {
       }
 
       const resJson = await response.json();
-      if (resJson.data && resJson.data.foto) {
+      if (resJson.data) {
         const returnedFoto = resJson.data.foto;
-        const normalizedFoto = (returnedFoto.startsWith('data:') || returnedFoto.startsWith('http://') || returnedFoto.startsWith('https://') || returnedFoto.startsWith('blob:'))
-          ? returnedFoto
-          : `${API_BASE_URL}${returnedFoto}`;
+        const normalizedFoto = returnedFoto
+          ? ((returnedFoto.startsWith('data:') || returnedFoto.startsWith('http://') || returnedFoto.startsWith('https://') || returnedFoto.startsWith('blob:'))
+              ? returnedFoto
+              : `${API_BASE_URL}${returnedFoto}`)
+          : null;
 
         useStore.getState().updateElementoUnifilar(elemento.proyectoId, elemento.id, {
           foto: normalizedFoto,
-          fotoBlob: null
+          fotoBlob: null,
+          version: resJson.data.version
         });
       }
 

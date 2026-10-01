@@ -173,6 +173,22 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     }
   };
 
+  const handleRemovePhoto = () => {
+    if (readOnly) return;
+    setFotoBlob(null);
+    setFotoSrc(null);
+    if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    if (onUpdate) {
+      onUpdate({
+        ...elementoData,
+        fotoBlob: null,
+        foto: null,
+        eliminarFoto: true
+      });
+    }
+  };
+
   const handleSave = (e) => {
     e.preventDefault();
     if (readOnly) return;
@@ -1514,7 +1530,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           {/* Imagen del Transformador (Parte inferior del cuadro) */}
           <div className="p-4 bg-slate-900/30 text-center print:bg-white">
             {fotoBlob || fotoSrc || previewUrl ? (
-              <div className="max-w-md mx-auto rounded-xl overflow-hidden border border-slate-700 shadow-lg print:border-black">
+              <div className="max-w-md mx-auto rounded-xl overflow-hidden border border-slate-700 shadow-lg print:border-black relative group">
                 <SafeImage 
                   blob={fotoBlob} 
                   src={previewUrl || fotoSrc} 
@@ -1522,6 +1538,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   className="w-full object-cover" 
                   style={{ maxHeight: `${dt.fotoScale || 280}px` }}
                 />
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="no-print absolute top-2 right-2 p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95"
+                    title="Eliminar Fotografía"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ) : (
               <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
@@ -2438,6 +2464,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     className="object-contain w-full rounded-xl"
                     style={{ maxHeight: `${dt.fotoScale || 280}px` }}
                   />
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="no-print absolute top-2 right-2 p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95"
+                      title="Eliminar Fotografía"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">
@@ -2906,6 +2942,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     className="object-contain w-full rounded-xl"
                     style={{ maxHeight: `${dt.fotoScale || 280}px` }}
                   />
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="no-print absolute top-2 right-2 p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95"
+                      title="Eliminar Fotografía"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="p-6 border-2 border-dashed border-slate-800 rounded-xl text-center space-y-2 no-print">

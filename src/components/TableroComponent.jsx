@@ -967,7 +967,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 onUpdateTablero({
                   ...tableroData,
                   fotoBlob: null,
-                  foto: null
+                  foto: null,
+                  eliminarFoto: true
                 });
               }}
               className="no-print absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer transition-colors shadow"

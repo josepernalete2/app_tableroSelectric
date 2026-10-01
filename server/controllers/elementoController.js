@@ -181,10 +181,24 @@ export const crearElementoUnifilar = async (req, res, next) => {
         });
       }
 
+      const isDeletePhoto = (
+        req.body.eliminarFoto === 'true' ||
+        req.body.eliminarFoto === true ||
+        req.body.deletePhoto === 'true' ||
+        req.body.deletePhoto === true ||
+        req.body.foto === '' ||
+        req.body.foto === null ||
+        req.body.foto === 'null' ||
+        req.body.fotoUrl === '' ||
+        req.body.fotoUrl === null ||
+        ('foto' in req.body && !req.body.foto && !req.file) ||
+        ('fotoUrl' in req.body && !req.body.fotoUrl && !req.file)
+      );
+
       const updateFotoData = {};
-      if (finalFoto !== null && finalFoto !== undefined) {
+      if (finalFoto && !isDeletePhoto) {
         updateFotoData.foto = finalFoto;
-      } else if (req.body.eliminarFoto === 'true' || req.body.deletePhoto === 'true') {
+      } else if (isDeletePhoto) {
         updateFotoData.foto = null;
       }
 
@@ -210,7 +224,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           tipoElemento,
           ubicacion: ubicacion || null,
           alimentadoPor: alimentadoPor || null,
-          foto: finalFoto || null,
+          foto: isDeletePhoto ? null : (finalFoto || null),
           observacionesGenerales: observacionesGenerales || null,
           datosTecnicos: parsedDatosTecnicos,
           version: 1,
