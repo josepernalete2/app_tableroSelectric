@@ -934,10 +934,28 @@ export const useStore = create(
         }
       },
 
-      deleteCompany: (companyId) => {
+      deleteCompany: async (companyId) => {
         set((state) => ({
-          companies: state.companies.filter((c) => c.id !== companyId)
+          companies: state.companies.filter((c) => c.id !== companyId),
+          elementosLocales: (state.elementosLocales || []).filter((e) => e.companyId !== companyId && e.empresaId !== companyId),
+          subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.empresaId !== companyId),
+          puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((p) => p.empresaId !== companyId),
+          ccmLocales: (state.ccmLocales || []).filter((c) => c.empresaId !== companyId)
         }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/empresas/${companyId}`, {
+              method: 'DELETE',
+              headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              }
+            });
+          } catch (e) {
+            console.error('Error al eliminar empresa en el servidor:', e);
+          }
+        }
       },
 
       updateProyecto: async (companyId, proyectoId, updatedData) => {

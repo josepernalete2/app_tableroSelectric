@@ -6,7 +6,7 @@ import { uploadFotoInspeccion } from '../middleware/uploadMiddleware.js';
 
 // Controladores
 import { loginUsuario, obtenerUsuarios, crearUsuario, actualizarUsuario, eliminarUsuario, solicitarResetPassword, verificar2FA } from '../controllers/userController.js';
-import { obtenerEmpresas, obtenerEmpresaPorId, actualizarEmpresa, crearEmpresa } from '../controllers/empresaController.js';
+import { obtenerEmpresas, obtenerEmpresaPorId, actualizarEmpresa, crearEmpresa, eliminarEmpresa } from '../controllers/empresaController.js';
 import { obtenerProyectos, obtenerProyectosPorEmpresa, crearProyecto, obtenerProyectoCompleto, actualizarProyecto, eliminarProyecto } from '../controllers/proyectoController.js';
 import { obtenerAlimentadores, crearAlimentador, actualizarAlimentador, eliminarAlimentador } from '../controllers/alimentadorController.js';
 import { crearTableroCompleto, obtenerTablerosPorEmpresa, obtenerTableroPorId, actualizarTablero, eliminarTablero, crearCircuito, actualizarCircuito, eliminarCircuito, obtenerBalanceTablero, exportarTableroDXF } from '../controllers/tableroController.js';
@@ -54,11 +54,12 @@ router.post('/cron/backup', ejecutarCronBackup);
 // A partir de aquí todas las rutas requieren autenticación JWT
 router.use(verificarToken);
 
-// Rutas de Empresas (Lectura: Todos los autenticados; Escritura: ADMIN y WORKER)
+// Rutas de Empresas (Lectura: Todos los autenticados; Escritura: ADMIN y WORKER; Eliminación: ADMIN)
 router.get('/empresas', obtenerEmpresas);
 router.get('/empresas/:id', obtenerEmpresaPorId);
 router.post('/empresas', requireRoles('ADMIN', 'WORKER'), crearEmpresa);
 router.put('/empresas/:id', requireRoles('ADMIN', 'WORKER'), actualizarEmpresa);
+router.delete('/empresas/:id', requireRoles('ADMIN'), eliminarEmpresa);
 
 // Rutas de Proyectos
 router.get('/proyectos', obtenerProyectos);

@@ -148,3 +148,166 @@ export const crearEmpresa = async (req, res, next) => {
     next(error);
   }
 };
+
+export const eliminarEmpresa = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    }
+
+    const empresa = await prisma.empresa.findUnique({
+      where: { id }
+    });
+
+    if (!empresa) {
+      return res.status(404).json({ ok: false, error: 'Empresa no encontrada.' });
+    }
+
+    // Transacción de eliminación en cascada segura de todas las dependencias
+    await prisma.$transaction(async (tx) => {
+      // 1. Obtener los IDs de proyectos pertenecientes a la empresa
+      const proyectos = await tx.proyecto.findMany({
+        where: { empresaId: id },
+        select: { id: true }
+      });
+      const proyectoIds = proyectos.map(p => p.id);
+
+      // 2. Tableros pertenecientes a la empresa o sus proyectos
+      const tableros = await tx.tablero.findMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        },
+        select: { id: true }
+      });
+      const tableroIds = tableros.map(t => t.id);
+
+      // 3. Eliminar circuitos de los tableros
+      if (tableroIds.length > 0) {
+        await tx.circuito.deleteMany({
+          where: { tableroId: { in: tableroIds } }
+        });
+      }
+
+      // 4. Eliminar alarmas asociadas
+      await tx.alarma.deleteMany({
+        where: {
+          OR: [
+            { proyectoId: { in: proyectoIds } },
+            { tableroId: { in: tableroIds } }
+          ]
+        }
+      });
+
+      // 5. Eliminar tableros
+      if (tableroIds.length > 0) {
+        await tx.tablero.deleteMany({
+          where: { id: { in: tableroIds } }
+        });
+      }
+
+      // 6. Eliminar alimentadores
+      if (proyectoIds.length > 0) {
+        await tx.alimentador.deleteMany({
+          where: { proyectoId: { in: proyectoIds } }
+        });
+      }
+
+      // 7. Eliminar elementos unifilares
+      await tx.elementoUnifilar.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      // 8. Eliminar inspecciones
+      await tx.subestacion.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      await tx.puntoMedicion.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      await tx.ccm.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      await tx.inspeccionTermografica.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      await tx.inspeccionAterramiento.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      await tx.inspeccionTanqueCombustible.deleteMany({
+        where: {
+          OR: [
+            { empresaId: id },
+            { proyectoId: { in: proyectoIds } }
+          ]
+        }
+      });
+
+      // 9. Eliminar proyectos
+      if (proyectoIds.length > 0) {
+        await tx.proyecto.deleteMany({
+          where: { id: { in: proyectoIds } }
+        });
+      }
+
+      // 10. Desvincular usuarios asociados a esta empresa
+      await tx.user.updateMany({
+        where: { companyId: id },
+        data: { companyId: null }
+      });
+
+      // 11. Eliminar la empresa
+      await tx.empresa.delete({
+        where: { id }
+      });
+    });
+
+    return res.status(200).json({ 
+      ok: true, 
+      message: 'Empresa y todos sus datos dependientes eliminados correctamente en cascada.' 
+    });
+  } catch (error) {
+    console.error('Error en eliminarEmpresa:', error);
+    next(error);
+  }
+};
+
