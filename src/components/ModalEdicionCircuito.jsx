@@ -563,7 +563,15 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveRotuloFoto = () => {
-    handleSaveEquipment(rotulo || 'RESERVA', 'RESERVA');
+    const isReserve = estado === 'RESERVA' || (!rotulo || rotulo.trim().toUpperCase() === 'RESERVA');
+    const finalRotulo = rotulo?.trim() || (isReserve ? 'RESERVA' : 'CARGA DIRECTA');
+    handleSaveEquipment(finalRotulo, isReserve ? 'RESERVA' : 'CARGA_DIRECTA', {
+      estado: isReserve ? 'RESERVA' : estado,
+      vinculadoId: null,
+      elementoDestinoId: null,
+      tipoElementoDestino: null,
+      equipo: finalRotulo
+    });
   };
 
   const simularCapturaFoto = () => {
@@ -2148,9 +2156,57 @@ export const ModalEdicionCircuito = ({
           {/* ============================================================== */}
           {isTablero && (!alimentaOtro || step === 'ROTULAR_Y_FOTO') && step === 'ROTULAR_Y_FOTO' && (
             <div className="space-y-5 animate-in fade-in duration-200">
-              {/* Selector Universal sin opciones de creación de nuevos sub-elementos */}
-              {renderUniversalElementSelector(false)}
+              
+              {/* Tarjeta de Resaltado Visual para Estado de Reserva */}
+              {estado === 'RESERVA' ? (
+                <div className="p-3.5 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/30 rounded-xl flex items-center justify-between gap-3 text-amber-300 shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-amber-400" /> Circuito Marcado como Reserva
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Polo(s) <span className="font-mono text-amber-300 font-bold">[{validation.requiredPoles.join(', ')}]</span> configurado(s) como reserva sin carga asignada.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstado('ACTIVO');
+                      if (rotulo === 'RESERVA') setRotulo('');
+                    }}
+                    className="px-2.5 py-1 text-[10px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition cursor-pointer shrink-0"
+                  >
+                    Cambiar a Activo
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800 rounded-xl gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">⚡</span>
+                    <span className="text-xs text-slate-300 font-medium">¿Deseas bloquear esta salida como reserva?</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEstado('RESERVA');
+                      setRotulo('RESERVA');
+                      setNombreArtefacto('RESERVA');
+                      setBreakerAmp('');
+                      setDescArtefacto('');
+                      setPotenciaWatts('');
+                    }}
+                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-sm"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    Marcar como Reserva
+                  </button>
+                </div>
+              )}
 
+              {/* Rótulo / Descripción */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
                   Rótulo del Circuito / Descripción
@@ -2159,11 +2215,12 @@ export const ModalEdicionCircuito = ({
                   type="text"
                   value={rotulo}
                   onChange={(e) => setRotulo(e.target.value)}
-                  placeholder="Ej. RESERVA, VACÍO, ILUMINACIÓN"
+                  placeholder="Ej. RESERVA, ILUMINACIÓN, TOMACORRIENTES..."
                   className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
 
+              {/* Conductor (Calibre opcional) */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
                   Conductor (Calibre opcional)
@@ -2171,12 +2228,13 @@ export const ModalEdicionCircuito = ({
                 <select
                   value={conductor}
                   onChange={(e) => setConductor(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
                 >
                   {COND_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
 
+              {/* Fotografía de Evidencia */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-2">
                   Fotografía de Evidencia / Circuito
@@ -2188,14 +2246,23 @@ export const ModalEdicionCircuito = ({
                 />
               </div>
 
+              {/* Botón de Guardar */}
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
                   type="button"
                   onClick={handleSaveRotuloFoto}
                   disabled={isTablero && !validation.isValid}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
+                  className={`px-6 py-2.5 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed font-black text-sm shadow-md transition-all w-full cursor-pointer flex items-center justify-center gap-2 ${
+                    estado === 'RESERVA'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 ring-2 ring-amber-500/40 shadow-amber-500/20'
+                      : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                  }`}
                 >
-                  {isTablero && !validation.isValid ? 'Resolver Conflicto de Polos para Guardar' : 'Guardar Cambios'}
+                  {isTablero && !validation.isValid
+                    ? 'Resolver Conflicto de Polos para Guardar'
+                    : estado === 'RESERVA'
+                    ? 'Guardar como Reserva'
+                    : 'Guardar Cambios'}
                 </button>
               </div>
             </div>
