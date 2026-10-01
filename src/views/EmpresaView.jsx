@@ -33,12 +33,17 @@ import {
   Edit3
 } from 'lucide-react';
 
-// Componente para renderizar Blobs de forma segura evitando fugas de memoria
+import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+import { API_BASE_URL } from '../utils/api';
+
+// Componente para renderizar Base64 / Blobs / URLs de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
   const [objectUrl, setObjectUrl] = useState(null);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    if (blob) {
+    setHasError(false);
+    if (blob instanceof Blob || blob instanceof File) {
       const url = URL.createObjectURL(blob);
       setObjectUrl(url);
       return () => {
@@ -47,12 +52,20 @@ const SafeImage = ({ blob, src, alt, className }) => {
     } else {
       setObjectUrl(null);
     }
-  }, [blob]);
+  }, [blob, src]);
 
-  const finalSrc = objectUrl || src;
-  if (!finalSrc) return null;
+  const rawSrc = objectUrl || (typeof src === 'string' ? src : null);
+  const finalSrc = getCleanImageUrl(rawSrc, API_BASE_URL);
+  if (!finalSrc || hasError) return null;
 
-  return <img src={finalSrc} alt={alt} className={className} />;
+  return (
+    <img 
+      src={finalSrc} 
+      alt={alt || "Evidencia fotográfica"} 
+      className={className} 
+      onError={() => setHasError(true)}
+    />
+  );
 };
 
 export const EmpresaView = () => {
@@ -184,6 +197,7 @@ export const EmpresaView = () => {
   const [alimentadoPor, setAlimentadoPor] = useState('');
   const [observacionesGenerales, setObservacionesGenerales] = useState('');
   const [fotoBlob, setFotoBlob] = useState(null);
+  const [foto, setFoto] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
   // Campos de Tablero
@@ -294,7 +308,7 @@ export const EmpresaView = () => {
   );
   const isElementoValid = elementoNombre.trim() !== '' && !nombreElementoDuplicado;
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -303,9 +317,18 @@ export const EmpresaView = () => {
       return;
     }
 
-    setFotoBlob(file);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
+    try {
+      const base64Url = await compressImageToBase64(file);
+      setFotoBlob(file);
+      setFoto(base64Url);
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(base64Url);
+    } catch (err) {
+      console.error("Error al procesar imagen Base64:", err);
+      setFotoBlob(file);
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
   };
 
   const handleCreateProyecto = (e) => {
@@ -451,6 +474,7 @@ export const EmpresaView = () => {
       tipoElemento,
       ubicacion: ubicacion.trim() || 'Sin ubicación',
       alimentadoPor: alimentadoPor.trim() || 'No definido',
+      foto,
       fotoBlob,
       observacionesGenerales: observacionesGenerales.trim(),
       datosTecnicos
@@ -470,8 +494,9 @@ export const EmpresaView = () => {
       setSuministroNumeroContrato('');
       setSuministroNic('');
       setSuministroPosteTrafo('');
+      setFoto(null);
       setFotoBlob(null);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
       setShowElementoModal(false);
     } else {
@@ -1533,14 +1558,15 @@ export const EmpresaView = () => {
                   Foto o Imagen de la Placa Técnico
                 </label>
                 
-                {previewUrl ? (
+                {previewUrl || foto ? (
                   <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-900 aspect-video flex items-center justify-center group shadow-md shrink-0">
-                    <img src={previewUrl} alt="Vista previa" className="w-full h-full object-cover" />
+                    <img src={previewUrl || foto} alt="Vista previa" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => {
+                        setFoto(null);
                         setFotoBlob(null);
-                        if (previewUrl) URL.revokeObjectURL(previewUrl);
+                        if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                         setPreviewUrl(null);
                       }}
                       className="absolute top-2 right-2 p-1.5 bg-slate-950/80 hover:bg-red-650 text-white rounded-lg cursor-pointer"

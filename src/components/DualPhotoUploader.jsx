@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Image as ImageIcon, X, AlertCircle } from 'lucide-react';
+import { Camera, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext';
+import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 
 // Renderizado seguro de imágenes con soporte para File / Blob / Data URL / URL remota
-export const SafePreviewImage = ({ blob, src, alt, className }) => {
+export const SafePreviewImage = ({ blob, src, alt, className, onError }) => {
   const [objectUrl, setObjectUrl] = useState(null);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
+    setImgError(false);
     if (blob instanceof Blob || blob instanceof File) {
       const url = URL.createObjectURL(blob);
       setObjectUrl(url);
@@ -27,19 +30,34 @@ export const SafePreviewImage = ({ blob, src, alt, className }) => {
     } else {
       setObjectUrl(null);
     }
-  }, [blob]);
+  }, [blob, src]);
 
-  const finalSrc = objectUrl || (typeof src === 'string' ? src : null);
-  if (!finalSrc) return null;
+  const rawSrc = objectUrl || (typeof src === 'string' ? src : null);
+  const finalSrc = getCleanImageUrl(rawSrc);
 
-  return <img src={finalSrc} alt={alt || "Evidencia fotográfica"} className={className} />;
+  if (!finalSrc || imgError) return null;
+
+  return (
+    <img
+      src={finalSrc}
+      alt={alt || "Evidencia fotográfica"}
+      className={className}
+      onError={(e) => {
+        setImgError(true);
+        onError?.(e);
+      }}
+    />
+  );
 };
 
 export default function DualPhotoUploader({
   fotoBlob,
   fotoSrc,
   previewUrl,
+  value,
+  foto,
   onImageSelected,
+  onChange,
   onRemove,
   readOnly = false,
   label = "Evidencia Fotográfica",
@@ -48,8 +66,13 @@ export default function DualPhotoUploader({
   className = ""
 }) {
   const { alert: customAlert } = useConfirm();
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleFileChange = (e) => {
+  // Determinar la fuente activa de imagen
+  const activeSrc = value || foto || fotoSrc || previewUrl || null;
+  const hasPhoto = !!(fotoBlob || activeSrc);
+
+  const handleFileChange = async (e) => {
     if (readOnly) return;
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -59,14 +82,32 @@ export default function DualPhotoUploader({
       return;
     }
 
-    if (onImageSelected) {
-      onImageSelected(file);
+    try {
+      setIsProcessing(true);
+      // Conversión y compresión automática a Base64 en el navegador (Zero-Disk serverless safe)
+      const base64DataUrl = await compressImageToBase64(file);
+
+      if (onImageSelected) {
+        onImageSelected(file, base64DataUrl);
+      }
+      if (onChange) {
+        onChange(base64DataUrl);
+      }
+    } catch (err) {
+      console.error('Error al procesar fotografía en Base64:', err);
+      customAlert('Ocurrió un error al procesar la imagen seleccionada.');
+    } finally {
+      setIsProcessing(false);
+      // Resetear valor para permitir seleccionar el mismo archivo consecutivamente
+      e.target.value = '';
     }
-    // Reset file input value so selecting the same file triggers onChange
-    e.target.value = '';
   };
 
-  const hasPhoto = !!(fotoBlob || fotoSrc || previewUrl);
+  const handleRemove = () => {
+    if (readOnly) return;
+    onRemove?.();
+    onChange?.(null);
+  };
 
   return (
     <div className={`space-y-3 font-sans ${className}`}>
@@ -84,11 +125,16 @@ export default function DualPhotoUploader({
         </div>
       )}
 
-      {hasPhoto ? (
+      {isProcessing ? (
+        <div className="p-8 border border-slate-800 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-2 text-amber-400">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-xs font-bold">Optimizando y convirtiendo imagen...</span>
+        </div>
+      ) : hasPhoto ? (
         <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/80 shadow-xl group max-w-md mx-auto">
           <SafePreviewImage
             blob={fotoBlob}
-            src={previewUrl || fotoSrc}
+            src={activeSrc}
             alt={label}
             className="w-full h-auto max-h-80 object-cover rounded-2xl"
           />
@@ -97,7 +143,7 @@ export default function DualPhotoUploader({
             <div className="absolute top-2 right-2 flex items-center gap-1.5 no-print">
               <button
                 type="button"
-                onClick={onRemove}
+                onClick={handleRemove}
                 className="p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95"
                 title="Eliminar Fotografía"
               >

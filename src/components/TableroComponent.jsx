@@ -5,12 +5,16 @@ import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import { API_BASE_URL } from '../utils/api';
 
-// Componente para renderizar Blobs de forma segura evitando fugas de memoria
-const SafeImage = ({ blob, src, alt, className }) => {
+import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+
+// Componente para renderizar Base64 / Blobs / URLs de forma segura evitando fugas de memoria
+const SafeImage = ({ blob, src, alt, className, style }) => {
   const [objectUrl, setObjectUrl] = useState(null);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    if (blob) {
+    setHasError(false);
+    if (blob instanceof Blob || blob instanceof File) {
       const url = URL.createObjectURL(blob);
       setObjectUrl(url);
       return () => {
@@ -19,12 +23,13 @@ const SafeImage = ({ blob, src, alt, className }) => {
     } else {
       setObjectUrl(null);
     }
-  }, [blob]);
+  }, [blob, src]);
 
-  const finalSrc = objectUrl || src;
-  if (!finalSrc) return null;
+  const rawSrc = objectUrl || (typeof src === 'string' ? src : null);
+  const finalSrc = getCleanImageUrl(rawSrc, API_BASE_URL);
+  if (!finalSrc || hasError) return null;
 
-  return <img src={finalSrc} alt={alt} className={className} />;
+  return <img src={finalSrc} alt={alt || "Inspección del tablero"} className={className} style={style} onError={() => setHasError(true)} />;
 };
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
@@ -980,18 +985,28 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 type="file"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files[0];
                   if (!file) return;
                   if (file.size > 10 * 1024 * 1024) {
                     customAlert("La imagen es demasiado grande. Máximo 10MB.");
                     return;
                   }
-                  onUpdateTablero({
-                    ...tableroData,
-                    fotoBlob: file,
-                    foto: null
-                  });
+                  try {
+                    const base64Url = await compressImageToBase64(file);
+                    onUpdateTablero({
+                      ...tableroData,
+                      fotoBlob: file,
+                      foto: base64Url
+                    });
+                  } catch (err) {
+                    console.error("Error procesando imagen Base64:", err);
+                    onUpdateTablero({
+                      ...tableroData,
+                      fotoBlob: file,
+                      foto: null
+                    });
+                  }
                 }}
                 className="hidden"
               />
@@ -1002,18 +1017,28 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files[0];
                   if (!file) return;
                   if (file.size > 10 * 1024 * 1024) {
                     customAlert("La imagen es demasiado grande. Máximo 10MB.");
                     return;
                   }
-                  onUpdateTablero({
-                    ...tableroData,
-                    fotoBlob: file,
-                    foto: null
-                  });
+                  try {
+                    const base64Url = await compressImageToBase64(file);
+                    onUpdateTablero({
+                      ...tableroData,
+                      fotoBlob: file,
+                      foto: base64Url
+                    });
+                  } catch (err) {
+                    console.error("Error procesando imagen Base64:", err);
+                    onUpdateTablero({
+                      ...tableroData,
+                      fotoBlob: file,
+                      foto: null
+                    });
+                  }
                 }}
                 className="hidden"
               />

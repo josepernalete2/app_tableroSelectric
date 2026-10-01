@@ -907,20 +907,16 @@ export default function TransferComponent({
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}
               previewUrl={previewUrl}
-              onImageSelected={(file) => {
+              onImageSelected={(file, base64Url) => {
                 setFotoBlob(file);
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  setFotoSrc(reader.result);
-                };
-                reader.readAsDataURL(file);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(URL.createObjectURL(file));
+                setFotoSrc(base64Url);
+                if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(base64Url);
               }}
               onRemove={() => {
                 setFotoBlob(null);
                 setFotoSrc(null);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
               }}
               readOnly={!isEditing}

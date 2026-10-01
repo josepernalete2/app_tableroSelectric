@@ -21,12 +21,17 @@ import {
   TENSIONES_COVENIN_TODAS 
 } from '../utils/constants';
 
-// Componente para renderizar Blobs de imagen de forma segura
-const SafeImage = ({ blob, src, alt, className }) => {
+import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+import { API_BASE_URL } from '../utils/api';
+
+// Componente para renderizar Base64 / Blobs / URLs de imagen de forma segura
+const SafeImage = ({ blob, src, alt, className, style }) => {
   const [objectUrl, setObjectUrl] = useState(null);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
-    if (blob) {
+    setHasError(false);
+    if (blob instanceof Blob || blob instanceof File) {
       const url = URL.createObjectURL(blob);
       setObjectUrl(url);
       return () => {
@@ -35,12 +40,13 @@ const SafeImage = ({ blob, src, alt, className }) => {
     } else {
       setObjectUrl(null);
     }
-  }, [blob]);
+  }, [blob, src]);
 
-  const finalSrc = objectUrl || src;
-  if (!finalSrc) return null;
+  const rawSrc = objectUrl || (typeof src === 'string' ? src : null);
+  const finalSrc = getCleanImageUrl(rawSrc, API_BASE_URL);
+  if (!finalSrc || hasError) return null;
 
-  return <img src={finalSrc} alt={alt} className={className} />;
+  return <img src={finalSrc} alt={alt || "Evidencia fotográfica"} className={className} style={style} onError={() => setHasError(true)} />;
 };
 
 export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly }) {
@@ -145,7 +151,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     }));
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     if (readOnly) return;
     const file = e.target.files[0];
     if (!file) return;
@@ -153,9 +159,18 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       customAlert("La imagen es demasiado grande. Por favor elija una de menos de 10MB.");
       return;
     }
-    setFotoBlob(file);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
+    try {
+      const base64Url = await compressImageToBase64(file);
+      setFotoBlob(file);
+      setFotoSrc(base64Url);
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(base64Url);
+    } catch (err) {
+      console.error("Error al procesar imagen Base64:", err);
+      setFotoBlob(file);
+      if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
   };
 
   const handleSave = (e) => {
@@ -907,15 +922,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}
               previewUrl={previewUrl}
-              onImageSelected={(file) => {
+              onImageSelected={(file, base64Url) => {
                 setFotoBlob(file);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(URL.createObjectURL(file));
+                setFotoSrc(base64Url);
+                if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(base64Url);
               }}
               onRemove={() => {
                 setFotoBlob(null);
                 setFotoSrc(null);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
               }}
               readOnly={!isEditing}
@@ -3141,20 +3157,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}
               previewUrl={previewUrl}
-              onImageSelected={(file) => {
+              onImageSelected={(file, base64Url) => {
                 setFotoBlob(file);
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  setFotoSrc(reader.result);
-                };
-                reader.readAsDataURL(file);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(URL.createObjectURL(file));
+                setFotoSrc(base64Url);
+                if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(base64Url);
               }}
               onRemove={() => {
                 setFotoBlob(null);
                 setFotoSrc(null);
-                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
               }}
               readOnly={!isEditing}

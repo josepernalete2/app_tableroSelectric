@@ -360,15 +360,16 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           fotoBlob={fotoBlob}
           fotoSrc={foto}
           previewUrl={previewUrl}
-          onImageSelected={(file) => {
+          onImageSelected={(file, base64Url) => {
             updateField('fotoBlob', file);
-            if (previewUrl) URL.revokeObjectURL(previewUrl);
-            setPreviewUrl(URL.createObjectURL(file));
+            updateField('foto', base64Url);
+            if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(base64Url);
           }}
           onRemove={() => {
             updateField('fotoBlob', null);
             updateField('foto', null);
-            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
             setPreviewUrl(null);
           }}
           readOnly={readOnly}

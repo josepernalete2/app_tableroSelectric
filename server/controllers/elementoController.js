@@ -63,9 +63,11 @@ export const crearElementoUnifilar = async (req, res, next) => {
       }
     }
 
-    // Determinar la URL pública de la foto guardada en disco por Multer
-    let finalFoto = fotoUrl || null;
-    if (req.file) {
+    // Determinar la foto (Base64 DataURL, URL pública en nube o buffer en memoria)
+    let finalFoto = req.body.foto || fotoUrl || null;
+    if (req.file && req.file.buffer) {
+      finalFoto = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    } else if (req.file && req.file.filename) {
       finalFoto = `/uploads/${req.file.filename}`;
     }
 

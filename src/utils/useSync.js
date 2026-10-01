@@ -271,8 +271,13 @@ export function useSync() {
 
       const resJson = await response.json();
       if (resJson.data && resJson.data.foto) {
+        const returnedFoto = resJson.data.foto;
+        const normalizedFoto = (returnedFoto.startsWith('data:') || returnedFoto.startsWith('http://') || returnedFoto.startsWith('https://') || returnedFoto.startsWith('blob:'))
+          ? returnedFoto
+          : `${API_BASE_URL}${returnedFoto}`;
+
         useStore.getState().updateElementoUnifilar(elemento.proyectoId, elemento.id, {
-          foto: `${API_BASE_URL}${resJson.data.foto}`,
+          foto: normalizedFoto,
           fotoBlob: null
         });
       }
