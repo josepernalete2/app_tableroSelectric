@@ -23,7 +23,7 @@ import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
 import DualPhotoUploader from './DualPhotoUploader';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -592,7 +592,7 @@ export const ModalEdicionCircuito = ({
         </label>
         {selectedElementoDestinoId ? (
           <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
-            ID: {selectedElementoDestinoId}
+            ID: {getElementCode(selectedElementoDestinoId)}
           </span>
         ) : isCreatingNewProvisional && showCreateOptions ? (
           <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
@@ -2039,7 +2039,7 @@ export const ModalEdicionCircuito = ({
                           )}
                           <div>
                             <p className="font-semibold text-slate-200">{el.nombre}</p>
-                            <p className="text-[10px] text-amber-500 font-mono">ID: {el.id} {el.tipo ? `• [${el.tipo}]` : ''}</p>
+                            <p className="text-[10px] text-amber-500 font-mono">ID: {el.codigo || getElementCode(el, el.tipo)} {el.tipo ? `• [${el.tipo}]` : ''}</p>
                           </div>
                         </div>
                         {isSelected && <Check className="w-4 h-4 text-amber-500" />}

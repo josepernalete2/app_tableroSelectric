@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ZoomIn, ZoomOut, RotateCcw, Link2 } from 'lucide-react';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 
 export default function DiagramaUnifilarBlueprint({ 
   elementos = [], 
@@ -710,7 +710,7 @@ export default function DiagramaUnifilarBlueprint({
                       fill={isDarkTheme ? '#64748b' : '#334155'}
                       className="font-mono select-none"
                     >
-                      {node.id}
+                      {getElementCode(node, node.tipoElemento)}
                     </text>
                   </g>
                 );

@@ -11,72 +11,209 @@ localforage.config({
 });
 
 export const PREFIX_MAP = {
-  TABLERO: 'TAB',
-  PUNTO_SUMINISTRO: 'SUM',
-  PUNTO_MEDICION: 'PM',
-  SUBESTACION: 'SUB',
-  AMBIENTAL_FISICA: 'AMB',
-  TERMOGRAFICA: 'TER',
-  SISTEMA_ATERRAMIENTO: 'PAT',
-  TANQUE_COMBUSTIBLE: 'TK',
-  CCM: 'CCM',
-  TRANSFORMADOR: 'TRAFO',
-  GENERADOR: 'GEN',
-  TRANSFER: 'ATS',
-  PUESTA_TIERRA: 'PAT',
-  BANCO_CONDENSADOR: 'BC',
-  OTRO: 'OTR'
+  GENERADOR: 'gen',
+  TABLERO: 'tab',
+  SUBESTACION: 'sub',
+  PUNTO_SUMINISTRO: 'med',
+  PUNTO_MEDICION: 'med',
+  TRANSFER: 'trs',
+  BANCO_CONDENSADOR: 'bco',
+  TRANSFORMADOR: 'tra',
+  PUESTA_TIERRA: 'pat',
+  SISTEMA_ATERRAMIENTO: 'pat',
+  CCM: 'ccm',
+  TANQUE_COMBUSTIBLE: 'tk',
+  TERMOGRAFICA: 'ter',
+  AMBIENTAL_FISICA: 'amb',
+  OTRO: 'otr'
 };
 
-export const cleanElementName = (nombre, id) => {
-  if (!nombre) return id || '';
-  let cleanName = nombre.trim();
-  
-  if (id) {
-    if (cleanName.startsWith(`${id} - `)) {
-      cleanName = cleanName.substring(id.length + 3);
-    } else if (cleanName.startsWith(`${id}: `)) {
-      cleanName = cleanName.substring(id.length + 2);
+export const LEGACY_PREFIX_MAP = {
+  GEN: 'gen',
+  TAB: 'tab',
+  SUB: 'sub',
+  SUM: 'med',
+  PM: 'med',
+  ATS: 'trs',
+  BC: 'bco',
+  BCO: 'bco',
+  TRAFO: 'tra',
+  TRA: 'tra',
+  PAT: 'pat',
+  CCM: 'ccm',
+  TK: 'tk',
+  TER: 'ter',
+  AMB: 'amb',
+  OTR: 'otr'
+};
+
+export const getElementCode = (item, defaultType = 'TABLERO') => {
+  if (!item) return '';
+  if (typeof item === 'string') {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item);
+    if (!isUuid && /^[a-z0-9_]+-\d+$/i.test(item)) {
+      const match = item.match(/^([a-zA-Z0-9_]+)-(\d+)$/);
+      if (match) {
+        const rawPfx = match[1].toUpperCase();
+        const num = match[2];
+        const canon = PREFIX_MAP[item] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx.toLowerCase();
+        return `${canon}-${num}`;
+      }
+      return item.toLowerCase();
     }
-    const idPattern = new RegExp(`\\s*\\(ID:\\s*${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`, 'gi');
-    cleanName = cleanName.replace(idPattern, '').trim();
+    return item;
   }
 
-  return cleanName || id;
+  if (item.codigo && typeof item.codigo === 'string' && item.codigo.trim()) {
+    return item.codigo.toLowerCase().trim();
+  }
+  if (item.datosTecnicos?.codigo && typeof item.datosTecnicos.codigo === 'string' && item.datosTecnicos.codigo.trim()) {
+    return item.datosTecnicos.codigo.toLowerCase().trim();
+  }
+
+  // Si item.id tiene formato de código corto (no UUID)
+  if (item.id && typeof item.id === 'string') {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
+    if (!isUuid) {
+      const match = item.id.match(/^([a-zA-Z0-9_]+)-(\d+)$/);
+      if (match) {
+        const rawPfx = match[1].toUpperCase();
+        const num = match[2];
+        const canonicalPrefix = PREFIX_MAP[item.tipoElemento] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx.toLowerCase();
+        return `${canonicalPrefix}-${num}`;
+      }
+    }
+  }
+
+  const tipo = item.tipoElemento || defaultType;
+  const prefix = PREFIX_MAP[tipo] || 'elm';
+  return `${prefix}-1`;
 };
 
-export const formatElementTitleWithId = (nombre, id) => {
-  return cleanElementName(nombre, id);
+export const cleanElementName = (nombre, id, codigo) => {
+  if (!nombre) return codigo || (typeof id === 'string' ? getElementCode(id) : '') || '';
+  let cleanName = nombre.trim();
+  
+  const toClean = [id, codigo].filter(Boolean);
+  toClean.forEach(cleanId => {
+    if (typeof cleanId === 'string' && cleanId.trim()) {
+      const trimmed = cleanId.trim();
+      if (cleanName.toLowerCase().startsWith(`${trimmed.toLowerCase()} - `)) {
+        cleanName = cleanName.substring(trimmed.length + 3);
+      } else if (cleanName.toLowerCase().startsWith(`${trimmed.toLowerCase()}: `)) {
+        cleanName = cleanName.substring(trimmed.length + 2);
+      }
+      const idPattern = new RegExp(`\\s*\\(ID:\\s*${trimmed.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\)`, 'gi');
+      cleanName = cleanName.replace(idPattern, '').trim();
+    }
+  });
+
+  return cleanName || codigo || (typeof id === 'string' ? getElementCode(id) : '');
 };
 
-export const getNextElementId = (tipoElemento, state = {}) => {
-  const prefix = PREFIX_MAP[tipoElemento || 'TABLERO'] || 'ELM';
+export const formatElementTitleWithId = (nombre, id, codigo) => {
+  return cleanElementName(nombre, id, codigo);
+};
+
+export const getNextElementId = (tipoElemento, proyectoIdOrScope, stateParam) => {
+  const tipo = tipoElemento || 'TABLERO';
+  const prefix = PREFIX_MAP[tipo] || 'elm';
+
+  let state = {};
+  let targetProyectoId = null;
+  let targetCompanyId = null;
+
+  if (typeof proyectoIdOrScope === 'string') {
+    targetProyectoId = proyectoIdOrScope;
+    state = stateParam || useStore.getState?.() || {};
+  } else if (proyectoIdOrScope && typeof proyectoIdOrScope === 'object') {
+    if (proyectoIdOrScope.companies || proyectoIdOrScope.elementosLocales) {
+      state = proyectoIdOrScope;
+    } else {
+      targetProyectoId = proyectoIdOrScope.proyectoId;
+      targetCompanyId = proyectoIdOrScope.companyId;
+      state = stateParam || useStore.getState?.() || {};
+    }
+  } else {
+    state = stateParam || useStore.getState?.() || {};
+  }
+
   let maxNum = 0;
+  let countInScope = 0;
+
+  const validPrefixes = new Set([
+    prefix.toLowerCase(),
+    ...(Object.entries(LEGACY_PREFIX_MAP).filter(([_, v]) => v === prefix).map(([k]) => k.toLowerCase()))
+  ]);
 
   const checkItem = (item) => {
-    if (item && item.id && typeof item.id === 'string' && item.id.startsWith(`${prefix}-`)) {
-      const parts = item.id.split('-');
-      const num = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(num) && num > maxNum) maxNum = num;
+    if (!item) return;
+    const itemTipo = item.tipoElemento || (item.tipoPlantilla === 'INSPECCION_SUBESTACION' ? 'SUBESTACION' : (item.tipoPlantilla === 'PUNTO_MEDICION' ? 'PUNTO_MEDICION' : (item.tipoPlantilla === 'CCM' ? 'CCM' : null)));
+    
+    const isSameType = itemTipo && (itemTipo === tipo || PREFIX_MAP[itemTipo] === prefix);
+    const candidates = [item.codigo, item.id, item.datosTecnicos?.codigo].filter(Boolean);
+    let matchedPrefix = false;
+
+    for (const code of candidates) {
+      if (typeof code === 'string') {
+        const parts = code.toLowerCase().split('-');
+        if (parts.length >= 2) {
+          const num = parseInt(parts[parts.length - 1], 10);
+          const pfx = parts.slice(0, -1).join('-');
+          if (validPrefixes.has(pfx) && !isNaN(num)) {
+            matchedPrefix = true;
+            if (num > maxNum) maxNum = num;
+          }
+        }
+      }
+    }
+
+    if (isSameType || matchedPrefix) {
+      countInScope++;
     }
   };
 
-  (state.companies || []).forEach(c => {
-    (c.elementosUnifilares || []).forEach(checkItem);
-    (c.proyectos || []).forEach(p => {
-      (p.elementosUnifilares || p.tableros || []).forEach(checkItem);
-      (p.inspeccionesSubestacion || p.subestaciones || []).forEach(checkItem);
-      (p.puntosMedicion || []).forEach(checkItem);
-      (p.ccmList || []).forEach(checkItem);
+  if (targetProyectoId && state.companies) {
+    for (const company of state.companies) {
+      const proj = (company.proyectos || []).find((p) => p.id === targetProyectoId);
+      if (proj) {
+        (proj.elementosUnifilares || proj.tableros || []).forEach(checkItem);
+        (proj.inspeccionesSubestacion || proj.subestaciones || []).forEach(checkItem);
+        (proj.puntosMedicion || []).forEach(checkItem);
+        (proj.ccmList || []).forEach(checkItem);
+        break;
+      }
+    }
+  } else if (targetCompanyId && state.companies) {
+    const comp = state.companies.find((c) => c.id === targetCompanyId);
+    if (comp) {
+      (comp.elementosUnifilares || []).forEach(checkItem);
+      (comp.proyectos || []).forEach(p => {
+        (p.elementosUnifilares || p.tableros || []).forEach(checkItem);
+        (p.inspeccionesSubestacion || p.subestaciones || []).forEach(checkItem);
+        (p.puntosMedicion || []).forEach(checkItem);
+        (p.ccmList || []).forEach(checkItem);
+      });
+    }
+  } else {
+    (state.companies || []).forEach(c => {
+      (c.elementosUnifilares || []).forEach(checkItem);
+      (c.proyectos || []).forEach(p => {
+        (p.elementosUnifilares || p.tableros || []).forEach(checkItem);
+        (p.inspeccionesSubestacion || p.subestaciones || []).forEach(checkItem);
+        (p.puntosMedicion || []).forEach(checkItem);
+        (p.ccmList || []).forEach(checkItem);
+      });
     });
-  });
 
-  (state.elementosLocales || []).forEach(checkItem);
-  (state.subestacionesLocales || []).forEach(checkItem);
-  (state.puntosMedicionLocales || []).forEach(checkItem);
-  (state.ccmLocales || []).forEach(checkItem);
+    (state.elementosLocales || []).forEach(checkItem);
+    (state.subestacionesLocales || []).forEach(checkItem);
+    (state.puntosMedicionLocales || []).forEach(checkItem);
+    (state.ccmLocales || []).forEach(checkItem);
+  }
 
-  return `${prefix}-${maxNum + 1}`;
+  const nextNum = Math.max(maxNum, countInScope) + 1;
+  return `${prefix}-${nextNum}`;
 };
 
 // Almacenamiento personalizado para localforage (soporta objetos Blob binarios)
@@ -105,7 +242,8 @@ const initialCompanies = [
         elementosUnifilares: [
           {
             id: 'TAB-1',
-            nombre: 'TAB-1 - Tablero Principal (No. 20)',
+            codigo: 'tab-1',
+            nombre: 'Tablero Principal (No. 20)',
             tipoElemento: 'TABLERO',
             ubicacion: 'SOTANO SALA DE TABLEROS',
             alimentadoPor: 'ATS SOTANO (TRANSFERENCIA AUTOMATICA) transferecia 580',
@@ -113,6 +251,7 @@ const initialCompanies = [
             fotoBlob: null,
             observacionesGenerales: 'SALEN ACOMETIDAS 1 X 500 Y 1X250 MCM DE LA BARRA PARTE INFERIOR. LA ACOMETIDA 250 MCM VA A CAJA CON UN BREAKER AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR EATON, Ki400, 350 A. SALEN UNA ACOMETIDA 4/0 QUE ALIMENTA TRANSFERENCIA 160. LA ACOMETIDA 500 MCM VA A UNA CAJA AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR ABB, TIPO 6520, 400 A, SALEN 2X500 Y ALIMENTAN TABLERO EN PRIMER PISO.',
             datosTecnicos: {
+              codigo: 'tab-1',
               maxPoles: 30,
               tipoTablero: 'SUPERFICIAL',
               voltajeAcometida: '211.5 / 207.4 / 208.6 V',
@@ -129,7 +268,8 @@ const initialCompanies = [
           },
           {
             id: 'ATS-1',
-            nombre: 'ATS-1 - Transferencia 580 Estacionamiento',
+            codigo: 'trs-1',
+            nombre: 'Transferencia 580 Estacionamiento',
             tipoElemento: 'TRANSFER',
             ubicacion: 'ESTACIONAMIENTO',
             alimentadoPor: 'GENERADOR 580 1 + GENERADOR 580 2',
@@ -137,6 +277,7 @@ const initialCompanies = [
             fotoBlob: null,
             observacionesGenerales: 'TRANSFERENCIA ALIMENTADA POR LOS DOS GENERADORES',
             datosTecnicos: {
+              codigo: 'trs-1',
               modelo: 'DOMOSA',
               tipoTransferencia: 'YUYE-YES1 3200/4P',
               amperaje: '3200',
@@ -153,7 +294,8 @@ const initialCompanies = [
           },
           {
             id: 'ATS-2',
-            nombre: 'ATS-2 - Transferencia 580 Sótano Sala Técnica',
+            codigo: 'trs-2',
+            nombre: 'Transferencia 580 Sótano Sala Técnica',
             tipoElemento: 'TRANSFER',
             ubicacion: 'SOTANO SALA TECNICA',
             alimentadoPor: 'TRANSFERENCIA DOMOSA + CORPOELEC',
@@ -161,6 +303,7 @@ const initialCompanies = [
             fotoBlob: null,
             observacionesGenerales: 'PASA DIRECTAMENTE AL TABLERO .',
             datosTecnicos: {
+              codigo: 'trs-2',
               modelo: 'NO TIENE',
               tipoTransferencia: 'NO TIENE',
               amperaje: '',
@@ -177,7 +320,8 @@ const initialCompanies = [
           },
           {
             id: 'GEN-1',
-            nombre: 'GEN-1 - Generador No. 1 DOMOSA 580 KVA',
+            codigo: 'gen-1',
+            nombre: 'Generador No. 1 DOMOSA 580 KVA',
             tipoElemento: 'GENERADOR',
             ubicacion: 'ESTACIONAMIENTO',
             alimentadoPor: 'TRANSFERENCIA DOMOSA EN ESTACIONAMIENTO',
@@ -185,6 +329,7 @@ const initialCompanies = [
             fotoBlob: null,
             observacionesGenerales: 'Generador No. 1 DOMOSA 580 KVA ubicado en el estacionamiento.',
             datosTecnicos: {
+              codigo: 'gen-1',
               kva: '580 KVA',
               marca: 'DOMOSA',
               fases: '3',
@@ -200,7 +345,8 @@ const initialCompanies = [
           },
           {
             id: 'GEN-2',
-            nombre: 'GEN-2 - Generador No. 2 DOMOSA 580 KVA',
+            codigo: 'gen-2',
+            nombre: 'Generador No. 2 DOMOSA 580 KVA',
             tipoElemento: 'GENERADOR',
             ubicacion: 'ESTACIONAMIENTO',
             alimentadoPor: 'TRANSFERENCIA DOMOSA EN ESTACIONAMIENTO',
@@ -208,6 +354,7 @@ const initialCompanies = [
             fotoBlob: null,
             observacionesGenerales: 'Generador No. 2 DOMOSA 580 KVA ubicado en el estacionamiento.',
             datosTecnicos: {
+              codigo: 'gen-2',
               kva: '580 KVA',
               marca: 'DOMOSA',
               fases: '3',
@@ -1119,24 +1266,32 @@ export const useStore = create(
         if (proyectoId && !targetProyecto) return { success: false, error: 'Proyecto no encontrado en la base de datos.' };
 
         let uuidId = elementoData.id;
-        if (!uuidId || !uuidId.includes('-')) {
+        if (!uuidId || !uuidId.includes('-') || uuidId.length < 10) {
           uuidId = crypto.randomUUID();
         }
 
+        const tipoElemento = elementoData.tipoElemento || 'TABLERO';
+        const codigo = elementoData.codigo || getNextElementId(tipoElemento, proyectoId, get());
+
         const nombreFinal = (elementoData.nombre && elementoData.nombre.trim())
           ? elementoData.nombre.trim()
-          : uuidId;
+          : `${codigo.toUpperCase()} - ${tipoElemento}`;
 
         const nuevoElemento = {
           id: uuidId,
+          codigo: codigo,
           nombre: nombreFinal,
-          tipoElemento: elementoData.tipoElemento || 'TABLERO',
+          tipoElemento,
           ubicacion: elementoData.ubicacion || 'Sin ubicación',
           alimentadoPor: elementoData.alimentadoPor || '',
+          alimentadoPorId: elementoData.alimentadoPorId || null,
           foto: elementoData.foto || null,
           fotoBlob: elementoData.fotoBlob || null,
           observacionesGenerales: elementoData.observacionesGenerales || '',
-          datosTecnicos: elementoData.datosTecnicos || {},
+          datosTecnicos: {
+            ...(elementoData.datosTecnicos || {}),
+            codigo: codigo
+          },
           proyectoId: proyectoId || null,
           empresaId: parentCompanyId,
           createdAt: new Date().toISOString()
@@ -1350,21 +1505,26 @@ export const useStore = create(
         if (!targetProyecto) return { success: false, error: 'Proyecto no encontrado.' };
 
         let uuidId = payload.id;
-        if (!uuidId || !uuidId.includes('-')) {
+        if (!uuidId || !uuidId.includes('-') || uuidId.length < 10) {
           uuidId = crypto.randomUUID();
         }
 
+        const tipoElemento = payload.tipoElemento || payload.tipoPlantilla || 'SUBESTACION';
+        const codigo = payload.codigo || getNextElementId(tipoElemento, proyectoId, get());
+
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
           ? payload.nombre.trim() 
-          : uuidId;
+          : `${codigo.toUpperCase()} - Subestación`;
 
         const nuevaSubestacion = {
           ...payload,
           id: uuidId,
+          codigo: codigo,
           nombre: nombreFinal,
+          tipoElemento,
+          tipoPlantilla: payload.tipoPlantilla || 'INSPECCION_SUBESTACION',
           proyectoId,
           empresaId: parentCompanyId,
-          tipoPlantilla: 'INSPECCION_SUBESTACION',
           createdAt: new Date().toISOString()
         };
 
@@ -1492,17 +1652,20 @@ export const useStore = create(
         }
 
         let uuidId = payload.id;
-        if (!uuidId || !uuidId.includes('-')) {
+        if (!uuidId || !uuidId.includes('-') || uuidId.length < 10) {
           uuidId = crypto.randomUUID();
         }
 
+        const codigo = payload.codigo || getNextElementId('PUNTO_MEDICION', proyectoId, get());
+
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
           ? payload.nombre.trim() 
-          : uuidId;
+          : `${codigo.toUpperCase()} - Punto de Medición`;
 
         const nuevoPunto = {
           ...payload,
           id: uuidId,
+          codigo: codigo,
           nombre: nombreFinal,
           proyectoId,
           empresaId: parentCompanyId,
@@ -1645,17 +1808,20 @@ export const useStore = create(
         }
 
         let uuidId = payload.id;
-        if (!uuidId || !uuidId.includes('-')) {
+        if (!uuidId || !uuidId.includes('-') || uuidId.length < 10) {
           uuidId = crypto.randomUUID();
         }
 
+        const codigo = payload.codigo || getNextElementId('CCM', proyectoId, get());
+
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
           ? payload.nombre.trim() 
-          : uuidId;
+          : `${codigo.toUpperCase()} - CCM`;
 
         const nuevoCcm = {
           ...payload,
           id: uuidId,
+          codigo: codigo,
           nombre: nombreFinal,
           proyectoId,
           empresaId: parentCompanyId,
@@ -2031,18 +2197,23 @@ export const useStore = create(
       crearElementoProvisional: (proyectoId, datosProvisional = {}) => {
         const state = get();
         const tipo = datosProvisional.tipoElemento || 'TABLERO';
-        const newId = datosProvisional.id || getNextElementId(tipo, state);
+        const codigo = datosProvisional.codigo || getNextElementId(tipo, proyectoId, state);
+        const uuidId = datosProvisional.id && datosProvisional.id.length > 10 ? datosProvisional.id : crypto.randomUUID();
 
         const provisionalObj = {
-          id: newId,
-          nombre: datosProvisional.nombre || `RESERVA (${newId})`,
+          id: uuidId,
+          codigo: codigo,
+          nombre: datosProvisional.nombre || `RESERVA (${codigo})`,
           tipoElemento: tipo,
           ubicacion: 'RESERVA (Pendiente por Crear)',
           alimentadoPor: datosProvisional.circuitoOrigen ? `Circuito ${datosProvisional.circuitoOrigen}` : null,
           circuitoOrigen: datosProvisional.circuitoOrigen || null,
           estadoVinculo: 'PENDIENTE_CREAR',
           observacionesGenerales: 'Nodo registrado en estado provisional como Reserva activa.',
-          datosTecnicos: {},
+          datosTecnicos: {
+            ...(datosProvisional.datosTecnicos || {}),
+            codigo: codigo
+          },
           proyectoId
         };
 

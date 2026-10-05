@@ -16,7 +16,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import DiagramaUnifilarBlueprint from './DiagramaUnifilarBlueprint';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 
 export default function ModalDiagramaUnifilar({ 
@@ -480,7 +480,7 @@ export default function ModalDiagramaUnifilar({
                         </span>
                       </div>
                       <h4 className="text-sm font-black text-slate-100 tracking-wide font-mono uppercase truncate">{selectedNode.nombre}</h4>
-                      <span className="text-[9.5px] font-mono font-bold text-slate-500">ID: {selectedNode.id}</span>
+                      <span className="text-[9.5px] font-mono font-bold text-slate-500">ID: {getElementCode(selectedNode, selectedNode.tipoElemento)}</span>
                     </div>
 
                     {/* Formulario de Edición */}

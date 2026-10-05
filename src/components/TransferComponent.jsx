@@ -22,7 +22,7 @@ import {
   RotateCcw,
   X
 } from 'lucide-react';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
@@ -264,7 +264,7 @@ export default function TransferComponent({
                 {estadoServicio}
               </span>
               <span className="font-mono text-xs font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                ID: {data.id}
+                ID: {getElementCode(data, 'TRANSFER')}
               </span>
             </div>
             <h1 className="text-lg font-black text-slate-100 mt-0.5">

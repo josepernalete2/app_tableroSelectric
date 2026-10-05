@@ -9,7 +9,7 @@ import {
   RotateCcw,
   X
 } from 'lucide-react';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
@@ -239,7 +239,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         <span className="font-semibold text-slate-100 print:text-black">{cleanName}</span>
         {elementId && (
           <span className="inline-flex items-center font-mono font-bold text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
-            ID: {elementId}
+            ID: {getElementCode(elementId, tipoElemento)}
           </span>
         )}
       </span>
@@ -276,7 +276,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         <div className="flex items-center gap-2">
           {renderBadge()}
           <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {elementoData.id}
+            ID: {getElementCode(elementoData, tipoElemento)}
           </span>
         </div>
 

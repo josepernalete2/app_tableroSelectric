@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw } from 'lucide-react';
+import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import DualPhotoUploader from './DualPhotoUploader';
@@ -180,7 +181,7 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
           <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {id}
+            ID: {getElementCode(subestacionData, 'SUBESTACION')}
           </span>
         </div>
       </div>

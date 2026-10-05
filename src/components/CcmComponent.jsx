@@ -19,7 +19,7 @@ import {
   Settings
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
   const { companies, crearElementoProvisional } = useStore();
@@ -232,7 +232,7 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
           <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {id}
+            ID: {getElementCode(ccmData, 'CCM')}
           </span>
         </div>
       </div>

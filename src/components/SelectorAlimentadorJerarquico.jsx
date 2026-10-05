@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { API_BASE_URL } from '../utils/api';
-import useStore from '../store/useStore';
+import useStore, { getElementCode } from '../store/useStore';
 import {
   Search,
   ChevronDown,
@@ -116,6 +116,7 @@ export default function SelectorAlimentadorJerarquico({
       .filter((el) => !tableroActualId || (el.id !== tableroActualId && el.nombre !== tableroActualId))
       .map((el) => ({
         id: el.id,
+        codigo: el.codigo || getElementCode(el, el.tipoElemento),
         nombre: el.nombre,
         tipoElemento: el.tipoElemento || 'TABLERO',
         categoria: el.categoria || resolverCategoria(el.tipoElemento),
@@ -463,6 +464,9 @@ export default function SelectorAlimentadorJerarquico({
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold text-xs text-slate-100 truncate">
                                       {item.nombre}
+                                    </span>
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                                      ID: {item.codigo || getElementCode(item, item.tipoElemento)}
                                     </span>
                                     <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-800 text-amber-300 shrink-0">
                                       ⚡ {item.nivelTension}

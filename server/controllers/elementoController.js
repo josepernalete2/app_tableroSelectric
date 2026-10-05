@@ -8,6 +8,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
   try {
     const {
       id,
+      codigo,
       nombre,
       tipoElemento,
       ubicacion,
@@ -61,6 +62,9 @@ export const crearElementoUnifilar = async (req, res, next) => {
       } else {
         parsedDatosTecnicos = datosTecnicos;
       }
+    }
+    if (codigo && !parsedDatosTecnicos.codigo) {
+      parsedDatosTecnicos.codigo = codigo;
     }
 
     // Determinar la foto (Base64 DataURL, URL pública en nube o buffer en memoria)

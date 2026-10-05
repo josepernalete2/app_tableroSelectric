@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore, { formatElementTitleWithId } from '../store/useStore';
+import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import AvanceProgressBar from '../components/AvanceProgressBar';
@@ -468,9 +468,11 @@ export const EmpresaView = () => {
       };
     }
 
+    const assignedCode = getNextElementId(tipoElemento, { companyId });
     const result = addElementoUnifilar({
       proyectoId: null,
       companyId,
+      codigo: assignedCode,
       nombre: elementoNombre.trim(),
       tipoElemento,
       ubicacion: ubicacion.trim() || 'Sin ubicación',
@@ -911,7 +913,7 @@ export const EmpresaView = () => {
                       {!isMultiSelectMode && (
                         <div className="absolute top-3 right-3 flex items-center gap-2">
                           <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
-                            ID: {item.id}
+                            ID: {getElementCode(item, item.tipoElemento)}
                           </span>
                         </div>
                       )}
@@ -937,7 +939,7 @@ export const EmpresaView = () => {
                     <div className="p-5 flex-1 flex flex-col justify-between">
                       <div className="space-y-1">
                         <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
-                          {formatElementTitleWithId(item.nombre, item.id)}
+                          {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
                         </h3>
                         <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
                           <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
@@ -1153,15 +1155,20 @@ export const EmpresaView = () => {
 
               {/* Nombre descriptivo */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nombre descriptivo del equipo
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    Nombre descriptivo del equipo
+                  </label>
+                  <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-md font-mono text-[10px] font-bold">
+                    Código: {getNextElementId(tipoElemento, { companyId })}
+                  </span>
+                </div>
                 <input
                   type="text"
                   required
                   value={elementoNombre}
                   onChange={(e) => setElementoNombre(e.target.value)}
-                  placeholder={`Ej. ${tipoElemento === 'TABLERO' ? 'Tablero Principal (TAB 20)' : tipoElemento === 'TRANSFORMADOR' ? 'Transformador GE 500 KVA' : tipoElemento === 'PUESTA_TIERRA' ? 'Malla Puesta a Tierra N° 1' : 'Generador DOMOSA 1'}`}
+                  placeholder={`Ej. ${PREFIX_MAP[tipoElemento] || 'tab'}-1: Nombre Descriptivo`}
                   className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
                     nombreElementoDuplicado 
                       ? 'border-red-500 focus:border-red-500 focus:ring-red-550' 

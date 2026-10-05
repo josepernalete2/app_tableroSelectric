@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useStore, { formatElementTitleWithId } from '../store/useStore';
+import useStore, { formatElementTitleWithId, getElementCode } from '../store/useStore';
 import { API_BASE_URL } from '../utils/api';
 import { 
   FileText, 
@@ -567,9 +567,9 @@ export default function ReportesView() {
                 >
                   <div className="space-y-1">
                     <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
-                      ID: {tab.id}
+                      ID: {getElementCode(tab, tab.tipoElemento || 'TABLERO')}
                     </span>
-                    <h4 className="font-bold text-sm text-slate-200 mt-2">{tab.nombre}</h4>
+                    <h4 className="font-bold text-sm text-slate-200 mt-2">{formatElementTitleWithId(tab.nombre, tab.id, tab.codigo)}</h4>
                     <p className="text-xs text-slate-400">Ubicación: {tab.ubicacion || 'Sin especificar'}</p>
                   </div>
 
