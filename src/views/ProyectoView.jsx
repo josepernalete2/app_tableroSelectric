@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId } from '../store/useStore';
+import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId, sortElementsByOrder } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import SelectorAlimentadorJerarquico from '../components/SelectorAlimentadorJerarquico';
@@ -91,6 +91,8 @@ export const ProyectoView = () => {
     deleteCcm,
     updateCcm,
     updateProyecto,
+    moverElemento,
+    reordenarColeccion,
     showToast
   } = useStore();
 
@@ -143,6 +145,56 @@ export const ProyectoView = () => {
 
   // Estado para Modal de Edición de ID (Solo Administradores)
   const [editIdModalData, setEditIdModalData] = useState({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' });
+
+  // Estado para arrastrar y soltar (Drag and Drop)
+  const [draggedItemId, setDraggedItemId] = useState(null);
+
+  // Obtención y ordenamiento cronológico / personalizado estricto
+  const elementos = useMemo(() => {
+    return sortElementsByOrder(proyecto?.elementosUnifilares || proyecto?.tableros || []);
+  }, [proyecto]);
+
+  const inspecciones = useMemo(() => {
+    return sortElementsByOrder(proyecto?.inspeccionesSubestacion || proyecto?.subestaciones || []);
+  }, [proyecto]);
+
+  const puntosMedicion = useMemo(() => {
+    return sortElementsByOrder(proyecto?.puntosMedicion || []);
+  }, [proyecto]);
+
+  const filteredElementos = useMemo(() => {
+    if (!searchQuery.trim()) return elementos;
+    const q = searchQuery.toLowerCase();
+    return elementos.filter(e => 
+      e.nombre?.toLowerCase().includes(q) || 
+      e.codigo?.toLowerCase().includes(q) || 
+      e.tipoElemento?.toLowerCase().includes(q) ||
+      e.ubicacion?.toLowerCase().includes(q)
+    );
+  }, [elementos, searchQuery]);
+
+  const filteredInspecciones = useMemo(() => {
+    if (!searchQuery.trim()) return inspecciones;
+    const q = searchQuery.toLowerCase();
+    return inspecciones.filter(i => 
+      i.nombre?.toLowerCase().includes(q) || 
+      i.codigo?.toLowerCase().includes(q) || 
+      i.tipoElemento?.toLowerCase().includes(q) ||
+      i.ubicacion?.toLowerCase().includes(q) ||
+      i.inspector?.toLowerCase().includes(q)
+    );
+  }, [inspecciones, searchQuery]);
+
+  const filteredPuntosMedicion = useMemo(() => {
+    if (!searchQuery.trim()) return puntosMedicion;
+    const q = searchQuery.toLowerCase();
+    return puntosMedicion.filter(item => 
+      (item.nombre && item.nombre.toLowerCase().includes(q)) ||
+      (item.nombreUsuario && item.nombreUsuario.toLowerCase().includes(q)) ||
+      (item.numeroContrato && item.numeroContrato.toLowerCase().includes(q)) ||
+      (item.codigoElementoPrincipal && item.codigoElementoPrincipal.toLowerCase().includes(q))
+    );
+  }, [puntosMedicion, searchQuery]);
 
   // Estados de selección múltiple
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -481,29 +533,6 @@ export const ProyectoView = () => {
       </div>
     );
   }
-
-  const elementos = proyecto.elementosUnifilares || proyecto.tableros || [];
-  const inspecciones = proyecto.inspeccionesSubestacion || proyecto.subestaciones || [];
-  const puntosMedicion = proyecto.puntosMedicion || [];
-
-  const filteredElementos = elementos.filter((item) =>
-    item.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (item.ubicacion && item.ubicacion.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    item.tipoElemento.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredInspecciones = inspecciones.filter((item) =>
-    item.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (item.ubicacion && item.ubicacion.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (item.inspector && item.inspector.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const filteredPuntosMedicion = puntosMedicion.filter((item) =>
-    (item.nombre && item.nombre.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (item.nombreUsuario && item.nombreUsuario.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (item.numeroContrato && item.numeroContrato.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (item.codigoElementoPrincipal && item.codigoElementoPrincipal.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
 
   const nombreElementoDuplicado = elementos.some(
     (e) => e.nombre.toLowerCase().trim() === nombre.toLowerCase().trim() && e.id !== editingElemento?.id
@@ -1181,11 +1210,34 @@ export const ProyectoView = () => {
 
             {filteredInspecciones.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredInspecciones.map((item) => {
+                {filteredInspecciones.map((item, index) => {
                   const isSelected = selectedIds.has(item.id);
+                  const isDragging = draggedItemId === item.id;
                   return (
                     <div
                       key={item.id}
+                      draggable={!isMultiSelectMode}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', item.id);
+                        setDraggedItemId(item.id);
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData('text/plain');
+                        if (sourceId && sourceId !== item.id) {
+                          const sourceIdx = inspecciones.findIndex(x => x.id === sourceId);
+                          const targetIdx = inspecciones.findIndex(x => x.id === item.id);
+                          if (sourceIdx !== -1 && targetIdx !== -1) {
+                            const newOrder = [...inspecciones];
+                            const [removed] = newOrder.splice(sourceIdx, 1);
+                            newOrder.splice(targetIdx, 0, removed);
+                            reordenarColeccion(companyId, proyectoId, newOrder.map(x => x.id), 'INSPECCION');
+                            showToast?.('Orden de inspecciones actualizado', 'success');
+                          }
+                        }
+                        setDraggedItemId(null);
+                      }}
                       onClick={() => {
                         if (isMultiSelectMode) {
                           handleToggleSelect(item.id);
@@ -1194,6 +1246,8 @@ export const ProyectoView = () => {
                         }
                       }}
                       className={`bg-slate-950 border flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group rounded-2xl shadow-md hover:shadow-xl ${
+                        isDragging ? 'opacity-40 border-dashed border-amber-500 scale-98' : ''
+                      } ${
                         isMultiSelectMode && isSelected 
                           ? 'border-amber-500 shadow-amber-500/5 ring-1 ring-amber-500/20' 
                           : 'border-slate-800/80 hover:border-slate-700/60'
@@ -1205,7 +1259,10 @@ export const ProyectoView = () => {
                           {item.tipoElemento === 'TERMOGRAFICA' ? 'Inspección Termográfica' : item.tipoElemento === 'SISTEMA_ATERRAMIENTO' ? 'Puesta a Tierra (SPAT)' : item.tipoElemento === 'TANQUE_COMBUSTIBLE' ? 'Tanque de Combustible' : 'Inspección Visual / Civil'}
                         </span>
                         
-                        <div className="absolute top-3 left-3">
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 bg-slate-900/90 text-slate-400 border border-slate-800 rounded-lg text-[9.5px] font-mono font-bold">
+                            #{index + 1}
+                          </span>
                           <span className="px-3 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
                             {item.tipoElemento === 'TERMOGRAFICA' ? '🔥 TERMOGRAFÍA' : item.tipoElemento === 'SISTEMA_ATERRAMIENTO' ? '🛡️ SPAT ATERRAMIENTO' : item.tipoElemento === 'TANQUE_COMBUSTIBLE' ? '⛽ TANQUE COMBUSTIBLE' : '🏢 SUBESTACIÓN'}
                           </span>
@@ -1251,11 +1308,21 @@ export const ProyectoView = () => {
                         <AvanceProgressBar elemento={item} tipoElemento={item.tipoElemento || 'SUBESTACION'} />
                       </div>
 
-                      {/* Acciones CRUD Directas en Tarjeta (Obs 2 y 24) */}
+                      {/* Acciones CRUD Directas en Tarjeta (Obs 2 y 24) con Reordenamiento */}
                       <div className="mt-3">
                         <ElementoCardActions
                           onEdit={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
                           onNewInspection={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
+                          onMoveUp={() => {
+                            moverElemento(companyId, proyectoId, item.id, 'UP', 'INSPECCION');
+                            showToast?.('Posición de inspección actualizada', 'info');
+                          }}
+                          onMoveDown={() => {
+                            moverElemento(companyId, proyectoId, item.id, 'DOWN', 'INSPECCION');
+                            showToast?.('Posición de inspección actualizada', 'info');
+                          }}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < filteredInspecciones.length - 1}
                           onDelete={async () => {
                             const ok = await confirm({
                               title: 'Eliminar Inspección',
@@ -1308,7 +1375,7 @@ export const ProyectoView = () => {
 
             {filteredElementos.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredElementos.map((item) => {
+                {filteredElementos.map((item, index) => {
                   const isTablero = item.tipoElemento === 'TABLERO';
                   const isTrafo = item.tipoElemento === 'TRANSFORMADOR';
                   const isGen = item.tipoElemento === 'GENERADOR';
@@ -1317,10 +1384,33 @@ export const ProyectoView = () => {
                   const isPuntoSuministro = item.tipoElemento === 'PUNTO_SUMINISTRO';
                   const isCcm = item.tipoElemento === 'CCM';
                   const isBanco = item.tipoElemento === 'BANCO_CONDENSADOR';
+                  const isDragging = draggedItemId === item.id;
 
                   return (
                     <div
                       key={item.id}
+                      draggable={!isMultiSelectMode}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', item.id);
+                        setDraggedItemId(item.id);
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData('text/plain');
+                        if (sourceId && sourceId !== item.id) {
+                          const sourceIdx = elementos.findIndex(x => x.id === sourceId);
+                          const targetIdx = elementos.findIndex(x => x.id === item.id);
+                          if (sourceIdx !== -1 && targetIdx !== -1) {
+                            const newOrder = [...elementos];
+                            const [removed] = newOrder.splice(sourceIdx, 1);
+                            newOrder.splice(targetIdx, 0, removed);
+                            reordenarColeccion(companyId, proyectoId, newOrder.map(x => x.id), 'UNIFILAR');
+                            showToast?.('Orden de diagrama unifilar actualizado', 'success');
+                          }
+                        }
+                        setDraggedItemId(null);
+                      }}
                       onClick={() => {
                         if (isMultiSelectMode) {
                           handleToggleSelect(item.id);
@@ -1329,6 +1419,8 @@ export const ProyectoView = () => {
                         }
                       }}
                       className={`bg-slate-950 border flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group rounded-2xl shadow-md hover:shadow-xl ${
+                        isDragging ? 'opacity-40 border-dashed border-amber-500 scale-98' : ''
+                      } ${
                         isMultiSelectMode && selectedIds.has(item.id) 
                           ? 'border-amber-500 shadow-amber-500/5 ring-1 ring-amber-500/20' 
                           : 'border-slate-800/80 hover:border-slate-700/60'
@@ -1359,7 +1451,10 @@ export const ProyectoView = () => {
                         )}
                         
                         {/* Badges de tipo e ID */}
-                        <div className="absolute top-3 left-3">
+                        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 bg-slate-900/90 text-slate-400 border border-slate-800 rounded-lg text-[9.5px] font-mono font-bold">
+                            #{index + 1}
+                          </span>
                           {isTablero && (
                             <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
                               ⚡ PANEL ELÉCTRICO
@@ -1509,6 +1604,16 @@ export const ProyectoView = () => {
                               setShowElementoModal(true);
                             }}
                             onNewInspection={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
+                            onMoveUp={() => {
+                              moverElemento(companyId, proyectoId, item.id, 'UP', 'UNIFILAR');
+                              showToast?.('Posición del equipo actualizada', 'info');
+                            }}
+                            onMoveDown={() => {
+                              moverElemento(companyId, proyectoId, item.id, 'DOWN', 'UNIFILAR');
+                              showToast?.('Posición del equipo actualizada', 'info');
+                            }}
+                            canMoveUp={index > 0}
+                            canMoveDown={index < filteredElementos.length - 1}
                             onDelete={async () => {
                               const ok = await confirm({
                                 title: 'Eliminar Elemento',

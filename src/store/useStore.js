@@ -115,6 +115,23 @@ export const formatElementTitleWithId = (nombre, id, codigo) => {
   return cleanElementName(nombre, id, codigo);
 };
 
+export const sortElementsByOrder = (list = []) => {
+  if (!Array.isArray(list)) return [];
+  return [...list].sort((a, b) => {
+    const orderA = a.orden !== undefined && a.orden !== null ? Number(a.orden) : null;
+    const orderB = b.orden !== undefined && b.orden !== null ? Number(b.orden) : null;
+    if (orderA !== null && orderB !== null && orderA !== orderB) {
+      return orderA - orderB;
+    }
+    if (orderA !== null && orderB === null) return -1;
+    if (orderA === null && orderB !== null) return 1;
+    // Orden cronológico estricto por defecto (createdAt ascendente)
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeA - timeB;
+  });
+};
+
 export const getNextElementId = (tipoElemento, proyectoIdOrScope, stateParam) => {
   const tipo = tipoElemento || 'TABLERO';
   const prefix = PREFIX_MAP[tipo] || 'elm';
@@ -1273,6 +1290,13 @@ export const useStore = create(
         const tipoElemento = elementoData.tipoElemento || 'TABLERO';
         const codigo = elementoData.codigo || getNextElementId(tipoElemento, proyectoId, get());
 
+        const existingElements = proyectoId 
+          ? (targetProyecto?.elementosUnifilares || targetProyecto?.tableros || []) 
+          : (companies.find(c => c.id === parentCompanyId)?.elementosUnifilares || []);
+        const nextOrden = elementoData.orden !== undefined 
+          ? Number(elementoData.orden) 
+          : (existingElements.length > 0 ? Math.max(0, ...existingElements.map(e => Number(e.orden) || 0)) + 1 : 1);
+
         const nombreFinal = (elementoData.nombre && elementoData.nombre.trim())
           ? elementoData.nombre.trim()
           : `${codigo.toUpperCase()} - ${tipoElemento}`;
@@ -1282,6 +1306,7 @@ export const useStore = create(
           codigo: codigo,
           nombre: nombreFinal,
           tipoElemento,
+          orden: nextOrden,
           ubicacion: elementoData.ubicacion || 'Sin ubicación',
           alimentadoPor: elementoData.alimentadoPor || '',
           alimentadoPorId: elementoData.alimentadoPorId || null,
@@ -1512,6 +1537,11 @@ export const useStore = create(
         const tipoElemento = payload.tipoElemento || payload.tipoPlantilla || 'SUBESTACION';
         const codigo = payload.codigo || getNextElementId(tipoElemento, proyectoId, get());
 
+        const existingSub = targetProyecto ? (targetProyecto.inspeccionesSubestacion || targetProyecto.subestaciones || []) : [];
+        const nextOrden = payload.orden !== undefined 
+          ? Number(payload.orden) 
+          : (existingSub.length > 0 ? Math.max(0, ...existingSub.map(s => Number(s.orden) || 0)) + 1 : 1);
+
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
           ? payload.nombre.trim() 
           : `${codigo.toUpperCase()} - Subestación`;
@@ -1522,6 +1552,7 @@ export const useStore = create(
           codigo: codigo,
           nombre: nombreFinal,
           tipoElemento,
+          orden: nextOrden,
           tipoPlantilla: payload.tipoPlantilla || 'INSPECCION_SUBESTACION',
           proyectoId,
           empresaId: parentCompanyId,
@@ -1658,6 +1689,11 @@ export const useStore = create(
 
         const codigo = payload.codigo || getNextElementId('PUNTO_MEDICION', proyectoId, get());
 
+        const existingPm = targetProyecto ? (targetProyecto.puntosMedicion || []) : [];
+        const nextOrden = payload.orden !== undefined 
+          ? Number(payload.orden) 
+          : (existingPm.length > 0 ? Math.max(0, ...existingPm.map(p => Number(p.orden) || 0)) + 1 : 1);
+
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
           ? payload.nombre.trim() 
           : `${codigo.toUpperCase()} - Punto de Medición`;
@@ -1667,6 +1703,7 @@ export const useStore = create(
           id: uuidId,
           codigo: codigo,
           nombre: nombreFinal,
+          orden: nextOrden,
           proyectoId,
           empresaId: parentCompanyId,
           tipoPlantilla: 'PUNTO_MEDICION',
@@ -1814,6 +1851,11 @@ export const useStore = create(
 
         const codigo = payload.codigo || getNextElementId('CCM', proyectoId, get());
 
+        const existingCcm = targetProyecto ? (targetProyecto.ccmList || []) : [];
+        const nextOrden = payload.orden !== undefined 
+          ? Number(payload.orden) 
+          : (existingCcm.length > 0 ? Math.max(0, ...existingCcm.map(c => Number(c.orden) || 0)) + 1 : 1);
+
         const nombreFinal = (payload.nombre && payload.nombre.trim()) 
           ? payload.nombre.trim() 
           : `${codigo.toUpperCase()} - CCM`;
@@ -1823,6 +1865,7 @@ export const useStore = create(
           id: uuidId,
           codigo: codigo,
           nombre: nombreFinal,
+          orden: nextOrden,
           proyectoId,
           empresaId: parentCompanyId,
           tipoPlantilla: 'CCM',
@@ -2119,6 +2162,164 @@ export const useStore = create(
         }
 
         return { success: true, codigo: cleanCode };
+      },
+
+      moverElemento: (companyId, proyectoId, elementoId, direccion = 'UP', tipoColeccion = 'UNIFILAR') => {
+        set((state) => {
+          const updatedCompanies = state.companies.map((c) => {
+            if (companyId && c.id !== companyId) return c;
+
+            if (proyectoId) {
+              return {
+                ...c,
+                proyectos: (c.proyectos || []).map((p) => {
+                  if (p.id !== proyectoId) return p;
+
+                  if (tipoColeccion === 'UNIFILAR') {
+                    const list = [...(p.elementosUnifilares || p.tableros || [])];
+                    const sorted = sortElementsByOrder(list);
+                    const currentIndex = sorted.findIndex((item) => item.id === elementoId);
+                    if (currentIndex === -1) return p;
+
+                    const targetIndex = direccion === 'UP' ? currentIndex - 1 : currentIndex + 1;
+                    if (targetIndex < 0 || targetIndex >= sorted.length) return p;
+
+                    const [moved] = sorted.splice(currentIndex, 1);
+                    sorted.splice(targetIndex, 0, moved);
+
+                    const reindexed = sorted.map((item, idx) => ({
+                      ...item,
+                      orden: idx + 1
+                    }));
+
+                    return {
+                      ...p,
+                      elementosUnifilares: reindexed,
+                      tableros: reindexed
+                    };
+                  } else {
+                    const list = [...(p.inspeccionesSubestacion || p.subestaciones || [])];
+                    const sorted = sortElementsByOrder(list);
+                    const currentIndex = sorted.findIndex((item) => item.id === elementoId);
+                    if (currentIndex === -1) return p;
+
+                    const targetIndex = direccion === 'UP' ? currentIndex - 1 : currentIndex + 1;
+                    if (targetIndex < 0 || targetIndex >= sorted.length) return p;
+
+                    const [moved] = sorted.splice(currentIndex, 1);
+                    sorted.splice(targetIndex, 0, moved);
+
+                    const reindexed = sorted.map((item, idx) => ({
+                      ...item,
+                      orden: idx + 1
+                    }));
+
+                    return {
+                      ...p,
+                      inspeccionesSubestacion: reindexed,
+                      subestaciones: reindexed
+                    };
+                  }
+                })
+              };
+            } else {
+              // Nivel de Empresa
+              const list = [...(c.elementosUnifilares || [])];
+              const sorted = sortElementsByOrder(list);
+              const currentIndex = sorted.findIndex((item) => item.id === elementoId);
+              if (currentIndex === -1) return c;
+
+              const targetIndex = direccion === 'UP' ? currentIndex - 1 : currentIndex + 1;
+              if (targetIndex < 0 || targetIndex >= sorted.length) return c;
+
+              const [moved] = sorted.splice(currentIndex, 1);
+              sorted.splice(targetIndex, 0, moved);
+
+              const reindexed = sorted.map((item, idx) => ({
+                ...item,
+                orden: idx + 1
+              }));
+
+              return {
+                ...c,
+                elementosUnifilares: reindexed
+              };
+            }
+          });
+
+          return {
+            companies: updatedCompanies
+          };
+        });
+      },
+
+      reordenarColeccion: (companyId, proyectoId, orderedIds = [], tipoColeccion = 'UNIFILAR') => {
+        if (!Array.isArray(orderedIds) || orderedIds.length === 0) return;
+
+        set((state) => {
+          const updatedCompanies = state.companies.map((c) => {
+            if (companyId && c.id !== companyId) return c;
+
+            if (proyectoId) {
+              return {
+                ...c,
+                proyectos: (c.proyectos || []).map((p) => {
+                  if (p.id !== proyectoId) return p;
+
+                  if (tipoColeccion === 'UNIFILAR') {
+                    const list = [...(p.elementosUnifilares || p.tableros || [])];
+                    const reindexed = list.map((item) => {
+                      const idx = orderedIds.indexOf(item.id);
+                      return {
+                        ...item,
+                        orden: idx !== -1 ? idx + 1 : (item.orden || 9999)
+                      };
+                    });
+                    const sorted = sortElementsByOrder(reindexed);
+                    return {
+                      ...p,
+                      elementosUnifilares: sorted,
+                      tableros: sorted
+                    };
+                  } else {
+                    const list = [...(p.inspeccionesSubestacion || p.subestaciones || [])];
+                    const reindexed = list.map((item) => {
+                      const idx = orderedIds.indexOf(item.id);
+                      return {
+                        ...item,
+                        orden: idx !== -1 ? idx + 1 : (item.orden || 9999)
+                      };
+                    });
+                    const sorted = sortElementsByOrder(reindexed);
+                    return {
+                      ...p,
+                      inspeccionesSubestacion: sorted,
+                      subestaciones: sorted
+                    };
+                  }
+                })
+              };
+            } else {
+              const list = [...(c.elementosUnifilares || [])];
+              const reindexed = list.map((item) => {
+                const idx = orderedIds.indexOf(item.id);
+                return {
+                  ...item,
+                  orden: idx !== -1 ? idx + 1 : (item.orden || 9999)
+                };
+              });
+              const sorted = sortElementsByOrder(reindexed);
+              return {
+                ...c,
+                elementosUnifilares: sorted
+              };
+            }
+          });
+
+          return {
+            companies: updatedCompanies
+          };
+        });
       },
 
       removeFromQueue: (id) => {

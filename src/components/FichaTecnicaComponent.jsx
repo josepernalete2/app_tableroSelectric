@@ -229,10 +229,42 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
   const renderElementWithId = (nombreText, fallbackId) => {
     if (!nombreText) return <span className="opacity-40">—</span>;
-    let cleanName = nombreText;
+    const str = String(nombreText).trim();
+    if (!str) return <span className="opacity-40">—</span>;
+
+    // Verificar si es una selección múltiple separada por comas
+    const parts = str.split(',').map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      return (
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
+          {parts.map((part, idx) => {
+            let cleanName = part;
+            let elementId = null;
+            const match = part.match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
+            if (match) {
+              if (match[1]) cleanName = match[1].trim();
+              if (match[2]) elementId = match[2].trim();
+            }
+            return (
+              <span key={idx} className="inline-flex items-center gap-1 bg-slate-900/60 print:bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-800 print:border-slate-300">
+                <span className="font-semibold text-slate-100 print:text-black">{cleanName}</span>
+                {elementId && (
+                  <span className="inline-flex items-center font-mono font-bold text-[9.5px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                    ID: {getElementCode(elementId, tipoElemento)}
+                  </span>
+                )}
+                {idx < parts.length - 1 && <span className="text-slate-600 print:text-slate-400 font-bold">,</span>}
+              </span>
+            );
+          })}
+        </span>
+      );
+    }
+
+    let cleanName = str;
     let elementId = fallbackId || null;
 
-    const match = String(nombreText).match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
+    const match = str.match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
     if (match) {
       if (match[1]) cleanName = match[1].trim();
       if (match[2] && !elementId) elementId = match[2].trim();

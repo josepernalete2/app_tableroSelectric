@@ -12,8 +12,11 @@ import {
   Edit3,
   X,
   Check,
+  CheckSquare,
+  Square,
   AlertCircle,
-  Radio
+  Radio,
+  Plus
 } from 'lucide-react';
 
 /**
@@ -42,7 +45,7 @@ const getIconAndColor = (tipo) => {
 };
 
 /**
- * Componente Selector Dinámico e Inteligente de Alimentador / Nodo Padre Jerárquico
+ * Componente Selector Dinámico e Inteligente de Alimentador / Jerarquía con soporte de Selección Múltiple
  */
 export default function SelectorAlimentadorJerarquico({
   value = '',
@@ -50,12 +53,13 @@ export default function SelectorAlimentadorJerarquico({
   proyectoId,
   tableroActualId,
   elementosList = null,
-  placeholder = 'Seleccionar equipo o acometida de alimentación...',
+  placeholder = 'Seleccionar uno o varios equipos de alimentación...',
   disabled = false,
   label = 'Alimentado Por (Procedencia / Jerarquía)',
   className = '',
   allowQuickCreate = false,
-  onQuickCreate = null
+  onQuickCreate = null,
+  multiple = true
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -164,23 +168,6 @@ export default function SelectorAlimentadorJerarquico({
     return () => { isMounted = false; };
   }, [proyectoId, tableroActualId, normalizedExternalList]);
 
-  // Sincronizar el valor inicial con el estado local
-  useEffect(() => {
-    if (!value) {
-      setCustomText('');
-      return;
-    }
-    const found = items.find(
-      (item) => item.nombre === value || item.id === value || `${item.nombre} (ID: ${item.id})` === value
-    );
-    if (!found && value && value.trim() !== '') {
-      setIsCustomMode(true);
-      setCustomText(value);
-    } else if (found) {
-      setIsCustomMode(false);
-    }
-  }, [value, items]);
-
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -199,12 +186,50 @@ export default function SelectorAlimentadorJerarquico({
     }
   }, [isOpen]);
 
-  // Elemento seleccionado actual
-  const selectedItem = useMemo(() => {
-    if (!value) return null;
-    return items.find(
-      (item) => item.nombre === value || item.id === value || `${item.nombre} (ID: ${item.id})` === value
-    );
+  // Desglosar `value` en elementos seleccionados
+  const selectedItems = useMemo(() => {
+    if (!value) return [];
+
+    let tokens = [];
+    if (Array.isArray(value)) {
+      tokens = value.map(v => typeof v === 'object' ? (v.id || v.nombre) : String(v));
+    } else if (typeof value === 'string') {
+      tokens = value.split(',').map(s => s.trim()).filter(Boolean);
+    }
+
+    const result = [];
+    tokens.forEach((token) => {
+      // Buscar por ID, código o nombre
+      const found = items.find((item) => 
+        item.id === token || 
+        item.codigo === token || 
+        item.nombre === token || 
+        `${item.nombre} (ID: ${item.id})` === token ||
+        `${item.nombre} (ID: ${item.codigo})` === token ||
+        `${item.nombre} (${item.codigo})` === token ||
+        token.toLowerCase().includes(item.nombre.toLowerCase())
+      );
+
+      if (found) {
+        if (!result.some(r => r.id === found.id)) {
+          result.push(found);
+        }
+      } else if (token) {
+        // Objeto virtual/personalizado
+        result.push({
+          id: `custom_${token.replace(/\s+/g, '_')}`,
+          nombre: token,
+          codigo: 'EXT',
+          tipoElemento: 'OTRO',
+          categoria: 'Personalizado',
+          nivelTension: 'Personalizado',
+          ubicacion: 'Exterior / Directo',
+          isCustom: true
+        });
+      }
+    });
+
+    return result;
   }, [value, items]);
 
   // Filtrado reactivo en tiempo real
@@ -214,6 +239,7 @@ export default function SelectorAlimentadorJerarquico({
     return items.filter(
       (item) =>
         item.nombre?.toLowerCase().includes(term) ||
+        item.codigo?.toLowerCase().includes(term) ||
         item.tipoElemento?.toLowerCase().includes(term) ||
         item.ubicacion?.toLowerCase().includes(term) ||
         item.nivelTension?.toLowerCase().includes(term) ||
@@ -232,23 +258,44 @@ export default function SelectorAlimentadorJerarquico({
     return groups;
   }, [filteredItems]);
 
-  const handleSelect = (item) => {
-    setIsCustomMode(false);
-    setCustomText('');
-    setIsOpen(false);
-    setSearch('');
+  const emitChange = (newSelectedItems) => {
+    const formattedString = newSelectedItems.map(i => i.nombre).join(', ');
+    const ids = newSelectedItems.map(i => i.id);
+    const primaryObj = newSelectedItems.length > 0 ? newSelectedItems[0] : null;
+
     if (onChange) {
-      onChange(item.nombre, item);
+      onChange(formattedString, primaryObj, ids, newSelectedItems);
     }
   };
 
+  const handleToggleItem = (item) => {
+    if (!multiple) {
+      emitChange([item]);
+      setIsOpen(false);
+      return;
+    }
+
+    const isAlreadySelected = selectedItems.some((sel) => sel.id === item.id);
+    let updated;
+    if (isAlreadySelected) {
+      updated = selectedItems.filter((sel) => sel.id !== item.id);
+    } else {
+      updated = [...selectedItems, item];
+    }
+    emitChange(updated);
+  };
+
+  const handleRemoveItem = (id, e) => {
+    if (e) e.stopPropagation();
+    const updated = selectedItems.filter((item) => item.id !== id);
+    emitChange(updated);
+  };
+
   const handleClear = (e) => {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
     setIsCustomMode(false);
     setCustomText('');
-    if (onChange) {
-      onChange('', null);
-    }
+    emitChange([]);
   };
 
   return (
@@ -258,10 +305,10 @@ export default function SelectorAlimentadorJerarquico({
           <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             {label}
           </label>
-          {selectedItem && (
+          {selectedItems.length > 0 && (
             <span className="text-[10px] text-amber-400 font-mono font-bold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Nodo Jerárquico Vinculado
+              {selectedItems.length === 1 ? '1 Fuente Jerárquica' : `${selectedItems.length} Fuentes Jerárquicas`}
             </span>
           )}
         </div>
@@ -279,6 +326,7 @@ export default function SelectorAlimentadorJerarquico({
                 const val = e.target.value;
                 setCustomText(val);
                 if (onChange) {
+                  const parts = val.split(',').map(s => s.trim()).filter(Boolean);
                   onChange(val, {
                     id: 'CUSTOM',
                     nombre: val,
@@ -286,10 +334,10 @@ export default function SelectorAlimentadorJerarquico({
                     categoria: 'Acometida Externa',
                     nivelTension: 'Personalizado',
                     ubicacion: 'Exterior / Directo'
-                  });
+                  }, parts);
                 }
               }}
-              placeholder="Ej. Acometida Directa CORPOELEC, Generador Móvil, etc."
+              placeholder="Ej. Acometida CORPOELEC, Generador 1, Generador 2..."
               className="w-full pl-9 pr-8 py-2.5 bg-slate-900 border border-amber-500/40 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all font-mono"
             />
             <Edit3 className="w-4 h-4 text-amber-400 absolute left-3 top-3" />
@@ -298,7 +346,7 @@ export default function SelectorAlimentadorJerarquico({
                 type="button"
                 onClick={() => {
                   setCustomText('');
-                  if (onChange) onChange('', null);
+                  if (onChange) onChange('', null, []);
                 }}
                 className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200 p-0.5 rounded-md cursor-pointer"
                 title="Borrar texto"
@@ -320,65 +368,70 @@ export default function SelectorAlimentadorJerarquico({
           </button>
         </div>
       ) : (
-        /* MODO SELECTOR DINÁMICO */
+        /* MODO SELECTOR DINÁMICO (SOPORTA MÚLTIPLE) */
         <div className="relative">
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setIsOpen(!isOpen)}
-            className={`w-full min-h-[46px] px-3.5 py-2 rounded-xl text-left border flex items-center justify-between gap-3 transition-all duration-200 cursor-pointer ${
+          <div
+            onClick={() => {
+              if (!disabled) setIsOpen(!isOpen);
+            }}
+            className={`w-full min-h-[46px] px-3.5 py-2 rounded-xl text-left border flex flex-wrap items-center justify-between gap-2 transition-all duration-200 cursor-pointer ${
               isOpen
                 ? 'bg-slate-900 border-amber-500 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/5'
                 : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-750'
             } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {selectedItem ? (
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                {(() => {
-                  const { icon: ItemIcon, color } = getIconAndColor(selectedItem.tipoElemento);
+            {/* Lista de Chips Seleccionados */}
+            {selectedItems.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1 py-0.5">
+                {selectedItems.map((sel) => {
+                  const { icon: ItemIcon, color } = getIconAndColor(sel.tipoElemento);
                   return (
-                    <div className={`p-1.5 rounded-lg border shrink-0 ${color}`}>
-                      <ItemIcon className="w-4 h-4" />
-                    </div>
+                    <span
+                      key={sel.id}
+                      className="inline-flex items-center gap-1.5 bg-slate-950/90 text-slate-100 border border-slate-700/80 hover:border-amber-500/40 rounded-lg px-2 py-1 text-xs shadow-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className={`p-0.5 rounded ${color}`}>
+                        <ItemIcon className="w-3 h-3" />
+                      </span>
+                      <span className="font-semibold text-xs truncate max-w-[160px] sm:max-w-[220px]">
+                        {sel.nombre}
+                      </span>
+                      {sel.codigo && (
+                        <span className="font-mono text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                          {sel.codigo}
+                        </span>
+                      )}
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleRemoveItem(sel.id, e)}
+                          className="text-slate-400 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                          title={`Quitar ${sel.nombre}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
                   );
-                })()}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-slate-100 truncate">
-                      {selectedItem.nombre}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
-                      ⚡ {selectedItem.nivelTension}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-                    <span className="truncate">{selectedItem.ubicacion}</span>
-                    {selectedItem.detalles && (
-                      <>
-                        <span className="text-slate-600">•</span>
-                        <span className="text-slate-400 truncate">{selectedItem.detalles}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+                })}
               </div>
             ) : (
-              <span className="text-sm text-slate-500 truncate font-mono">
-                {value || placeholder}
+              <span className="text-xs sm:text-sm text-slate-500 truncate font-mono">
+                {placeholder}
               </span>
             )}
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              {value && (
-                <span
-                  role="button"
-                  tabIndex={0}
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+              {selectedItems.length > 0 && !disabled && (
+                <button
+                  type="button"
                   onClick={handleClear}
-                  className="p-1 text-slate-400 hover:text-rose-400 rounded-md transition-colors"
-                  title="Limpiar selección"
+                  className="p-1 text-slate-400 hover:text-rose-400 rounded-md transition-colors cursor-pointer"
+                  title="Limpiar toda la selección"
                 >
                   <X className="w-4 h-4" />
-                </span>
+                </button>
               )}
               <ChevronDown
                 className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
@@ -386,13 +439,14 @@ export default function SelectorAlimentadorJerarquico({
                 }`}
               />
             </div>
-          </button>
+          </div>
 
           {/* MENÚ DESPLEGABLE CON BÚSQUEDA Y CATEGORÍAS */}
           {isOpen && (
             <div className="absolute z-50 left-0 right-0 mt-2 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              {/* Barra de búsqueda */}
-              <div className="p-3 border-b border-slate-800 bg-slate-950/50">
+              
+              {/* Barra superior de búsqueda y controles de selección múltiple */}
+              <div className="p-3 border-b border-slate-800 bg-slate-950/70 space-y-2">
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
@@ -400,23 +454,42 @@ export default function SelectorAlimentadorJerarquico({
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar por nombre, tipo, nivel de tensión o ubicación..."
+                    placeholder="Buscar por nombre, código (gen-1), tensión o tipo..."
                     className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
                   />
                   {search && (
                     <button
                       type="button"
                       onClick={() => setSearch('')}
-                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
+
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400 font-medium">
+                    {selectedItems.length > 0 ? (
+                      <>Seleccionados: <strong className="text-amber-400">{selectedItems.length}</strong> fuente(s)</>
+                    ) : (
+                      <span className="text-slate-500">Haz clic para marcar o desmarcar fuentes</span>
+                    )}
+                  </span>
+                  {selectedItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClear}
+                      className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer"
+                    >
+                      Deseleccionar Todo
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Lista de opciones agrupadas */}
-              <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/60 p-1.5 custom-scrollbar">
+              {/* Lista de opciones agrupadas con casillas de verificación */}
+              <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/60 p-1.5 custom-scrollbar">
                 {loading ? (
                   <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
                     <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -440,28 +513,34 @@ export default function SelectorAlimentadorJerarquico({
                       </div>
 
                       {/* Items del Grupo */}
-                      <div className="space-y-0.5 mt-1">
+                      <div className="space-y-1 mt-1">
                         {group.map((item) => {
-                          const isSelected = selectedItem?.id === item.id || value === item.nombre;
+                          const isSelected = selectedItems.some((sel) => sel.id === item.id);
                           const { icon: ItemIcon, color } = getIconAndColor(item.tipoElemento);
 
                           return (
-                            <button
+                            <div
                               key={item.id}
-                              type="button"
-                              onClick={() => handleSelect(item)}
-                              className={`w-full text-left px-2.5 py-2 rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                              onClick={() => handleToggleItem(item)}
+                              className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer select-none ${
                                 isSelected
-                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                  : 'hover:bg-slate-800/80 text-slate-200'
+                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 shadow-xs'
+                                  : 'hover:bg-slate-800/80 text-slate-200 border border-transparent'
                               }`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <div className="shrink-0 text-amber-400">
+                                  {isSelected ? (
+                                    <CheckSquare className="w-4 h-4 fill-amber-500/20" />
+                                  ) : (
+                                    <Square className="w-4 h-4 text-slate-600" />
+                                  )}
+                                </div>
                                 <div className={`p-1.5 rounded-lg border shrink-0 ${color}`}>
                                   <ItemIcon className="w-3.5 h-3.5" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-semibold text-xs text-slate-100 truncate">
                                       {item.nombre}
                                     </span>
@@ -478,8 +557,7 @@ export default function SelectorAlimentadorJerarquico({
                                   </div>
                                 </div>
                               </div>
-                              {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
-                            </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -488,8 +566,29 @@ export default function SelectorAlimentadorJerarquico({
                 )}
               </div>
 
-              {/* Footer con opciones de creación rápida y entrada manual */}
-              <div className="p-2 border-t border-slate-800 bg-slate-950/80 space-y-1.5">
+              {/* Footer con opciones de creación rápida, entrada manual y botón Listo */}
+              <div className="p-2.5 border-t border-slate-800 bg-slate-950/90 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomMode(true);
+                      setIsOpen(false);
+                    }}
+                    className="flex-1 px-3 py-1.5 rounded-xl text-left flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors font-medium border border-dashed border-amber-500/30 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Texto Manual / Acometida Externa</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shrink-0"
+                  >
+                    Listo / Aplicar
+                  </button>
+                </div>
+
                 {(allowQuickCreate || onQuickCreate) && (
                   <button
                     type="button"
@@ -499,39 +598,29 @@ export default function SelectorAlimentadorJerarquico({
                         onQuickCreate();
                       }
                     }}
-                    className="w-full px-3 py-2 rounded-xl text-left flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40 transition-colors font-bold border border-emerald-500/30 cursor-pointer shadow-sm"
+                    className="w-full px-3 py-1.5 rounded-xl text-left flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40 transition-colors font-bold border border-emerald-500/30 cursor-pointer shadow-sm"
                   >
                     <span className="p-0.5 bg-emerald-500 text-slate-950 rounded font-black text-[10px] leading-none">+</span>
                     <span>Crear nueva fuente / nodo en línea</span>
                   </button>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsCustomMode(true);
-                    setIsOpen(false);
-                  }}
-                  className="w-full px-3 py-2 rounded-xl text-left flex items-center gap-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors font-medium border border-dashed border-amber-500/30 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Personalizado / Acometida Externa (Texto Manual)</span>
-                </button>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* INSIGNIA SECUNDARIA RESUMEN DEL ALIMENTADOR SELECCIONADO */}
-      {selectedItem && (
-        <div className="flex items-center flex-wrap gap-2 px-3 py-1.5 bg-slate-900/60 border border-slate-800 rounded-xl text-[11px] text-slate-300 animate-in fade-in">
-          <span className="text-slate-500 font-bold uppercase text-[9px] tracking-wide">Origen:</span>
-          <span className="font-semibold text-slate-200">{selectedItem.nombre}</span>
-          <span className="text-slate-600">•</span>
-          <span className="text-amber-400 font-mono font-medium">⚡ {selectedItem.nivelTension}</span>
-          <span className="text-slate-600">•</span>
-          <span className="text-slate-400 truncate">📍 {selectedItem.ubicacion}</span>
+      {/* RESUMEN INFERIOR DE FUENTES SELECCIONADAS */}
+      {selectedItems.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <span className="text-slate-500 font-bold uppercase text-[9px] tracking-wide">Fuentes Vinculadas:</span>
+          {selectedItems.map((item, idx) => (
+            <span key={item.id} className="inline-flex items-center gap-1 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 px-2 py-0.5 rounded-md">
+              <span className="font-semibold text-slate-200">{item.nombre}</span>
+              <span className="text-amber-400 font-mono text-[9.5px]">({item.codigo || getElementCode(item)})</span>
+              {idx < selectedItems.length - 1 && <span className="text-slate-600 font-bold">,</span>}
+            </span>
+          ))}
         </div>
       )}
     </div>

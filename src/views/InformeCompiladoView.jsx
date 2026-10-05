@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore, { formatElementTitleWithId, getElementCode } from '../store/useStore';
+import useStore, { formatElementTitleWithId, getElementCode, sortElementsByOrder } from '../store/useStore';
 import TableroComponent from '../components/TableroComponent';
 import FichaTecnicaComponent from '../components/FichaTecnicaComponent';
 import SubestacionComponent from '../components/SubestacionComponent';
@@ -14,16 +14,16 @@ import {
   FileText, 
   Zap, 
   Building, 
-  Gauge,
+  Gauge, 
   Award, 
   User, 
-  Calendar,
-  Layers,
-  Cpu,
-  ShieldAlert,
-  RefreshCw,
-  Edit,
-  Check
+  Calendar, 
+  Layers, 
+  Cpu, 
+  ShieldAlert, 
+  RefreshCw, 
+  Edit, 
+  Check 
 } from 'lucide-react';
 
 export default function InformeCompiladoView() {
@@ -68,10 +68,10 @@ export default function InformeCompiladoView() {
     );
   }
 
-  const elementos = proyecto.elementosUnifilares || proyecto.tableros || [];
-  const subestaciones = proyecto.inspeccionesSubestacion || proyecto.subestaciones || [];
-  const puntosMedicion = proyecto.puntosMedicion || [];
-  const ccmList = proyecto.ccmList || [];
+  const elementos = sortElementsByOrder(proyecto.elementosUnifilares || proyecto.tableros || []);
+  const subestaciones = sortElementsByOrder(proyecto.inspeccionesSubestacion || proyecto.subestaciones || []);
+  const puntosMedicion = sortElementsByOrder(proyecto.puntosMedicion || []);
+  const ccmList = sortElementsByOrder(proyecto.ccmList || []);
 
   const transformadores = elementos.filter(e => e.tipoElemento === 'TRANSFORMADOR');
   const generadores = elementos.filter(e => e.tipoElemento === 'GENERADOR');
@@ -633,7 +633,17 @@ export default function InformeCompiladoView() {
               <div className="space-y-4">
                 {/* Find elements that are fed by nothing or general feed */}
                 {elementos.map(e => {
-                  const feeds = elementos.filter(child => child.alimentadoPor === e.nombre);
+                  const feeds = elementos.filter(child => {
+                    if (child.datosTecnicos?.alimentadoPorIds && Array.isArray(child.datosTecnicos.alimentadoPorIds)) {
+                      if (child.datosTecnicos.alimentadoPorIds.includes(e.id)) return true;
+                    }
+                    if (!child.alimentadoPor) return false;
+                    if (child.alimentadoPor === e.nombre) return true;
+                    return child.alimentadoPor.split(',').some(part => {
+                      const p = part.trim().toLowerCase();
+                      return p.includes(e.nombre.toLowerCase()) || (e.id && p.includes(e.id.toLowerCase()));
+                    });
+                  });
                   return (
                     <div key={e.id} className="border-l-2 border-amber-500/30 pl-4 py-1.5 space-y-2">
                       <div className="flex items-center gap-2">

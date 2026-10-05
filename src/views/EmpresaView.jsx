@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId } from '../store/useStore';
+import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId, sortElementsByOrder } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
@@ -80,6 +80,8 @@ export const EmpresaView = () => {
     deleteProyecto,
     addElementoUnifilar,
     deleteElementoUnifilar,
+    moverElemento,
+    reordenarColeccion,
     updateEmpresa,
     showToast
   } = useStore();
@@ -260,6 +262,7 @@ export const EmpresaView = () => {
   const [descripcionOtro, setDescripcionOtro] = useState('');
 
   const [showDiagramModal, setShowDiagramModal] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState(null);
 
   const companyElementos = useMemo(() => {
     if (!company) return [];
@@ -273,7 +276,7 @@ export const EmpresaView = () => {
         list.push(...pList);
       });
     }
-    return list;
+    return sortElementsByOrder(list);
   }, [company]);
 
   if (!company) {
@@ -289,7 +292,7 @@ export const EmpresaView = () => {
   }
 
   const proyectos = company.proyectos || [];
-  const elementosGenerales = company.elementosUnifilares || [];
+  const elementosGenerales = sortElementsByOrder(company.elementosUnifilares || []);
 
   const filteredProjects = proyectos.filter((p) =>
     p.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -824,17 +827,42 @@ export const EmpresaView = () => {
 
           {filteredElementosGenerales.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredElementosGenerales.map((item) => {
+              {filteredElementosGenerales.map((item, index) => {
                 const isTablero = item.tipoElemento === 'TABLERO';
                 const isTrafo = item.tipoElemento === 'TRANSFORMADOR';
                 const isGen = item.tipoElemento === 'GENERADOR';
                 const isPuestaTierra = item.tipoElemento === 'PUESTA_TIERRA';
                 const isTransfer = item.tipoElemento === 'TRANSFER';
                 const isSelected = selectedIds.has(item.id);
+                const isDragging = draggedItemId === item.id;
 
                 return (
                   <div
                     key={item.id}
+                    draggable={!isMultiSelectMode && user?.role !== 'CLIENT'}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', item.id);
+                      setDraggedItemId(item.id);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const sourceId = e.dataTransfer.getData('text/plain') || draggedItemId;
+                      if (sourceId && sourceId !== item.id) {
+                        const sourceIdx = elementosGenerales.findIndex(x => x.id === sourceId);
+                        const targetIdx = elementosGenerales.findIndex(x => x.id === item.id);
+                        if (sourceIdx !== -1 && targetIdx !== -1) {
+                          const newOrder = [...elementosGenerales];
+                          const [removed] = newOrder.splice(sourceIdx, 1);
+                          newOrder.splice(targetIdx, 0, removed);
+                          reordenarColeccion(companyId, null, newOrder.map(x => x.id), 'UNIFILAR');
+                          showToast?.('Orden de equipos actualizado', 'success');
+                        }
+                      }
+                      setDraggedItemId(null);
+                    }}
                     onClick={() => {
                       if (isMultiSelectMode) {
                         handleToggleSelect(item.id);
@@ -843,6 +871,8 @@ export const EmpresaView = () => {
                       }
                     }}
                     className={`bg-slate-950 border flex flex-col justify-between overflow-hidden cursor-pointer transition-all hover:-translate-y-0.5 group rounded-2xl shadow-md hover:shadow-xl ${
+                      isDragging ? 'opacity-40 border-dashed border-amber-500 scale-98' : ''
+                    } ${
                       isMultiSelectMode && isSelected 
                         ? 'border-amber-500 shadow-amber-500/5 ring-1 ring-amber-500/20' 
                         : 'border-slate-800/80 hover:border-slate-700/60'
@@ -870,7 +900,10 @@ export const EmpresaView = () => {
                       )}
                       
                       {/* Badge por tipoElemento */}
-                      <div className="absolute top-3 left-3">
+                      <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-slate-900/90 text-slate-400 border border-slate-800 rounded-lg text-[9.5px] font-mono font-bold">
+                          #{index + 1}
+                        </span>
                         {isTablero && (
                           <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-sky-950/95 text-sky-400 border border-sky-800/40 font-mono">
                             ⚡ TABLERO
@@ -1007,6 +1040,16 @@ export const EmpresaView = () => {
                         <ElementoCardActions
                           onEdit={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
                           onNewInspection={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
+                          onMoveUp={() => {
+                            moverElemento(companyId, null, item.id, 'UP', 'UNIFILAR');
+                            showToast?.('Posición del equipo actualizada', 'info');
+                          }}
+                          onMoveDown={() => {
+                            moverElemento(companyId, null, item.id, 'DOWN', 'UNIFILAR');
+                            showToast?.('Posición del equipo actualizada', 'info');
+                          }}
+                          canMoveUp={index > 0}
+                          canMoveDown={index < filteredElementosGenerales.length - 1}
                           onDelete={async () => {
                             const ok = await confirm({
                               title: 'Eliminar Equipo',
