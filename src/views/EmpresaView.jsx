@@ -407,6 +407,7 @@ export const EmpresaView = () => {
         kva: kvaGen,
         combustible: combustibleGen,
         voltajeGeneracion: voltajeGen,
+        voltaje: voltajeGen,
         potenciaKw: potenciaKwGen,
         amperaje: amperajeGen
       };

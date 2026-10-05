@@ -291,7 +291,7 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
         case 'TABLERO':
           return tech.voltajeAcometida || tech.tension || (tech.voltaje?.va ? `${tech.voltaje.va} V` : '208 / 120 V');
         case 'GENERADOR':
-          return tech.voltajeGeneracion || tech.tension || (tech.kva ? `${tech.kva} kVA` : 'N/D');
+          return tech.voltajeGeneracion || tech.voltaje || tech.tension || (tech.kva ? `${tech.kva} kVA` : 'N/D');
         case 'TRANSFER':
           return tech.tension || (tech.capacidadAmperios ? `${tech.capacidadAmperios} A` : 'N/D');
         case 'PUNTO_MEDICION':

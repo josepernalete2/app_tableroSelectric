@@ -435,9 +435,13 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   {dt.breakerPrincipal?.amp || '-'}
                 </td>
                 <td className="p-2 font-bold text-slate-100 border-r border-slate-800 print:text-black print:border-gray-300">
-                  IA: {dt.voltaje?.va || dt.barrasPrincipales?.ia || '211,5'}<br/>
-                  IB: {dt.voltaje?.vb || dt.barrasPrincipales?.ib || '207,4'}<br/>
-                  IC: {dt.voltaje?.vc || dt.barrasPrincipales?.ic || '208,6'}
+                  {typeof dt.voltaje === 'string' && dt.voltaje ? dt.voltaje : (
+                    <>
+                      VA: {dt.voltaje?.va || dt.barrasPrincipales?.va || '211,5 V'}<br/>
+                      VB: {dt.voltaje?.vb || dt.barrasPrincipales?.vb || '207,4 V'}<br/>
+                      VC: {dt.voltaje?.vc || dt.barrasPrincipales?.vc || '208,6 V'}
+                    </>
+                  )}
                 </td>
                 <td className="p-2 font-bold text-slate-100 print:text-black">
                   {dt.acometida || '3X500 MCM'}
@@ -651,16 +655,17 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">VOLTAJE NOMINAL (COVENIN 159)</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
                   {isEditing ? (
-                    <select
-                      value={dt.voltajeGeneracion || dt.voltaje || ''}
-                      onChange={(e) => handleDtChange('voltajeGeneracion', e.target.value)}
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs"
-                    >
-                      <option value="">-- Seleccionar Tensión --</option>
-                      {TENSIONES_COVENIN_159_BT.map(v => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
+                    <input
+                      type="text"
+                      value={dt.voltajeGeneracion ?? dt.voltaje ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleDtChange('voltajeGeneracion', val);
+                        handleDtChange('voltaje', val);
+                      }}
+                      placeholder="Ej. 208 / 120 V ó 480 / 277 V"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600 font-mono text-xs px-2 py-1"
+                    />
                   ) : (
                     dt.voltajeGeneracion || dt.voltaje || '—'
                   )}
@@ -670,7 +675,17 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERAJE NOMINAL</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
-                  {isEditing ? <input type="text" value={dt.amperaje || ''} onChange={(e) => handleDtChange('amperaje', e.target.value)} placeholder="Ej. 1600" className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600" /> : (dt.amperaje || '—')}
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.amperaje || ''}
+                      onChange={(e) => handleDtChange('amperaje', e.target.value)}
+                      placeholder="Ej. 1600"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600 font-mono text-xs px-2 py-1"
+                    />
+                  ) : (
+                    dt.amperaje || '—'
+                  )}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
               </tr>

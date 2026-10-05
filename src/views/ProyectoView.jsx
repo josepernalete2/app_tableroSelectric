@@ -274,7 +274,7 @@ export const ProyectoView = () => {
       } else if (editingElemento.tipoElemento === 'GENERADOR') {
         setKvaGen(tech.kva || '');
         setCombustibleGen(tech.combustible || tech.tipoCombustible || 'DIESEL');
-        setVoltajeGen(tech.voltajeGeneracion || '');
+        setVoltajeGen(tech.voltajeGeneracion || tech.voltaje || '');
         setPotenciaKwGen(tech.potenciaKw || tech.kw || '');
         setAmperajeGen(tech.amperaje || '');
       } else if (editingElemento.tipoElemento === 'PUESTA_TIERRA') {
@@ -622,7 +622,8 @@ export const ProyectoView = () => {
         potenciaKw: kwGenNum || potenciaKwGen,
         kvar: editingElemento?.datosTecnicos?.kvar || kvarGen,
         factorPotencia: fpGen,
-        voltajeGeneracion: voltajeGen || editingElemento?.datosTecnicos?.voltajeGeneracion || '',
+        voltajeGeneracion: voltajeGen || editingElemento?.datosTecnicos?.voltajeGeneracion || editingElemento?.datosTecnicos?.voltaje || '',
+        voltaje: voltajeGen || editingElemento?.datosTecnicos?.voltaje || editingElemento?.datosTecnicos?.voltajeGeneracion || '',
         amperaje: ampGenNum || amperajeGen,
         tipoCombustible: combustibleGen || editingElemento?.datosTecnicos?.tipoCombustible || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
         combustible: combustibleGen || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
