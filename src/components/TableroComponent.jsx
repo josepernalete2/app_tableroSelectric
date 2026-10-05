@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download } from 'lucide-react';
-import useStore from '../store/useStore';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3 } from 'lucide-react';
+import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import { API_BASE_URL } from '../utils/api';
+import ModalEditarIdElemento from './ModalEditarIdElemento';
 
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 
@@ -47,9 +48,12 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     addElementoUnifilar,
     registrarConflictoCircuito,
     showToast,
-    setPanelConflictosOpen
+    setPanelConflictosOpen,
+    user
   } = useStore();
   const { alert: customAlert } = useConfirm();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
+  const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
 
   const project = React.useMemo(() => {
     if (!tableroData) return null;
@@ -633,6 +637,21 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 <div className="flex items-center gap-2 min-w-0">
                   <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
                   <span className="font-mono font-black tracking-wide text-xs sm:text-sm">INFORMACIÓN GENERAL DE PANEL ELÉCTRICO / TABLERO</span>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <span className="inline-flex items-center font-mono font-bold text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-lg shadow-sm">
+                      ID: {getElementCode(tableroData, 'TABLERO')}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditIdModalOpen(true)}
+                        className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                        title="Editar ID del elemento (Solo Administradores)"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 no-print">
                   <button
@@ -1517,6 +1536,15 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       </div>
 
       </div> {/* Fin de screen-container */}
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={isEditIdModalOpen}
+        onClose={() => setIsEditIdModalOpen(false)}
+        elemento={tableroData}
+        tipoElemento="TABLERO"
+        proyectoId={project?.id || tableroData?.proyectoId}
+      />
     </div>
   );
 };

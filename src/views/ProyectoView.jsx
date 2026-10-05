@@ -31,9 +31,12 @@ import {
   CheckSquare,
   Settings,
   HelpCircle,
-  Plus
+  Plus,
+  Edit3,
+  Tag
 } from 'lucide-react';
 import HelpModal from '../components/HelpModal';
+import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 import { API_BASE_URL } from '../utils/api';
 
@@ -137,6 +140,9 @@ export const ProyectoView = () => {
   // Estados de pestaña activa
   const [activeTab, setActiveTab] = useState('UNIFILAR'); // 'UNIFILAR' | 'ESTRUCTURAL'
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Estado para Modal de Edición de ID (Solo Administradores)
+  const [editIdModalData, setEditIdModalData] = useState({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' });
 
   // Estados de selección múltiple
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -1206,10 +1212,23 @@ export const ProyectoView = () => {
                         </div>
 
                         {!isMultiSelectMode && (
-                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
                             <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
                               ID: {getElementCode(item, item.tipoElemento || 'SUBESTACION')}
                             </span>
+                            {user?.role === 'ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditIdModalData({ isOpen: true, elemento: item, tipoElemento: item.tipoElemento || 'SUBESTACION' });
+                                }}
+                                className="p-1 bg-slate-900/90 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                                title="Editar ID del elemento (Solo Administradores)"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1384,10 +1403,23 @@ export const ProyectoView = () => {
                         </div>
 
                         {!isMultiSelectMode && (
-                          <div className="absolute top-3 right-3 flex items-center gap-2">
+                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
                             <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
                               ID: {getElementCode(item, item.tipoElemento)}
                             </span>
+                            {user?.role === 'ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditIdModalData({ isOpen: true, elemento: item, tipoElemento: item.tipoElemento });
+                                }}
+                                className="p-1 bg-slate-900/90 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                                title="Editar ID del elemento (Solo Administradores)"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -2733,6 +2765,15 @@ export const ProyectoView = () => {
       <HelpModal
         isOpen={showHelpModal}
         onClose={() => setShowHelpModal(false)}
+      />
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={editIdModalData.isOpen}
+        onClose={() => setEditIdModalData({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' })}
+        elemento={editIdModalData.elemento}
+        tipoElemento={editIdModalData.tipoElemento}
+        proyectoId={proyectoId}
       />
 
     </div>

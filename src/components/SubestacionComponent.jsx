@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
-import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw } from 'lucide-react';
+import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw, Edit3 } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
+import ModalEditarIdElemento from './ModalEditarIdElemento';
 import DualPhotoUploader from './DualPhotoUploader';
 import { TENSIONES_COVENIN_159_MT, TENSIONES_COVENIN_TODAS } from '../utils/constants';
 
 export default function SubestacionComponent({ subestacionData, onUpdate, readOnly }) {
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
+  const user = useStore((state) => state.user);
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
+  const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
   if (!subestacionData) return <div className="text-center p-8 text-slate-400">No hay datos de subestación seleccionados.</div>;
 
   const {
@@ -180,9 +184,21 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           >
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
-          <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {getElementCode(subestacionData, 'SUBESTACION')}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+              ID: {getElementCode(subestacionData, 'SUBESTACION')}
+            </span>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsEditIdModalOpen(true)}
+                className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                title="Editar ID del elemento (Solo Administradores)"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -424,6 +440,15 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
       <div className="text-[10px] text-slate-500 text-center leading-relaxed border-t border-slate-800 pt-4 font-sans select-none print:border-gray-200 print:text-slate-500">
         <span className="font-bold text-slate-400 uppercase print:text-slate-600">Nota de Evaluación:</span> B = Bueno, R = Regular (Requiere mantenimiento preventivo), M = Malo (Acción correctiva inmediata).
       </div>
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={isEditIdModalOpen}
+        onClose={() => setIsEditIdModalOpen(false)}
+        elemento={subestacionData}
+        tipoElemento="SUBESTACION"
+        proyectoId={subestacionData?.proyectoId}
+      />
     </div>
   );
 }

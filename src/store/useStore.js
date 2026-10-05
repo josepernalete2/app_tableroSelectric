@@ -1937,6 +1937,190 @@ export const useStore = create(
         }
       },
 
+      updateElementoCodigo: async (elementoId, nuevoCodigo, tipoElemento = null, proyectoId = null) => {
+        const cleanCode = String(nuevoCodigo || '').trim().toLowerCase();
+        if (!cleanCode) return { success: false, error: 'El código o ID visual no puede estar vacío.' };
+
+        set((state) => {
+          let updatedItemPayload = null;
+          let itemType = 'ELEMENTO_UNIFILAR';
+          let itemCompanyId = state.companies[0]?.id || null;
+
+          const updatedCompanies = state.companies.map((c) => {
+            const compElementos = (c.elementosUnifilares || []).map((el) => {
+              if (el.id === elementoId) {
+                const dt = { ...(el.datosTecnicos || {}), codigo: cleanCode };
+                const updated = { ...el, codigo: cleanCode, datosTecnicos: dt };
+                updatedItemPayload = updated;
+                itemType = 'ELEMENTO_UNIFILAR';
+                itemCompanyId = c.id;
+                return updated;
+              }
+              return el;
+            });
+
+            const compProyectos = (c.proyectos || []).map((p) => {
+              const pElementos = (p.elementosUnifilares || p.tableros || []).map((el) => {
+                if (el.id === elementoId) {
+                  const dt = { ...(el.datosTecnicos || {}), codigo: cleanCode };
+                  const updated = { ...el, codigo: cleanCode, datosTecnicos: dt };
+                  updatedItemPayload = updated;
+                  itemType = 'ELEMENTO_UNIFILAR';
+                  itemCompanyId = c.id;
+                  return updated;
+                }
+                return el;
+              });
+
+              const pSubestaciones = (p.inspeccionesSubestacion || p.subestaciones || []).map((sub) => {
+                if (sub.id === elementoId) {
+                  const dt = { ...(sub.datosTecnicos || {}), codigo: cleanCode };
+                  const updated = { ...sub, codigo: cleanCode, datosTecnicos: dt };
+                  updatedItemPayload = updated;
+                  itemType = 'SUBESTACION';
+                  itemCompanyId = c.id;
+                  return updated;
+                }
+                return sub;
+              });
+
+              const pPuntos = (p.puntosMedicion || []).map((pm) => {
+                if (pm.id === elementoId) {
+                  const dt = { ...(pm.datosTecnicos || {}), codigo: cleanCode };
+                  const updated = { ...pm, codigo: cleanCode, datosTecnicos: dt };
+                  updatedItemPayload = updated;
+                  itemType = 'PUNTO_MEDICION';
+                  itemCompanyId = c.id;
+                  return updated;
+                }
+                return pm;
+              });
+
+              const pCcm = (p.ccmList || []).map((ccm) => {
+                if (ccm.id === elementoId) {
+                  const dt = { ...(ccm.datosTecnicos || {}), codigo: cleanCode };
+                  const updated = { ...ccm, codigo: cleanCode, datosTecnicos: dt };
+                  updatedItemPayload = updated;
+                  itemType = 'CCM';
+                  itemCompanyId = c.id;
+                  return updated;
+                }
+                return ccm;
+              });
+
+              return {
+                ...p,
+                elementosUnifilares: pElementos,
+                tableros: pElementos,
+                inspeccionesSubestacion: pSubestaciones,
+                subestaciones: pSubestaciones,
+                puntosMedicion: pPuntos,
+                ccmList: pCcm
+              };
+            });
+
+            return {
+              ...c,
+              elementosUnifilares: compElementos,
+              proyectos: compProyectos
+            };
+          });
+
+          const updatedElementosLocales = (state.elementosLocales || []).map((el) => {
+            if (el.id === elementoId) {
+              const dt = { ...(el.datosTecnicos || {}), codigo: cleanCode };
+              return { ...el, codigo: cleanCode, datosTecnicos: dt };
+            }
+            return el;
+          });
+
+          const updatedSubestacionesLocales = (state.subestacionesLocales || []).map((s) => {
+            if (s.id === elementoId) {
+              const dt = { ...(s.datosTecnicos || {}), codigo: cleanCode };
+              return { ...s, codigo: cleanCode, datosTecnicos: dt };
+            }
+            return s;
+          });
+
+          const updatedPuntosLocales = (state.puntosMedicionLocales || []).map((pm) => {
+            if (pm.id === elementoId) {
+              const dt = { ...(pm.datosTecnicos || {}), codigo: cleanCode };
+              return { ...pm, codigo: cleanCode, datosTecnicos: dt };
+            }
+            return pm;
+          });
+
+          const updatedCcmLocales = (state.ccmLocales || []).map((ccm) => {
+            if (ccm.id === elementoId) {
+              const dt = { ...(ccm.datosTecnicos || {}), codigo: cleanCode };
+              return { ...ccm, codigo: cleanCode, datosTecnicos: dt };
+            }
+            return ccm;
+          });
+
+          let inQueue = false;
+          const updatedSyncQueue = state.syncQueue.map((item) => {
+            if (item.id === elementoId) {
+              inQueue = true;
+              const p = item.payload || {};
+              const dt = { ...(p.datosTecnicos || {}), codigo: cleanCode };
+              return {
+                ...item,
+                payload: { ...p, codigo: cleanCode, datosTecnicos: dt }
+              };
+            }
+            return item;
+          });
+
+          if (!inQueue && updatedItemPayload) {
+            updatedSyncQueue.push({
+              id: elementoId,
+              tipo: itemType,
+              companyId: itemCompanyId,
+              payload: updatedItemPayload
+            });
+          }
+
+          return {
+            companies: updatedCompanies,
+            elementosLocales: updatedElementosLocales,
+            subestacionesLocales: updatedSubestacionesLocales,
+            puntosMedicionLocales: updatedPuntosLocales,
+            ccmLocales: updatedCcmLocales,
+            syncQueue: updatedSyncQueue
+          };
+        });
+
+        // Sincronización remota si está en línea
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            const normalizedType = String(tipoElemento || '').toUpperCase();
+            let endpoint = `/api/elementos-unifilares/${elementoId}`;
+            if (normalizedType.includes('SUBESTACION')) {
+              endpoint = `/api/subestaciones/${elementoId}`;
+            } else if (normalizedType.includes('PUNTO_MEDICION') || normalizedType.includes('MEDICION')) {
+              endpoint = `/api/puntos-medicion/${elementoId}`;
+            } else if (normalizedType.includes('CCM')) {
+              endpoint = `/api/ccm/${elementoId}`;
+            }
+
+            await fetch(`${API_BASE_URL}${endpoint}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify({ codigo: cleanCode })
+            });
+          } catch (e) {
+            console.error('Error al sincronizar actualización de código ID:', e);
+          }
+        }
+
+        return { success: true, codigo: cleanCode };
+      },
+
       removeFromQueue: (id) => {
         set((state) => ({
           syncQueue: state.syncQueue.filter((item) => item.id !== id),

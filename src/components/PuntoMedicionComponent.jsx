@@ -13,18 +13,23 @@ import {
   CheckSquare,
   Activity,
   Settings,
-  RotateCcw
+  RotateCcw,
+  Edit3
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
+import ModalEditarIdElemento from './ModalEditarIdElemento';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import { TENSIONES_COVENIN_TODAS } from '../utils/constants';
 import useStore, { getElementCode } from '../store/useStore';
 
 export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }) {
   const { crearElementoProvisional } = useStore();
+  const user = useStore((state) => state.user);
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
   const [circuitDataWizard, setCircuitDataWizard] = useState(null);
   const [wizardModo, setWizardModo] = useState('ENTRADA');
+  const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
   if (!puntoData) {
     return <div className="text-center p-8 text-slate-400">No hay datos de punto de medición seleccionados.</div>;
   }
@@ -151,9 +156,21 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
           >
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
-          <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {getElementCode(puntoData, 'PUNTO_MEDICION')}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+              ID: {getElementCode(puntoData, 'PUNTO_MEDICION')}
+            </span>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsEditIdModalOpen(true)}
+                className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                title="Editar ID del elemento (Solo Administradores)"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -735,6 +752,15 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
             updateField('puntoConexionPCC', updated.equipo);
           }
         }}
+      />
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={isEditIdModalOpen}
+        onClose={() => setIsEditIdModalOpen(false)}
+        elemento={puntoData}
+        tipoElemento="PUNTO_MEDICION"
+        proyectoId={puntoData?.proyectoId}
       />
     </div>
   );

@@ -12,6 +12,7 @@ import {
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
+import ModalEditarIdElemento from './ModalEditarIdElemento';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import TransferComponent from './TransferComponent';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
@@ -52,7 +53,10 @@ const SafeImage = ({ blob, src, alt, className, style }) => {
 
 export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
+  const user = useStore((state) => state.user);
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const companies = useStore((state) => state.companies || []);
 
   const allFeeders = React.useMemo(() => {
@@ -275,9 +279,21 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       <div className="flex justify-between items-center no-print">
         <div className="flex items-center gap-2">
           {renderBadge()}
-          <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {getElementCode(elementoData, tipoElemento)}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+              ID: {getElementCode(elementoData, tipoElemento)}
+            </span>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsEditIdModalOpen(true)}
+                className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                title="Editar ID del elemento (Solo Administradores)"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -3388,6 +3404,15 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             }
           }
         }}
+      />
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={isEditIdModalOpen}
+        onClose={() => setIsEditIdModalOpen(false)}
+        elemento={elementoData}
+        tipoElemento={tipoElemento}
+        proyectoId={elementoData?.proyectoId}
       />
 
     </div>

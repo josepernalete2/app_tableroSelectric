@@ -25,6 +25,7 @@ import {
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
+import ModalEditarIdElemento from './ModalEditarIdElemento';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import DualPhotoUploader from './DualPhotoUploader';
 import { 
@@ -42,6 +43,9 @@ export default function TransferComponent({
 }) {
   const data = transferData || elementoData;
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
+  const user = useStore((state) => state.user);
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
+  const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
   const companies = useStore((state) => state.companies || []);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -263,9 +267,21 @@ export default function TransferComponent({
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${estadoServicio === 'En Servicio' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'}`}>
                 {estadoServicio}
               </span>
-              <span className="font-mono text-xs font-bold text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                ID: {getElementCode(data, 'TRANSFER')}
-              </span>
+              <div className="flex items-center gap-1">
+                <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/30">
+                  ID: {getElementCode(data, 'TRANSFER')}
+                </span>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditIdModalOpen(true)}
+                    className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                    title="Editar ID del elemento (Solo Administradores)"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
             <h1 className="text-lg font-black text-slate-100 mt-0.5">
               {nombre || 'Unidad de Transferencia'}
@@ -1057,6 +1073,15 @@ export default function TransferComponent({
           </div>
         </div>
       )}
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={isEditIdModalOpen}
+        onClose={() => setIsEditIdModalOpen(false)}
+        elemento={data}
+        tipoElemento="TRANSFER"
+        proyectoId={data?.proyectoId}
+      />
 
     </div>
   );

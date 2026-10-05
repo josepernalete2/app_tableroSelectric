@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
+import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
 import AvanceProgressBar from '../components/AvanceProgressBar';
 import ElementoCardActions from '../components/ElementoCardActions';
 import { 
@@ -119,6 +120,9 @@ export const EmpresaView = () => {
   const [showModal, setShowModal] = useState(false); // Modal Proyecto
   const [showElementoModal, setShowElementoModal] = useState(false); // Modal Elemento
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Estado para Modal de Edición de ID (Solo Administradores)
+  const [editIdModalData, setEditIdModalData] = useState({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' });
 
   // Estados de selección múltiple
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -911,10 +915,23 @@ export const EmpresaView = () => {
 
                       {/* ID Badge */}
                       {!isMultiSelectMode && (
-                        <div className="absolute top-3 right-3 flex items-center gap-2">
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5">
                           <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
                             ID: {getElementCode(item, item.tipoElemento)}
                           </span>
+                          {user?.role === 'ADMIN' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditIdModalData({ isOpen: true, elemento: item, tipoElemento: item.tipoElemento });
+                              }}
+                              className="p-1 bg-slate-900/90 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                              title="Editar ID del elemento (Solo Administradores)"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       )}
 
@@ -1770,6 +1787,14 @@ export const EmpresaView = () => {
         elementos={companyElementos}
         companyName={company?.nombre}
         companyId={companyId}
+      />
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={editIdModalData.isOpen}
+        onClose={() => setEditIdModalData({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' })}
+        elemento={editIdModalData.elemento}
+        tipoElemento={editIdModalData.tipoElemento}
       />
 
     </div>

@@ -16,16 +16,21 @@ import {
   Thermometer, 
   CheckSquare, 
   FileText,
-  Settings
+  Settings,
+  Edit3
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
+import ModalEditarIdElemento from './ModalEditarIdElemento';
 import useStore, { getElementCode } from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
   const { companies, crearElementoProvisional } = useStore();
+  const user = useStore((state) => state.user);
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
   const [circuitDataWizard, setCircuitDataWizard] = useState(null);
   const [wizardModo, setWizardModo] = useState('SALIDA');
+  const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
   if (!ccmData) {
     return <div className="text-center p-8 text-slate-400">No hay datos de CCM seleccionados.</div>;
   }
@@ -231,9 +236,21 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
           >
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
-          <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
-            ID: {getElementCode(ccmData, 'CCM')}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+              ID: {getElementCode(ccmData, 'CCM')}
+            </span>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setIsEditIdModalOpen(true)}
+                className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                title="Editar ID del elemento (Solo Administradores)"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -801,6 +818,15 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
           if (updated.detallesTecnicos?.proteccion || updated.breaker?.amp) updateGaveta(circuitId, 'proteccion', updated.detallesTecnicos?.proteccion || updated.breaker?.amp);
           if (updated.detallesTecnicos?.redComms) updateGaveta(circuitId, 'redComms', updated.detallesTecnicos.redComms);
         }}
+      />
+
+      {/* Modal de Edición de ID Visual (Solo Administradores) */}
+      <ModalEditarIdElemento
+        isOpen={isEditIdModalOpen}
+        onClose={() => setIsEditIdModalOpen(false)}
+        elemento={ccmData}
+        tipoElemento="CCM"
+        proyectoId={ccmData?.proyectoId}
       />
 
     </div>
