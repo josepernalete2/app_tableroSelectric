@@ -33,7 +33,11 @@ import {
   HelpCircle,
   Plus,
   Edit3,
-  Tag
+  Tag,
+  FolderOpen,
+  MapPin,
+  Phone,
+  Mail
 } from 'lucide-react';
 import HelpModal from '../components/HelpModal';
 import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
@@ -116,10 +120,16 @@ export const ProyectoView = () => {
     e.preventDefault();
     if (!editProyectoNombre.trim()) return;
 
+    const finalDireccion = editProyectoDireccion.trim() || company?.direccion || company?.ubicacion || '';
+
     updateProyecto(companyId, proyectoId, {
       nombre: editProyectoNombre.trim(),
       descripcion: editProyectoDescripcion.trim(),
-      direccion: editProyectoDireccion.trim(),
+      direccion: finalDireccion,
+      ubicacion: finalDireccion,
+      responsableNombre: editResponsableNombre.trim(),
+      responsableTelefono: editResponsableTelefono.trim(),
+      responsableEmail: editResponsableEmail.trim(),
       responsable: {
         nombre: editResponsableNombre.trim(),
         telefono: editResponsableTelefono.trim(),
@@ -134,10 +144,10 @@ export const ProyectoView = () => {
   const handleOpenEditModal = () => {
     setEditProyectoNombre(proyecto?.nombre || '');
     setEditProyectoDescripcion(proyecto?.descripcion || '');
-    setEditProyectoDireccion(proyecto?.direccion || proyecto?.ubicacion || '');
-    setEditResponsableNombre(proyecto?.responsableNombre || (typeof proyecto?.responsable === 'object' ? proyecto?.responsable?.nombre : proyecto?.responsable) || '');
-    setEditResponsableTelefono(proyecto?.responsableTelefono || proyecto?.responsable?.telefono || '');
-    setEditResponsableEmail(proyecto?.responsableEmail || proyecto?.responsable?.email || '');
+    setEditProyectoDireccion(proyecto?.direccion || proyecto?.ubicacion || company?.direccion || company?.ubicacion || '');
+    setEditResponsableNombre(proyecto?.responsableNombre || (typeof proyecto?.responsable === 'object' ? proyecto?.responsable?.nombre : proyecto?.responsable) || company?.contactoPrincipal || company?.responsable || '');
+    setEditResponsableTelefono(proyecto?.responsableTelefono || (typeof proyecto?.responsable === 'object' ? proyecto?.responsable?.telefono : '') || company?.telefono || '');
+    setEditResponsableEmail(proyecto?.responsableEmail || (typeof proyecto?.responsable === 'object' ? proyecto?.responsable?.email : '') || company?.email || '');
     setShowEditProyectoModal(true);
   };
 
@@ -1009,7 +1019,7 @@ export const ProyectoView = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-900">
             <div className="md:col-span-2">
               <span className="text-[10px] text-slate-500 font-bold uppercase block">Ubicación / Dirección</span>
-              <span className="text-sm font-semibold text-slate-200">{proyecto.direccion || proyecto.ubicacion || 'No definida'}</span>
+              <span className="text-sm font-semibold text-slate-200">{proyecto.direccion || proyecto.ubicacion || company?.direccion || company?.ubicacion || 'No definida'}</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-500 font-bold uppercase block">Empresa</span>
@@ -1034,19 +1044,19 @@ export const ProyectoView = () => {
                   <div>
                     <strong className="text-slate-400">Nombre:</strong>{' '}
                     <span className="text-slate-200 font-semibold">
-                      {proyecto.responsableNombre || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.nombre : proyecto.responsable) || 'N/D'}
+                      {proyecto.responsableNombre || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.nombre : proyecto.responsable) || company?.contactoPrincipal || company?.responsable || 'No definido'}
                     </span>
                   </div>
                   <div>
                     <strong className="text-slate-400">Teléfono:</strong>{' '}
                     <span className="text-slate-200 font-semibold font-mono">
-                      {proyecto.responsableTelefono || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.telefono : '') || 'N/D'}
+                      {proyecto.responsableTelefono || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.telefono : '') || company?.telefono || 'No definido'}
                     </span>
                   </div>
                   <div>
                     <strong className="text-slate-400">Email:</strong>{' '}
                     <span className="text-slate-200 font-semibold">
-                      {proyecto.responsableEmail || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.email : '') || 'N/D'}
+                      {proyecto.responsableEmail || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.email : '') || company?.email || 'No definido'}
                     </span>
                   </div>
                 </div>
@@ -2671,107 +2681,6 @@ export const ProyectoView = () => {
                   className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
                   Registrar Punto
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Edición de Proyecto */}
-      {showEditProyectoModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn font-sans text-xs">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 space-y-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                <Building className="w-5 h-5 text-amber-500" /> Editar Proyecto
-              </h3>
-              <button 
-                onClick={() => setShowEditProyectoModal(false)}
-                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateProyectoSubmit} className="space-y-4">
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Nombre del Proyecto</label>
-                <input 
-                  type="text" 
-                  value={editProyectoNombre} 
-                  onChange={(e) => setEditProyectoNombre(e.target.value)} 
-                  required 
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Descripción del Proyecto</label>
-                <textarea 
-                  value={editProyectoDescripcion} 
-                  onChange={(e) => setEditProyectoDescripcion(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm h-20"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Dirección / Ubicación Física</label>
-                <input 
-                  type="text" 
-                  value={editProyectoDireccion} 
-                  onChange={(e) => setEditProyectoDireccion(e.target.value)} 
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500 text-sm"
-                />
-              </div>
-
-              <div className="border-t border-slate-800 pt-4 mt-4 space-y-4">
-                <h4 className="font-bold text-sky-400 uppercase tracking-wider text-[10px]">Responsable del Proyecto</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-slate-500 font-medium mb-1">Nombre</label>
-                    <input 
-                      type="text" 
-                      value={editResponsableNombre} 
-                      onChange={(e) => setEditResponsableNombre(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-medium mb-1">Teléfono</label>
-                    <input 
-                      type="text" 
-                      value={editResponsableTelefono} 
-                      onChange={(e) => setEditResponsableTelefono(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-500 font-medium mb-1">Email</label>
-                    <input 
-                      type="email" 
-                      value={editResponsableEmail} 
-                      onChange={(e) => setEditResponsableEmail(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t border-slate-800">
-                <button 
-                  type="button" 
-                  onClick={() => setShowEditProyectoModal(false)}
-                  className="px-4 py-2 border border-slate-700 text-slate-350 hover:bg-slate-800 hover:text-slate-200 rounded-lg font-bold transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-400 active:scale-98 rounded-lg font-bold transition-all shadow-md cursor-pointer"
-                >
-                  Guardar Cambios
                 </button>
               </div>
             </form>

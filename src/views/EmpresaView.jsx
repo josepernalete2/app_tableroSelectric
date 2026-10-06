@@ -347,24 +347,39 @@ export const EmpresaView = () => {
     }
   };
 
+  const handleOpenCreateProjectModal = () => {
+    setProyectoNombre('');
+    setProyectoDescripcion('');
+    setProyectoDireccion(company?.direccion || company?.ubicacion || '');
+    setProyectoRespNombre(company?.contactoPrincipal || company?.responsable || '');
+    setProyectoRespTelefono(company?.telefono || '');
+    setProyectoRespEmail(company?.email || '');
+    setShowModal(true);
+  };
+
   const handleCreateProyecto = async (e) => {
     e.preventDefault();
     if (!isProyectoValid) return;
+
+    const finalDireccion = proyectoDireccion.trim() || company?.direccion || company?.ubicacion || '';
+    const finalRespNombre = proyectoRespNombre.trim() || company?.contactoPrincipal || company?.responsable || '';
+    const finalRespTelefono = proyectoRespTelefono.trim() || company?.telefono || '';
+    const finalRespEmail = proyectoRespEmail.trim() || company?.email || '';
 
     const result = await addProyecto(
       proyectoNombre.trim(),
       proyectoDescripcion.trim(),
       companyId,
       {
-        direccion: proyectoDireccion.trim(),
-        ubicacion: proyectoDireccion.trim(),
-        responsableNombre: proyectoRespNombre.trim(),
-        responsableTelefono: proyectoRespTelefono.trim(),
-        responsableEmail: proyectoRespEmail.trim(),
+        direccion: finalDireccion,
+        ubicacion: finalDireccion,
+        responsableNombre: finalRespNombre,
+        responsableTelefono: finalRespTelefono,
+        responsableEmail: finalRespEmail,
         responsable: {
-          nombre: proyectoRespNombre.trim(),
-          telefono: proyectoRespTelefono.trim(),
-          email: proyectoRespEmail.trim()
+          nombre: finalRespNombre,
+          telefono: finalRespTelefono,
+          email: finalRespEmail
         }
       }
     );
@@ -708,7 +723,7 @@ export const EmpresaView = () => {
 
               {/* Botón Secundario: + Crear Proyecto */}
               <button
-                onClick={() => setShowModal(true)}
+                onClick={handleOpenCreateProjectModal}
                 className="bg-slate-900 border border-slate-700 text-slate-100 font-semibold hover:bg-slate-800 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap w-full sm:w-auto cursor-pointer text-xs"
               >
                 <Plus className="w-4 h-4" /> + Crear Proyecto

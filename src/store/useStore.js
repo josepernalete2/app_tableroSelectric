@@ -1101,24 +1101,25 @@ export const useStore = create(
       },
 
       updateProyecto: async (companyId, proyectoId, updatedData) => {
-        const dir = updatedData.direccion || updatedData.ubicacion || '';
-        const respNom = updatedData.responsableNombre || updatedData.responsable?.nombre || '';
-        const respTel = updatedData.responsableTelefono || updatedData.responsable?.telefono || '';
-        const respMail = updatedData.responsableEmail || updatedData.responsable?.email || '';
+        const { companies } = get();
+        const company = companies.find((c) => c.id === companyId);
+        const dir = updatedData.direccion !== undefined ? updatedData.direccion : (updatedData.ubicacion !== undefined ? updatedData.ubicacion : '');
+        const respNom = updatedData.responsableNombre !== undefined ? updatedData.responsableNombre : (typeof updatedData.responsable === 'object' ? updatedData.responsable?.nombre : updatedData.responsable) || '';
+        const respTel = updatedData.responsableTelefono !== undefined ? updatedData.responsableTelefono : (typeof updatedData.responsable === 'object' ? updatedData.responsable?.telefono : '') || '';
+        const respMail = updatedData.responsableEmail !== undefined ? updatedData.responsableEmail : (typeof updatedData.responsable === 'object' ? updatedData.responsable?.email : '') || '';
 
         const normalizedData = {
           ...updatedData,
-          ...(dir ? { direccion: dir, ubicacion: dir } : {}),
-          ...(respNom || respTel || respMail ? {
-            responsableNombre: respNom,
-            responsableTelefono: respTel,
-            responsableEmail: respMail,
-            responsable: {
-              nombre: respNom,
-              telefono: respTel,
-              email: respMail
-            }
-          } : {})
+          direccion: dir || (company?.direccion || company?.ubicacion || ''),
+          ubicacion: dir || (company?.direccion || company?.ubicacion || ''),
+          responsableNombre: respNom,
+          responsableTelefono: respTel,
+          responsableEmail: respMail,
+          responsable: {
+            nombre: respNom,
+            telefono: respTel,
+            email: respMail
+          }
         };
 
         set((state) => ({
@@ -1217,10 +1218,10 @@ export const useStore = create(
         if (!company) return { success: false, error: 'Empresa no encontrada.' };
 
         const uuidId = crypto.randomUUID();
-        const dir = extraData.direccion || extraData.ubicacion || '';
-        const respNom = extraData.responsableNombre || extraData.responsable?.nombre || '';
-        const respTel = extraData.responsableTelefono || extraData.responsable?.telefono || '';
-        const respMail = extraData.responsableEmail || extraData.responsable?.email || '';
+        const dir = extraData.direccion || extraData.ubicacion || company.direccion || company.ubicacion || '';
+        const respNom = extraData.responsableNombre || (typeof extraData.responsable === 'object' ? extraData.responsable?.nombre : extraData.responsable) || company.contactoPrincipal || company.responsable || '';
+        const respTel = extraData.responsableTelefono || (typeof extraData.responsable === 'object' ? extraData.responsable?.telefono : '') || company.telefono || '';
+        const respMail = extraData.responsableEmail || (typeof extraData.responsable === 'object' ? extraData.responsable?.email : '') || company.email || '';
 
         const nuevoProyecto = {
           id: uuidId,
