@@ -110,23 +110,63 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       return <span className="text-xs text-slate-400 dark:text-slate-600 italic font-mono">RESERVA</span>;
     }
 
-    let cleanName = equipoText;
-    let elementId = elementoDestinoId || vinculadoId || null;
-    let elementType = tipoElementoDestino || tipoDestino || null;
+    let cleanName = String(equipoText).trim();
+    let rawElementId = elementoDestinoId || vinculadoId || null;
+    let elementType = tipoElementoDestino || tipoDestino || 'TABLERO';
 
-    const match = String(equipoText).match(/^(.*?)(?:\s*\((?:ID:\s*)?([A-Z0-9_-]+)\))?$/i);
+    // Extraer ID si viene embebido en texto: "Nombre (ID: xxx)" o "Nombre (xxx)"
+    const match = cleanName.match(/^(.*?)(?:\s*\((?:ID:\s*)?([a-zA-Z0-9_-]+)\))?$/i);
     if (match) {
       if (match[1]) cleanName = match[1].trim();
-      if (match[2] && !elementId) elementId = match[2].trim();
+      if (match[2] && !rawElementId) rawElementId = match[2].trim();
+    }
+
+    // Limpiar cualquier UUID embebido en el nombre
+    cleanName = cleanElementName(cleanName, rawElementId);
+
+    // Resolver IDs de elementos a códigos amigables y estandarizados (ej. TAB-1, TRS-1, GEN-1, CCM-1)
+    let idBadges = [];
+    if (rawElementId) {
+      const idList = String(rawElementId).split(',').map(s => s.trim()).filter(Boolean);
+      idBadges = idList.map(id => {
+        const found = alimentadores.find(e => e.id === id || e.codigo === id);
+        if (found) {
+          return {
+            id,
+            code: getElementCode(found, found.tipoElemento || elementType),
+            name: cleanElementName(found.nombre, found.id, found.codigo)
+          };
+        }
+        return {
+          id,
+          code: getElementCode(id, elementType),
+          name: null
+        };
+      });
+    }
+
+    // Si el nombre resultante sigue siendo un UUID crudo o quedó vacío, reemplazar por el nombre o código amigable
+    const isNameUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanName);
+    if ((!cleanName || isNameUuid) && idBadges.length > 0 && idBadges[0].name) {
+      cleanName = idBadges.map(b => b.name).filter(Boolean).join(', ');
+    } else if (isNameUuid && idBadges.length > 0) {
+      cleanName = idBadges.map(b => b.code).join(', ');
     }
 
     return (
       <div className="flex flex-col gap-0.5">
         <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{cleanName}</span>
-        {elementId && (
-          <span className="inline-flex items-center w-max px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/30">
-            {elementType && elementType !== 'SUB_TABLERO' && elementType !== 'TABLERO' ? `${elementType}: ` : ''}{elementId}
-          </span>
+        {idBadges.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+            {idBadges.map((badge, bIdx) => (
+              <span
+                key={bIdx}
+                className="inline-flex items-center w-max px-1.5 py-0.5 rounded text-[9.5px] font-mono font-bold bg-amber-500/10 text-amber-500 border border-amber-500/30 shadow-sm"
+              >
+                ID: {badge.code}
+              </span>
+            ))}
+          </div>
         )}
       </div>
     );
@@ -395,7 +435,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         updatedFields.vinculadoId = prov.id;
         updatedFields.elementoDestinoId = prov.id;
         updatedFields.tipoElementoDestino = prov.tipoElemento || updatedFields.tipoElementoProvisional || 'TABLERO';
-        updatedFields.equipo = `${prov.nombre} (ID: ${prov.id})`;
+        updatedFields.equipo = `${cleanElementName(prov.nombre, prov.id, prov.codigo)} (ID: ${getElementCode(prov, prov.tipoElemento || updatedFields.tipoElementoProvisional || 'TABLERO')})`;
         updatedFields.tipoDestino = prov.tipoElemento === 'TABLERO' ? 'SUB_TABLERO' : 'ELEMENTO_VINCULADO';
 
         const pendingItem = { id: prov.id, nombre: prov.nombre, tipoElemento: prov.tipoElemento, circuitoId: circuitId };

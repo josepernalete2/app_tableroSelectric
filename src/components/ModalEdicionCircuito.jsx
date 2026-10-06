@@ -24,7 +24,7 @@ import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
 import DualPhotoUploader from './DualPhotoUploader';
-import useStore, { getElementCode } from '../store/useStore';
+import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -202,11 +202,11 @@ export const ModalEdicionCircuito = ({
                         t === 'TRANSFORMADOR' ? 'Transformador' :
                         t === 'PUNTO_MEDICION' ? 'Equipo de Medida' :
                         t === 'TABLERO' ? 'Tablero' : (t || 'Elemento');
-      const autoDesc = `Alimentación a ${tipoLabel}: ${found.nombre}`;
+      const autoDesc = `Alimentación a ${tipoLabel}: ${cleanElementName(found.nombre, found.id, found.codigo)}`;
       setNombreArtefacto(autoDesc);
       setRotulo(autoDesc);
       if (!descArtefacto) {
-        setDescArtefacto(`Alimentación directa hacia ${found.nombre} (ID: ${found.id})`);
+        setDescArtefacto(`Alimentación directa hacia ${cleanElementName(found.nombre, found.id, found.codigo)} (ID: ${getElementCode(found, found.tipoElemento || t)})`);
       }
     }
   };
@@ -523,14 +523,14 @@ export const ModalEdicionCircuito = ({
   const handleSaveVinculo = (linkElement) => {
     if (isMultiSelect) {
       if (selectedLinks.length === 0) return customAlert('Por favor, selecciona al menos un elemento para vincular.');
-      const names = selectedLinks.map(el => `${el.nombre} (ID: ${el.id})`).join(', ');
+      const names = selectedLinks.map(el => `${cleanElementName(el.nombre, el.id, el.codigo)} (ID: ${getElementCode(el, el.tipo || 'SUB_TABLERO')})`).join(', ');
       const ids = selectedLinks.map(el => el.id).join(', ');
       handleSaveEquipment(names, 'SUB_TABLERO', { vinculadoId: ids, elementoDestinoId: ids, tipoElementoDestino: 'SUB_TABLERO', vinculados: selectedLinks });
       return;
     }
     const el = linkElement || selectedLink;
     if (!el) return customAlert('Por favor, selecciona un elemento para vincular.');
-    handleSaveEquipment(`${el.nombre} (ID: ${el.id})`, el.tipo || 'SUB_TABLERO', { vinculadoId: el.id, elementoDestinoId: el.id, tipoElementoDestino: el.tipo || 'SUB_TABLERO' });
+    handleSaveEquipment(`${cleanElementName(el.nombre, el.id, el.codigo)} (ID: ${getElementCode(el, el.tipo || 'SUB_TABLERO')})`, el.tipo || 'SUB_TABLERO', { vinculadoId: el.id, elementoDestinoId: el.id, tipoElementoDestino: el.tipo || 'SUB_TABLERO' });
   };
 
   const handleSavePorCrear = () => {

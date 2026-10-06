@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
-import useStore, { getElementCode } from '../store/useStore';
+import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
   const { companies, crearElementoProvisional } = useStore();
@@ -808,7 +808,7 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
               updated.vinculadoId = prov.id;
               updated.elementoDestinoId = prov.id;
               updated.tipoElementoDestino = 'TABLERO';
-              updated.equipo = `${prov.nombre} (ID: ${prov.id})`;
+              updated.equipo = `${cleanElementName(prov.nombre, prov.id, prov.codigo)} (ID: ${getElementCode(prov, 'TABLERO')})`;
               updated.tipoDestino = 'SUB_TABLERO';
             }
           }
