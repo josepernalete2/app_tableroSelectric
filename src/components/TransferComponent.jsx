@@ -517,7 +517,7 @@ export default function TransferComponent({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               
               {/* Tarjeta 1: FUENTE NORMAL / PRINCIPAL (VERDE) */}
-              <div className="bg-gradient-to-b from-emerald-950/30 to-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative overflow-hidden">
+              <div className="bg-gradient-to-b from-emerald-950/30 to-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-20">
                 <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -605,7 +605,7 @@ export default function TransferComponent({
               </div>
 
               {/* Tarjeta 2: FUENTE EMERGENCIA (ÁMBAR/ROJO) */}
-              <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative overflow-hidden">
+              <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-10">
                 <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40">
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>

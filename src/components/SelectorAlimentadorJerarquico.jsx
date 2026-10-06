@@ -441,46 +441,46 @@ export default function SelectorAlimentadorJerarquico({
             </div>
           </div>
 
-          {/* MENÚ DESPLEGABLE CON BÚSQUEDA Y CATEGORÍAS */}
+          {/* MENÚ DESPLEGABLE CON BÚSQUEDA Y CATEGORÍAS (AMPLIO, FLOTANTE Z-100 Y ADAPTABLE A TABLETS) */}
           {isOpen && (
-            <div className="absolute z-50 left-0 right-0 mt-2 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute z-[100] left-0 w-full min-w-[320px] sm:min-w-[460px] md:min-w-[520px] max-w-[95vw] mt-2 bg-slate-900/98 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-2xl overflow-hidden ring-1 ring-amber-500/20 animate-in fade-in zoom-in-95 duration-150">
               
               {/* Barra superior de búsqueda y controles de selección múltiple */}
-              <div className="p-3 border-b border-slate-800 bg-slate-950/70 space-y-2">
+              <div className="p-3 sm:p-3.5 border-b border-slate-800 bg-slate-950/80 space-y-2.5">
                 <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
                     ref={searchInputRef}
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Buscar por nombre, código (gen-1), tensión o tipo..."
-                    className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-700/80 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
+                    className="w-full pl-10 pr-9 py-2.5 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono shadow-inner"
                   />
                   {search && (
                     <button
                       type="button"
                       onClick={() => setSearch('')}
-                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white cursor-pointer"
+                      className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer p-0.5 rounded"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px]">
+                <div className="flex items-center justify-between text-xs px-0.5">
                   <span className="text-slate-400 font-medium">
                     {selectedItems.length > 0 ? (
-                      <>Seleccionados: <strong className="text-amber-400">{selectedItems.length}</strong> fuente(s)</>
+                      <>Seleccionados: <strong className="text-amber-400 font-bold">{selectedItems.length}</strong> fuente(s)</>
                     ) : (
-                      <span className="text-slate-500">Haz clic para marcar o desmarcar fuentes</span>
+                      <span className="text-slate-500">Toca para marcar o desmarcar fuentes</span>
                     )}
                   </span>
                   {selectedItems.length > 0 && (
                     <button
                       type="button"
                       onClick={handleClear}
-                      className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer"
+                      className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-rose-500/10"
                     >
                       Deseleccionar Todo
                     </button>
@@ -488,32 +488,32 @@ export default function SelectorAlimentadorJerarquico({
                 </div>
               </div>
 
-              {/* Lista de opciones agrupadas con casillas de verificación */}
-              <div className="max-h-72 overflow-y-auto divide-y divide-slate-800/60 p-1.5 custom-scrollbar">
+              {/* Lista de opciones agrupadas con casillas de verificación (Desplazamiento vertical fluido) */}
+              <div className="max-h-64 sm:max-h-80 overflow-y-auto divide-y divide-slate-800/60 p-2 overscroll-contain custom-scrollbar">
                 {loading ? (
-                  <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                    Cargando jerarquía eléctrica del proyecto...
+                  <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2.5">
+                    <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                    <span>Cargando jerarquía eléctrica del proyecto...</span>
                   </div>
                 ) : Object.keys(groupedItems).length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-400 space-y-1">
-                    <AlertCircle className="w-5 h-5 mx-auto text-slate-500 mb-1" />
-                    <p className="font-semibold text-slate-300">No se encontraron equipos registrados</p>
-                    <p className="text-[11px] text-slate-500">Puedes ingresar una acometida externa manual con la opción de abajo.</p>
+                  <div className="p-8 text-center text-xs text-slate-400 space-y-1.5">
+                    <AlertCircle className="w-6 h-6 mx-auto text-slate-500 mb-1" />
+                    <p className="font-bold text-slate-300 text-sm">No se encontraron equipos registrados</p>
+                    <p className="text-xs text-slate-500">Puedes ingresar una acometida externa manual con la opción de abajo.</p>
                   </div>
                 ) : (
                   Object.entries(groupedItems).map(([categoria, group]) => (
-                    <div key={categoria} className="py-1.5 first:pt-0 last:pb-0">
+                    <div key={categoria} className="py-2 first:pt-0 last:pb-0">
                       {/* Cabecera de Categoría */}
-                      <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <div className="px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between bg-slate-950/40 rounded-lg mb-1">
                         <span>{categoria}</span>
-                        <span className="text-slate-400 font-mono text-[9px] bg-slate-800 px-1.5 py-0.5 rounded-full">
+                        <span className="text-slate-400 font-mono text-[10px] bg-slate-800 px-2 py-0.5 rounded-full border border-slate-750 font-bold">
                           {group.length}
                         </span>
                       </div>
 
-                      {/* Items del Grupo */}
-                      <div className="space-y-1 mt-1">
+                      {/* Items del Grupo (Área táctil optimizada para Tablets) */}
+                      <div className="space-y-1.5">
                         {group.map((item) => {
                           const isSelected = selectedItems.some((sel) => sel.id === item.id);
                           const { icon: ItemIcon, color } = getIconAndColor(item.tipoElemento);
@@ -522,38 +522,38 @@ export default function SelectorAlimentadorJerarquico({
                             <div
                               key={item.id}
                               onClick={() => handleToggleItem(item)}
-                              className={`w-full text-left px-3 py-2 rounded-xl flex items-center justify-between gap-3 transition-colors cursor-pointer select-none ${
+                              className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer select-none min-h-[48px] active:scale-[0.99] ${
                                 isSelected
-                                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/40 shadow-xs'
-                                  : 'hover:bg-slate-800/80 text-slate-200 border border-transparent'
+                                  ? 'bg-amber-500/15 text-amber-200 border border-amber-500/40 shadow-sm'
+                                  : 'hover:bg-slate-800/90 active:bg-slate-800 text-slate-200 border border-transparent'
                               }`}
                             >
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                <div className="shrink-0 text-amber-400">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="shrink-0 text-amber-400 p-0.5">
                                   {isSelected ? (
-                                    <CheckSquare className="w-4 h-4 fill-amber-500/20" />
+                                    <CheckSquare className="w-5 h-5 fill-amber-500/20 text-amber-400" />
                                   ) : (
-                                    <Square className="w-4 h-4 text-slate-600" />
+                                    <Square className="w-5 h-5 text-slate-600" />
                                   )}
                                 </div>
-                                <div className={`p-1.5 rounded-lg border shrink-0 ${color}`}>
-                                  <ItemIcon className="w-3.5 h-3.5" />
+                                <div className={`p-2 rounded-xl border shrink-0 ${color}`}>
+                                  <ItemIcon className="w-4 h-4" />
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-xs text-slate-100 truncate">
+                                    <span className="font-bold text-xs sm:text-sm text-slate-100">
                                       {item.nombre}
                                     </span>
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
                                       ID: {item.codigo || getElementCode(item, item.tipoElemento)}
                                     </span>
-                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-800 text-amber-300 shrink-0">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-amber-300 border border-slate-700/60 shrink-0">
                                       ⚡ {item.nivelTension}
                                     </span>
                                   </div>
-                                  <div className="text-[11px] text-slate-400 truncate mt-0.5">
-                                    📍 {item.ubicacion}
-                                    {item.detalles ? ` • ${item.detalles}` : ''}
+                                  <div className="text-xs text-slate-400 truncate mt-1 flex items-center gap-1.5">
+                                    <span>📍 {item.ubicacion}</span>
+                                    {item.detalles && <span className="text-slate-500 font-medium">• {item.detalles}</span>}
                                   </div>
                                 </div>
                               </div>
@@ -567,23 +567,23 @@ export default function SelectorAlimentadorJerarquico({
               </div>
 
               {/* Footer con opciones de creación rápida, entrada manual y botón Listo */}
-              <div className="p-2.5 border-t border-slate-800 bg-slate-950/90 space-y-2">
-                <div className="flex items-center justify-between gap-2">
+              <div className="p-3 border-t border-slate-800 bg-slate-950/90 space-y-2">
+                <div className="flex items-center justify-between gap-2.5">
                   <button
                     type="button"
                     onClick={() => {
                       setIsCustomMode(true);
                       setIsOpen(false);
                     }}
-                    className="flex-1 px-3 py-1.5 rounded-xl text-left flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors font-medium border border-dashed border-amber-500/30 cursor-pointer"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl text-left flex items-center gap-2 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-all font-medium border border-dashed border-amber-500/30 cursor-pointer min-h-[42px]"
                   >
-                    <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Texto Manual / Acometida Externa</span>
+                    <Edit3 className="w-4 h-4 shrink-0" />
+                    <span className="truncate font-semibold">Texto Manual / Acometida Externa</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsOpen(false)}
-                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shrink-0"
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shrink-0 min-h-[42px]"
                   >
                     Listo / Aplicar
                   </button>
@@ -598,7 +598,7 @@ export default function SelectorAlimentadorJerarquico({
                         onQuickCreate();
                       }
                     }}
-                    className="w-full px-3 py-1.5 rounded-xl text-left flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40 transition-colors font-bold border border-emerald-500/30 cursor-pointer shadow-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl text-left flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-900/40 transition-colors font-bold border border-emerald-500/30 cursor-pointer shadow-sm min-h-[42px]"
                   >
                     <span className="p-0.5 bg-emerald-500 text-slate-950 rounded font-black text-[10px] leading-none">+</span>
                     <span>Crear nueva fuente / nodo en línea</span>
