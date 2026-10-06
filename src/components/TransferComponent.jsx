@@ -34,6 +34,7 @@ import {
   FRECUENCIAS_NORMALIZADAS, 
   POLOS_TRANSFERENCIA 
 } from '../utils/constants';
+import TensionNominalInput from './TensionNominalInput';
 
 export default function TransferComponent({ 
   transferData, 
@@ -365,14 +366,18 @@ export default function TransferComponent({
               {isEditing ? (
                 <input
                   type="text"
-                  value={dt.amperaje || dt.capacidadAmperios || ''}
-                  onChange={(e) => handleDtChange('amperaje', e.target.value)}
-                  placeholder="Ej. 3200 A"
-                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono font-bold text-amber-400 text-center w-28"
+                  value={dt.amperaje !== undefined && dt.amperaje !== null ? dt.amperaje : (dt.capacidadAmperios !== undefined && dt.capacidadAmperios !== null ? dt.capacidadAmperios : '')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    handleDtChange('amperaje', val);
+                    handleDtChange('capacidadAmperios', val);
+                  }}
+                  placeholder="Ej. 3200 A o 0"
+                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono font-bold text-amber-400 text-center w-28 focus:border-amber-500 focus:outline-none"
                 />
               ) : (
                 <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg font-mono font-black text-sm">
-                  {dt.amperaje || dt.capacidadAmperios ? `${dt.amperaje || dt.capacidadAmperios}` : '—'}
+                  {dt.amperaje !== undefined && dt.amperaje !== null && dt.amperaje !== '' ? `${dt.amperaje}` : (dt.capacidadAmperios !== undefined && dt.capacidadAmperios !== null && dt.capacidadAmperios !== '' ? `${dt.capacidadAmperios}` : '—')}
                 </span>
               )}
             </div>
@@ -424,16 +429,12 @@ export default function TransferComponent({
               <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 space-y-1">
                 <span className="text-[10px] text-slate-400 block font-bold">TENSIÓN NOMINAL (COVENIN 159):</span>
                 {isEditing ? (
-                  <select
+                  <TensionNominalInput
+                    tipo="TODAS"
                     value={dt.tensionNominal || ''}
-                    onChange={(e) => handleDtChange('tensionNominal', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-bold"
-                  >
-                    <option value="">-- Seleccionar Tensión Normalizada --</option>
-                    {TENSIONES_COVENIN_159_BT.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => handleDtChange('tensionNominal', val)}
+                    placeholder="Ej. 208/120 V o escribir..."
+                  />
                 ) : (
                   <span className="text-emerald-400 font-bold text-sm block mt-0.5">{dt.tensionNominal || '—'}</span>
                 )}
@@ -517,7 +518,7 @@ export default function TransferComponent({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               
               {/* Tarjeta 1: FUENTE NORMAL / PRINCIPAL (VERDE) */}
-              <div className="bg-gradient-to-b from-emerald-950/30 to-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-20">
+              <div className="bg-gradient-to-b from-emerald-950/30 to-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-20 focus-within:z-40">
                 <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -605,7 +606,7 @@ export default function TransferComponent({
               </div>
 
               {/* Tarjeta 2: FUENTE EMERGENCIA (ÁMBAR/ROJO) */}
-              <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-10">
+              <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-10 focus-within:z-40">
                 <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40">
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
@@ -1027,17 +1028,14 @@ export default function TransferComponent({
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                    Tensión Normalizada
+                    Tensión Nominal
                   </label>
-                  <select
+                  <TensionNominalInput
+                    tipo="TODAS"
                     value={newSourceTension}
-                    onChange={(e) => setNewSourceTension(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-2 py-2 text-slate-100 text-xs font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
-                  >
-                    {TENSIONES_COVENIN_159_BT.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
+                    onChange={(val) => setNewSourceTension(val)}
+                    placeholder="Ej. 208/120 V o 13.8 kV"
+                  />
                 </div>
               </div>
 

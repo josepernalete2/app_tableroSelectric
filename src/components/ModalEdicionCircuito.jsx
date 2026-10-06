@@ -17,7 +17,8 @@ import {
   Building2, 
   Gauge, 
   Radio,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
@@ -49,7 +50,7 @@ export const ModalEdicionCircuito = ({
   tipoOrigen = 'TABLERO',
   modo = 'SALIDA'
 }) => {
-  const { alert: customAlert } = useConfirm();
+  const { confirm, alert: customAlert } = useConfirm();
   const { registrarConflictoCircuito, showToast, setPanelConflictosOpen } = useStore();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
@@ -229,40 +230,31 @@ export const ModalEdicionCircuito = ({
   const [tensionSecundaria, setTensionSecundaria] = useState('');
   const [interruptorAguasAbajo, setInterruptorAguasAbajo] = useState('');
 
-  // Reversión explícita a Reserva
-  const handleRevertirAReserva = () => {
-    setAlimentaOtro(false);
-    setIsCreatingNewProvisional(false);
-    setProvisionalCustomName('');
-    onSave(circuitData.id, {
-      equipo: 'RESERVA',
-      tipoDestino: 'RESERVA',
-      vinculadoId: null,
-      elementoDestinoId: null,
-      tipoElementoDestino: null,
-      tipoElementoProvisional: undefined,
-      nombreProvisional: undefined,
-      breaker: {
-        amp: '',
-        marca: '',
-        tipo: ''
-      },
-      conductor: '',
-      poles: isTablero ? validation.requiredPoles : [1, 2, 3],
-      numPolos: isTablero ? numPolos : 1,
-      posicionPolo: isTablero ? posicionPolo : 1,
-      codigoPolo: circuitData?.codigoPolo || circuitData?.polo_label || '',
-      polo_label: circuitData?.polo_label || circuitData?.codigoPolo || '',
-      estado: 'RESERVA',
-      ficha: {
-        descripcion: '',
-        potenciaWatts: null,
-      },
-      fotografia: null,
-      detallesTecnicos: {}
+  // Eliminación / Reversión explícita a Reserva
+  const handleEliminarCircuito = async () => {
+    const requiredList = validation?.requiredPoles || circuitData.poles || [posicionPolo];
+    const polesStr = requiredList.join(', ');
+    const circuitName = circuitData.equipo && circuitData.equipo !== 'RESERVA' ? `"${circuitData.equipo}"` : `en polo(s) [${polesStr}]`;
+
+    const isConfirmed = await confirm({
+      title: 'Eliminar Circuito / Carga',
+      message: `¿Estás seguro de que deseas eliminar el circuito ${circuitName} (Polos: [${polesStr}]) y restablecerlo como RESERVA disponible?`,
+      confirmText: 'Sí, Eliminar Circuito',
+      cancelText: 'Cancelar',
+      type: 'danger'
     });
-    onClose();
+
+    if (isConfirmed) {
+      setAlimentaOtro(false);
+      setIsCreatingNewProvisional(false);
+      setProvisionalCustomName('');
+      onSave(circuitData.id, null);
+      showToast(`Circuito en polo(s) [${polesStr}] eliminado y restablecido a reserva`, 'info');
+      onClose();
+    }
   };
+
+  const handleRevertirAReserva = handleEliminarCircuito;
 
   // Cargar datos al abrir modal
   useEffect(() => {
@@ -727,7 +719,6 @@ export const ModalEdicionCircuito = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div 
         className="absolute inset-0 bg-slate-950/70 backdrop-blur-md transition-opacity" 
-        onClick={onClose} 
       />
 
       <div 
@@ -777,15 +768,15 @@ export const ModalEdicionCircuito = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isTablero && (circuitData.tipoDestino === 'ARTEFACTO' || circuitData.tipoDestino === 'SUB_TABLERO' || circuitData.equipo !== 'RESERVA') && (
+            {isTablero && (
               <button
                 type="button"
-                onClick={handleRevertirAReserva}
-                className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-500/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Desvincular carga/equipo y restablecer este circuito a estado Reserva"
+                onClick={handleEliminarCircuito}
+                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-500/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Eliminar este circuito o carga agregada y dejar los polos como RESERVA"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Revertir a Reserva</span>
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">Eliminar Circuito</span>
               </button>
             )}
             <button 

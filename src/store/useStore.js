@@ -61,14 +61,20 @@ export const getElementCode = (item, defaultType = 'TABLERO') => {
       }
       return item.toLowerCase();
     }
+    if (isUuid) {
+      const prefix = PREFIX_MAP[defaultType] || 'tab';
+      return `${prefix}-1`;
+    }
     return item;
   }
 
   if (item.codigo && typeof item.codigo === 'string' && item.codigo.trim()) {
-    return item.codigo.toLowerCase().trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.codigo);
+    if (!isUuid) return item.codigo.toLowerCase().trim();
   }
   if (item.datosTecnicos?.codigo && typeof item.datosTecnicos.codigo === 'string' && item.datosTecnicos.codigo.trim()) {
-    return item.datosTecnicos.codigo.toLowerCase().trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.datosTecnicos.codigo);
+    if (!isUuid) return item.datosTecnicos.codigo.toLowerCase().trim();
   }
 
   // Si item.id tiene formato de código corto (no UUID)
@@ -82,11 +88,12 @@ export const getElementCode = (item, defaultType = 'TABLERO') => {
         const canonicalPrefix = PREFIX_MAP[item.tipoElemento] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx.toLowerCase();
         return `${canonicalPrefix}-${num}`;
       }
+      return item.id.toLowerCase();
     }
   }
 
   const tipo = item.tipoElemento || defaultType;
-  const prefix = PREFIX_MAP[tipo] || 'elm';
+  const prefix = PREFIX_MAP[tipo] || 'tab';
   return `${prefix}-1`;
 };
 
@@ -94,6 +101,10 @@ export const cleanElementName = (nombre, id, codigo) => {
   if (!nombre) return codigo || (typeof id === 'string' ? getElementCode(id) : '') || '';
   let cleanName = nombre.trim();
   
+  // Limpiar cualquier UUID embebido en el nombre
+  cleanName = cleanName.replace(/\s*\((?:ID:\s*)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi, '').trim();
+  cleanName = cleanName.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*[-:]\s*/gi, '').trim();
+
   const toClean = [id, codigo].filter(Boolean);
   toClean.forEach(cleanId => {
     if (typeof cleanId === 'string' && cleanId.trim()) {
@@ -118,8 +129,10 @@ export const formatElementTitleWithId = (nombre, id, codigo) => {
 export const sortElementsByOrder = (list = []) => {
   if (!Array.isArray(list)) return [];
   return [...list].sort((a, b) => {
-    const orderA = a.orden !== undefined && a.orden !== null ? Number(a.orden) : null;
-    const orderB = b.orden !== undefined && b.orden !== null ? Number(b.orden) : null;
+    const rawOrderA = a.orden !== undefined && a.orden !== null ? a.orden : a.datosTecnicos?.orden;
+    const rawOrderB = b.orden !== undefined && b.orden !== null ? b.orden : b.datosTecnicos?.orden;
+    const orderA = rawOrderA !== undefined && rawOrderA !== null && !isNaN(Number(rawOrderA)) ? Number(rawOrderA) : null;
+    const orderB = rawOrderB !== undefined && rawOrderB !== null && !isNaN(Number(rawOrderB)) ? Number(rawOrderB) : null;
     if (orderA !== null && orderB !== null && orderA !== orderB) {
       return orderA - orderB;
     }
@@ -872,41 +885,6 @@ export const useStore = create(
         }
       },
 
-      updateProyecto: async (companyId, proyectoId, updatedData) => {
-        set((state) => ({
-          companies: state.companies.map((c) => {
-            if (c.id === companyId) {
-              return {
-                ...c,
-                proyectos: (c.proyectos || []).map((p) => {
-                  if (p.id === proyectoId) {
-                    return { ...p, ...updatedData };
-                  }
-                  return p;
-                })
-              };
-            }
-            return c;
-          })
-        }));
-
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/proyectos/${proyectoId}`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              },
-              body: JSON.stringify(updatedData)
-            });
-          } catch (e) {
-            console.error('Error al actualizar proyecto en el servidor:', e);
-          }
-        }
-      },
-
       fetchAlimentadores: async (proyectoId) => {
         if (navigator.onLine) {
           try {
@@ -1123,6 +1101,26 @@ export const useStore = create(
       },
 
       updateProyecto: async (companyId, proyectoId, updatedData) => {
+        const dir = updatedData.direccion || updatedData.ubicacion || '';
+        const respNom = updatedData.responsableNombre || updatedData.responsable?.nombre || '';
+        const respTel = updatedData.responsableTelefono || updatedData.responsable?.telefono || '';
+        const respMail = updatedData.responsableEmail || updatedData.responsable?.email || '';
+
+        const normalizedData = {
+          ...updatedData,
+          ...(dir ? { direccion: dir, ubicacion: dir } : {}),
+          ...(respNom || respTel || respMail ? {
+            responsableNombre: respNom,
+            responsableTelefono: respTel,
+            responsableEmail: respMail,
+            responsable: {
+              nombre: respNom,
+              telefono: respTel,
+              email: respMail
+            }
+          } : {})
+        };
+
         set((state) => ({
           companies: state.companies.map((c) => {
             if (c.id === companyId) {
@@ -1130,7 +1128,7 @@ export const useStore = create(
                 ...c,
                 proyectos: (c.proyectos || []).map((p) => {
                   if (p.id === proyectoId) {
-                    return { ...p, ...updatedData };
+                    return { ...p, ...normalizedData };
                   }
                   return p;
                 })
@@ -1140,7 +1138,7 @@ export const useStore = create(
           }),
           proyectosLocales: (state.proyectosLocales || []).map((p) => {
             if (p.id === proyectoId) {
-              return { ...p, ...updatedData };
+              return { ...p, ...normalizedData };
             }
             return p;
           }),
@@ -1148,7 +1146,7 @@ export const useStore = create(
             id: proyectoId,
             tipo: 'PROYECTO',
             companyId,
-            payload: { id: proyectoId, ...updatedData, empresaId: companyId }
+            payload: { id: proyectoId, ...normalizedData, empresaId: companyId }
           }]
         }));
 
@@ -1161,7 +1159,7 @@ export const useStore = create(
                 'Content-Type': 'application/json',
                 ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
               },
-              body: JSON.stringify(updatedData)
+              body: JSON.stringify(normalizedData)
             });
           } catch (e) {
             console.error('Error al actualizar proyecto en el servidor:', e);
@@ -1213,17 +1211,31 @@ export const useStore = create(
         set({ companies: enrichedList });
       },
 
-      addProyecto: (nombre, descripcion, companyId) => {
+      addProyecto: async (nombre, descripcion, companyId, extraData = {}) => {
         const { companies } = get();
         const company = companies.find((c) => c.id === companyId);
         if (!company) return { success: false, error: 'Empresa no encontrada.' };
 
         const uuidId = crypto.randomUUID();
+        const dir = extraData.direccion || extraData.ubicacion || '';
+        const respNom = extraData.responsableNombre || extraData.responsable?.nombre || '';
+        const respTel = extraData.responsableTelefono || extraData.responsable?.telefono || '';
+        const respMail = extraData.responsableEmail || extraData.responsable?.email || '';
 
         const nuevoProyecto = {
           id: uuidId,
           nombre,
           descripcion: descripcion || '',
+          direccion: dir,
+          ubicacion: dir,
+          responsableNombre: respNom,
+          responsableTelefono: respTel,
+          responsableEmail: respMail,
+          responsable: {
+            nombre: respNom,
+            telefono: respTel,
+            email: respMail
+          },
           empresaId: companyId,
           elementosUnifilares: [],
           inspeccionesSubestacion: [],
@@ -1250,6 +1262,22 @@ export const useStore = create(
             payload: nuevoProyecto
           }]
         }));
+
+        if (navigator.onLine) {
+          try {
+            const { token } = get();
+            await fetch(`${API_BASE_URL}/api/proyectos`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+              },
+              body: JSON.stringify(nuevoProyecto)
+            });
+          } catch (e) {
+            console.error('Error al registrar proyecto en el servidor:', e);
+          }
+        }
 
         return { success: true, proyecto: nuevoProyecto };
       },
@@ -2165,6 +2193,8 @@ export const useStore = create(
       },
 
       moverElemento: (companyId, proyectoId, elementoId, direccion = 'UP', tipoColeccion = 'UNIFILAR') => {
+        let changedItems = [];
+
         set((state) => {
           const updatedCompanies = state.companies.map((c) => {
             if (companyId && c.id !== companyId) return c;
@@ -2189,8 +2219,13 @@ export const useStore = create(
 
                     const reindexed = sorted.map((item, idx) => ({
                       ...item,
-                      orden: idx + 1
+                      orden: idx + 1,
+                      datosTecnicos: {
+                        ...(item.datosTecnicos || {}),
+                        orden: idx + 1
+                      }
                     }));
+                    changedItems = reindexed;
 
                     return {
                       ...p,
@@ -2211,8 +2246,13 @@ export const useStore = create(
 
                     const reindexed = sorted.map((item, idx) => ({
                       ...item,
-                      orden: idx + 1
+                      orden: idx + 1,
+                      datosTecnicos: {
+                        ...(item.datosTecnicos || {}),
+                        orden: idx + 1
+                      }
                     }));
+                    changedItems = reindexed;
 
                     return {
                       ...p,
@@ -2237,8 +2277,13 @@ export const useStore = create(
 
               const reindexed = sorted.map((item, idx) => ({
                 ...item,
-                orden: idx + 1
+                orden: idx + 1,
+                datosTecnicos: {
+                  ...(item.datosTecnicos || {}),
+                  orden: idx + 1
+                }
               }));
+              changedItems = reindexed;
 
               return {
                 ...c,
@@ -2247,14 +2292,22 @@ export const useStore = create(
             }
           });
 
+          // Actualizar persistencia de elementos locales
+          const updatedElementosLocales = (state.elementosLocales || []).map((loc) => {
+            const match = changedItems.find((ci) => ci.id === loc.id);
+            return match ? { ...loc, orden: match.orden, datosTecnicos: { ...(loc.datosTecnicos || {}), orden: match.orden } } : loc;
+          });
+
           return {
-            companies: updatedCompanies
+            companies: updatedCompanies,
+            elementosLocales: updatedElementosLocales
           };
         });
       },
 
       reordenarColeccion: (companyId, proyectoId, orderedIds = [], tipoColeccion = 'UNIFILAR') => {
         if (!Array.isArray(orderedIds) || orderedIds.length === 0) return;
+        let changedItems = [];
 
         set((state) => {
           const updatedCompanies = state.companies.map((c) => {
@@ -2270,12 +2323,18 @@ export const useStore = create(
                     const list = [...(p.elementosUnifilares || p.tableros || [])];
                     const reindexed = list.map((item) => {
                       const idx = orderedIds.indexOf(item.id);
+                      const newOrd = idx !== -1 ? idx + 1 : (item.orden || 9999);
                       return {
                         ...item,
-                        orden: idx !== -1 ? idx + 1 : (item.orden || 9999)
+                        orden: newOrd,
+                        datosTecnicos: {
+                          ...(item.datosTecnicos || {}),
+                          orden: newOrd
+                        }
                       };
                     });
                     const sorted = sortElementsByOrder(reindexed);
+                    changedItems = sorted;
                     return {
                       ...p,
                       elementosUnifilares: sorted,
@@ -2285,12 +2344,18 @@ export const useStore = create(
                     const list = [...(p.inspeccionesSubestacion || p.subestaciones || [])];
                     const reindexed = list.map((item) => {
                       const idx = orderedIds.indexOf(item.id);
+                      const newOrd = idx !== -1 ? idx + 1 : (item.orden || 9999);
                       return {
                         ...item,
-                        orden: idx !== -1 ? idx + 1 : (item.orden || 9999)
+                        orden: newOrd,
+                        datosTecnicos: {
+                          ...(item.datosTecnicos || {}),
+                          orden: newOrd
+                        }
                       };
                     });
                     const sorted = sortElementsByOrder(reindexed);
+                    changedItems = sorted;
                     return {
                       ...p,
                       inspeccionesSubestacion: sorted,
@@ -2303,12 +2368,18 @@ export const useStore = create(
               const list = [...(c.elementosUnifilares || [])];
               const reindexed = list.map((item) => {
                 const idx = orderedIds.indexOf(item.id);
+                const newOrd = idx !== -1 ? idx + 1 : (item.orden || 9999);
                 return {
                   ...item,
-                  orden: idx !== -1 ? idx + 1 : (item.orden || 9999)
+                  orden: newOrd,
+                  datosTecnicos: {
+                    ...(item.datosTecnicos || {}),
+                    orden: newOrd
+                  }
                 };
               });
               const sorted = sortElementsByOrder(reindexed);
+              changedItems = sorted;
               return {
                 ...c,
                 elementosUnifilares: sorted
@@ -2316,8 +2387,15 @@ export const useStore = create(
             }
           });
 
+          // Actualizar persistencia de elementos locales
+          const updatedElementosLocales = (state.elementosLocales || []).map((loc) => {
+            const match = changedItems.find((ci) => ci.id === loc.id);
+            return match ? { ...loc, orden: match.orden, datosTecnicos: { ...(loc.datosTecnicos || {}), orden: match.orden } } : loc;
+          });
+
           return {
-            companies: updatedCompanies
+            companies: updatedCompanies,
+            elementosLocales: updatedElementosLocales
           };
         });
       },

@@ -17,6 +17,7 @@ import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import TransferComponent from './TransferComponent';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import DualPhotoUploader from './DualPhotoUploader';
+import TensionNominalInput from './TensionNominalInput';
 import { 
   TENSIONES_COVENIN_159_BT, 
   TENSIONES_COVENIN_159_MT, 
@@ -3142,41 +3143,15 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
                 <td className="p-3 text-slate-100 font-semibold print:text-black">
                   {isEditing ? (
-                    <div className="flex gap-2">
-                      <select
-                        value={TENSIONES_COVENIN_TODAS.includes(dt.nivelTension || dt.tensionNominal) ? (dt.nivelTension || dt.tensionNominal) : ((dt.nivelTension || dt.tensionNominal) ? 'CUSTOM' : '')}
-                        onChange={(e) => {
-                          if (e.target.value !== 'CUSTOM') {
-                            handleDtChange('nivelTension', e.target.value);
-                            handleDtChange('tensionNominal', e.target.value);
-                          }
-                        }}
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-1/2"
-                      >
-                        <option value="">Seleccione tensión...</option>
-                        <optgroup label="Baja Tensión (BT)">
-                          {TENSIONES_COVENIN_159_BT.map(v => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Media Tensión (MT)">
-                          {TENSIONES_COVENIN_159_MT.map(v => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </optgroup>
-                        <option value="CUSTOM">Otra tensión...</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={dt.nivelTension || dt.tensionNominal || ''}
-                        onChange={(e) => {
-                          handleDtChange('nivelTension', e.target.value);
-                          handleDtChange('tensionNominal', e.target.value);
-                        }}
-                        placeholder="Ej. 13.8 kV o 208/120 V"
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-1/2 font-mono"
-                      />
-                    </div>
+                    <TensionNominalInput
+                      tipo="TODAS"
+                      value={dt.nivelTension || dt.tensionNominal || ''}
+                      onChange={(val) => {
+                        handleDtChange('nivelTension', val);
+                        handleDtChange('tensionNominal', val);
+                      }}
+                      placeholder="Ej. 13.8 kV o 208/120 V"
+                    />
                   ) : (
                     dt.nivelTension || dt.tensionNominal || '—'
                   )}

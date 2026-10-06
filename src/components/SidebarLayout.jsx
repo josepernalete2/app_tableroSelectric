@@ -477,7 +477,7 @@ export const SidebarLayout = () => {
       {/* MODAL 1: FUTUROS REPORTES PREDICTIVOS */}
       {showReportsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowReportsModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" />
           
           <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800">
@@ -550,7 +550,7 @@ export const SidebarLayout = () => {
       {/* MODAL 3: GESTIÓN DE USUARIOS Y ROLES (SOLO ACCESIBLE PARA ADMINISTRADORES) */}
       {showUsersModal && user?.role === 'ADMIN' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowUsersModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" />
           
           <div className="relative w-full max-w-4xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
@@ -796,7 +796,7 @@ export const SidebarLayout = () => {
       {/* MODAL 4: CHAT DE SOPORTE E INSPECCIÓN */}
       {showChatModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 no-print">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowChatModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" />
           
           {!isChatEnabled ? (
             /* Pantalla de bloqueo: Módulo en Desarrollo */

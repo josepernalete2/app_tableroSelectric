@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore, { formatElementTitleWithId, getElementCode, sortElementsByOrder } from '../store/useStore';
+import useStore, { formatElementTitleWithId, getElementCode, cleanElementName, sortElementsByOrder } from '../store/useStore';
+import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
 import TableroComponent from '../components/TableroComponent';
 import FichaTecnicaComponent from '../components/FichaTecnicaComponent';
 import SubestacionComponent from '../components/SubestacionComponent';
@@ -299,14 +300,21 @@ export default function InformeCompiladoView() {
               </div>
               {elementos.map((item, idx) => (
                 <div key={item.id} className="flex justify-between items-end gap-2 pl-4 text-xs">
-                  <span className="truncate">{item.nombre} ({item.tipoElemento})</span>
+                  <span className="truncate">
+                    <span className="font-semibold text-slate-200 print:text-slate-900">{cleanElementName(item.nombre, item.id, item.codigo)}</span>
+                    <span className="text-slate-500 text-[10px] ml-1">({item.tipoElemento || 'TABLERO'})</span>
+                    <span className="text-amber-500/80 font-mono text-[10px] ml-1">[{getElementCode(item, item.tipoElemento)}]</span>
+                  </span>
                   <span className="border-b border-dashed border-slate-850 flex-1 h-1 min-w-[20px] print:border-gray-200"></span>
                   <span className="font-mono">Reg. {idx + 1}</span>
                 </div>
               ))}
               {subestaciones.map((sub, idx) => (
                 <div key={sub.id} className="flex justify-between items-end gap-2 pl-4 text-xs">
-                  <span className="truncate">Inspección Subestación: {sub.nombre}</span>
+                  <span className="truncate">
+                    <span className="font-semibold text-slate-200 print:text-slate-900">Subestación: {cleanElementName(sub.nombre, sub.id, sub.codigo)}</span>
+                    <span className="text-amber-500/80 font-mono text-[10px] ml-1">[{getElementCode(sub, 'SUBESTACION')}]</span>
+                  </span>
                   <span className="border-b border-dashed border-slate-850 flex-1 h-1 min-w-[20px] print:border-gray-200"></span>
                   <span className="font-mono">Sub. {idx + 1}</span>
                 </div>
@@ -482,21 +490,35 @@ export default function InformeCompiladoView() {
                 <table className="w-full text-xs text-left border border-slate-800 print:border-gray-300">
                   <thead className="bg-slate-950 text-[10px] font-bold uppercase tracking-wider text-slate-400 print:bg-gray-100 print:text-slate-700">
                     <tr>
-                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nombre</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Nombre / ID</th>
                       <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Ubicación</th>
-                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Polos Máx</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Tensión / Polos</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Interruptor Ppal.</th>
+                      <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Potencia Estimada</th>
                       <th className="p-2.5 border-b border-slate-800 print:border-gray-300">Alimentador</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-850 print:divide-gray-255 text-slate-300 print:text-slate-800">
-                    {tableros.map(e => (
-                      <tr key={e.id}>
-                        <td className="p-2.5 font-bold">{e.nombre}</td>
-                        <td className="p-2.5">{e.ubicacion}</td>
-                        <td className="p-2.5">{e.datosTecnicos?.maxPoles || '30'}</td>
-                        <td className="p-2.5">{e.alimentadoPor || '—'}</td>
-                      </tr>
-                    ))}
+                    {tableros.map(e => {
+                      const pot = calcularPotenciaEstimadaTablero(e);
+                      return (
+                        <tr key={e.id}>
+                          <td className="p-2.5 font-bold">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{cleanElementName(e.nombre, e.id, e.codigo)}</span>
+                              <span className="font-mono text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded print:text-slate-900 print:bg-slate-100 print:border-slate-300">
+                                ID: {getElementCode(e, 'TABLERO')}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-2.5">{e.ubicacion || '—'}</td>
+                          <td className="p-2.5">{e.datosTecnicos?.tensionNominal || e.tensionNominal || '208Y/120 V'} ({e.datosTecnicos?.maxPoles || '30'}P)</td>
+                          <td className="p-2.5">{e.datosTecnicos?.capacidadBarraje || e.datosTecnicos?.amperajeNominal || e.datosTecnicos?.interruptorPrincipal || '—'}</td>
+                          <td className="p-2.5 font-mono font-bold text-sky-400 print:text-slate-950">{pot.texto}</td>
+                          <td className="p-2.5">{e.alimentadoPor || '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               ) : (
@@ -628,7 +650,7 @@ export default function InformeCompiladoView() {
             />
           </div>
 
-          <div className="bg-slate-950 p-6 rounded-2xl border border-slate-850 space-y-4 print:bg-slate-50 print:border-gray-300 no-print">
+          <div className="bg-slate-950 p-6 rounded-2xl border border-slate-850 space-y-4 print:bg-slate-50 print:border-gray-300 print:p-4 print:rounded-lg">
             {elementos.length > 0 ? (
               <div className="space-y-4">
                 {/* Find elements that are fed by nothing or general feed */}
@@ -646,15 +668,18 @@ export default function InformeCompiladoView() {
                   });
                   return (
                     <div key={e.id} className="border-l-2 border-amber-500/30 pl-4 py-1.5 space-y-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-slate-100 print:text-slate-900 uppercase">
-                          {e.nombre}
+                          {cleanElementName(e.nombre, e.id, e.codigo)}
+                        </span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 uppercase font-mono print:bg-white print:border-slate-300 print:text-slate-800">
+                          ID: {getElementCode(e, e.tipoElemento)}
                         </span>
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 uppercase font-mono print:bg-white print:border-gray-300">
                           {e.tipoElemento}
                         </span>
                         {e.alimentadoPor && (
-                          <span className="text-[9px] text-slate-500 font-medium">
+                          <span className="text-[9px] text-slate-500 font-medium print:text-slate-600">
                             (Alimentado por: {e.alimentadoPor})
                           </span>
                         )}
@@ -662,11 +687,14 @@ export default function InformeCompiladoView() {
 
                       {feeds.length > 0 && (
                         <div className="pl-6 space-y-1">
-                          <span className="text-[9px] font-bold text-slate-500 uppercase block">Alimenta a:</span>
+                          <span className="text-[9px] font-bold text-slate-500 uppercase block print:text-slate-600">Alimenta aguas abajo a:</span>
                           {feeds.map(child => (
                             <div key={child.id} className="flex items-center gap-2 text-xs text-slate-400 print:text-slate-700">
                               <span>↳</span>
-                              <span className="font-bold">{child.nombre}</span>
+                              <span className="font-bold">{cleanElementName(child.nombre, child.id, child.codigo)}</span>
+                              <span className="text-[8px] px-1 bg-amber-500/10 text-amber-400 rounded font-mono border border-amber-500/30 print:bg-white print:border-gray-300 print:text-slate-800">
+                                ID: {getElementCode(child, child.tipoElemento)}
+                              </span>
                               <span className="text-[8px] px-1 bg-slate-900 text-slate-500 rounded uppercase font-mono print:bg-white print:border-gray-200 border border-slate-850">
                                 {child.tipoElemento}
                               </span>
@@ -679,7 +707,7 @@ export default function InformeCompiladoView() {
                 })}
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic text-center">No hay suficientes elementos para trazar la jerarquía.</p>
+              <p className="text-xs text-slate-550 italic text-center">No hay suficientes elementos para trazar la jerarquía.</p>
             )}
           </div>
         </div>
@@ -703,12 +731,27 @@ export default function InformeCompiladoView() {
             } : item;
 
             return (
-              <div key={item.id} className="page-break pt-8 space-y-6">
-                <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
-                  <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                    Inspección #{idx + 1}: {formatElementTitleWithId(item.nombre, item.id, item.codigo)} ({item.tipoElemento})
-                  </h2>
-                  <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {getElementCode(item, item.tipoElemento)}</span>
+              <div key={item.id} className="page-break pt-8 space-y-4">
+                {/* Encabezado visible en pantalla y en reporte impreso/PDF */}
+                <div className="border-b-2 border-amber-500/80 pb-3 flex justify-between items-center print:border-slate-800 print:pb-2 bg-slate-900/40 print:bg-slate-100 p-3 rounded-t-xl print:rounded-none">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                      Inspección Técnica #{idx + 1} &bull; {item.tipoElemento || 'TABLERO'}
+                    </span>
+                    <h2 className="text-base sm:text-lg font-black text-slate-100 print:text-slate-950 uppercase tracking-wide">
+                      {cleanElementName(item.nombre, item.id, item.codigo)}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg print:border-slate-400 print:text-slate-900 print:bg-white shadow-sm">
+                      ID: {getElementCode(item, item.tipoElemento)}
+                    </span>
+                    {isTablero && (
+                      <span className="text-xs font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/30 px-2.5 py-1 rounded-lg print:border-slate-400 print:text-slate-900 print:bg-white shadow-sm">
+                        ⚡ {calcularPotenciaEstimadaTablero(enrichedElement).texto}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Renderizar según sea Tablero o Ficha Técnica */}
@@ -733,12 +776,19 @@ export default function InformeCompiladoView() {
 
           {/* Subestaciones */}
           {subestaciones.map((sub, idx) => (
-            <div key={sub.id} className="page-break pt-8 space-y-6">
-              <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
-                <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                  Subestación #{idx + 1}: {formatElementTitleWithId(sub.nombre, sub.id, sub.codigo)}
-                </h2>
-                <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {getElementCode(sub, 'SUBESTACION')}</span>
+            <div key={sub.id} className="page-break pt-8 space-y-4">
+              <div className="border-b-2 border-amber-500/80 pb-3 flex justify-between items-center print:border-slate-800 print:pb-2 bg-slate-900/40 print:bg-slate-100 p-3 rounded-t-xl print:rounded-none">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                    Subestación #{idx + 1} &bull; Obras Civiles y Transformación
+                  </span>
+                  <h2 className="text-base sm:text-lg font-black text-slate-100 print:text-slate-950 uppercase tracking-wide">
+                    {cleanElementName(sub.nombre, sub.id, sub.codigo)}
+                  </h2>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg print:border-slate-400 print:text-slate-900 print:bg-white shadow-sm">
+                  ID: {getElementCode(sub, 'SUBESTACION')}
+                </span>
               </div>
 
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
@@ -752,12 +802,19 @@ export default function InformeCompiladoView() {
 
           {/* Puntos de Medición y Suministro */}
           {puntosMedicion.map((pm, idx) => (
-            <div key={pm.id} className="page-break pt-8 space-y-6">
-              <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
-                <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                  Punto de Medición #{idx + 1}: {formatElementTitleWithId(pm.nombre, pm.id, pm.codigo)}
-                </h2>
-                <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {getElementCode(pm, 'PUNTO_MEDICION')}</span>
+            <div key={pm.id} className="page-break pt-8 space-y-4">
+              <div className="border-b-2 border-amber-500/80 pb-3 flex justify-between items-center print:border-slate-800 print:pb-2 bg-slate-900/40 print:bg-slate-100 p-3 rounded-t-xl print:rounded-none">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                    Punto de Medición #{idx + 1} &bull; Parámetros de Suministro y Metrología
+                  </span>
+                  <h2 className="text-base sm:text-lg font-black text-slate-100 print:text-slate-950 uppercase tracking-wide">
+                    {cleanElementName(pm.nombre, pm.id, pm.codigo)}
+                  </h2>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg print:border-slate-400 print:text-slate-900 print:bg-white shadow-sm">
+                  ID: {getElementCode(pm, 'PUNTO_MEDICION')}
+                </span>
               </div>
 
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
@@ -771,12 +828,19 @@ export default function InformeCompiladoView() {
 
           {/* Centros de Control de Motores (CCM) */}
           {ccmList.map((ccm, idx) => (
-            <div key={ccm.id} className="page-break pt-8 space-y-6">
-              <div className="border-b border-slate-800 pb-3 flex justify-between items-center print:border-gray-300 no-print">
-                <h2 className="text-lg font-bold text-amber-500 uppercase tracking-wide">
-                  CCM #{idx + 1}: {formatElementTitleWithId(ccm.nombre, ccm.id, ccm.codigo)}
-                </h2>
-                <span className="text-xs text-amber-400 font-mono font-bold bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">ID: {getElementCode(ccm, 'CCM')}</span>
+            <div key={ccm.id} className="page-break pt-8 space-y-4">
+              <div className="border-b-2 border-amber-500/80 pb-3 flex justify-between items-center print:border-slate-800 print:pb-2 bg-slate-900/40 print:bg-slate-100 p-3 rounded-t-xl print:rounded-none">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                    CCM #{idx + 1} &bull; Centro de Control de Motores y Gavetas
+                  </span>
+                  <h2 className="text-base sm:text-lg font-black text-slate-100 print:text-slate-950 uppercase tracking-wide">
+                    {cleanElementName(ccm.nombre, ccm.id, ccm.codigo)}
+                  </h2>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg print:border-slate-400 print:text-slate-900 print:bg-white shadow-sm">
+                  ID: {getElementCode(ccm, 'CCM')}
+                </span>
               </div>
 
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>

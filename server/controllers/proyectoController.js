@@ -3,9 +3,9 @@ import prisma from '../db.js';
 // Sanitizar un proyecto
 const sanitizarProyecto = (proyecto, role) => {
   if (!proyecto) return null;
-  if (role !== 'ADMIN') {
+  // Solo sanitizar si el rol es expresamente CLIENT
+  if (role === 'CLIENT') {
     const {
-      responsableNombre,
       responsableTelefono,
       responsableEmail,
       ...resto
@@ -97,7 +97,7 @@ export const obtenerProyectosPorEmpresa = async (req, res, next) => {
  */
 export const crearProyecto = async (req, res, next) => {
   try {
-    const { id, nombre, descripcion, direccion, empresaId, responsableNombre, responsableTelefono, responsableEmail } = req.body;
+    const { id, nombre, descripcion, direccion, ubicacion, empresaId, responsableNombre, responsableTelefono, responsableEmail, responsable } = req.body;
 
     // Validación de campos requeridos
     if (!id || !nombre || !empresaId) {
@@ -106,6 +106,11 @@ export const crearProyecto = async (req, res, next) => {
         error: 'Los campos id, nombre y empresaId son obligatorios.'
       });
     }
+
+    const dirFinal = direccion || ubicacion || '';
+    const respNomFinal = responsableNombre || responsable?.nombre || null;
+    const respTelFinal = responsableTelefono || responsable?.telefono || null;
+    const respEmailFinal = responsableEmail || responsable?.email || null;
 
     // Inserción / Upsert del proyecto en PostgreSQL con autocreado de empresa si no existe
     const empresaExiste = await prisma.empresa.findUnique({
@@ -125,19 +130,19 @@ export const crearProyecto = async (req, res, next) => {
       update: {
         nombre,
         descripcion: descripcion || null,
-        direccion: direccion || '',
-        responsableNombre: responsableNombre || null,
-        responsableTelefono: responsableTelefono || null,
-        responsableEmail: responsableEmail || null
+        direccion: dirFinal,
+        responsableNombre: respNomFinal,
+        responsableTelefono: respTelFinal,
+        responsableEmail: respEmailFinal
       },
       create: {
         id,
         nombre,
         descripcion: descripcion || null,
-        direccion: direccion || '',
-        responsableNombre: responsableNombre || null,
-        responsableTelefono: responsableTelefono || null,
-        responsableEmail: responsableEmail || null,
+        direccion: dirFinal,
+        responsableNombre: respNomFinal,
+        responsableTelefono: respTelFinal,
+        responsableEmail: respEmailFinal,
         empresa: {
           connect: { id: empresaId }
         }
@@ -162,25 +167,31 @@ export const crearProyecto = async (req, res, next) => {
 export const actualizarProyecto = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { nombre, descripcion, direccion, responsableNombre, responsableTelefono, responsableEmail } = req.body;
+    const { nombre, descripcion, direccion, ubicacion, responsableNombre, responsableTelefono, responsableEmail, responsable } = req.body;
 
-    if (req.user.role !== 'ADMIN') {
-      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    if (req.user.role === 'CLIENT') {
+      return res.status(403).json({ ok: false, error: 'Acción no permitida para clientes.' });
     }
+
+    const dirFinal = direccion !== undefined ? direccion : (ubicacion !== undefined ? ubicacion : undefined);
+    const respNomFinal = responsableNombre !== undefined ? responsableNombre : (responsable?.nombre !== undefined ? responsable.nombre : undefined);
+    const respTelFinal = responsableTelefono !== undefined ? responsableTelefono : (responsable?.telefono !== undefined ? responsable.telefono : undefined);
+    const respEmailFinal = responsableEmail !== undefined ? responsableEmail : (responsable?.email !== undefined ? responsable.email : undefined);
+
+    const updateData = {};
+    if (nombre !== undefined) updateData.nombre = nombre;
+    if (descripcion !== undefined) updateData.descripcion = descripcion;
+    if (dirFinal !== undefined) updateData.direccion = dirFinal;
+    if (respNomFinal !== undefined) updateData.responsableNombre = respNomFinal;
+    if (respTelFinal !== undefined) updateData.responsableTelefono = respTelFinal;
+    if (respEmailFinal !== undefined) updateData.responsableEmail = respEmailFinal;
 
     const updated = await prisma.proyecto.update({
       where: { id },
-      data: {
-        nombre,
-        descripcion: descripcion || null,
-        direccion: direccion || '',
-        responsableNombre: responsableNombre || null,
-        responsableTelefono: responsableTelefono || null,
-        responsableEmail: responsableEmail || null
-      }
+      data: updateData
     });
 
-    return res.status(200).json({ ok: true, data: updated });
+    return res.status(200).json({ ok: true, data: sanitizarProyecto(updated, req.user.role) });
   } catch (error) {
     console.error('Error en actualizarProyecto:', error);
     next(error);

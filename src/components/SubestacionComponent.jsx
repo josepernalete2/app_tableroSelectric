@@ -6,6 +6,7 @@ import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import DualPhotoUploader from './DualPhotoUploader';
 import { TENSIONES_COVENIN_159_MT, TENSIONES_COVENIN_TODAS } from '../utils/constants';
+import TensionNominalInput from './TensionNominalInput';
 
 export default function SubestacionComponent({ subestacionData, onUpdate, readOnly }) {
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
@@ -224,25 +225,13 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           {/* Nivel de Tensión Normalizado (COVENIN 159) */}
           <div className="flex flex-col gap-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Nivel de Tensión (COVENIN 159)</span>
-            <div className="flex gap-2">
-              <select
-                value={nivelTension}
-                onChange={(e) => updateField('nivelTension', e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono font-bold"
-              >
-                <option value="">-- Seleccionar Nivel de Tensión --</option>
-                <optgroup label="Media Tensión (MT - COVENIN 159)">
-                  {TENSIONES_COVENIN_159_MT.map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Baja Tensión (BT - COVENIN 159)">
-                  {TENSIONES_COVENIN_TODAS.filter(v => !TENSIONES_COVENIN_159_MT.includes(v)).map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
+            <TensionNominalInput
+              tipo="TODAS"
+              disabled={readOnly}
+              value={nivelTension}
+              onChange={(val) => updateField('nivelTension', val)}
+              placeholder="Ej. 13.8 kV o escribir..."
+            />
           </div>
 
           {/* Inspector */}

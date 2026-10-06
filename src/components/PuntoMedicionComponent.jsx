@@ -20,6 +20,7 @@ import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import { TENSIONES_COVENIN_TODAS } from '../utils/constants';
+import TensionNominalInput from './TensionNominalInput';
 import useStore, { getElementCode } from '../store/useStore';
 
 export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }) {
@@ -291,18 +292,13 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
           {/* Tensión Nominal de Suministro */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tensión Nominal de Suministro (COVENIN 159)</label>
-            <input
-              type="text"
+            <TensionNominalInput
+              tipo="TODAS"
               disabled={readOnly}
-              list="covenin-voltajes-medicion"
               value={tensionNominal ?? ''}
-              onChange={(e) => updateField('tensionNominal', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              onChange={(val) => updateField('tensionNominal', val)}
               placeholder="Ej. 13.8 kV o 120/208 V (3Φ - 4 hilos)"
             />
-            <datalist id="covenin-voltajes-medicion">
-              {TENSIONES_COVENIN_TODAS.map(v => <option key={v} value={v}>{v}</option>)}
-            </datalist>
           </div>
 
           {/* Potencia Contratada / Conectada */}

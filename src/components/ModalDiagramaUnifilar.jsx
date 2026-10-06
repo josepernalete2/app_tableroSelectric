@@ -339,7 +339,7 @@ export default function ModalDiagramaUnifilar({
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
         {/* Backdrop */}
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose} />
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" />
 
         {/* Ventana Principal */}
         <div className="relative w-full max-w-7xl h-[95vh] bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">

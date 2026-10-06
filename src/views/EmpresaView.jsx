@@ -6,6 +6,7 @@ import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
 import AvanceProgressBar from '../components/AvanceProgressBar';
 import ElementoCardActions from '../components/ElementoCardActions';
+import TensionNominalInput from '../components/TensionNominalInput';
 import { 
   TENSIONES_COVENIN_159_BT, 
   TENSIONES_COVENIN_159_MT, 
@@ -31,11 +32,15 @@ import {
   CheckSquare,
   Database,
   Gauge,
-  Edit3
+  Edit3,
+  MapPin,
+  Phone,
+  Mail
 } from 'lucide-react';
 
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 import { API_BASE_URL } from '../utils/api';
+import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
 
 // Componente para renderizar Base64 / Blobs / URLs de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -195,6 +200,10 @@ export const EmpresaView = () => {
   // Form states de Proyectos
   const [proyectoNombre, setProyectoNombre] = useState('');
   const [proyectoDescripcion, setProyectoDescripcion] = useState('');
+  const [proyectoDireccion, setProyectoDireccion] = useState('');
+  const [proyectoRespNombre, setProyectoRespNombre] = useState('');
+  const [proyectoRespTelefono, setProyectoRespTelefono] = useState('');
+  const [proyectoRespEmail, setProyectoRespEmail] = useState('');
 
   // Form states de Elementos (Fuera de Proyectos)
   const [tipoElemento, setTipoElemento] = useState('TABLERO');
@@ -338,20 +347,37 @@ export const EmpresaView = () => {
     }
   };
 
-  const handleCreateProyecto = (e) => {
+  const handleCreateProyecto = async (e) => {
     e.preventDefault();
     if (!isProyectoValid) return;
 
-    const result = addProyecto(
+    const result = await addProyecto(
       proyectoNombre.trim(),
       proyectoDescripcion.trim(),
-      companyId
+      companyId,
+      {
+        direccion: proyectoDireccion.trim(),
+        ubicacion: proyectoDireccion.trim(),
+        responsableNombre: proyectoRespNombre.trim(),
+        responsableTelefono: proyectoRespTelefono.trim(),
+        responsableEmail: proyectoRespEmail.trim(),
+        responsable: {
+          nombre: proyectoRespNombre.trim(),
+          telefono: proyectoRespTelefono.trim(),
+          email: proyectoRespEmail.trim()
+        }
+      }
     );
 
     if (result.success) {
       setProyectoNombre('');
       setProyectoDescripcion('');
+      setProyectoDireccion('');
+      setProyectoRespNombre('');
+      setProyectoRespTelefono('');
+      setProyectoRespEmail('');
       setShowModal(false);
+      showToast?.('Proyecto registrado exitosamente', 'success');
     } else {
       customAlert(result.error);
     }
@@ -779,6 +805,24 @@ export const EmpresaView = () => {
                         {proj.descripcion || 'Sin descripción disponible.'}
                       </p>
                     </div>
+
+                    {/* Ubicación y Responsable del Proyecto */}
+                    {((proj.direccion || proj.ubicacion) || (proj.responsableNombre || (typeof proj.responsable === 'object' ? proj.responsable?.nombre : proj.responsable))) && (
+                      <div className="space-y-1.5 pt-2 border-t border-slate-900/50 text-[11px]">
+                        {(proj.direccion || proj.ubicacion) && (
+                          <div className="flex items-center gap-1.5 text-slate-400 truncate" title={proj.direccion || proj.ubicacion}>
+                            <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span className="truncate">{proj.direccion || proj.ubicacion}</span>
+                          </div>
+                        )}
+                        {(proj.responsableNombre || (typeof proj.responsable === 'object' ? proj.responsable?.nombre : proj.responsable)) && (
+                          <div className="flex items-center gap-1.5 text-slate-400 truncate" title={proj.responsableNombre || (typeof proj.responsable === 'object' ? proj.responsable?.nombre : proj.responsable)}>
+                            <User className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                            <span className="truncate">{proj.responsableNombre || (typeof proj.responsable === 'object' ? proj.responsable?.nombre : proj.responsable)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="border-t border-slate-900/60 pt-4 mt-4 space-y-2.5">
@@ -991,14 +1035,22 @@ export const EmpresaView = () => {
                         <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
                           {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
                         </h3>
+                        {isTablero && (
+                          <div className="pt-0.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm">
+                              ⚡ Potencia Estimada: {calcularPotenciaEstimadaTablero(item).texto}
+                            </span>
+                          </div>
+                        )}
                         <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
                           <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
                           <p className="truncate"><span className="text-slate-500 font-bold">Alimentador:</span> {item.alimentadoPor || 'No definido'}</p>
                           
                           <div className="pt-2">
                             {isTablero && (
-                              <p className="text-sky-400 font-mono font-semibold text-[10px] bg-sky-950/40 p-1.5 rounded-lg border border-sky-900/40">
-                                ⚡ Capacidad: {item.datosTecnicos?.maxPoles || 24} Polos ({item.datosTecnicos?.voltajeAcometida || '208/120 V'})
+                              <p className="text-sky-400 font-mono font-semibold text-[10px] bg-sky-950/40 p-1.5 rounded-lg border border-sky-900/40 flex items-center justify-between">
+                                <span>⚡ Capacidad: {item.datosTecnicos?.maxPoles || 24} Polos ({item.datosTecnicos?.voltajeAcometida || '208/120 V'})</span>
+                                <span className="text-amber-400 font-bold ml-1">{calcularPotenciaEstimadaTablero(item).etiquetaCorta}</span>
                               </p>
                             )}
                             {isTrafo && (
@@ -1087,10 +1139,10 @@ export const EmpresaView = () => {
       {/* MODAL 1: REGISTRAR NUEVO PROYECTO */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" />
           
-          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+          <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-amber-500" />
                 Registrar Nuevo Proyecto
@@ -1103,17 +1155,17 @@ export const EmpresaView = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateProyecto} className="mt-4 space-y-4">
+            <form onSubmit={handleCreateProyecto} className="mt-4 space-y-4 overflow-y-auto pr-1">
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nombre del Proyecto
+                  Nombre del Proyecto *
                 </label>
                 <input
                   type="text"
                   required
                   value={proyectoNombre}
                   onChange={(e) => setProyectoNombre(e.target.value)}
-                  placeholder="Ej. Inspecciones Planta Baja 2026"
+                  placeholder="Ej. Inspecciones Planta Principal 2026"
                   className={`w-full px-3.5 py-2.5 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
                     nombreProyectoDuplicado 
                       ? 'border-red-500 focus:border-red-500 focus:ring-red-550' 
@@ -1128,14 +1180,73 @@ export const EmpresaView = () => {
               </div>
 
               <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-amber-500" /> Ubicación / Dirección de la Obra o Planta
+                </label>
+                <input
+                  type="text"
+                  value={proyectoDireccion}
+                  onChange={(e) => setProyectoDireccion(e.target.value)}
+                  placeholder="Ej. Galpón 4, Av. Industrial, Valencia"
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all"
+                />
+              </div>
+
+              <div className="bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80 space-y-3">
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-sky-400" /> Persona a Cargo / Responsable Técnico
+                </span>
+
+                <div>
+                  <label className="block text-[9.5px] font-semibold text-slate-400 uppercase mb-1">
+                    Nombre Completo
+                  </label>
+                  <input
+                    type="text"
+                    value={proyectoRespNombre}
+                    onChange={(e) => setProyectoRespNombre(e.target.value)}
+                    placeholder="Ej. Ing. Carlos Mendoza"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-lg text-xs text-slate-100 focus:outline-none transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[9.5px] font-semibold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-slate-400" /> Teléfono
+                    </label>
+                    <input
+                      type="text"
+                      value={proyectoRespTelefono}
+                      onChange={(e) => setProyectoRespTelefono(e.target.value)}
+                      placeholder="+58 412 1234567"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-lg text-xs text-slate-100 focus:outline-none transition-all font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9.5px] font-semibold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-slate-400" /> Correo
+                    </label>
+                    <input
+                      type="email"
+                      value={proyectoRespEmail}
+                      onChange={(e) => setProyectoRespEmail(e.target.value)}
+                      placeholder="carlos@empresa.com"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-lg text-xs text-slate-100 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Descripción (Opcional)
+                  Descripción / Alcance (Opcional)
                 </label>
                 <textarea
                   value={proyectoDescripcion}
                   onChange={(e) => setProyectoDescripcion(e.target.value)}
                   placeholder="Describe brevemente el alcance de este proyecto..."
-                  rows={4}
+                  rows={2}
                   className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 transition-all font-sans resize-none"
                 />
               </div>
@@ -1165,7 +1276,7 @@ export const EmpresaView = () => {
       {/* MODAL MULTI-PLANTILLA DE ELEMENTOS UNIFILARES EN LA EMPRESA */}
       {showElementoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowElementoModal(false)} />
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" />
           
           <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
@@ -1360,7 +1471,12 @@ export const EmpresaView = () => {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Voltaje Generación</label>
-                      <input type="text" value={voltajeGen} onChange={(e) => setVoltajeGen(e.target.value)} placeholder="Ej. 208 / 120 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                      <TensionNominalInput
+                        tipo="BT"
+                        value={voltajeGen}
+                        onChange={(val) => setVoltajeGen(val)}
+                        placeholder="Ej. 208 / 120 V o escribir..."
+                      />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Interruptor Amperaje</label>
@@ -1413,7 +1529,12 @@ export const EmpresaView = () => {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
-                      <input type="text" value={tensionBanco} onChange={(e) => setTensionBanco(e.target.value)} placeholder="Ej. 208 V o 480 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                      <TensionNominalInput
+                        tipo="BT"
+                        value={tensionBanco}
+                        onChange={(val) => setTensionBanco(val)}
+                        placeholder="Ej. 208 V o 480 V"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1428,37 +1549,12 @@ export const EmpresaView = () => {
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
                         Tensión de Suministro (COVENIN 159:1997)
                       </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={TENSIONES_COVENIN_TODAS.includes(suministroTension) ? suministroTension : (suministroTension ? 'CUSTOM' : '')}
-                          onChange={(e) => {
-                            if (e.target.value !== 'CUSTOM') {
-                              setSuministroTension(e.target.value);
-                            }
-                          }}
-                          className="w-1/2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10"
-                        >
-                          <option value="">Seleccione tensión...</option>
-                          <optgroup label="Baja Tensión (BT)">
-                            {TENSIONES_COVENIN_159_BT.map(v => (
-                              <option key={v} value={v}>{v}</option>
-                            ))}
-                          </optgroup>
-                          <optgroup label="Media Tensión (MT)">
-                            {TENSIONES_COVENIN_159_MT.map(v => (
-                              <option key={v} value={v}>{v}</option>
-                            ))}
-                          </optgroup>
-                          <option value="CUSTOM">Otra tensión...</option>
-                        </select>
-                        <input
-                          type="text"
-                          value={suministroTension}
-                          onChange={(e) => setSuministroTension(e.target.value)}
-                          placeholder="Ej. 13.8 kV o 208/120 V"
-                          className="w-1/2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono"
-                        />
-                      </div>
+                      <TensionNominalInput
+                        tipo="TODAS"
+                        value={suministroTension}
+                        onChange={(val) => setSuministroTension(val)}
+                        placeholder="Ej. 13.8 kV o 208/120 V"
+                      />
                     </div>
 
                     <div>

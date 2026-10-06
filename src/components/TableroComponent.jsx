@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3 } from 'lucide-react';
-import useStore, { getElementCode } from '../store/useStore';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3, Trash2 } from 'lucide-react';
+import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import { API_BASE_URL } from '../utils/api';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
+import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
 
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 
@@ -35,6 +36,7 @@ const SafeImage = ({ blob, src, alt, className, style }) => {
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS, TENSIONES_COVENIN_159_BT } from '../utils/constants';
+import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
   const [editingCircuit, setEditingCircuit] = useState(null);
@@ -51,7 +53,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     setPanelConflictosOpen,
     user
   } = useStore();
-  const { alert: customAlert } = useConfirm();
+  const { confirm, alert: customAlert } = useConfirm();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
 
@@ -560,6 +562,31 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     onUpdateTablero(newData);
   };
 
+  // Delete / Reset a circuit back to default RESERVA
+  const handleDeleteCircuit = async (circuitId) => {
+    if (readOnly) return;
+    const circuit = normalizedCircuits.find(c => c.id === circuitId);
+    if (!circuit) return;
+
+    const polesStr = Array.isArray(circuit.poles) && circuit.poles.length > 0 
+      ? circuit.poles.join(', ') 
+      : (circuit.posicionPolo || 'seleccionado');
+    const circuitName = circuit.equipo && circuit.equipo !== 'RESERVA' ? `"${circuit.equipo}"` : `del polo [${polesStr}]`;
+
+    const isConfirmed = await confirm({
+      title: 'Eliminar Circuito / Carga',
+      message: `¿Estás seguro de que deseas eliminar el circuito ${circuitName} asignado al polo / grupo [${polesStr}] y restablecerlo como RESERVA disponible?`,
+      confirmText: 'Sí, Eliminar Circuito',
+      cancelText: 'Cancelar',
+      type: 'danger'
+    });
+
+    if (isConfirmed) {
+      saveCircuitFromModal(circuitId, null);
+      showToast(`Circuito en polo(s) [${polesStr}] eliminado y restablecido a reserva`, 'success');
+    }
+  };
+
   // Split rendering rows into left (odd) and right (even) poles
   const oddPoles = Array.from({ length: Math.ceil(maxPoles / 2) }, (_, i) => 2 * i + 1);
   
@@ -634,12 +661,17 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
           <tr className="border-b border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80">
             <td colSpan={7} className="p-0 font-bold text-sm tracking-wide">
               <div className="flex flex-row items-center justify-between gap-4 py-2.5 px-4 uppercase font-bold text-slate-800 dark:text-slate-200 w-full">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
-                  <span className="font-mono font-black tracking-wide text-xs sm:text-sm">INFORMACIÓN GENERAL DE PANEL ELÉCTRICO / TABLERO</span>
-                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                  <span className="font-mono font-black tracking-wide text-xs sm:text-sm truncate">
+                    {tableroData?.nombre ? cleanElementName(tableroData.nombre, tableroData.id, tableroData.codigo).toUpperCase() : 'INFORMACIÓN GENERAL DE PANEL ELÉCTRICO / TABLERO'}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1 flex-wrap">
                     <span className="inline-flex items-center font-mono font-bold text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded-lg shadow-sm">
                       ID: {getElementCode(tableroData, 'TABLERO')}
+                    </span>
+                    <span className="inline-flex items-center font-mono font-bold text-xs bg-sky-500/10 text-sky-400 border border-sky-500/30 px-2.5 py-0.5 rounded-lg shadow-sm">
+                      ⚡ Pot. Estimada: {calcularPotenciaEstimadaTablero(tableroData).texto}
                     </span>
                     {isAdmin && (
                       <button
@@ -791,11 +823,17 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                     value={tableroData.tension || ''}
                     disabled={readOnly}
                     onChange={(e) => updateField('tension', e.target.value)}
+                    onBlur={() => {
+                      if (tableroData.tension) {
+                        saveCustomOption('tensiones_bt', tableroData.tension, TENSIONES_COVENIN_159_BT);
+                        saveCustomOption('tensiones_todas', tableroData.tension);
+                      }
+                    }}
                     placeholder="Ej: 120/208 V (3Φ - 4 hilos)"
                     className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-[11px] focus:outline-none w-56 font-mono"
                   />
                   <datalist id="covenin-voltajes-tablero">
-                    {TENSIONES_COVENIN_159_BT.map(v => <option key={v} value={v}>{v}</option>)}
+                    {getCustomOptions('tensiones_bt', TENSIONES_COVENIN_159_BT).map(v => <option key={v} value={v}>{v}</option>)}
                   </datalist>
                 </div>
               </div>
@@ -1160,18 +1198,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           {/* Badges based on tipoDestino / tipoElementoDestino */}
                           {renderTipoDestinoBadge(cLeft.tipoDestino, cLeft.tipoElementoDestino)}
                         </div>
-                        {rowSpanLeft > 1 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              splitCircuit(cLeft.id);
-                            }}
-                            title="Separar Polos"
-                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-80 hover:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                        )}
+
+                        {/* Botones de acción contextual sobre el circuito */}
+                        <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+                          {rowSpanLeft > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                splitCircuit(cLeft.id);
+                              }}
+                              title="Separar Polos"
+                              className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                          )}
+                          {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCircuit(cLeft.id);
+                              }}
+                              title={`Eliminar circuito ${cLeft.equipo || ''} (Polos [${cLeft.poles?.join(', ')}])`}
+                              className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Breaker Marca */}
@@ -1238,36 +1294,76 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
                   {/* Número de Polo Impar (Barra Colectora Física Fija) */}
                   <td className="border-r-2 border-slate-800 dark:border-slate-700 p-0 text-center font-mono font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 align-middle select-none relative group/pole cursor-default">
-                    <div className="flex items-center justify-center min-h-[1.75rem] px-1">
+                    <div className="flex items-center justify-center min-h-[1.75rem] px-1 relative">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{oddPole}</span>
-                      {/* Interactive Group Control */}
-                      {oddPole < maxPoles - 1 && isFirstLeft && rowSpanLeft === 1 && (
-                        <button
-                          onClick={() => groupWithNext(cLeft.id, 'left')}
-                          title="Agrupar con siguiente polo"
-                          className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-80 hover:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                        </button>
-                      )}
+                      
+                      {/* Botones de acción en cada polo seleccionado */}
+                      <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole:opacity-100 transition-opacity z-10 px-0.5">
+                        {oddPole < maxPoles - 1 && isFirstLeft && rowSpanLeft === 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              groupWithNext(cLeft.id, 'left');
+                            }}
+                            title="Agrupar con siguiente polo"
+                            className="p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded cursor-pointer shadow transition-all"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCircuit(cLeft.id);
+                            }}
+                            title={`Eliminar circuito del polo ${oddPole}`}
+                            className="p-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded cursor-pointer shadow transition-all"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </td>
 
                   {/* === LADO DERECHO (PAR) === */}
                   {/* Número de Polo Par (Barra Colectora Física Fija) */}
                   <td className="border-r border-slate-800 dark:border-slate-700 p-0 text-center font-mono font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 align-middle select-none relative group/pole-right cursor-default">
-                    <div className="flex items-center justify-center min-h-[1.75rem] px-1">
+                    <div className="flex items-center justify-center min-h-[1.75rem] px-1 relative">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{evenPole}</span>
-                      {/* Interactive Group Control */}
-                      {evenPole < maxPoles && isFirstRight && rowSpanRight === 1 && (
-                        <button
-                          onClick={() => groupWithNext(cRight.id, 'right')}
-                          title="Agrupar con siguiente polo"
-                          className="no-print absolute bottom-0 left-1/2 -translate-x-1/2 opacity-80 hover:opacity-100 p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full cursor-pointer shadow transition-opacity"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                        </button>
-                      )}
+                      
+                      {/* Botones de acción en cada polo seleccionado */}
+                      <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole-right:opacity-100 transition-opacity z-10 px-0.5">
+                        {evenPole < maxPoles && isFirstRight && rowSpanRight === 1 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              groupWithNext(cRight.id, 'right');
+                            }}
+                            title="Agrupar con siguiente polo"
+                            className="p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded cursor-pointer shadow transition-all"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCircuit(cRight.id);
+                            }}
+                            title={`Eliminar circuito del polo ${evenPole}`}
+                            className="p-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded cursor-pointer shadow transition-all"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </td>
 
@@ -1350,18 +1446,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           {/* Badges based on tipoDestino / tipoElementoDestino */}
                           {renderTipoDestinoBadge(cRight.tipoDestino, cRight.tipoElementoDestino)}
                         </div>
-                        {rowSpanRight > 1 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              splitCircuit(cRight.id);
-                            }}
-                            title="Separar Polos"
-                            className="no-print absolute right-1 top-1/2 -translate-y-1/2 p-0.5 opacity-80 hover:opacity-100 bg-red-500 hover:bg-red-600 text-white rounded cursor-pointer shadow-sm transition-opacity z-10"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                        )}
+
+                        {/* Botones de acción contextual sobre el circuito derecho */}
+                        <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+                          {rowSpanRight > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                splitCircuit(cRight.id);
+                              }}
+                              title="Separar Polos"
+                              className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                          )}
+                          {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCircuit(cRight.id);
+                              }}
+                              title={`Eliminar circuito ${cRight.equipo || ''} (Polos [${cRight.poles?.join(', ')}])`}
+                              className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </>
                   )}
