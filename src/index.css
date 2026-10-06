@@ -136,6 +136,19 @@ body {
     color: #000000 !important;
     margin: 3mm 8mm 3mm 8mm !important; /* Sube la plantilla más hacia arriba */
   }
+  @page {
+    size: letter portrait;
+    margin: 10mm 8mm 10mm 8mm;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   .no-print {
     display: none !important;
   }
@@ -160,14 +173,14 @@ body {
   .print-card input,
   .print-card textarea,
   .print-card select {
-    color: #000000 !important;
+    color: #0f172a !important;
     text-shadow: none !important;
     box-shadow: none !important;
   }
 
   /* Clear dark backgrounds to keep prints clean and white */
   .print-card,
-  .print-card div:not(.bg-emerald-500):not(.bg-amber-500):not(.bg-red-500):not(.bg-emerald-600),
+  .print-card div:not(.bg-emerald-500):not(.bg-amber-500):not(.bg-red-500):not(.bg-emerald-600):not(.bg-slate-100):not(.bg-slate-50):not(.bg-slate-200),
   .print-card table,
   .print-card tr,
   .print-card td,
@@ -182,7 +195,11 @@ body {
   .bg-emerald-500, 
   .bg-amber-500, 
   .bg-red-500,
-  .bg-emerald-600 {
+  .bg-emerald-600,
+  .bg-slate-100,
+  .bg-slate-200,
+  .bg-amber-50,
+  .bg-blue-50 {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -197,43 +214,22 @@ body {
   .print-card div,
   .print-card input,
   .print-card textarea {
-    border-color: #475569 !important;
+    border-color: #cbd5e1 !important;
   }
 
   .print-card {
     border: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    zoom: 67% !important; /* Scale content down to fit on a single page */
   }
 
   /* Keep the photo size matching the system / screen layout proportions */
   .print-card img,
   .print-card .max-h-96,
   .print-card .h-96 {
-    max-height: 250px !important;
+    max-height: 220px !important;
     height: auto !important;
     object-fit: cover !important;
-  }
-
-  /* Shrink spacings */
-  .print-card .space-y-4 > :not([hidden]) ~ :not([hidden]),
-  .print-card .space-y-6 > :not([hidden]) ~ :not([hidden]),
-  .print-card .space-y-8 > :not([hidden]) ~ :not([hidden]) {
-    margin-top: 6px !important;
-    margin-bottom: 0px !important;
-  }
-
-  .print-card .grid {
-    gap: 8px !important;
-  }
-
-  /* Shrink padding */
-  .print-card .p-6,
-  .print-card .p-5,
-  .print-card .p-4,
-  .print-card .md\:p-8 {
-    padding: 6px !important;
   }
 
   /* Page break rules for compiled technical reports */
@@ -241,7 +237,12 @@ body {
     page-break-before: always !important;
     break-before: page !important;
   }
-  .page-break-avoid {
+  .page-break-after {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .page-break-avoid,
+  .break-inside-avoid {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

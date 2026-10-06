@@ -3,15 +3,6 @@ import prisma from '../db.js';
 // Sanitizar un proyecto
 const sanitizarProyecto = (proyecto, role) => {
   if (!proyecto) return null;
-  // Solo sanitizar si el rol es expresamente CLIENT
-  if (role === 'CLIENT') {
-    const {
-      responsableTelefono,
-      responsableEmail,
-      ...resto
-    } = proyecto;
-    return resto;
-  }
   return proyecto;
 };
 

@@ -1044,19 +1044,19 @@ export const ProyectoView = () => {
                   <div>
                     <strong className="text-slate-400">Nombre:</strong>{' '}
                     <span className="text-slate-200 font-semibold">
-                      {proyecto.responsableNombre || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.nombre : proyecto.responsable) || company?.contactoPrincipal || company?.responsable || 'No definido'}
+                      {proyecto.responsableNombre || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.nombre : proyecto.responsable) || 'No definido'}
                     </span>
                   </div>
                   <div>
                     <strong className="text-slate-400">Teléfono:</strong>{' '}
                     <span className="text-slate-200 font-semibold font-mono">
-                      {proyecto.responsableTelefono || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.telefono : '') || company?.telefono || 'No definido'}
+                      {proyecto.responsableTelefono || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.telefono : '') || 'No definido'}
                     </span>
                   </div>
                   <div>
                     <strong className="text-slate-400">Email:</strong>{' '}
                     <span className="text-slate-200 font-semibold">
-                      {proyecto.responsableEmail || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.email : '') || company?.email || 'No definido'}
+                      {proyecto.responsableEmail || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.email : '') || 'No definido'}
                     </span>
                   </div>
                 </div>

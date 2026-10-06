@@ -206,6 +206,30 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           delete sanitizedPayload.deletePhoto;
           delete sanitizedPayload.eliminarFoto;
 
+          if (modelName === 'proyecto') {
+            if (sanitizedPayload.responsable && typeof sanitizedPayload.responsable === 'object') {
+              if (sanitizedPayload.responsableNombre === undefined) sanitizedPayload.responsableNombre = sanitizedPayload.responsable.nombre || '';
+              if (sanitizedPayload.responsableTelefono === undefined) sanitizedPayload.responsableTelefono = sanitizedPayload.responsable.telefono || '';
+              if (sanitizedPayload.responsableEmail === undefined) sanitizedPayload.responsableEmail = sanitizedPayload.responsable.email || '';
+              delete sanitizedPayload.responsable;
+            }
+            if (sanitizedPayload.ubicacion !== undefined && sanitizedPayload.direccion === undefined) {
+              sanitizedPayload.direccion = sanitizedPayload.ubicacion;
+            }
+            delete sanitizedPayload.ubicacion;
+            delete sanitizedPayload.elementosUnifilares;
+            delete sanitizedPayload.inspeccionesSubestacion;
+            delete sanitizedPayload.subestaciones;
+            delete sanitizedPayload.puntosMedicion;
+            delete sanitizedPayload.ccmList;
+            delete sanitizedPayload.tableros;
+            delete sanitizedPayload.alimentadores;
+            delete sanitizedPayload.inspeccionesTermograficas;
+            delete sanitizedPayload.inspeccionesAterramiento;
+            delete sanitizedPayload.inspeccionesTanquesCombustible;
+            delete sanitizedPayload.empresa;
+          }
+
           // Operación CREATE, UPDATE o UPSERT
           if (existingRecord) {
             // Control de Concurrencia Optimista (OCC)
