@@ -1201,13 +1201,29 @@ export const useStore = create(
       importCompanies: (companiesList) => {
         const enrichedList = companiesList.map((c) => ({
           ...c,
-          proyectos: (c.proyectos || []).map((p) => ({
-            ...p,
-            elementosUnifilares: p.elementosUnifilares || p.tableros || [],
-            inspeccionesSubestacion: p.inspeccionesSubestacion || p.subestaciones || [],
-            puntosMedicion: p.puntosMedicion || [],
-            ccmList: p.ccmList || []
-          }))
+          proyectos: (c.proyectos || []).map((p) => {
+            const respNom = p.responsableNombre !== undefined ? p.responsableNombre : (typeof p.responsable === 'object' ? p.responsable?.nombre : p.responsable) || '';
+            const respTel = p.responsableTelefono !== undefined ? p.responsableTelefono : (typeof p.responsable === 'object' ? p.responsable?.telefono : '') || '';
+            const respMail = p.responsableEmail !== undefined ? p.responsableEmail : (typeof p.responsable === 'object' ? p.responsable?.email : '') || '';
+            const dir = p.direccion || p.ubicacion || '';
+            return {
+              ...p,
+              direccion: dir,
+              ubicacion: dir,
+              responsableNombre: respNom,
+              responsableTelefono: respTel,
+              responsableEmail: respMail,
+              responsable: {
+                nombre: respNom,
+                telefono: respTel,
+                email: respMail
+              },
+              elementosUnifilares: p.elementosUnifilares || p.tableros || [],
+              inspeccionesSubestacion: p.inspeccionesSubestacion || p.subestaciones || [],
+              puntosMedicion: p.puntosMedicion || [],
+              ccmList: p.ccmList || []
+            };
+          })
         }));
         set({ companies: enrichedList });
       },

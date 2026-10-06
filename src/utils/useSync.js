@@ -212,10 +212,25 @@ export function useSync() {
 
   const sincronizarProyecto = async (empresaId, proyecto) => {
     try {
+      const respNom = proyecto.responsableNombre || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.nombre : proyecto.responsable) || '';
+      const respTel = proyecto.responsableTelefono || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.telefono : '') || '';
+      const respMail = proyecto.responsableEmail || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.email : '') || '';
+      const dir = proyecto.direccion || proyecto.ubicacion || '';
+
       const payload = {
         id: proyecto.id,
         nombre: proyecto.nombre,
         descripcion: proyecto.descripcion || '',
+        direccion: dir,
+        ubicacion: dir,
+        responsableNombre: respNom,
+        responsableTelefono: respTel,
+        responsableEmail: respMail,
+        responsable: {
+          nombre: respNom,
+          telefono: respTel,
+          email: respMail
+        },
         empresaId
       };
 
