@@ -2648,8 +2648,9 @@ export const useStore = create(
       },
 
       removeFromQueue: (id) => {
+        if (!id) return;
         set((state) => ({
-          syncQueue: state.syncQueue.filter((item) => item.id !== id),
+          syncQueue: (state.syncQueue || []).filter((item) => item.id !== id && item.payload?.id !== id),
           proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== id),
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== id),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== id),

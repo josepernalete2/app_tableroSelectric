@@ -83,13 +83,84 @@ export const mapEntityToPrismaModel = (entity) => {
 // Campos del sistema restringidos que nunca deben ser mutados vía sync batch (SEC-02)
 const FORBIDDEN_MUTATION_FIELDS = ['role', 'password', 'deletedAt'];
 
+// Lista blanca estricta de campos permitidos por modelo según schema.prisma (evita PrismaClientValidationError)
+const MODEL_ALLOWED_FIELDS = {
+  empresa: new Set([
+    'id', 'nombre', 'rif', 'direccionFiscal', 'direccion', 'gerente1Nombre',
+    'gerente1Telefono', 'gerente1Email', 'gerente2Nombre', 'gerente2Telefono',
+    'gerente2Email', 'telegramBackupPin', 'telegramChatId'
+  ]),
+  proyecto: new Set([
+    'id', 'nombre', 'direccion', 'descripcion', 'empresaId', 'responsableNombre',
+    'responsableTelefono', 'responsableEmail'
+  ]),
+  alimentador: new Set([
+    'id', 'nombre', 'origen', 'capacidadAmperios', 'capacidadKVA', 'proyectoId'
+  ]),
+  tablero: new Set([
+    'id', 'nombre', 'ubicacion', 'maxPolos', 'tension', 'fases', 'alimentadorId',
+    'proyectoId', 'empresaId', 'version', 'deletedAt'
+  ]),
+  circuito: new Set([
+    'id', 'tableroId', 'posicionPolo', 'numPolos', 'amperaje', 'descripcion',
+    'estado', 'elementoDestinoId', 'tipoElementoDestino', 'version', 'deletedAt'
+  ]),
+  elementoUnifilar: new Set([
+    'id', 'nombre', 'tipoElemento', 'ubicacion', 'alimentadoPor', 'foto',
+    'observacionesGenerales', 'datosTecnicos', 'alimentadoPorId', 'circuitoOrigen',
+    'calibreConductor', 'breakerAmperaje', 'breakerMarca', 'breakerTipo',
+    'potenciaEstimada', 'estadoVinculo', 'detallesFormato', 'version',
+    'deletedAt', 'proyectoId', 'empresaId'
+  ]),
+  subestacion: new Set([
+    'id', 'nombre', 'ubicacion', 'fecha', 'hora', 'inspector', 'nivelTension',
+    'estadoEntorno', 'obrasCiviles', 'equiposPrincipales', 'puestaTierra',
+    'edificioControl', 'firmaInspector', 'firmaSupervisor', 'version',
+    'deletedAt', 'proyectoId', 'empresaId'
+  ]),
+  puntoMedicion: new Set([
+    'id', 'nombre', 'fecha', 'hora', 'inspector', 'nombreUsuario', 'numeroContrato',
+    'empresaDistribuidora', 'nivelTensionContrato', 'tensionNominal', 'potenciaContratada',
+    'tarifaAplicable', 'codigoElementoPrincipal', 'tipoAcometida', 'puntoConexionPCC',
+    'conductorAcometida', 'longitudAcometida', 'elementoManiobra', 'capacidadInterrupcion',
+    'ubicacionTransformador', 'propiedadTransformador', 'usoTransformador', 'ubicacionMedidor',
+    'tipoMedicion', 'marcaModeloMedidor', 'numeroSerieAno', 'observaciones', 'firmaInspector',
+    'firmaSupervisor', 'version', 'deletedAt', 'proyectoId', 'empresaId'
+  ]),
+  ccm: new Set([
+    'id', 'nombre', 'plantaInstalacion', 'areaProceso', 'fabricanteMarca', 'modeloSerie',
+    'gradoNemaIp', 'fecha', 'inspector', 'supervisor', 'anoFabricacionInstalacion',
+    'parametrosElectricos', 'gavetasBucketLog', 'inspeccionFisica', 'seguridadTermografia',
+    'hallazgosCriticos', 'firmaInspector', 'firmaSupervisor', 'version', 'deletedAt',
+    'proyectoId', 'empresaId'
+  ]),
+  inspeccionTermografica: new Set([
+    'id', 'nombre', 'ubicacion', 'fecha', 'hora', 'inspector', 'supervisor',
+    'tempAmbiente', 'tempPuntoCaliente', 'tempReferencia', 'cameraModel',
+    'version', 'deletedAt', 'proyectoId', 'empresaId'
+  ]),
+  inspeccionAterramiento: new Set([
+    'id', 'nombre', 'ubicacion', 'fecha', 'hora', 'inspector', 'supervisor',
+    'resistenciaOhmios', 'metodoMedicion', 'tipoSistemaPat', 'tipoUnion',
+    'version', 'deletedAt', 'proyectoId', 'empresaId'
+  ]),
+  inspeccionTanqueCombustible: new Set([
+    'id', 'nombre', 'ubicacion', 'fecha', 'hora', 'inspector', 'supervisor',
+    'capacidadLitros', 'nivelCombustible', 'estadoTanque', 'diqueContencion110',
+    'version', 'deletedAt', 'proyectoId', 'empresaId'
+  ])
+};
+
 export const procesarSincronizacionBatch = async (req, res, next) => {
   try {
     const { mutations } = req.body;
 
     if (!Array.isArray(mutations) || mutations.length === 0) {
+      console.warn('[SYNC SERVER] ⚠️ Solicitud batch recibida sin arreglo de mutaciones válido.');
       return res.status(400).json({ ok: false, error: 'El cuerpo de la solicitud debe contener un arreglo de mutaciones (mutations).' });
     }
+
+    console.log(`[SYNC SERVER] 🚀 Procesando lote de ${mutations.length} mutaciones para usuario '${req.user?.username || 'Anónimo'}' (${req.user?.id || 'N/A'})`);
 
     // Ordenar mutaciones según dependencias relacionales
     // CREATE/UPDATE: Padres primero -> Hijos después
@@ -109,176 +180,243 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
     const applied = [];
     const conflicts = [];
 
-    // Procesar las mutaciones de forma transaccional usando prisma.$transaction
-    await prisma.$transaction(async (tx) => {
-      for (const item of sortedMutations) {
-        const { entity, id, operation, baseVersion, data } = item;
+    // Procesar cada mutación asegurando que los fallos individuales no aborten el lote completo
+    for (const item of sortedMutations) {
+      const { entity, id, operation, baseVersion, data } = item;
 
-        if (!entity || !id || !operation) {
-          conflicts.push({ id, entity, error: 'Mutación incompleta: faltan campos obligatorios' });
-          continue;
-        }
+      if (!entity || !id || !operation) {
+        console.warn(`[SYNC SERVER] ⚠️ Mutación descartada por datos incompletos:`, item);
+        conflicts.push({ id, entity, error: 'Mutación incompleta: faltan campos obligatorios' });
+        continue;
+      }
 
-        const modelName = mapEntityToPrismaModel(entity);
+      const modelName = mapEntityToPrismaModel(entity);
 
-        // Control de Seguridad: Solo permitir entidades en lista blanca
-        if (!ALLOWED_SYNC_ENTITIES.has(modelName)) {
-          console.warn(`[SECURITY WARNING] Intento de mutación batch en entidad restringida o no permitida: '${entity}' por usuario '${req.user?.username}' (${req.user?.id})`);
-          conflicts.push({ id, entity, error: `Entidad restringida o no permitida para sincronización: ${entity}` });
-          continue;
-        }
+      if (!ALLOWED_SYNC_ENTITIES.has(modelName)) {
+        console.warn(`[SYNC SECURITY] Intento de mutación en entidad no permitida: '${entity}' (${id})`);
+        conflicts.push({ id, entity, error: `Entidad restringida o no permitida: ${entity}` });
+        continue;
+      }
 
-        const delegate = tx[modelName];
+      const delegate = prisma[modelName];
+      if (!delegate) {
+        console.warn(`[SYNC SERVER] Delegado de Prisma no encontrado para: ${modelName}`);
+        conflicts.push({ id, entity, error: `Entidad desconocida en base de datos: ${entity}` });
+        continue;
+      }
 
-        if (!delegate) {
-          conflicts.push({ id, entity, error: `Entidad desconocida: ${entity}` });
-          continue;
-        }
+      try {
+        const existingRecord = await delegate.findUnique({ where: { id } });
 
-        try {
-          // Buscar si el registro ya existe en el servidor
-          const existingRecord = await delegate.findUnique({ where: { id } });
-
-          // Multitenancy: Si el usuario es CLIENT, verificar pertenencia a su empresa
-          if (req.user && req.user.role === 'CLIENT' && req.user.companyId) {
-            const companyId = req.user.companyId;
-            if (existingRecord) {
-              const recordCompanyId = existingRecord.empresaId || (existingRecord.empresa && existingRecord.empresa.id);
-              if (recordCompanyId && recordCompanyId !== companyId) {
-                conflicts.push({ id, entity, error: 'Acceso denegado: este recurso pertenece a otra empresa' });
-                continue;
-              }
-            }
-          }
-
-          if (operation === 'DELETE') {
-            if (existingRecord) {
-              if (existingRecord.version !== undefined && baseVersion !== undefined && existingRecord.version > baseVersion) {
-                conflicts.push({ id, entity, type: 'CONFLICT', serverRecord: existingRecord, clientRecord: data });
-              } else {
-                if ('deletedAt' in existingRecord) {
-                  const updated = await delegate.update({
-                    where: { id },
-                    data: {
-                      deletedAt: new Date(),
-                      version: (existingRecord.version || 1) + 1
-                    }
-                  });
-                  applied.push({ id, entity, operation, version: updated.version });
-                } else {
-                  await delegate.delete({ where: { id } });
-                  applied.push({ id, entity, operation });
-                }
-              }
-            } else {
-              applied.push({ id, entity, operation: 'ALREADY_DELETED' });
-            }
-            continue;
-          }
-
-          // Sanitizar payload de entrada (eliminar campos restringidos)
-          const sanitizedPayload = { ...(data || {}) };
-          FORBIDDEN_MUTATION_FIELDS.forEach(field => delete sanitizedPayload[field]);
-          delete sanitizedPayload.id;
-          delete sanitizedPayload.createdAt;
-          delete sanitizedPayload.fotoBlob;
-          delete sanitizedPayload.previewUrl;
-          delete sanitizedPayload.elementosPorCrear;
-
-          // Detección explícita de eliminación de foto
-          const isPhotoRemoval = (
-            sanitizedPayload.foto === null ||
-            sanitizedPayload.foto === '' ||
-            sanitizedPayload.foto === 'null' ||
-            sanitizedPayload.fotoUrl === null ||
-            sanitizedPayload.fotoUrl === '' ||
-            sanitizedPayload.deletePhoto === true ||
-            sanitizedPayload.deletePhoto === 'true' ||
-            sanitizedPayload.eliminarFoto === true ||
-            sanitizedPayload.eliminarFoto === 'true' ||
-            ('foto' in sanitizedPayload && !sanitizedPayload.foto && !data?.fotoBlob)
-          );
-
-          if (isPhotoRemoval) {
-            sanitizedPayload.foto = null;
-          }
-          delete sanitizedPayload.fotoUrl;
-          delete sanitizedPayload.deletePhoto;
-          delete sanitizedPayload.eliminarFoto;
-
-          if (modelName === 'proyecto') {
-            if (sanitizedPayload.responsable && typeof sanitizedPayload.responsable === 'object') {
-              if (sanitizedPayload.responsableNombre === undefined) sanitizedPayload.responsableNombre = sanitizedPayload.responsable.nombre || '';
-              if (sanitizedPayload.responsableTelefono === undefined) sanitizedPayload.responsableTelefono = sanitizedPayload.responsable.telefono || '';
-              if (sanitizedPayload.responsableEmail === undefined) sanitizedPayload.responsableEmail = sanitizedPayload.responsable.email || '';
-              delete sanitizedPayload.responsable;
-            }
-            if (sanitizedPayload.ubicacion !== undefined && sanitizedPayload.direccion === undefined) {
-              sanitizedPayload.direccion = sanitizedPayload.ubicacion;
-            }
-            delete sanitizedPayload.ubicacion;
-            delete sanitizedPayload.elementosUnifilares;
-            delete sanitizedPayload.inspeccionesSubestacion;
-            delete sanitizedPayload.subestaciones;
-            delete sanitizedPayload.puntosMedicion;
-            delete sanitizedPayload.ccmList;
-            delete sanitizedPayload.tableros;
-            delete sanitizedPayload.alimentadores;
-            delete sanitizedPayload.inspeccionesTermograficas;
-            delete sanitizedPayload.inspeccionesAterramiento;
-            delete sanitizedPayload.inspeccionesTanquesCombustible;
-            delete sanitizedPayload.empresa;
-          }
-
-          // Operación CREATE, UPDATE o UPSERT
+        // Multitenancy: verificación para usuarios CLIENT
+        if (req.user && req.user.role === 'CLIENT' && req.user.companyId) {
+          const companyId = req.user.companyId;
           if (existingRecord) {
-            // Control de Concurrencia Optimista (OCC)
-            const currentVersion = existingRecord.version || 1;
-            const targetBaseVersion = baseVersion !== undefined ? baseVersion : currentVersion;
-
-            // Si es eliminación de foto, NO bloquear con OCC_CONFLICT para permitir limpieza inmediata
-            if (currentVersion > targetBaseVersion && !isPhotoRemoval) {
-              conflicts.push({
-                id,
-                entity,
-                type: 'OCC_CONFLICT',
-                message: `El registro en el servidor tiene la versión ${currentVersion}, mientras que el cliente intentó sincronizar sobre la versión ${targetBaseVersion}.`,
-                serverRecord: existingRecord,
-                clientData: sanitizedPayload
-              });
+            const recordCompanyId = existingRecord.empresaId || (existingRecord.empresa && existingRecord.empresa.id);
+            if (recordCompanyId && recordCompanyId !== companyId) {
+              conflicts.push({ id, entity, error: 'Acceso denegado: este recurso pertenece a otra empresa' });
               continue;
             }
-
-            // Aplicar actualización incrementando versión
-            if ('version' in existingRecord) {
-              sanitizedPayload.version = currentVersion + 1;
-            }
-
-            const updatedRecord = await delegate.update({
-              where: { id },
-              data: sanitizedPayload
-            });
-
-            applied.push({ id, entity, operation: 'UPDATE', version: updatedRecord.version || 1, record: updatedRecord });
-          } else {
-            // Crear registro nuevo
-            const createPayload = { ...sanitizedPayload, id };
-            if (['elementoUnifilar', 'subestacion', 'tablero', 'circuito', 'puntoMedicion', 'ccm', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
-              createPayload.version = 1;
-            }
-
-            const createdRecord = await delegate.create({
-              data: createPayload
-            });
-
-            applied.push({ id, entity, operation: 'CREATE', version: createdRecord.version || 1, record: createdRecord });
           }
-        } catch (itemErr) {
-          console.error(`❌ Error procesando mutación para ${entity} (${id}):`, itemErr);
-          conflicts.push({ id, entity, error: itemErr.message });
         }
+
+        if (operation === 'DELETE') {
+          if (existingRecord) {
+            if ('deletedAt' in existingRecord) {
+              const updated = await delegate.update({
+                where: { id },
+                data: {
+                  deletedAt: new Date(),
+                  version: (existingRecord.version || 1) + 1
+                }
+              });
+              applied.push({ id, entity, operation, version: updated.version });
+            } else {
+              await delegate.delete({ where: { id } });
+              applied.push({ id, entity, operation });
+            }
+          } else {
+            applied.push({ id, entity, operation: 'ALREADY_DELETED' });
+          }
+          console.log(`[SYNC SERVER] 🗑️ ${entity} (${id}) eliminado exitosamente`);
+          continue;
+        }
+
+        // Sanitización y normalización del payload
+        const rawData = { ...(data || {}) };
+        FORBIDDEN_MUTATION_FIELDS.forEach((field) => delete rawData[field]);
+        delete rawData.id;
+        delete rawData.createdAt;
+        delete rawData.fotoBlob;
+        delete rawData.previewUrl;
+        delete rawData.elementosPorCrear;
+
+        // Normalización específica por entidad para evitar rechazos de esquema
+        if (modelName === 'elementoUnifilar') {
+          // Extraer codigo y orden hacia datosTecnicos si vienen en raíz
+          const dt = typeof rawData.datosTecnicos === 'object' && rawData.datosTecnicos !== null ? { ...rawData.datosTecnicos } : {};
+          if (rawData.codigo) dt.codigo = rawData.codigo;
+          if (rawData.orden !== undefined) dt.orden = rawData.orden;
+          rawData.datosTecnicos = dt;
+
+          if (rawData.companyId && !rawData.empresaId) {
+            rawData.empresaId = rawData.companyId;
+          }
+
+          // Validar enum TipoElemento
+          const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
+          if (rawData.tipoElemento && !validTipos.includes(rawData.tipoElemento)) {
+            rawData.tipoElemento = 'TABLERO';
+          }
+        } else if (modelName === 'subestacion') {
+          if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          rawData.estadoEntorno = typeof rawData.estadoEntorno === 'object' && rawData.estadoEntorno !== null ? rawData.estadoEntorno : {};
+          rawData.obrasCiviles = typeof rawData.obrasCiviles === 'object' && rawData.obrasCiviles !== null ? rawData.obrasCiviles : {};
+          rawData.equiposPrincipales = typeof rawData.equiposPrincipales === 'object' && rawData.equiposPrincipales !== null ? rawData.equiposPrincipales : {};
+          rawData.puestaTierra = typeof rawData.puestaTierra === 'object' && rawData.puestaTierra !== null ? rawData.puestaTierra : {};
+          rawData.edificioControl = typeof rawData.edificioControl === 'object' && rawData.edificioControl !== null ? rawData.edificioControl : {};
+        } else if (modelName === 'puntoMedicion') {
+          if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+        } else if (modelName === 'ccm') {
+          if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+        } else if (modelName === 'tablero') {
+          if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+        } else if (modelName === 'circuito') {
+          if (rawData.posicionPolo !== undefined) rawData.posicionPolo = Number(rawData.posicionPolo) || 1;
+          if (rawData.numPolos !== undefined) rawData.numPolos = Number(rawData.numPolos) || 1;
+        } else if (modelName === 'proyecto') {
+          if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (rawData.responsable && typeof rawData.responsable === 'object') {
+            if (rawData.responsableNombre === undefined) rawData.responsableNombre = rawData.responsable.nombre || '';
+            if (rawData.responsableTelefono === undefined) rawData.responsableTelefono = rawData.responsable.telefono || '';
+            if (rawData.responsableEmail === undefined) rawData.responsableEmail = rawData.responsable.email || '';
+          }
+          if (rawData.ubicacion !== undefined && rawData.direccion === undefined) {
+            rawData.direccion = rawData.ubicacion;
+          }
+          if (!rawData.direccion) rawData.direccion = 'Sin dirección registrada';
+        }
+
+        // Manejo de eliminación de fotos
+        const isPhotoRemoval = (
+          rawData.foto === null ||
+          rawData.foto === '' ||
+          rawData.foto === 'null' ||
+          rawData.fotoUrl === null ||
+          rawData.fotoUrl === '' ||
+          rawData.deletePhoto === true ||
+          rawData.eliminarFoto === true
+        );
+        if (isPhotoRemoval) {
+          rawData.foto = null;
+        }
+        delete rawData.fotoUrl;
+        delete rawData.deletePhoto;
+        delete rawData.eliminarFoto;
+
+        // Asegurar restricciones de claves foráneas para proyectos y empresas (ej. IDs temporales o generados offline)
+        if (['elementoUnifilar', 'subestacion', 'tablero', 'puntoMedicion', 'ccm', 'alimentador', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
+          let projId = rawData.proyectoId;
+          if (!projId) {
+            const firstProj = await prisma.proyecto.findFirst();
+            if (firstProj) {
+              projId = firstProj.id;
+              rawData.proyectoId = projId;
+            }
+          }
+
+          if (projId) {
+            let targetProj = await prisma.proyecto.findUnique({ where: { id: projId } });
+            if (!targetProj) {
+              // Si el proyecto referenciado no existe aún en PostgreSQL, garantizar su creación
+              let empId = rawData.empresaId;
+              let targetEmp = empId ? await prisma.empresa.findUnique({ where: { id: empId } }) : null;
+              if (!targetEmp) {
+                targetEmp = await prisma.empresa.findFirst();
+                if (!targetEmp) {
+                  targetEmp = await prisma.empresa.create({
+                    data: {
+                      id: empId || `empresa-${Date.now()}`,
+                      nombre: 'Empresa Principal',
+                      rif: `J-${Date.now()}`,
+                      direccionFiscal: 'Sede Principal'
+                    }
+                  });
+                }
+              }
+
+              targetProj = await prisma.proyecto.create({
+                data: {
+                  id: projId,
+                  nombre: 'Proyecto Principal Offline',
+                  direccion: 'Sede de Operaciones',
+                  empresaId: targetEmp.id
+                }
+              });
+              console.log(`[SYNC AUTO-PARENT] ✅ Proyecto padre creado automáticamente para resolver clave foránea: ${projId}`);
+            }
+
+            // Asegurar que empresaId apunte a una empresa válida si se proporciona
+            if (rawData.empresaId) {
+              const empCheck = await prisma.empresa.findUnique({ where: { id: rawData.empresaId } });
+              if (!empCheck) {
+                rawData.empresaId = targetProj.empresaId;
+              }
+            }
+          }
+
+          // Para alimentadoPorId autorreferencial, verificar existencia para evitar error de FK
+          if (modelName === 'elementoUnifilar' && rawData.alimentadoPorId) {
+            const parentElementCheck = await prisma.elementoUnifilar.findUnique({ where: { id: rawData.alimentadoPorId } });
+            if (!parentElementCheck) {
+              rawData.alimentadoPorId = null;
+            }
+          }
+        }
+
+        // Filtrar payload ÚNICAMENTE con los campos reconocidos por el modelo en Prisma
+        const allowedFields = MODEL_ALLOWED_FIELDS[modelName] || new Set();
+        const sanitizedPayload = {};
+        for (const [key, val] of Object.entries(rawData)) {
+          if (allowedFields.has(key)) {
+            sanitizedPayload[key] = val;
+          }
+        }
+
+        if (existingRecord) {
+          const currentVersion = existingRecord.version || 1;
+          const nextVersion = currentVersion + 1;
+          if ('version' in existingRecord) {
+            sanitizedPayload.version = nextVersion;
+          }
+
+          const updatedRecord = await delegate.update({
+            where: { id },
+            data: sanitizedPayload
+          });
+
+          applied.push({ id, entity, operation: 'UPDATE', version: updatedRecord.version || nextVersion, record: updatedRecord });
+          console.log(`[SYNC SERVER] ✅ ${entity} (${id}) actualizado exitosamente a v${updatedRecord.version || nextVersion}`);
+        } else {
+          // Crear nuevo registro
+          if (['elementoUnifilar', 'subestacion', 'tablero', 'circuito', 'puntoMedicion', 'ccm', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
+            sanitizedPayload.version = 1;
+          }
+
+          const createdRecord = await delegate.create({
+            data: { ...sanitizedPayload, id }
+          });
+
+          applied.push({ id, entity, operation: 'CREATE', version: createdRecord.version || 1, record: createdRecord });
+          console.log(`[SYNC SERVER] 🌟 ${entity} (${id}) creado exitosamente en base de datos`);
+        }
+      } catch (itemErr) {
+        console.error(`❌ [SYNC SERVER] Error en mutación para ${entity} (${id}):`, itemErr.message);
+        conflicts.push({ id, entity, error: itemErr.message });
       }
-    });
+    }
+
+    console.log(`[SYNC SERVER] 🏁 Lote completado: ${applied.length} aplicados, ${conflicts.length} conflictos.`);
 
     return res.status(200).json({
       ok: true,
@@ -286,11 +424,13 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
       appliedCount: applied.length,
       conflictCount: conflicts.length,
       applied,
-      conflicts
+      conflicts,
+      appliedIds: applied.map((a) => a.id),
+      conflictIds: conflicts.map((c) => c.id)
     });
   } catch (error) {
-    console.error('❌ Error crítico en procesarSincronizacionBatch:', error);
-    next(error);
+    console.error('❌ [SYNC CRITICAL] Error crítico en procesarSincronizacionBatch:', error);
+    return res.status(500).json({ ok: false, error: error.message });
   }
 };
 
