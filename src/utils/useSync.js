@@ -3,7 +3,9 @@ import useStore from '../store/useStore';
 import { API_BASE_URL } from './api';
 
 export function useSync() {
-  const { syncQueue, removeFromQueue } = useStore();
+  const syncQueue = useStore((state) => state.syncQueue || []);
+  const removeFromQueue = useStore((state) => state.removeFromQueue);
+  const isStoreSyncing = useStore((state) => state.isSyncing || false);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [isSyncing, setIsSyncing] = useState(false);
   
@@ -47,26 +49,37 @@ export function useSync() {
     };
   }, []);
 
-  // Control de reintentos y tiempo de espera para evitar bucles infinitos
+  // Control de reintentos con backoff progresivo para evitar bucles infinitos
+  const retryCountRef = useRef(0);
   const lastSyncAttemptRef = useRef(0);
   const syncTimeoutRef = useRef(null);
 
-  // Disparar sincronización automática cuando cambie la red o la cola de elementos (con throttle)
+  // Disparar sincronización automática cuando cambie la red o la cola de elementos (con backoff progresivo)
   useEffect(() => {
     if (isOnline && syncQueue.length > 0 && !isSyncingRef.current) {
+      // Si ya fallaron 5 intentos automáticos consecutivos, pausar para no saturar la red ni bloquear el hilo
+      if (retryCountRef.current >= 5) {
+        console.warn('[SYNC CLIENT] ⏸️ Reintentos automáticos en pausa tras 5 intentos sin éxito. Presione "Sincronizar Ahora" para forzar reintento.');
+        return;
+      }
+
+      const backoffMs = Math.min(2000 * Math.pow(1.5, retryCountRef.current), 25000);
       const now = Date.now();
       const elapsed = now - lastSyncAttemptRef.current;
-      if (elapsed < 3000) {
+
+      if (elapsed < backoffMs) {
         if (!syncTimeoutRef.current) {
           syncTimeoutRef.current = setTimeout(() => {
             syncTimeoutRef.current = null;
             if (!isSyncingRef.current && useStore.getState().syncQueue.length > 0) {
+              lastSyncAttemptRef.current = Date.now();
               procesarColaSincronizacion();
             }
-          }, 3000 - elapsed);
+          }, backoffMs - elapsed);
         }
         return;
       }
+
       lastSyncAttemptRef.current = now;
       procesarColaSincronizacion();
     }
@@ -104,22 +117,31 @@ export function useSync() {
     }
   };
 
-  const procesarColaSincronizacion = async () => {
-    if (isSyncingRef.current) return;
+  const procesarColaSincronizacion = async (isManual = false) => {
+    if (isSyncingRef.current) return { success: false, busy: true };
+
+    if (isManual) {
+      retryCountRef.current = 0;
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
+    }
 
     const token = getFreshToken();
     if (!token || token === 'mock-offline-token') {
       // Modo offline local sin backend configurado
-      return;
+      return { success: false, offline: true, error: 'Sin sesión activa con el servidor central' };
     }
 
     try {
       isSyncingRef.current = true;
       setIsSyncing(true);
+      useStore.getState().setIsSyncing?.(true);
 
       const currentQueue = [...useStore.getState().syncQueue];
       if (currentQueue.length === 0) {
-        return;
+        return { success: true, count: 0 };
       }
 
       console.group(`🔄 [SYNC DEPURACIÓN] Procesando cola de sincronización (${currentQueue.length} elementos pendientes)`);
@@ -128,7 +150,7 @@ export function useSync() {
         ID_Cola: item.id,
         ID_Payload: item.payload?.id,
         Tipo: item.tipo,
-        Operacion: item.operation || 'UPSERT',
+        Operacion: item.operation || item.accion || item.operacion || 'UPSERT',
         Nombre: item.payload?.nombre || item.payload?.codigo || 'Sin nombre',
         TieneFotoBlob: Boolean(item.payload?.fotoBlob)
       })));
@@ -151,7 +173,7 @@ export function useSync() {
 
         let entityName = 'ElementoUnifilar';
         if (item.tipo === 'PROYECTO') entityName = 'Proyecto';
-        else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') entityName = 'ElementoUnifilar';
+        else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO' || item.tipo === 'ELEMENTO') entityName = 'ElementoUnifilar';
         else if (item.tipo === 'SUBESTACION') entityName = 'Subestacion';
         else if (item.tipo === 'PUNTO_MEDICION') entityName = 'PuntoMedicion';
         else if (item.tipo === 'CCM') entityName = 'Ccm';
@@ -161,7 +183,7 @@ export function useSync() {
 
         const mutationData = { ...(item.payload || {}) };
         // Solo aplicar lógica de eliminación de foto en entidades que soportan imágenes
-        if ((item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') && !mutationData.foto && !mutationData.fotoBlob) {
+        if ((item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO' || item.tipo === 'ELEMENTO') && !mutationData.foto && !mutationData.fotoBlob) {
           mutationData.foto = null;
           mutationData.eliminarFoto = true;
         }
@@ -174,16 +196,55 @@ export function useSync() {
         jsonMutations.push({
           entity: entityName,
           id: mutationId,
-          operation: item.operation || 'UPSERT',
+          operation: item.operation || item.accion || item.operacion || 'UPSERT',
           baseVersion: item.payload?.version || 1,
           data: mutationData
         });
         queueItemsMap.set(mutationId, item.id);
       }
 
+      let batchAppliedCount = 0;
+      let batchConflictCount = 0;
+
       if (jsonMutations.length > 0) {
         console.log(`[SYNC CLIENT] 📦 Enviando ${jsonMutations.length} mutaciones estructuradas en lote al servidor...`);
-        const batchRes = await sincronizarLote(jsonMutations);
+        let batchRes = await sincronizarLote(jsonMutations);
+
+        // FALLBACK ROBUSTO: Si el envío en lote falla por error HTTP o excepción del servidor
+        // (por ejemplo por un registro atípico o timeout), iterar individualmente para que no se pierdan
+        // las demás mutaciones de campo.
+        if (!batchRes.success && batchRes.status !== 401 && batchRes.status !== 403) {
+          console.warn(`[SYNC CLIENT] ⚠️ El lote completo no pudo procesarse (${batchRes.status || 'ERROR'}). Iniciando fallback iterativo individual...`);
+          const fallbackApplied = [];
+          const fallbackConflicts = [];
+
+          for (const singleMutation of jsonMutations) {
+            if (!navigator.onLine) break;
+            try {
+              console.log(`[SYNC CLIENT] 🔄 Reintentando mutación individual: ${singleMutation.entity} (${singleMutation.id})...`);
+              const singleRes = await sincronizarLote([singleMutation]);
+              if (singleRes.success && singleRes.data?.applied?.length > 0) {
+                fallbackApplied.push(...singleRes.data.applied);
+              } else {
+                fallbackConflicts.push({ id: singleMutation.id, error: singleRes.error || 'Fallo individual' });
+              }
+            } catch (singleErr) {
+              fallbackConflicts.push({ id: singleMutation.id, error: singleErr.message });
+            }
+          }
+
+          if (fallbackApplied.length > 0) {
+            batchRes = {
+              success: true,
+              data: {
+                applied: fallbackApplied,
+                conflicts: fallbackConflicts,
+                appliedIds: fallbackApplied.map((a) => a.id),
+                conflictIds: fallbackConflicts.map((c) => c.id)
+              }
+            };
+          }
+        }
 
         if (batchRes.success) {
           const appliedItems = batchRes.data?.applied || [];
@@ -193,24 +254,38 @@ export function useSync() {
             ...(batchRes.data?.appliedIds || [])
           ]);
 
+          batchAppliedCount = appliedItems.length;
+          batchConflictCount = conflicts.length;
           console.log(`[SYNC CLIENT] 🎯 Elementos aplicados por el backend: ${appliedItems.length}`);
 
-          // Remover del queue local TODOS los elementos procesados exitosamente
+          // Recopilar todos los IDs confirmados y eliminarlos de la cola de forma atómica
+          const idsToRemove = [];
           currentQueue.forEach((item) => {
             const itemId = item.id;
             const payloadId = item.payload?.id;
             if (appliedIdSet.has(itemId) || (payloadId && appliedIdSet.has(payloadId))) {
-              console.log(`[SYNC CLIENT] 🗑️ Removiendo de la cola item confirmado: ${itemId}${payloadId ? ' / ' + payloadId : ''}`);
-              removeFromQueue(itemId);
-              if (payloadId) removeFromQueue(payloadId);
+              if (itemId) idsToRemove.push(itemId);
+              if (payloadId) idsToRemove.push(payloadId);
             }
           });
 
-          // Actualizar versiones y registros en store
           appliedItems.forEach((appItem) => {
             const queueId = queueItemsMap.get(appItem.id) || appItem.id;
-            if (queueId) removeFromQueue(queueId);
+            if (queueId) idsToRemove.push(queueId);
+            if (appItem.id) idsToRemove.push(appItem.id);
+          });
 
+          if (idsToRemove.length > 0) {
+            console.log(`[SYNC CLIENT] 🗑️ Removiendo de la cola ${idsToRemove.length} identificadores confirmados.`);
+            if (useStore.getState().removeBatchFromQueue) {
+              useStore.getState().removeBatchFromQueue(idsToRemove);
+            } else {
+              idsToRemove.forEach((id) => removeFromQueue(id));
+            }
+          }
+
+          // Actualizar versiones y registros en store
+          appliedItems.forEach((appItem) => {
             if (appItem.record) {
               const rec = appItem.record;
               if (appItem.entity === 'ElementoUnifilar' || appItem.entity === 'Tablero') {
@@ -242,11 +317,12 @@ export function useSync() {
           }
         } else if (batchRes.status === 401 || batchRes.status === 403) {
           console.warn(`[SYNC AUTH] Error HTTP ${batchRes.status}: Sesión expirada. Pausando sincronización.`);
-          return;
+          return { success: false, status: batchRes.status, error: 'Sesión expirada' };
         } else {
           // Error de red o del servidor: NO DESCARTAR LOS DATOS LOCALES.
           console.warn(`[SYNC RETRY] Falló sincronización de lote (${batchRes.status || 'ERROR'}). Manteniendo datos locales intactos.`);
-          return;
+          retryCountRef.current += 1;
+          return { success: false, status: batchRes.status, error: batchRes.error || 'Error de respuesta del servidor' };
         }
       }
 
@@ -287,16 +363,32 @@ export function useSync() {
         }
       }
 
+      const finalQueueLength = useStore.getState().syncQueue.length;
+
+      if (batchAppliedCount > 0) {
+        retryCountRef.current = 0;
+      }
+
       // Si la cola se vació por completo de manera exitosa, actualizar datos consolidados desde el servidor
-      if (useStore.getState().syncQueue.length === 0) {
+      if (finalQueueLength === 0) {
         console.log('[SYNC CLIENT] 🎉 Toda la cola se sincronizó exitosamente. Actualizando estado consolidado.');
+        useStore.getState().showToast?.('¡Todos los datos han sido sincronizados exitosamente!', 'success');
         await useStore.getState().pullInitialData?.();
       }
+
+      return {
+        success: finalQueueLength === 0 || batchAppliedCount > 0,
+        appliedCount: batchAppliedCount,
+        conflictCount: batchConflictCount,
+        remainingCount: finalQueueLength
+      };
     } catch (criticalErr) {
       console.error('[SYNC CRITICAL] 💥 Excepción no controlada en procesarColaSincronizacion:', criticalErr);
+      return { success: false, error: criticalErr.message || 'Error inesperado' };
     } finally {
       setIsSyncing(false);
       isSyncingRef.current = false;
+      useStore.getState().setIsSyncing?.(false);
       console.groupEnd();
     }
   };
@@ -517,10 +609,10 @@ export function useSync() {
 
   return {
     isOnline,
-    isSyncing,
+    isSyncing: isSyncing || isStoreSyncing,
     pendingCount: syncQueue.length,
-    triggerSync: procesarColaSincronizacion,
-    syncPendingData: procesarColaSincronizacion,
+    triggerSync: () => procesarColaSincronizacion(true),
+    syncPendingData: () => procesarColaSincronizacion(true),
     pullInitialData: () => useStore.getState().pullInitialData?.()
   };
 }

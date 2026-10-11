@@ -442,11 +442,13 @@ export const useStore = create(
       elementosLocales: [],
       subestacionesLocales: [],
       syncQueue: [],
+      isSyncing: false,
       socket: null,
       toast: { show: false, message: '', type: 'success', action: null },
       conflictosCircuitos: [],
       isPanelConflictosOpen: false,
 
+      setIsSyncing: (isSyncing) => set({ isSyncing }),
       showToast: (message, type = 'success', action = null) => set({ toast: { show: true, message, type, action } }),
       hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
       setSocket: (socket) => set({ socket }),
@@ -2657,6 +2659,31 @@ export const useStore = create(
           puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((p) => p.id !== id),
           ccmLocales: (state.ccmLocales || []).filter((c) => c.id !== id)
         }));
+      },
+
+      removeBatchFromQueue: (ids = []) => {
+        if (!Array.isArray(ids) || ids.length === 0) return;
+        const idSet = new Set(ids.filter(Boolean));
+        if (idSet.size === 0) return;
+        set((state) => ({
+          syncQueue: (state.syncQueue || []).filter((item) => !idSet.has(item.id) && (!item.payload?.id || !idSet.has(item.payload.id))),
+          proyectosLocales: (state.proyectosLocales || []).filter((p) => !idSet.has(p.id)),
+          elementosLocales: (state.elementosLocales || []).filter((e) => !idSet.has(e.id)),
+          subestacionesLocales: (state.subestacionesLocales || []).filter((s) => !idSet.has(s.id)),
+          puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((p) => !idSet.has(p.id)),
+          ccmLocales: (state.ccmLocales || []).filter((c) => !idSet.has(c.id))
+        }));
+      },
+
+      clearSyncQueue: () => {
+        set({
+          syncQueue: [],
+          proyectosLocales: [],
+          elementosLocales: [],
+          subestacionesLocales: [],
+          puntosMedicionLocales: [],
+          ccmLocales: []
+        });
       },
 
       processSyncQueue: async () => {

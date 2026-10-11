@@ -52,6 +52,9 @@ export const mapEntityToPrismaModel = (entity) => {
     'circuito': 'circuito',
     'Circuito': 'circuito',
     'CIRCUITO': 'circuito',
+    'elemento': 'elementoUnifilar',
+    'Elemento': 'elementoUnifilar',
+    'ELEMENTO': 'elementoUnifilar',
     'elementoUnifilar': 'elementoUnifilar',
     'ElementoUnifilar': 'elementoUnifilar',
     'ELEMENTO_UNIFILAR': 'elementoUnifilar',
@@ -270,6 +273,12 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           }
         } else if (modelName === 'subestacion') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (!rawData.nombre) rawData.nombre = 'Subestación Principal';
+          if (!rawData.ubicacion) rawData.ubicacion = 'Sede Principal';
+          if (!rawData.fecha) rawData.fecha = new Date().toISOString().split('T')[0];
+          if (!rawData.hora) rawData.hora = '08:00';
+          if (!rawData.inspector) rawData.inspector = 'Inspector';
+          if (!rawData.nivelTension) rawData.nivelTension = '13.8 kV';
           rawData.estadoEntorno = typeof rawData.estadoEntorno === 'object' && rawData.estadoEntorno !== null ? rawData.estadoEntorno : {};
           rawData.obrasCiviles = typeof rawData.obrasCiviles === 'object' && rawData.obrasCiviles !== null ? rawData.obrasCiviles : {};
           rawData.equiposPrincipales = typeof rawData.equiposPrincipales === 'object' && rawData.equiposPrincipales !== null ? rawData.equiposPrincipales : {};
@@ -277,15 +286,19 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           rawData.edificioControl = typeof rawData.edificioControl === 'object' && rawData.edificioControl !== null ? rawData.edificioControl : {};
         } else if (modelName === 'puntoMedicion') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (!rawData.nombre) rawData.nombre = 'Punto de Medición';
         } else if (modelName === 'ccm') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (!rawData.nombre) rawData.nombre = 'CCM Principal';
         } else if (modelName === 'tablero') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (!rawData.nombre) rawData.nombre = 'Tablero Principal';
         } else if (modelName === 'circuito') {
           if (rawData.posicionPolo !== undefined) rawData.posicionPolo = Number(rawData.posicionPolo) || 1;
           if (rawData.numPolos !== undefined) rawData.numPolos = Number(rawData.numPolos) || 1;
         } else if (modelName === 'proyecto') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (!rawData.nombre) rawData.nombre = 'Proyecto Principal';
           if (rawData.responsable && typeof rawData.responsable === 'object') {
             if (rawData.responsableNombre === undefined) rawData.responsableNombre = rawData.responsable.nombre || '';
             if (rawData.responsableTelefono === undefined) rawData.responsableTelefono = rawData.responsable.telefono || '';
@@ -313,6 +326,27 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
         delete rawData.fotoUrl;
         delete rawData.deletePhoto;
         delete rawData.eliminarFoto;
+
+        // Asegurar restricciones de claves foráneas para circuitos (tableroId)
+        if (modelName === 'circuito' && rawData.tableroId) {
+          const parentTablero = await prisma.tablero.findUnique({ where: { id: rawData.tableroId } });
+          if (!parentTablero) {
+            let projId = rawData.proyectoId;
+            if (!projId) {
+              const firstP = await prisma.proyecto.findFirst();
+              projId = firstP ? firstP.id : 'proj-auto';
+            }
+            await prisma.tablero.create({
+              data: {
+                id: rawData.tableroId,
+                nombre: 'Tablero Principal Auto',
+                ubicacion: 'General',
+                proyectoId: projId
+              }
+            });
+            console.log(`[SYNC AUTO-PARENT] ✅ Tablero padre creado automáticamente para circuito: ${rawData.tableroId}`);
+          }
+        }
 
         // Asegurar restricciones de claves foráneas para proyectos y empresas (ej. IDs temporales o generados offline)
         if (['elementoUnifilar', 'subestacion', 'tablero', 'puntoMedicion', 'ccm', 'alimentador', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
@@ -383,6 +417,7 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           }
         }
 
+        // Ejecución tolerante a fallos: Upsert seguro bidireccional (Create-Or-Update)
         if (existingRecord) {
           const currentVersion = existingRecord.version || 1;
           const nextVersion = currentVersion + 1;
@@ -390,25 +425,53 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
             sanitizedPayload.version = nextVersion;
           }
 
-          const updatedRecord = await delegate.update({
-            where: { id },
-            data: sanitizedPayload
-          });
+          try {
+            const updatedRecord = await delegate.update({
+              where: { id },
+              data: sanitizedPayload
+            });
 
-          applied.push({ id, entity, operation: 'UPDATE', version: updatedRecord.version || nextVersion, record: updatedRecord });
-          console.log(`[SYNC SERVER] ✅ ${entity} (${id}) actualizado exitosamente a v${updatedRecord.version || nextVersion}`);
+            applied.push({ id, entity, operation: 'UPDATE', version: updatedRecord.version || nextVersion, record: updatedRecord });
+            console.log(`[SYNC SERVER] ✅ ${entity} (${id}) actualizado exitosamente a v${updatedRecord.version || nextVersion}`);
+          } catch (updErr) {
+            // Si el registro desapareció entre el find y el update, crear de respaldo
+            if (updErr.code === 'P2025') {
+              console.warn(`[SYNC SERVER] ⚠️ Registro no encontrado en update para ${entity} (${id}). Creando en su lugar...`);
+              const createdRecord = await delegate.create({
+                data: { ...sanitizedPayload, id }
+              });
+              applied.push({ id, entity, operation: 'CREATE', version: createdRecord.version || 1, record: createdRecord });
+            } else {
+              throw updErr;
+            }
+          }
         } else {
-          // Crear nuevo registro
+          // Crear nuevo registro con fallback a update si ya existía por conflicto de clave única (P2002)
           if (['elementoUnifilar', 'subestacion', 'tablero', 'circuito', 'puntoMedicion', 'ccm', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
             sanitizedPayload.version = 1;
           }
 
-          const createdRecord = await delegate.create({
-            data: { ...sanitizedPayload, id }
-          });
+          try {
+            const createdRecord = await delegate.create({
+              data: { ...sanitizedPayload, id }
+            });
 
-          applied.push({ id, entity, operation: 'CREATE', version: createdRecord.version || 1, record: createdRecord });
-          console.log(`[SYNC SERVER] 🌟 ${entity} (${id}) creado exitosamente en base de datos`);
+            applied.push({ id, entity, operation: 'CREATE', version: createdRecord.version || 1, record: createdRecord });
+            console.log(`[SYNC SERVER] 🌟 ${entity} (${id}) creado exitosamente en base de datos`);
+          } catch (createErr) {
+            // Manejo de conflicto de ID o clave única (P2002): Upsert fallback
+            if (createErr.code === 'P2002' || createErr.message?.includes('Unique constraint') || createErr.message?.includes('ya existe')) {
+              console.warn(`[SYNC SERVER] ⚠️ Conflicto de unicidad en create para ${entity} (${id}). Ejecutando fallback a update (Upsert)...`);
+              const updatedRecord = await delegate.update({
+                where: { id },
+                data: sanitizedPayload
+              });
+              applied.push({ id, entity, operation: 'UPDATE', version: updatedRecord.version || 2, record: updatedRecord });
+              console.log(`[SYNC SERVER] ✅ ${entity} (${id}) persistido exitosamente vía fallback Upsert`);
+            } else {
+              throw createErr;
+            }
+          }
         }
       } catch (itemErr) {
         console.error(`❌ [SYNC SERVER] Error en mutación para ${entity} (${id}):`, itemErr.message);
