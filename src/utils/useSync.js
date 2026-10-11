@@ -26,9 +26,13 @@ export function useSync() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Al recuperar conexión, intentar sincronizar pendientes y descargar cambios del servidor
+      // Al recuperar conexión: Prioridad Local (Local-First).
+      // Si existen cambios locales pendientes en la cola, DEBEN procesarse primero
+      // antes de cualquier pull para que el servidor no sobrescriba el estado local.
       const state = useStore.getState();
-      if (state.token && state.token !== 'mock-offline-token') {
+      if (state.syncQueue && state.syncQueue.length > 0) {
+        procesarColaSincronizacion();
+      } else if (state.token && state.token !== 'mock-offline-token') {
         state.pullInitialData?.();
       }
     };
@@ -48,7 +52,7 @@ export function useSync() {
     if (isOnline && syncQueue.length > 0 && !isSyncingRef.current) {
       procesarColaSincronizacion();
     }
-  }, [isOnline, syncQueue]);
+  }, [isOnline, syncQueue.length]);
 
   const sincronizarLote = async (mutaciones) => {
     try {
@@ -117,9 +121,14 @@ export function useSync() {
       else if (item.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE') entityName = 'InspeccionTanqueCombustible';
 
       const mutationData = { ...(item.payload || {}) };
-      if (!mutationData.foto && !mutationData.fotoBlob) {
+      // Solo aplicar lógica de eliminación de foto en entidades que soportan imágenes
+      if ((item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') && !mutationData.foto && !mutationData.fotoBlob) {
         mutationData.foto = null;
         mutationData.eliminarFoto = true;
+      }
+
+      if (item.companyId && !mutationData.empresaId) {
+        mutationData.empresaId = item.companyId;
       }
 
       jsonMutations.push({
@@ -138,14 +147,28 @@ export function useSync() {
       if (batchRes.success) {
         // Remover del queue local los elementos procesados exitosamente y actualizar version/foto en store
         (batchRes.data?.applied || []).forEach(appItem => {
-          const queueId = queueItemsMap.get(appItem.id);
+          const queueId = queueItemsMap.get(appItem.id) || appItem.id;
           if (queueId) removeFromQueue(queueId);
-          if (appItem.record && (appItem.entity === 'ElementoUnifilar' || appItem.entity === 'Tablero')) {
-            useStore.getState().updateElementoUnifilar(appItem.record.proyectoId, appItem.id, {
-              foto: appItem.record.foto || null,
-              fotoBlob: null,
-              version: appItem.record.version
-            });
+          if (appItem.record) {
+            if (appItem.entity === 'ElementoUnifilar' || appItem.entity === 'Tablero') {
+              useStore.getState().updateElementoUnifilar(appItem.record.proyectoId, appItem.id, {
+                foto: appItem.record.foto || null,
+                fotoBlob: null,
+                version: appItem.record.version
+              });
+            } else if (appItem.entity === 'Subestacion') {
+              useStore.getState().updateSubestacion(appItem.record.proyectoId, appItem.id, {
+                version: appItem.record.version
+              });
+            } else if (appItem.entity === 'PuntoMedicion') {
+              useStore.getState().updatePuntoMedicion(appItem.record.proyectoId, appItem.id, {
+                version: appItem.record.version
+              });
+            } else if (appItem.entity === 'Ccm') {
+              useStore.getState().updateCcm(appItem.record.proyectoId, appItem.id, {
+                version: appItem.record.version
+              });
+            }
           }
         });
 
@@ -158,19 +181,26 @@ export function useSync() {
         setIsSyncing(false);
         isSyncingRef.current = false;
         return;
+      } else {
+        // Error de red o del servidor: NO DESCARTAR LOS DATOS LOCALES.
+        // Se preserva la cola intacta en el dispositivo para reintentar más tarde.
+        console.warn(`[SYNC RETRY] Falló sincronización de lote (${batchRes.status}). Manteniendo datos locales intactos.`);
+        setIsSyncing(false);
+        isSyncingRef.current = false;
+        return;
       }
     }
 
-    // Procesar secuencialmente elementos restantes (ej. aquellos con fotos)
-    while (useStore.getState().syncQueue.length > 0) {
+    // Procesar elementos restantes con archivos (FormData individual)
+    const remainingQueue = [...useStore.getState().syncQueue];
+    for (const item of remainingQueue) {
       if (!navigator.onLine) {
         setIsOnline(false);
         break;
       }
 
-      const queueNow = useStore.getState().syncQueue;
-      const item = queueNow[0];
-      if (!item) break;
+      // Solo procesar aquellos que tienen fotoBlob binario pendiente
+      if (!item.payload?.fotoBlob) continue;
 
       let res = null;
       if (item.tipo === 'PROYECTO') {
@@ -185,25 +215,21 @@ export function useSync() {
         res = await sincronizarCcm(item.companyId, item.payload);
       }
 
-      if (res) {
-        if (res.success) {
-          removeFromQueue(item.id);
-        } else {
-          if (res.status === 'NETWORK_ERROR') break;
-          if (res.status === 401 || res.status === 403) {
-            useStore.getState().handleAuthError?.(res.status);
-            break;
-          }
-          removeFromQueue(item.id);
-        }
-      } else {
+      if (res && res.success) {
         removeFromQueue(item.id);
+      } else if (res && (res.status === 401 || res.status === 403)) {
+        useStore.getState().handleAuthError?.(res.status);
+        break;
+      } else {
+        // En caso de fallo de red o del servidor con FormData, NUNCA descartar de la cola.
+        console.warn(`[SYNC BLOB] No se pudo enviar elemento con archivo ${item.id}. Manteniendo en cola.`);
+        break;
       }
     }
 
-    // Si la cola se vació por completo, actualizar datos desde el servidor
+    // Si la cola se vació por completo de manera exitosa, actualizar datos consolidados desde el servidor
     if (useStore.getState().syncQueue.length === 0) {
-      useStore.getState().pullInitialData?.();
+      await useStore.getState().pullInitialData?.();
     }
 
     setIsSyncing(false);

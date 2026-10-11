@@ -18,7 +18,7 @@ router.get('/pull', verificarToken, async (req, res) => {
     const where = {};
 
     if (user.role === 'CLIENT' && empresaId) {
-      where.empresaId = empresaId;
+      where.id = empresaId;
     }
     // ADMIN puede ver todas las empresas o tendrá su propio filtro
 

@@ -306,7 +306,7 @@ export const pullData = async (req, res) => {
 
     // Multitenancy: usuarios CLIENT solo ven su empresa
     if (user.role === 'CLIENT' && empresaId) {
-      where.empresaId = empresaId;
+      where.id = empresaId;
     }
 
     // Filtrar por última fecha de sincronización si viene del cliente
