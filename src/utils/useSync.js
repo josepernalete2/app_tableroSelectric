@@ -166,8 +166,17 @@ export function useSync() {
         if (item.id) queueItemsMap.set(item.id, item.id);
         if (item.payload?.id) queueItemsMap.set(item.payload.id, item.id);
 
-        // Si el elemento tiene un archivo de imagen fotoBlob, debe enviarse via FormData
-        if (item.payload && item.payload.fotoBlob) {
+        // Detectar si fotoBlob es un archivo binario real en memoria (Blob o File)
+        const isRealBlob = Boolean(item.payload?.fotoBlob && (typeof Blob !== 'undefined' && item.payload.fotoBlob instanceof Blob));
+        
+        // Si tiene un fotoBlob que NO es un Blob real (ej. rehidratado como {} de localforage), limpiarlo
+        if (item.payload && item.payload.fotoBlob && !isRealBlob) {
+          console.warn(`[SYNC CLIENT] 🧹 Purgando fotoBlob no binario (rehidratado) en ${item.id} para procesar vía JSON batch.`);
+          delete item.payload.fotoBlob;
+        }
+
+        // Si el elemento tiene un archivo de imagen fotoBlob REAL, debe enviarse via FormData individual
+        if (isRealBlob) {
           continue;
         }
 
@@ -249,38 +258,38 @@ export function useSync() {
         if (batchRes.success) {
           const appliedItems = batchRes.data?.applied || [];
           const conflicts = batchRes.data?.conflicts || [];
-          const appliedIdSet = new Set([
-            ...appliedItems.map((a) => a.id),
-            ...(batchRes.data?.appliedIds || [])
-          ]);
+          const conflictIdSet = new Set(conflicts.map((c) => c.id).filter(Boolean));
 
           batchAppliedCount = appliedItems.length;
           batchConflictCount = conflicts.length;
           console.log(`[SYNC CLIENT] 🎯 Elementos aplicados por el backend: ${appliedItems.length}`);
 
-          // Recopilar todos los IDs confirmados y eliminarlos de la cola de forma atómica
-          const idsToRemove = [];
-          currentQueue.forEach((item) => {
-            const itemId = item.id;
-            const payloadId = item.payload?.id;
-            if (appliedIdSet.has(itemId) || (payloadId && appliedIdSet.has(payloadId))) {
-              if (itemId) idsToRemove.push(itemId);
-              if (payloadId) idsToRemove.push(payloadId);
-            }
-          });
-
-          appliedItems.forEach((appItem) => {
-            const queueId = queueItemsMap.get(appItem.id) || appItem.id;
-            if (queueId) idsToRemove.push(queueId);
-            if (appItem.id) idsToRemove.push(appItem.id);
-          });
-
-          if (idsToRemove.length > 0) {
-            console.log(`[SYNC CLIENT] 🗑️ Removiendo de la cola ${idsToRemove.length} identificadores confirmados.`);
-            if (useStore.getState().removeBatchFromQueue) {
-              useStore.getState().removeBatchFromQueue(idsToRemove);
-            } else {
-              idsToRemove.forEach((id) => removeFromQueue(id));
+          // Si el servidor aprobó el lote con 0 conflictos: LIMPIEZA FORZADA Y TOTAL DE LA COLA
+          if (conflicts.length === 0) {
+            console.log('[SYNC CLIENT] 🧹 El servidor aprobó las mutaciones con 0 conflictos. Vaciando la cola syncQueue de forma forzada y definitiva.');
+            useStore.getState().clearSyncQueue?.();
+          } else {
+            // Si hubo algún conflicto puntual, remover todos los que sí se aplicaron y conservar solo los que tienen conflicto
+            const appliedIdSet = new Set([
+              ...appliedItems.map((a) => a.id),
+              ...(batchRes.data?.appliedIds || [])
+            ]);
+            const idsToRemove = [];
+            currentQueue.forEach((item) => {
+              const itemId = item.id;
+              const payloadId = item.payload?.id;
+              if (appliedIdSet.has(itemId) || (payloadId && appliedIdSet.has(payloadId))) {
+                if (itemId) idsToRemove.push(itemId);
+                if (payloadId) idsToRemove.push(payloadId);
+              }
+            });
+            appliedItems.forEach((appItem) => {
+              const queueId = queueItemsMap.get(appItem.id) || appItem.id;
+              if (queueId) idsToRemove.push(queueId);
+              if (appItem.id) idsToRemove.push(appItem.id);
+            });
+            if (idsToRemove.length > 0) {
+              useStore.getState().removeBatchFromQueue?.(idsToRemove);
             }
           }
 

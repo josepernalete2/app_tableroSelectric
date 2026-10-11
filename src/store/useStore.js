@@ -449,6 +449,7 @@ export const useStore = create(
       isPanelConflictosOpen: false,
 
       setIsSyncing: (isSyncing) => set({ isSyncing }),
+      setSyncQueue: (syncQueue) => set({ syncQueue: Array.isArray(syncQueue) ? syncQueue : [] }),
       showToast: (message, type = 'success', action = null) => set({ toast: { show: true, message, type, action } }),
       hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
       setSocket: (socket) => set({ socket }),
