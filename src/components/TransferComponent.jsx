@@ -425,15 +425,15 @@ export default function TransferComponent({
                 )}
               </div>
 
-              {/* Tensión Nominal Normalizada (COVENIN 159) */}
+              {/* Tensión Nominal Normalizada (COVENIN 159:1997) */}
               <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-400 block font-bold">TENSIÓN NOMINAL (COVENIN 159):</span>
+                <span className="text-[10px] text-slate-400 block font-bold">TENSIÓN NOMINAL (COVENIN 159:1997):</span>
                 {isEditing ? (
                   <TensionNominalInput
                     tipo="TODAS"
                     value={dt.tensionNominal || ''}
                     onChange={(val) => handleDtChange('tensionNominal', val)}
-                    placeholder="Ej. 208/120 V o escribir..."
+                    placeholder="Ej. 208Y/120 V o 13800 V"
                   />
                 ) : (
                   <span className="text-emerald-400 font-bold text-sm block mt-0.5">{dt.tensionNominal || '—'}</span>

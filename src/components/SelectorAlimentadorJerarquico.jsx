@@ -99,7 +99,9 @@ export default function SelectorAlimentadorJerarquico({
         return tech.voltajeSecundario || tech.tensionSecundaria || tech.voltajePrimario || (tech.kva ? `${tech.kva} kVA` : 'N/D');
       }
       if (el.tipoElemento === 'SUBESTACION') {
-        return el.nivelTension ? `${el.nivelTension} kV` : (tech.nivelTension || 'Media/Alta Tensión');
+        if (!el.nivelTension) return tech.nivelTension || 'Media/Alta Tensión';
+        const str = String(el.nivelTension).trim();
+        return (str.toLowerCase().includes('v') || str.toLowerCase().includes('kv')) ? str : `${str} kV`;
       }
       if (el.tipoElemento === 'TABLERO') {
         return tech.voltajeAcometida || tech.tension || (tech.voltaje?.va ? `${tech.voltaje.va}V` : '208/120 V');

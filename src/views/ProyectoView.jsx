@@ -2093,8 +2093,13 @@ export const ProyectoView = () => {
                       <input type="text" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value)} placeholder="Ej. 1200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
-                      <input type="text" value={ccmTension} onChange={(e) => setCcmTension(e.target.value)} placeholder="Ej. 480 V" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa (COVENIN 159)</label>
+                      <TensionNominalInput
+                        tipo="BT"
+                        value={ccmTension}
+                        onChange={(val) => setCcmTension(val)}
+                        placeholder="Ej. 480Y/277 V o 480▲"
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -2292,14 +2297,13 @@ export const ProyectoView = () => {
 
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                      Nivel de Tensión (kV)
+                      Nivel de Tensión (COVENIN 159:1997)
                     </label>
-                    <input
-                      type="text"
+                    <TensionNominalInput
+                      tipo="TODAS"
                       value={nivelTension}
-                      onChange={(e) => setNivelTension(e.target.value)}
-                      placeholder="Ej. 13.8 kV, 4.16 kV"
-                      className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 font-mono"
+                      onChange={(val) => setNivelTension(val)}
+                      placeholder="Ej. 13800 V, 4800 V, 34500 V"
                     />
                   </div>
                 </>

@@ -291,13 +291,13 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
 
           {/* Tensión Nominal de Suministro */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tensión Nominal de Suministro (COVENIN 159)</label>
+            <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tensión Nominal de Suministro (COVENIN 159:1997)</label>
             <TensionNominalInput
               tipo="TODAS"
               disabled={readOnly}
               value={tensionNominal ?? ''}
               onChange={(val) => updateField('tensionNominal', val)}
-              placeholder="Ej. 13.8 kV o 120/208 V (3Φ - 4 hilos)"
+              placeholder="Ej. 13800 V o 208Y/120 V"
             />
           </div>
 

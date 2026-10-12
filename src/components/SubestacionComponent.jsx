@@ -222,15 +222,15 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
             />
           </div>
 
-          {/* Nivel de Tensión Normalizado (COVENIN 159) */}
+          {/* Nivel de Tensión Normalizado (COVENIN 159:1997) */}
           <div className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Nivel de Tensión (COVENIN 159)</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Nivel de Tensión (COVENIN 159:1997)</span>
             <TensionNominalInput
               tipo="TODAS"
               disabled={readOnly}
               value={nivelTension}
               onChange={(val) => updateField('nivelTension', val)}
-              placeholder="Ej. 13.8 kV o escribir..."
+              placeholder="Ej. 13800 V, 4800 V o 34500 V"
             />
           </div>
 

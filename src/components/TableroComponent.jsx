@@ -856,7 +856,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Tensión Nominal (COVENIN 159):</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Tensión Nominal (COVENIN 159:1997):</span>
                   <input
                     type="text"
                     list="covenin-voltajes-tablero"
@@ -869,8 +869,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         saveCustomOption('tensiones_todas', tableroData.tension);
                       }
                     }}
-                    placeholder="Ej: 120/208 V (3Φ - 4 hilos)"
-                    className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-[11px] focus:outline-none w-56 font-mono"
+                    placeholder="Ej: 208Y/120 V (3Φ - 4 hilos Estrella)"
+                    className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-[11px] focus:outline-none w-64 font-mono"
                   />
                   <datalist id="covenin-voltajes-tablero">
                     {getCustomOptions('tensiones_bt', TENSIONES_COVENIN_159_BT).map(v => <option key={v} value={v}>{v}</option>)}

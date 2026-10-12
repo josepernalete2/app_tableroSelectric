@@ -1789,13 +1789,13 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
                 <div>
-                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tensión Nominal (V / kV):</span>
+                  <span className="text-slate-500 block font-semibold mb-1 print:text-slate-600">Tensión Nominal (COVENIN 159):</span>
                   {isEditing ? (
-                    <input
-                      type="text"
+                    <TensionNominalInput
+                      tipo="TODAS"
                       value={dt.tensionNominal || ''}
-                      onChange={(e) => handleDtChange('tensionNominal', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:border-amber-500"
+                      onChange={(val) => handleDtChange('tensionNominal', val)}
+                      placeholder="Ej. 208Y/120 V o 13800 V"
                     />
                   ) : (
                     <span className="text-slate-200 font-bold px-2.5 py-1.5 bg-slate-900/50 rounded-lg block print:text-black print:bg-white">{dt.tensionNominal || '—'}</span>
