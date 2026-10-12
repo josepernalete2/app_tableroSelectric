@@ -36,7 +36,7 @@ import {
 } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto, obtenerPotencialesAlimentadores } from '../controllers/jerarquiaController.js';
-import { procesarSincronizacionBatch } from '../controllers/syncController.js';
+import { procesarSincronizacionBatch, sincronizarElementoMultipart } from '../controllers/syncController.js';
 
 const router = Router();
 
@@ -130,8 +130,10 @@ router.get('/auditoria/:proyectoId/estadisticas', getEstadisticas);
 router.get('/alarmas/proyecto/:proyectoId', getAlarmasProyecto);
 router.put('/alarmas/:id/estado', requireRoles('ADMIN', 'WORKER'), cambiarEstadoAlarma);
 
-// Endpoint de Sincronización Offline Batch
+// Endpoint de Sincronización Offline Batch y Multipart (Zero-Disk)
 router.post('/sync/batch', requireRoles('ADMIN', 'WORKER'), procesarSincronizacionBatch);
+router.post('/sync/upload', requireRoles('ADMIN', 'WORKER'), uploadFotoInspeccion.single('foto'), sincronizarElementoMultipart);
+router.post('/sync/elemento-multipart', requireRoles('ADMIN', 'WORKER'), uploadFotoInspeccion.single('foto'), sincronizarElementoMultipart);
 
 // Endpoints de Respaldo e Importación/Exportación Global
 router.get('/backup/export', requireRoles('ADMIN', 'WORKER'), exportDatabase);

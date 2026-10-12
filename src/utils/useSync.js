@@ -2,6 +2,49 @@ import { useEffect, useState, useRef } from 'react';
 import useStore from '../store/useStore';
 import { API_BASE_URL } from './api';
 
+/**
+ * Convierte un DataURL (Base64) a un objeto binario Blob nativo del navegador.
+ */
+export function dataURLtoBlob(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+    return null;
+  }
+  try {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch (e) {
+    console.warn('[SYNC CLIENT] ⚠️ Error al convertir DataURL a Blob:', e);
+    return null;
+  }
+}
+
+/**
+ * Determina de forma exhaustiva si un elemento de la cola posee una imagen adjunta
+ * (ya sea como Blob en memoria o como DataURL Base64 persistido).
+ */
+export function tieneImagenAdjunta(item) {
+  if (!item || !item.payload) return false;
+  const p = item.payload;
+  if (p.fotoBlob && (typeof Blob !== 'undefined' && p.fotoBlob instanceof Blob)) {
+    return true;
+  }
+  if (typeof p.foto === 'string' && p.foto.startsWith('data:image')) {
+    return true;
+  }
+  if (typeof p.fotoUrl === 'string' && p.fotoUrl.startsWith('data:image')) {
+    return true;
+  }
+  return false;
+}
+
 export function useSync() {
   const syncQueue = useStore((state) => state.syncQueue || []);
   const removeFromQueue = useStore((state) => state.removeFromQueue);
@@ -166,17 +209,11 @@ export function useSync() {
         if (item.id) queueItemsMap.set(item.id, item.id);
         if (item.payload?.id) queueItemsMap.set(item.payload.id, item.id);
 
-        // Detectar si fotoBlob es un archivo binario real en memoria (Blob o File)
-        const isRealBlob = Boolean(item.payload?.fotoBlob && (typeof Blob !== 'undefined' && item.payload.fotoBlob instanceof Blob));
-        
-        // Si tiene un fotoBlob que NO es un Blob real (ej. rehidratado como {} de localforage), limpiarlo
-        if (item.payload && item.payload.fotoBlob && !isRealBlob) {
-          console.warn(`[SYNC CLIENT] 🧹 Purgando fotoBlob no binario (rehidratado) en ${item.id} para procesar vía JSON batch.`);
-          delete item.payload.fotoBlob;
-        }
-
-        // Si el elemento tiene un archivo de imagen fotoBlob REAL, debe enviarse via FormData individual
-        if (isRealBlob) {
+        // Aislamiento de Archivos en la Cola:
+        // Si el elemento contiene una imagen (fotoBlob real o DataURL Base64),
+        // se aísla de inmediato para procesarse individualmente vía FormData multipart.
+        if (tieneImagenAdjunta(item)) {
+          console.log(`[SYNC CLIENT] 📎 Elemento aislado para envío multipart individual: ${item.id} (${item.payload?.nombre || item.tipo})`);
           continue;
         }
 
@@ -258,39 +295,33 @@ export function useSync() {
         if (batchRes.success) {
           const appliedItems = batchRes.data?.applied || [];
           const conflicts = batchRes.data?.conflicts || [];
-          const conflictIdSet = new Set(conflicts.map((c) => c.id).filter(Boolean));
 
           batchAppliedCount = appliedItems.length;
           batchConflictCount = conflicts.length;
-          console.log(`[SYNC CLIENT] 🎯 Elementos aplicados por el backend: ${appliedItems.length}`);
+          console.log(`[SYNC CLIENT] 🎯 Elementos de lote aplicados por el backend: ${appliedItems.length}`);
 
-          // Si el servidor aprobó el lote con 0 conflictos: LIMPIEZA FORZADA Y TOTAL DE LA COLA
-          if (conflicts.length === 0) {
-            console.log('[SYNC CLIENT] 🧹 El servidor aprobó las mutaciones con 0 conflictos. Vaciando la cola syncQueue de forma forzada y definitiva.');
-            useStore.getState().clearSyncQueue?.();
-          } else {
-            // Si hubo algún conflicto puntual, remover todos los que sí se aplicaron y conservar solo los que tienen conflicto
-            const appliedIdSet = new Set([
-              ...appliedItems.map((a) => a.id),
-              ...(batchRes.data?.appliedIds || [])
-            ]);
-            const idsToRemove = [];
-            currentQueue.forEach((item) => {
-              const itemId = item.id;
-              const payloadId = item.payload?.id;
-              if (appliedIdSet.has(itemId) || (payloadId && appliedIdSet.has(payloadId))) {
-                if (itemId) idsToRemove.push(itemId);
-                if (payloadId) idsToRemove.push(payloadId);
-              }
-            });
-            appliedItems.forEach((appItem) => {
-              const queueId = queueItemsMap.get(appItem.id) || appItem.id;
-              if (queueId) idsToRemove.push(queueId);
-              if (appItem.id) idsToRemove.push(appItem.id);
-            });
-            if (idsToRemove.length > 0) {
-              useStore.getState().removeBatchFromQueue?.(idsToRemove);
+          // Remover los elementos del lote que se aplicaron exitosamente
+          const appliedIdSet = new Set([
+            ...appliedItems.map((a) => a.id),
+            ...(batchRes.data?.appliedIds || []),
+            ...(conflicts.length === 0 ? jsonMutations.map((m) => m.id) : [])
+          ]);
+          const idsToRemove = [];
+          currentQueue.forEach((item) => {
+            const itemId = item.id;
+            const payloadId = item.payload?.id;
+            if (appliedIdSet.has(itemId) || (payloadId && appliedIdSet.has(payloadId))) {
+              if (itemId) idsToRemove.push(itemId);
+              if (payloadId) idsToRemove.push(payloadId);
             }
+          });
+          appliedItems.forEach((appItem) => {
+            const queueId = queueItemsMap.get(appItem.id) || appItem.id;
+            if (queueId) idsToRemove.push(queueId);
+            if (appItem.id) idsToRemove.push(appItem.id);
+          });
+          if (idsToRemove.length > 0) {
+            useStore.getState().removeBatchFromQueue?.(idsToRemove);
           }
 
           // Actualizar versiones y registros en store
@@ -335,23 +366,23 @@ export function useSync() {
         }
       }
 
-      // Procesar elementos restantes con archivos (FormData individual)
-      const remainingQueue = [...useStore.getState().syncQueue];
-      for (const item of remainingQueue) {
+      // Procesar elementos aislados con archivos (FormData individual / multipart/form-data)
+      const currentQueueAfterBatch = useStore.getState().syncQueue || [];
+      const multipartItems = currentQueueAfterBatch.filter((item) => tieneImagenAdjunta(item));
+      let multipartSuccessCount = 0;
+
+      for (const item of multipartItems) {
         if (!navigator.onLine) {
           setIsOnline(false);
           break;
         }
 
-        // Solo procesar aquellos que tienen fotoBlob binario pendiente
-        if (!item.payload?.fotoBlob) continue;
-
-        console.log(`[SYNC BLOB] 📸 Enviando archivo para elemento ${item.id}...`);
+        console.log(`[SYNC MULTIPART] 📸 Sincronizando elemento individual con imagen: ${item.id}...`);
         let res = null;
         if (item.tipo === 'PROYECTO') {
           res = await sincronizarProyecto(item.companyId, item.payload);
-        } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO') {
-          res = await sincronizarElementoUnifilar(item.companyId, item.payload);
+        } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO' || item.tipo === 'ELEMENTO' || !item.tipo) {
+          res = await sincronizarElementoUnifilar(item.companyId, item.payload, item.id);
         } else if (item.tipo === 'SUBESTACION') {
           res = await sincronizarSubestacion(item.companyId, item.payload);
         } else if (item.tipo === 'PUNTO_MEDICION') {
@@ -361,33 +392,38 @@ export function useSync() {
         }
 
         if (res && res.success) {
-          console.log(`[SYNC BLOB] ✅ Archivo sincronizado con éxito para ${item.id}`);
+          multipartSuccessCount++;
+          console.log(`[SYNC MULTIPART] ✅ Archivo e información sincronizados con éxito para ${item.id}`);
           removeFromQueue(item.id);
+          if (item.payload?.id && item.payload.id !== item.id) {
+            removeFromQueue(item.payload.id);
+          }
         } else if (res && (res.status === 401 || res.status === 403)) {
           useStore.getState().handleAuthError?.(res.status);
           break;
         } else {
-          console.warn(`[SYNC BLOB] ⚠️ No se pudo enviar elemento con archivo ${item.id}. Manteniendo en cola.`);
-          break;
+          // IMPORTANTE: NO USAR break para no congelar la cola. Continuar con los demás elementos.
+          console.warn(`[SYNC MULTIPART] ⚠️ No se pudo enviar elemento con archivo ${item.id} (${res?.error || res?.status || 'Error'}). Continuando con la cola.`);
+          continue;
         }
       }
 
       const finalQueueLength = useStore.getState().syncQueue.length;
 
-      if (batchAppliedCount > 0) {
+      if (batchAppliedCount > 0 || multipartSuccessCount > 0) {
         retryCountRef.current = 0;
       }
 
       // Si la cola se vació por completo de manera exitosa, actualizar datos consolidados desde el servidor
       if (finalQueueLength === 0) {
-        console.log('[SYNC CLIENT] 🎉 Toda la cola se sincronizó exitosamente. Actualizando estado consolidado.');
-        useStore.getState().showToast?.('¡Todos los datos han sido sincronizados exitosamente!', 'success');
+        console.log('[SYNC CLIENT] 🎉 Toda la cola se sincronizó exitosamente. Banner en verde esmeralda.');
+        useStore.getState().showToast?.('¡Todos los datos y fotografías han sido sincronizados exitosamente!', 'success');
         await useStore.getState().pullInitialData?.();
       }
 
       return {
-        success: finalQueueLength === 0 || batchAppliedCount > 0,
-        appliedCount: batchAppliedCount,
+        success: finalQueueLength === 0 || (batchAppliedCount > 0 || multipartSuccessCount > 0),
+        appliedCount: batchAppliedCount + multipartSuccessCount,
         conflictCount: batchConflictCount,
         remainingCount: finalQueueLength
       };
@@ -448,40 +484,67 @@ export function useSync() {
     }
   };
 
-  const sincronizarElementoUnifilar = async (empresaId, elemento) => {
+  const sincronizarElementoUnifilar = async (empresaId, elemento, queueItemId) => {
     try {
+      const elementId = elemento.id || queueItemId;
       const formData = new FormData();
-      formData.append('id', elemento.id);
-      formData.append('nombre', elemento.nombre);
+      formData.append('id', elementId);
+      formData.append('nombre', elemento.nombre || elemento.codigo || 'Elemento Unifilar');
       formData.append('tipoElemento', elemento.tipoElemento || 'TABLERO');
       formData.append('ubicacion', elemento.ubicacion || '');
       formData.append('alimentadoPor', elemento.alimentadoPor || '');
       formData.append('observacionesGenerales', elemento.observacionesGenerales || '');
-      formData.append('proyectoId', elemento.proyectoId);
-      if (empresaId) {
-        formData.append('empresaId', empresaId);
+      formData.append('proyectoId', elemento.proyectoId || '');
+
+      const compId = empresaId || elemento.empresaId || elemento.companyId;
+      if (compId) {
+        formData.append('empresaId', compId);
       }
 
-      formData.append('datosTecnicos', JSON.stringify(elemento.datosTecnicos || {}));
+      if (elemento.datosTecnicos) {
+        formData.append('datosTecnicos', JSON.stringify(elemento.datosTecnicos));
+      }
 
-      if (elemento.fotoBlob) {
-        const fileExt = elemento.fotoBlob.type ? elemento.fotoBlob.type.split('/')[1] : 'jpg';
-        formData.append('foto', elemento.fotoBlob, `foto_${elemento.id}.${fileExt}`);
-      } else if (elemento.foto) {
+      // Preparación y mapeo robusto del binario hacia FormData
+      let fileBlob = null;
+      if (elemento.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob)) {
+        fileBlob = elemento.fotoBlob;
+      } else if (typeof elemento.foto === 'string' && elemento.foto.startsWith('data:image')) {
+        fileBlob = dataURLtoBlob(elemento.foto);
+      } else if (typeof elemento.fotoUrl === 'string' && elemento.fotoUrl.startsWith('data:image')) {
+        fileBlob = dataURLtoBlob(elemento.fotoUrl);
+      }
+
+      if (fileBlob) {
+        const fileExt = fileBlob.type ? (fileBlob.type.split('/')[1] || 'jpg') : 'jpg';
+        formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
+      } else if (elemento.foto && typeof elemento.foto === 'string') {
         formData.append('fotoUrl', elemento.foto);
-      } else {
+      } else if (elemento.eliminarFoto) {
         formData.append('eliminarFoto', 'true');
         formData.append('foto', '');
       }
 
       const token = getFreshToken();
-      const response = await fetch(`${API_BASE_URL}/api/elementos-unifilares`, {
+      // Enviar primeramente al endpoint de sincronización multipart dedicado (/api/sync/upload)
+      let response = await fetch(`${API_BASE_URL}/api/sync/upload`, {
         method: 'POST',
         headers: {
           ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+          // No incluir Content-Type para permitir boundary automático multipart
         },
         body: formData
       });
+
+      if (response.status === 404) {
+        response = await fetch(`${API_BASE_URL}/api/elementos-unifilares`, {
+          method: 'POST',
+          headers: {
+            ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: formData
+        });
+      }
 
       if (response.status === 401 || response.status === 403) {
         useStore.getState().handleAuthError?.(response.status);
@@ -489,29 +552,32 @@ export function useSync() {
       }
 
       if (!response.ok) {
-        return { success: false, status: response.status };
+        const errText = await response.text();
+        console.error(`[SYNC MULTIPART] ❌ Error HTTP ${response.status}:`, errText);
+        return { success: false, status: response.status, error: errText };
       }
 
       const resJson = await response.json();
-      if (resJson.data) {
-        const returnedFoto = resJson.data.foto;
+      const record = resJson.data || resJson;
+      if (record) {
+        const returnedFoto = record.foto || resJson.foto;
         const normalizedFoto = returnedFoto
           ? ((returnedFoto.startsWith('data:') || returnedFoto.startsWith('http://') || returnedFoto.startsWith('https://') || returnedFoto.startsWith('blob:'))
               ? returnedFoto
               : `${API_BASE_URL}${returnedFoto}`)
           : null;
 
-        useStore.getState().updateElementoUnifilar(elemento.proyectoId, elemento.id, {
+        useStore.getState().updateElementoUnifilar(elemento.proyectoId, elementId, {
           foto: normalizedFoto,
           fotoBlob: null,
-          version: resJson.data.version
+          version: record.version || 1
         });
       }
 
-      return { success: true };
+      return { success: true, data: record };
     } catch (error) {
-      console.error('Error de red en sincronizarElementoUnifilar:', error);
-      return { success: false, status: 'NETWORK_ERROR' };
+      console.error('[SYNC MULTIPART] 🔌 Error de red en sincronizarElementoUnifilar:', error);
+      return { success: false, status: 'NETWORK_ERROR', error: error.message };
     }
   };
 

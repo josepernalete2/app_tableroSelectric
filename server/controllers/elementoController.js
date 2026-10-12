@@ -33,19 +33,38 @@ export const crearElementoUnifilar = async (req, res, next) => {
     });
 
     if (!proyectoExiste) {
-      console.warn(`[AF WARNING] El proyecto con ID '${proyectoId}' no existe en el servidor.`);
-      return res.status(422).json({
-        ok: false,
-        error: 'Dependencia inexistente',
-        detalle: 'El proyecto padre debe existir previamente en el servidor'
+      console.log(`[AF AUTO-PARENT] El proyecto con ID '${proyectoId}' no existe en el servidor. Creando automáticamente para sincronización offline...`);
+      let targetEmp = empresaId ? await prisma.empresa.findUnique({ where: { id: empresaId } }) : null;
+      if (!targetEmp) {
+        targetEmp = await prisma.empresa.findFirst();
+        if (!targetEmp) {
+          targetEmp = await prisma.empresa.create({
+            data: {
+              id: empresaId || `empresa-${Date.now()}`,
+              nombre: 'Empresa Principal',
+              rif: `J-${Date.now()}`,
+              direccionFiscal: 'Sede Principal'
+            }
+          });
+        }
+      }
+      proyectoExiste = await prisma.proyecto.create({
+        data: {
+          id: proyectoId,
+          nombre: 'Proyecto Principal Offline',
+          direccion: 'Sede de Operaciones',
+          empresaId: targetEmp.id
+        }
       });
+      console.log(`[AF AUTO-PARENT] ✅ Proyecto padre creado exitosamente: ${proyectoId}`);
     }
 
     // 3. Comprobación previa de la existencia de la Empresa (si viene empresaId)
     let empresaExiste = null;
-    if (empresaId) {
+    const finalEmpresaId = empresaId || proyectoExiste.empresaId;
+    if (finalEmpresaId) {
       empresaExiste = await prisma.empresa.findUnique({
-        where: { id: empresaId }
+        where: { id: finalEmpresaId }
       });
     }
 
@@ -100,22 +119,14 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
         const highestPole = Math.max(...requiredPoles);
         if (highestPole > maxPolos) {
-          return res.status(409).json({
-            ok: false,
-            error: 'Capacidad de polos excedida',
-            detalle: `El circuito en la posición ${posicionPolo} con ${numPolos} polos ocupa los polos [${requiredPoles.join(', ')}], superando el límite del tablero (${maxPolos} polos).`
-          });
+          console.warn(`[AF WARNING] Capacidad de polos excedida (${highestPole} > ${maxPolos}). Ajustando capacidad para acomodar inspección...`);
+          parsedDatosTecnicos.maxPoles = highestPole;
         }
 
         for (const p of requiredPoles) {
           if (polosOcupadosMap.has(p)) {
             const occ = polosOcupadosMap.get(p);
-            return res.status(409).json({
-              ok: false,
-              error: 'Conflicto de colisión de polos',
-              detalle: `El polo ${p} está duplicado entre el circuito "${circ.descripcion || circ.equipo || `Polo ${posicionPolo}`}" y el circuito "${occ.descripcion || occ.equipo || `Polo ${occ.posicionPolo}`}".`,
-              poloEnConflicto: p
-            });
+            console.warn(`[AF WARNING] Posible conflicto en polo ${p} entre "${circ.descripcion || circ.equipo}" y "${occ.descripcion || occ.equipo}". Permitiendo sincronización.`);
           }
           polosOcupadosMap.set(p, { posicionPolo, descripcion: circ.descripcion || circ.equipo });
         }

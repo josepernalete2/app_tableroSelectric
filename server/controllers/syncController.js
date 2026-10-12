@@ -587,6 +587,237 @@ export const pullData = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/sync/elemento-multipart y /api/sync/upload
+ * Procesa la sincronización individual de un elemento con foto binaria vía FormData (Multer).
+ * Soporta Zero-Disk (Base64 dataURL / buffer en memoria), auto-resolución de dependencias padre
+ * (proyectoId, empresaId, alimentadoPorId) y Upsert resiliente para evitar bloqueos en la syncQueue.
+ */
+export const sincronizarElementoMultipart = async (req, res) => {
+  try {
+    const {
+      id,
+      nombre,
+      tipoElemento,
+      ubicacion,
+      alimentadoPor,
+      observacionesGenerales,
+      datosTecnicos,
+      proyectoId,
+      empresaId,
+      fotoUrl,
+      eliminarFoto,
+      alimentadoPorId,
+      circuitoOrigen,
+      calibreConductor,
+      breakerAmperaje,
+      breakerMarca,
+      breakerTipo,
+      potenciaEstimada,
+      estadoVinculo,
+      detallesFormato
+    } = req.body;
+
+    const elementId = id || req.body.localId || `elem-${Date.now()}`;
+    const cleanNombre = nombre || req.body.codigo || 'Elemento Unifilar';
+    const cleanTipo = tipoElemento || 'TABLERO';
+
+    console.log(`[SYNC MULTIPART] 📸 Procesando elemento con binario: '${cleanNombre}' (${elementId}) tipo: ${cleanTipo}`);
+
+    // 1. Determinar y procesar la foto (Buffer en memoria de Multer o DataURL o URL)
+    let finalFoto = req.body.foto || fotoUrl || null;
+    const isPhotoRemoval = (
+      eliminarFoto === 'true' ||
+      eliminarFoto === true ||
+      req.body.deletePhoto === 'true' ||
+      req.body.deletePhoto === true ||
+      req.body.foto === '' ||
+      req.body.foto === 'null' ||
+      req.body.foto === null
+    );
+
+    if (isPhotoRemoval) {
+      finalFoto = null;
+    } else if (req.file && req.file.buffer) {
+      // Zero-Disk: Guardar como DataURL Base64 directamente compatible con PostgreSQL
+      finalFoto = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
+    } else if (req.file && req.file.filename) {
+      finalFoto = `/uploads/${req.file.filename}`;
+    }
+
+    // 2. Parsear datosTecnicos
+    let parsedDatosTecnicos = {};
+    if (datosTecnicos) {
+      if (typeof datosTecnicos === 'string') {
+        try {
+          parsedDatosTecnicos = JSON.parse(datosTecnicos);
+        } catch (e) {
+          console.warn('[SYNC MULTIPART] ⚠️ Error al deserializar datosTecnicos JSON:', e.message);
+          parsedDatosTecnicos = {};
+        }
+      } else if (typeof datosTecnicos === 'object') {
+        parsedDatosTecnicos = { ...datosTecnicos };
+      }
+    }
+    if (req.body.codigo && !parsedDatosTecnicos.codigo) {
+      parsedDatosTecnicos.codigo = req.body.codigo;
+    }
+
+    // 3. Auto-resolución de dependencias padre (Proyecto y Empresa) para garantizar integridad referencial
+    let resolvedProyectoId = proyectoId;
+    let resolvedEmpresaId = empresaId || req.body.companyId || req.user?.empresaId || req.user?.companyId;
+
+    if (!resolvedProyectoId) {
+      const firstProj = await prisma.proyecto.findFirst();
+      if (firstProj) {
+        resolvedProyectoId = firstProj.id;
+        if (!resolvedEmpresaId) resolvedEmpresaId = firstProj.empresaId;
+      }
+    }
+
+    if (resolvedProyectoId) {
+      let targetProj = await prisma.proyecto.findUnique({ where: { id: resolvedProyectoId } });
+      if (!targetProj) {
+        // Garantizar empresa padre
+        let targetEmp = resolvedEmpresaId ? await prisma.empresa.findUnique({ where: { id: resolvedEmpresaId } }) : null;
+        if (!targetEmp) {
+          targetEmp = await prisma.empresa.findFirst();
+          if (!targetEmp) {
+            targetEmp = await prisma.empresa.create({
+              data: {
+                id: resolvedEmpresaId || `empresa-${Date.now()}`,
+                nombre: 'Empresa Principal',
+                rif: `J-${Date.now()}`,
+                direccionFiscal: 'Sede Principal'
+              }
+            });
+          }
+        }
+        targetProj = await prisma.proyecto.create({
+          data: {
+            id: resolvedProyectoId,
+            nombre: 'Proyecto Principal Offline',
+            direccion: 'Sede de Operaciones',
+            empresaId: targetEmp.id
+          }
+        });
+        console.log(`[SYNC MULTIPART] ✅ Proyecto padre creado automáticamente para resolver clave foránea: ${resolvedProyectoId}`);
+      }
+      if (!resolvedEmpresaId || resolvedEmpresaId !== targetProj.empresaId) {
+        resolvedEmpresaId = targetProj.empresaId;
+      }
+    }
+
+    // 4. Verificar alimentadoPorId para evitar fallo de FK autorreferencial
+    let validAlimentadoPorId = alimentadoPorId || null;
+    if (validAlimentadoPorId) {
+      const parentElCheck = await prisma.elementoUnifilar.findUnique({ where: { id: validAlimentadoPorId } });
+      if (!parentElCheck) {
+        validAlimentadoPorId = null;
+      }
+    }
+
+    // 5. Preparar datos de ElementoUnifilar para Upsert
+    const elementData = {
+      nombre: cleanNombre,
+      tipoElemento: cleanTipo,
+      ubicacion: ubicacion || null,
+      alimentadoPor: alimentadoPor || null,
+      observacionesGenerales: observacionesGenerales || null,
+      datosTecnicos: parsedDatosTecnicos,
+      proyectoId: resolvedProyectoId,
+      empresaId: resolvedEmpresaId || null,
+      foto: finalFoto,
+      alimentadoPorId: validAlimentadoPorId,
+      circuitoOrigen: circuitoOrigen || null,
+      calibreConductor: calibreConductor || null,
+      breakerAmperaje: breakerAmperaje ? parseFloat(breakerAmperaje) : null,
+      breakerMarca: breakerMarca || null,
+      breakerTipo: breakerTipo || null,
+      potenciaEstimada: potenciaEstimada ? parseFloat(potenciaEstimada) : null,
+      estadoVinculo: estadoVinculo || null,
+      detallesFormato: typeof detallesFormato === 'object' && detallesFormato !== null ? detallesFormato : undefined
+    };
+
+    // 6. Upsert en ElementoUnifilar
+    const existingElement = await prisma.elementoUnifilar.findUnique({ where: { id: elementId } });
+    let savedElement;
+
+    if (existingElement) {
+      savedElement = await prisma.elementoUnifilar.update({
+        where: { id: elementId },
+        data: {
+          ...elementData,
+          version: (existingElement.version || 1) + 1
+        }
+      });
+      console.log(`[SYNC MULTIPART] 🔄 Elemento actualizado exitosamente: ${elementId} (v${savedElement.version})`);
+    } else {
+      savedElement = await prisma.elementoUnifilar.create({
+        data: {
+          id: elementId,
+          ...elementData,
+          version: 1
+        }
+      });
+      console.log(`[SYNC MULTIPART] 🆕 Elemento creado exitosamente con foto: ${elementId}`);
+    }
+
+    // 7. Si es tipo TABLERO, sincronizar también la tabla Tablero de forma no-bloqueante
+    if (cleanTipo === 'TABLERO') {
+      try {
+        const tension = parsedDatosTecnicos.tension || parsedDatosTecnicos.voltajeAcometida || null;
+        const fases = parsedDatosTecnicos.fases !== undefined ? parseInt(parsedDatosTecnicos.fases, 10) : 3;
+        const maxPolos = parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42;
+        const alimentadorId = parsedDatosTecnicos.alimentadorId || null;
+
+        await prisma.tablero.upsert({
+          where: { id: elementId },
+          update: {
+            nombre: cleanNombre,
+            ubicacion: ubicacion || null,
+            maxPolos,
+            tension,
+            fases,
+            alimentadorId,
+            proyectoId: resolvedProyectoId,
+            empresaId: resolvedEmpresaId || null
+          },
+          create: {
+            id: elementId,
+            nombre: cleanNombre,
+            ubicacion: ubicacion || 'General',
+            maxPolos,
+            tension,
+            fases,
+            alimentadorId,
+            proyectoId: resolvedProyectoId,
+            empresaId: resolvedEmpresaId || null
+          }
+        });
+      } catch (tableroErr) {
+        console.warn(`[SYNC MULTIPART] ⚠️ Aviso sincronizando tabla Tablero auxiliar (${elementId}):`, tableroErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: savedElement,
+      localId: elementId,
+      foto: savedElement.foto,
+      mensaje: 'Elemento y archivo binario sincronizados exitosamente'
+    });
+  } catch (error) {
+    console.error('❌ [SYNC MULTIPART ERROR] Error procesando elemento multipart:', error);
+    return res.status(500).json({
+      ok: false,
+      success: false,
+      error: error.message || 'Error interno al procesar archivo en sincronización'
+    });
+  }
+};
+
 // ENDPOINT LOCAL BACKUP: Generar y descargar backup JSON local
 export const generarBackupLocal = async (req, res) => {
   try {

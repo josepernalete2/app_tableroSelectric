@@ -1,6 +1,7 @@
 import express from 'express';
 import { verificarToken } from '../middleware/authMiddleware.js';
-import { procesarSincronizacionBatch, generarBackupLocal } from '../controllers/syncController.js';
+import { procesarSincronizacionBatch, generarBackupLocal, sincronizarElementoMultipart } from '../controllers/syncController.js';
+import { uploadFotoInspeccion } from '../middleware/uploadMiddleware.js';
 import prisma from '../db.js';
 
 const router = express.Router();
@@ -95,6 +96,10 @@ router.get('/pull', verificarToken, async (req, res) => {
 router.post('/', verificarToken, procesarSincronizacionBatch);
 router.post('/push', verificarToken, procesarSincronizacionBatch);
 router.post('/batch', verificarToken, procesarSincronizacionBatch);
+
+// ENDPOINT MULTIPART / BINARIOS: Sincronización individual de elementos con fotos (Zero-Disk)
+router.post('/upload', verificarToken, uploadFotoInspeccion.single('foto'), sincronizarElementoMultipart);
+router.post('/elemento-multipart', verificarToken, uploadFotoInspeccion.single('foto'), sincronizarElementoMultipart);
 
 // ENDPOINT LOCAL BACKUP: Generar backup JSON para descarga local
 router.post('/backup/local', verificarToken, generarBackupLocal);
