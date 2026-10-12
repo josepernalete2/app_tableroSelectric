@@ -4,6 +4,7 @@ import useStore from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '../utils/api';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import { 
   Briefcase, 
   TrendingUp, 
@@ -59,6 +60,9 @@ export const SidebarLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
+  // Control de instalación PWA en tablets y navegadores
+  const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
+
   // Menú móvil
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   
@@ -268,12 +272,24 @@ export const SidebarLayout = () => {
           </div>
           <span className="font-extrabold text-sm tracking-widest text-slate-100 font-mono">SELECTRIC</span>
         </Link>
-        <button
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="p-2 bg-slate-900 rounded-lg text-slate-400 hover:text-slate-200 border border-slate-800"
-        >
-          {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {isInstallable && !isInstalled && (
+            <button
+              onClick={promptInstall}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 text-slate-950 rounded-lg text-xs font-black shadow transition-all cursor-pointer"
+              title="Instalar aplicación en la tablet"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Instalar</span>
+            </button>
+          )}
+          <button
+            onClick={() => setIsMobileOpen(!isMobileOpen)}
+            className="p-2 bg-slate-900 rounded-lg text-slate-400 hover:text-slate-200 border border-slate-800"
+          >
+            {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       {/* 2. DRAWER DE MENÚ MÓVIL (no-print) */}
@@ -335,7 +351,19 @@ export const SidebarLayout = () => {
               </div>
             </div>
 
-            <div className="space-y-4 border-t border-slate-900 pt-4">
+            <div className="space-y-3 border-t border-slate-900 pt-4">
+              {isInstallable && !isInstalled && (
+                <button
+                  onClick={() => {
+                    setIsMobileOpen(false);
+                    promptInstall();
+                  }}
+                  className="w-full flex items-center justify-center gap-2.5 py-2.5 px-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 rounded-xl font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-slate-950" />
+                  <span>Instalar App en Tablet</span>
+                </button>
+              )}
               <div className="flex items-center gap-3 px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl">
                 <User className="w-4.5 h-4.5 text-amber-500" />
                 <div className="truncate min-w-0">
@@ -440,6 +468,20 @@ export const SidebarLayout = () => {
 
         {/* Perfil & Acciones */}
         <div className="space-y-4 border-t border-slate-900 pt-6">
+          {/* Botón PWA Instalable */}
+          {isInstallable && !isInstalled && (
+            <button
+              onClick={promptInstall}
+              title={isSidebarCollapsed ? "Instalar App (PWA)" : undefined}
+              className={`w-full flex items-center bg-gradient-to-r from-amber-500/20 to-amber-600/10 hover:from-amber-500/30 hover:to-amber-600/20 border border-amber-500/40 rounded-xl transition-all cursor-pointer text-xs font-black text-amber-400 shadow-sm active:scale-98 ${
+                isSidebarCollapsed ? 'justify-center p-3' : 'gap-2.5 px-3 py-2.5'
+              }`}
+            >
+              <Download className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
+              {!isSidebarCollapsed && <span className="animate-in fade-in duration-200">Instalar App (PWA)</span>}
+            </button>
+          )}
+
           <div className={`flex items-center bg-slate-900/60 border border-slate-850 rounded-xl ${
             isSidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
           }`}>

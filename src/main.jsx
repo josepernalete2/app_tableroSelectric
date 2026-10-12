@@ -6,7 +6,8 @@ import App from './App.jsx'
 // Registro del Service Worker para PWA y Notificaciones Push
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then((reg) => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((reg) => {
+      console.log('✅ [PWA] Service Worker registrado exitosamente con ámbito:', reg.scope);
       // Forzar chequeo de actualización al cargar
       reg.update().catch(() => {});
       
@@ -15,14 +16,26 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         if (installingWorker) {
           installingWorker.onstatechange = () => {
             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('🔄 Nueva versión PWA v2.3.0 disponible. Recargando para actualizar scripts...');
+              console.log('🔄 [PWA] Nueva versión disponible en cache.');
             }
           };
         }
       };
     }).catch((err) => {
-      console.warn('⚠️ No se pudo registrar el Service Worker:', err);
+      console.warn('⚠️ [PWA] No se pudo registrar el Service Worker:', err);
     });
+  });
+
+  // Capturar evento beforeinstallprompt para soporte en tablets Android y Chrome
+  window.addEventListener('beforeinstallprompt', (e) => {
+    console.log('📱 [PWA] Evento beforeinstallprompt detectado: la aplicación cumple todos los criterios de instalación.');
+    window.deferredPrompt = e;
+    window.dispatchEvent(new CustomEvent('pwa-installable', { detail: e }));
+  });
+
+  window.addEventListener('appinstalled', () => {
+    console.log('🎉 [PWA] Tablero Selectric instalado exitosamente en el sistema.');
+    window.deferredPrompt = null;
   });
 }
 
