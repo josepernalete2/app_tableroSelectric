@@ -274,13 +274,13 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
         </div>
       </div>
 
-      {/* Metrología Eléctrica de la Subestación */}
+      {/* MEDICIONES de la Subestación */}
       <MetrologiaElectricaSection
         mediciones={mediciones}
         onChange={(nuevasMediciones) => updateField('mediciones', nuevasMediciones)}
         readOnly={readOnly}
-        titulo="Metrología Eléctrica en Subestación (COVENIN 159)"
-        subtitulo="Medición de voltajes de línea L-L, fase L-N y 5 canales de corriente en celda o barraje"
+        titulo="MEDICIONES"
+        subtitulo="Medición de voltajes de línea L-L, fase L-N y canales de corriente en celda o barraje"
       />
 
       {/* Bloques de Evaluación Visual */}

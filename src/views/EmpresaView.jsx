@@ -443,10 +443,12 @@ export const EmpresaView = () => {
         spt: {
           barillaCalibre: '',
           barillaCantidad: '',
+          tipo: '',
           barillaConfiguracion: '',
           conductorCalibre: '',
           conductorTipoSold: '',
           resistencia: '',
+          amp: '',
           fechaMedicion: ''
         }
       };

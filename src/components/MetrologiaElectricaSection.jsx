@@ -8,8 +8,8 @@ export default function MetrologiaElectricaSection({
   onNestedChange,
   readOnly = false,
   isEditing,
-  titulo = "Metrología Eléctrica y Medición de Red (COVENIN 159)",
-  subtitulo = "Lectura de tensiones desglosadas L-L, L-N y 5 canales de corriente de servicio"
+  titulo = "MEDICIONES",
+  subtitulo = "Lectura de tensiones desglosadas L-L, L-N y canales de corriente"
 }) {
   const isReadOnly = isEditing !== undefined ? !isEditing : Boolean(readOnly);
 
@@ -164,11 +164,11 @@ export default function MetrologiaElectricaSection({
         </div>
       </div>
 
-      {/* BLOQUE 3: CINCO CANALES DE CORRIENTE */}
+      {/* BLOQUE 3: CORRIENTE */}
       <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl p-3.5 space-y-2.5">
         <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
           <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" /> Cinco Canales de Corriente (Fases, Neutro y Tierra)
+            <Shield className="w-3.5 h-3.5 text-emerald-400" /> CORRIENTE
           </span>
           <span className="text-[9px] font-mono text-slate-500 font-bold">Unidad: Amperios (A)</span>
         </div>

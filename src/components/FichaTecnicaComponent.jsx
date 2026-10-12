@@ -808,14 +808,14 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </tbody>
           </table>
 
-          {/* Metrología Eléctrica del Generador (COVENIN 159) */}
+          {/* MEDICIONES del Generador (COVENIN 159) */}
           <div className="p-4 bg-slate-950 border-b-2 border-slate-700">
             <MetrologiaElectricaSection
               mediciones={dt.mediciones || {}}
               onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
               readOnly={!isEditing}
-              titulo="Metrología Eléctrica y Medición de Generación (COVENIN 159)"
-              subtitulo="Lectura de voltajes desglosados L-L, L-N y 5 canales de corriente en bornes de generación"
+              titulo="MEDICIONES"
+              subtitulo="Lectura de voltajes desglosados L-L, L-N y canales de corriente en bornes de generación"
             />
           </div>
 
@@ -1467,12 +1467,12 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="3">BARILLA (VARILLA)</th>
                 <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="2">CONDUCTOR</th>
                 <th className="p-2 border-r border-slate-800 print:border-gray-300 w-24" rowSpan="2">RESISTENCIA</th>
-                <th className="p-2 print:text-black" rowSpan="2">FECHA DE MEDICIÓN</th>
+                <th className="p-2 print:text-black" rowSpan="2">AMP</th>
               </tr>
               <tr className="bg-slate-900/30 border-b border-slate-800 font-bold text-slate-500 uppercase print:bg-gray-50 print:text-black print:border-gray-300">
                 <th className="p-1 border-r border-slate-800 print:border-gray-350">CALIBRE</th>
                 <th className="p-1 border-r border-slate-800 print:border-gray-350">CANTIDAD</th>
-                <th className="p-1 border-r border-slate-800 print:border-gray-350">CONFIGURACIÓN</th>
+                <th className="p-1 border-r border-slate-800 print:border-gray-350">TIPO</th>
                 <th className="p-1 border-r border-slate-800 print:border-gray-350">CALIBRE</th>
                 <th className="p-1 border-r border-slate-800 print:border-gray-350">TIPO SOLD</th>
               </tr>
@@ -1510,12 +1510,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   {isEditing ? (
                     <input
                       type="text"
-                      value={dt.spt?.barillaConfiguracion || ''}
-                      onChange={(e) => handleSptChange('barillaConfiguracion', e.target.value)}
+                      value={dt.spt?.tipo || dt.spt?.barillaConfiguracion || ''}
+                      onChange={(e) => {
+                        handleSptChange('tipo', e.target.value);
+                        handleSptChange('barillaConfiguracion', e.target.value);
+                      }}
+                      placeholder="Ej. En Delta"
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
-                    dt.spt?.barillaConfiguracion || '—'
+                    dt.spt?.tipo || dt.spt?.barillaConfiguracion || '—'
                   )}
                 </td>
                 <td className="p-2 border-r border-slate-800 print:border-gray-300">
@@ -1558,17 +1562,36 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   {isEditing ? (
                     <input
                       type="text"
-                      value={dt.spt?.fechaMedicion || ''}
-                      onChange={(e) => handleSptChange('fechaMedicion', e.target.value)}
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
+                      value={dt.spt?.amp || dt.spt?.fechaMedicion || ''}
+                      onChange={(e) => {
+                        handleSptChange('amp', e.target.value);
+                        handleSptChange('fechaMedicion', e.target.value);
+                      }}
+                      placeholder="Ej. 10A"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500 font-bold"
                     />
                   ) : (
-                    dt.spt?.fechaMedicion || '—'
+                    dt.spt?.amp || dt.spt?.fechaMedicion || '—'
                   )}
                 </td>
               </tr>
             </tbody>
           </table>
+
+          {/* Sub-Header: MEDICIONES */}
+          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-amber-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+            MEDICIONES
+          </div>
+
+          <div className="p-4 border-b border-slate-700 bg-slate-900/30">
+            <MetrologiaElectricaSection
+              mediciones={dt.mediciones || {}}
+              onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
+              readOnly={!isEditing}
+              titulo="MEDICIONES"
+              subtitulo="Tensiones Línea-Línea, Línea-Neutro y Canales de Corriente (COVENIN 159)"
+            />
+          </div>
 
           {/* Caja de Observaciones Generales */}
           <div className="bg-slate-900/60 border-b border-slate-700 p-4 font-mono text-xs text-slate-200 print:bg-white print:text-black print:border-black">
@@ -3195,7 +3218,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     </div>
                   ) : (
                     <div className="space-y-1 text-xs">
-                      <div><strong className="text-slate-400">Distribuidora:</strong> {dt.empresaDistribuidora || 'CORPOELEC'} | <strong className="text-slate-400">Acometida:</strong> {dt.tipoAcometida || 'Subterránea'}</div>
+                      <div><strong className="text-slate-400">Distribuidora:</strong> {dt.empresaDistribuidora || 'CORPOELEC'} | <strong className="text-slate-400">TIPO:</strong> {dt.tipo || dt.tipoAcometida || 'Subterránea'}</div>
                       <div><strong className="text-slate-400">N° Contrato / NIC:</strong> <span className="font-mono text-amber-400 font-bold">{dt.numeroContrato || '—'}</span> | <strong className="text-slate-400">N° Medidor:</strong> <span className="font-mono">{dt.nic || '—'}</span></div>
                       <div><strong className="text-slate-400">Poste / Trafo Suministro:</strong> {dt.posteTransformador || '—'}</div>
                     </div>
@@ -3205,9 +3228,9 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </tbody>
           </table>
 
-          {/* Sub-Header: Metrología Eléctrica y Parámetros Operativos */}
+          {/* Sub-Header: MEDICIONES */}
           <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-amber-400 font-mono print:bg-gray-200 print:text-black print:border-black">
-            Metrología Eléctrica en Punto de Suministro (COVENIN 159:1997)
+            MEDICIONES
           </div>
 
           <div className="p-4 border-b border-slate-700 bg-slate-900/30">
@@ -3215,8 +3238,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               mediciones={dt.mediciones || {}}
               onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
               readOnly={!isEditing}
-              titulo="Metrología Eléctrica en Punto de Suministro (COVENIN 159:1997)"
-              subtitulo="Tensiones L-L, L-N y 5 Canales de Corriente (Fases, Neutro y Tierra)"
+              titulo="MEDICIONES"
+              subtitulo="Tensiones L-L, L-N y Canales de Corriente (Fases, Neutro y Tierra)"
             />
           </div>
 

@@ -886,7 +886,7 @@ export default function InformeCompiladoView() {
               <div className="border-b border-amber-500/80 pb-2 flex justify-between items-center print:border-slate-700 print:pb-1 bg-slate-900/40 print:bg-slate-100 p-2.5 rounded-t-xl print:rounded-none">
                 <div>
                   <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
-                    Punto de Medición #{idx + 1} &bull; Parámetros de Suministro y Metrología
+                    Punto de Medición #{idx + 1} &bull; Parámetros de Suministro y Mediciones
                   </span>
                   <h3 className="text-sm font-black text-slate-100 print:text-slate-950 uppercase">
                     {cleanElementName(pm.nombre, pm.id, pm.codigo)}

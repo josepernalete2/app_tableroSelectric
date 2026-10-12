@@ -796,15 +796,15 @@ export default function TransferComponent({
         </div>
 
         {/* ========================================================================= */}
-        {/* 4. METROLOGÍA ELÉCTRICA COMPLETA (COVENIN 159) */}
+        {/* 4. MEDICIONES (COVENIN 159) */}
         {/* ========================================================================= */}
         <div className="p-4 bg-slate-950 border-b-2 border-slate-800">
           <MetrologiaElectricaSection
             mediciones={dt.mediciones || {}}
             onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
             readOnly={!isEditing}
-            titulo="Parámetros de Medición en Barra de Carga Común (COVENIN 159)"
-            subtitulo="Tensiones L-L, L-N y 5 canales de corriente (Fases A, B, C, Neutro N y Tierra PE)"
+            titulo="MEDICIONES"
+            subtitulo="Tensiones L-L, L-N y canales de corriente en barra de carga común (COVENIN 159)"
           />
         </div>
 

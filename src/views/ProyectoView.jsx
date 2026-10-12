@@ -649,10 +649,12 @@ export const ProyectoView = () => {
         spt: editingElemento?.datosTecnicos?.spt || {
           barillaCalibre: '',
           barillaCantidad: '',
+          tipo: '',
           barillaConfiguracion: '',
           conductorCalibre: '',
           conductorTipoSold: '',
           resistencia: '',
+          amp: '',
           fechaMedicion: ''
         }
       };

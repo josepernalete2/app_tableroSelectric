@@ -53,7 +53,8 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
     codigoElementoPrincipal = '',
 
     // 2. Punto de Acometida
-    tipoAcometida = '',
+    tipoAcometida = puntoData.tipoAcometida || puntoData.tipo || '',
+    tipo = puntoData.tipo || puntoData.tipoAcometida || '',
     puntoConexionPCC = '',
     conductorAcometida = '',
     longitudAcometida = '',
@@ -370,25 +371,28 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Tipo de Acometida */}
+          {/* TIPO (Acometida) */}
           <div className="flex flex-col gap-1.5 md:col-span-2">
-            <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tipo de Acometida</label>
+            <label className="text-[11px] font-bold text-slate-400 print:text-slate-700 uppercase">TIPO</label>
             <div className="grid grid-cols-3 gap-3">
-              {['Aérea', 'Subterránea', 'Mixta'].map((tipo) => {
-                const isSelected = tipoAcometida === tipo;
+              {['Aérea', 'Subterránea', 'Mixta'].map((tipoVal) => {
+                const isSelected = (tipoAcometida === tipoVal) || (tipo === tipoVal);
                 return (
                   <button
-                    key={tipo}
+                    key={tipoVal}
                     type="button"
                     disabled={readOnly}
-                    onClick={() => updateField('tipoAcometida', tipo)}
+                    onClick={() => {
+                      updateField('tipoAcometida', tipoVal);
+                      updateField('tipo', tipoVal);
+                    }}
                     className={`py-2 px-3 text-center rounded-xl border text-[11px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                       isSelected
                         ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md print:bg-amber-100 print:text-slate-900 print:border-amber-600'
                         : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 print:bg-gray-50 print:text-slate-700 print:border-gray-300'
                     }`}
                   >
-                    [ {isSelected ? '✓' : ' '} ] {tipo}
+                    [ {isSelected ? '✓' : ' '} ] {tipoVal}
                   </button>
                 );
               })}
@@ -652,7 +656,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
         </div>
       </div>
 
-      {/* SECCIÓN 4.1: Metrología Eléctrica y Tensiones Normalizadas */}
+      {/* SECCIÓN 4.1: MEDICIONES */}
       <MetrologiaElectricaSection
         mediciones={puntoData.mediciones || {}}
         onChange={(nuevasMediciones, field, val) => {
@@ -665,8 +669,8 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
             });
           }
         }}
-        titulo="4.1 Metrología Eléctrica en Punto de Suministro"
-        subtitulo="Tensiones Línea-Línea, Línea-Neutro y 5 Canales de Corriente (COVENIN 159)"
+        titulo="MEDICIONES"
+        subtitulo="Tensiones Línea-Línea, Línea-Neutro y Canales de Corriente (COVENIN 159)"
         readOnly={readOnly}
       />
 
