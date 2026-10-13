@@ -105,7 +105,7 @@ export default function InformeCompiladoView() {
 
   const handleUpdateElemento = (elementoId, updatedData) => {
     const { 
-      id, nombre, ubicacion, alimentadoPor, foto, fotoBlob, observacionesGenerales, 
+      id, nombre, ubicacion, alimentadoPor, foto, fotoBlob, eliminarFoto, observacionesGenerales, 
       ...datosTecnicos 
     } = updatedData;
 
@@ -113,8 +113,9 @@ export default function InformeCompiladoView() {
       nombre,
       ubicacion,
       alimentadoPor,
-      foto,
-      fotoBlob,
+      foto: eliminarFoto ? null : (foto !== undefined ? foto : null),
+      fotoBlob: eliminarFoto ? null : (fotoBlob !== undefined ? fotoBlob : null),
+      eliminarFoto: Boolean(eliminarFoto),
       observacionesGenerales,
       datosTecnicos
     });

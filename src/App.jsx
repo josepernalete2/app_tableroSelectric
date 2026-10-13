@@ -481,7 +481,7 @@ const TableroWrapper = () => {
 
   const handleUpdateTablero = (updatedData) => {
     const { 
-      id, nombre, ubicacion, alimentadoPor, foto, fotoBlob, observacionesGenerales, 
+      id, nombre, ubicacion, alimentadoPor, foto, fotoBlob, eliminarFoto, observacionesGenerales, 
       nombreEmpresa, ...datosTecnicos 
     } = updatedData;
 
@@ -489,8 +489,9 @@ const TableroWrapper = () => {
       nombre,
       ubicacion,
       alimentadoPor,
-      foto,
-      fotoBlob,
+      foto: eliminarFoto ? null : (foto !== undefined ? foto : (element?.foto || null)),
+      fotoBlob: eliminarFoto ? null : (fotoBlob !== undefined ? fotoBlob : (element?.fotoBlob || null)),
+      eliminarFoto: Boolean(eliminarFoto),
       observacionesGenerales,
       datosTecnicos
     });

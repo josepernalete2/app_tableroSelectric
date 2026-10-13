@@ -5,6 +5,51 @@ export const TIPO_OPTIONS = ['TQ', 'TQD', 'M35', 'A2C', 'NS', 'TED32', 'M51', 'T
 
 /**
  * ============================================================================
+ * CLASIFICACIÓN TÉCNICA NORMALIZADA DE TABLEROS ELÉCTRICOS (AUDITORÍA)
+ * ============================================================================
+ */
+
+// 1. Capacidades (Número de Polos / Fases de alimentación)
+export const TABLERO_CAPACIDADES_POLOS = [
+  'Monopolar (1F)',
+  'Bipolar (2F)',
+  'Tripolar (3F)',
+  'Tetrapolar (3F-N)',
+  'Pentapolar (3F-N-T)'
+];
+
+// 2. Cantidad de Polos (Opciones normalizadas estrictas)
+export const TABLERO_CANTIDAD_POLOS_ESTANDAR = [
+  4, 6, 8, 12, 16, 18, 24, 30, 32, 36, 42, 48, 54, 72, 84
+];
+
+// 3. Uso Eléctrico (Función Principal con Siglas)
+export const TABLERO_USO_ELECTRICO = [
+  'TG (Tablero General)',
+  'TDF (Tablero de Distribución y Fuerza)',
+  'TAA (Tablero de Alumbrado y Artefactos)',
+  'TCE (Tablero de Circuitos Esenciales / Emergencia)',
+  'TC (Tablero de Control / Automatización)'
+];
+
+// 4. Montaje y Accesibilidad (Protección Mecánica)
+export const TABLERO_MONTAJE_OPCIONES = [
+  'Empotrar / Embutir',
+  'Superficial',
+  'Autosoportado (Gabinete de Piso / Switchgear)'
+];
+
+// 5. Nivel de Hermeticidad (Protección Ambiental NEMA / IP)
+export const TABLERO_HERMETICIDAD_NEMA_IP = [
+  'Uso Interior Seco (NEMA 1 / IP20)',
+  'A prueba de Goteo / Lluvia Ligera (NEMA 2 / IP22)',
+  'Resistente a la Intemperie (NEMA 3R / IP54 - IP55)',
+  'Hermético al Agua y Polvo (NEMA 4 / 4X / IP65 - IP66)',
+  'A prueba de Explosión (NEMA 7 / 9 / IP67)'
+];
+
+/**
+ * ============================================================================
  * NORMATIVA TÉCNICA ELÉCTRICA VENEZOLANA - NORMA COVENIN 159:1997
  * "Tensiones normales en sistemas de distribución y utilización de energía eléctrica"
  * Comisión Venezolana de Normas Industriales (FONDONORMA / CODELECTRA)

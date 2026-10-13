@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3, Trash2, Loader2, Shield, Layers, Box } from 'lucide-react';
 import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import { API_BASE_URL } from '../utils/api';
@@ -35,10 +35,22 @@ const SafeImage = ({ blob, src, alt, className, style }) => {
 };
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
-import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS, TENSIONES_COVENIN_159_BT } from '../utils/constants';
+import { 
+  AMP_OPTIONS, 
+  COND_OPTIONS, 
+  MARCA_OPTIONS, 
+  TIPO_OPTIONS, 
+  TENSIONES_COVENIN_159_BT,
+  TABLERO_CAPACIDADES_POLOS,
+  TABLERO_CANTIDAD_POLOS_ESTANDAR,
+  TABLERO_USO_ELECTRICO,
+  TABLERO_MONTAJE_OPCIONES,
+  TABLERO_HERMETICIDAD_NEMA_IP
+} from '../utils/constants';
 import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [editingCircuit, setEditingCircuit] = useState(null);
   const [elementosPorCrear, setElementosPorCrear] = useState(
     tableroData?.elementosPorCrear || tableroData?.datosTecnicos?.elementosPorCrear || []
@@ -305,6 +317,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     ubicacion,
     alimentadoPor,
     tipo,
+    montaje = (tipo === 'empotrado' || tipo === 'Empotrar / Embutir') 
+      ? 'Empotrar / Embutir' 
+      : ((tipo === 'autosoportado' || String(tipo).toLowerCase().includes('autosoportado')) 
+        ? 'Autosoportado (Gabinete de Piso / Switchgear)' 
+        : (tableroData.montaje || 'Superficial')),
+    capacidadPolos = tableroData.capacidadPolos || (tableroData.fases === 1 ? 'Monopolar (1F)' : (tableroData.fases === 2 ? 'Bipolar (2F)' : 'Tripolar (3F)')),
+    usoElectrico = tableroData.usoElectrico || tableroData.funcionPrincipal || 'TG (Tablero General)',
+    nivelHermeticidad = tableroData.nivelHermeticidad || tableroData.nemaIp || 'Uso Interior Seco (NEMA 1 / IP20)',
     foto,
     fotoBlob,
     barrasPrincipales = {},
@@ -329,6 +349,68 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     }
     
     onUpdateTablero(newData);
+  };
+
+  // Manejo de fotografía robusto con compresión Base64 y soporte offline multipart
+  const handlePhotoSelected = async (file) => {
+    if (readOnly || !file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      customAlert("La imagen seleccionada supera los 10MB. Por favor elija un archivo más liviano.");
+      return;
+    }
+    setIsUploadingPhoto(true);
+    try {
+      // 1. Compresión instantánea a Base64 para almacenamiento serializable seguro en localforage
+      const base64DataUrl = await compressImageToBase64(file);
+      onUpdateTablero({
+        ...tableroData,
+        fotoBlob: file,
+        foto: base64DataUrl,
+        eliminarFoto: false
+      });
+      showToast?.("Fotografía del tablero adjuntada con éxito.", "success");
+    } catch (err) {
+      console.error("Error al procesar fotografía Base64:", err);
+      // Fallback seguro usando FileReader nativo
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          onUpdateTablero({
+            ...tableroData,
+            fotoBlob: file,
+            foto: e.target.result,
+            eliminarFoto: false
+          });
+          showToast?.("Fotografía adjuntada.", "success");
+        };
+        reader.readAsDataURL(file);
+      } catch (fallbackErr) {
+        customAlert("No se pudo procesar la imagen seleccionada.");
+      }
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Eliminación limpia de fotografía con sincronización
+  const handleRemovePhoto = async () => {
+    if (readOnly) return;
+    const isConfirmed = await confirm({
+      title: 'Eliminar Fotografía',
+      message: '¿Estás seguro de que deseas eliminar la fotografía adjunta de este tablero?',
+      confirmText: 'Sí, Eliminar',
+      cancelText: 'Cancelar',
+      type: 'danger'
+    });
+    if (isConfirmed) {
+      onUpdateTablero({
+        ...tableroData,
+        fotoBlob: null,
+        foto: null,
+        eliminarFoto: true
+      });
+      showToast?.("Fotografía eliminada.", "info");
+    }
   };
 
   // Update a single circuit's properties
@@ -790,33 +872,60 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             </td>
           </tr>
 
-          {/* Fila Opcional: Capacidad, Fases y Tensión */}
-          <tr className="border-b border-slate-800 dark:border-slate-700">
-            <td className="w-24 p-2 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase">
-              Parámetros Panel:
+          {/* Fila: FICHA TÉCNICA - Clasificación Completa del Tablero */}
+          <tr className="border-b border-slate-800 dark:border-slate-700 bg-slate-900/40">
+            <td className="w-28 p-2.5 bg-slate-50 dark:bg-slate-800/60 font-black border-r border-slate-800 dark:border-slate-700 uppercase tracking-wider text-amber-500 font-mono text-[11px] align-top py-3">
+              FICHA TÉCNICA
             </td>
-            <td colSpan={6} className="p-2 font-medium">
-              <div className="flex flex-wrap items-center gap-6 text-xs">
-                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold shrink-0">Capacidad Gabinete:</span>
-                  <input
-                    type="number"
-                    value={maxPoles}
+            <td colSpan={6} className="p-3 font-medium">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 text-xs">
+                
+                {/* 1. Uso Eléctrico (Función Principal con Siglas) */}
+                <div className="flex flex-col gap-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Uso Eléctrico:</span>
+                  <select
+                    value={usoElectrico}
                     disabled={readOnly}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value, 10) || 0;
-                      const maxCircPosition = circuits.reduce((acc, c) => {
-                        const maxVal = Math.max(...c.poles);
-                        return maxVal > acc ? maxVal : acc;
-                      }, 0);
-                      if (val < maxCircPosition) {
-                        customAlert(`No se puede reducir la capacidad a ${val} polos porque hay circuitos ocupando posiciones hasta el polo ${maxCircPosition}.`);
-                        return;
-                      }
-                      updateField('maxPoles', val);
+                      updateField('usoElectrico', e.target.value);
+                      updateField('funcionPrincipal', e.target.value);
                     }}
-                    className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border-none text-[11px] focus:outline-none w-10 text-center"
-                  />
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                  >
+                    {TABLERO_USO_ELECTRICO.map(opt => (
+                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Capacidades (Número de Polos / Fases de Alimentación) */}
+                <div className="flex flex-col gap-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Capacidad (Alimentación):</span>
+                  <select
+                    value={capacidadPolos}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      let f = 3;
+                      if (val.includes('1F')) f = 1;
+                      else if (val.includes('2F')) f = 2;
+                      updateField('capacidadPolos', val);
+                      updateField('fases', f);
+                    }}
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                  >
+                    {TABLERO_CAPACIDADES_POLOS.map(opt => (
+                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Cantidad de Polos (Opciones normalizadas estrictas) */}
+                <div className="flex flex-col gap-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Cantidad Polos:</span>
+                    <span className="font-mono text-amber-500 font-bold text-[10px]">{maxPoles} P</span>
+                  </div>
                   <select
                     value={maxPoles}
                     disabled={readOnly}
@@ -824,7 +933,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       const val = parseInt(e.target.value, 10);
                       if (!val) return;
                       const maxCircPosition = circuits.reduce((acc, c) => {
-                        const maxVal = Math.max(...c.poles);
+                        const maxVal = Math.max(...(c.poles || [1]));
                         return maxVal > acc ? maxVal : acc;
                       }, 0);
                       if (val < maxCircPosition) {
@@ -833,30 +942,57 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       }
                       updateField('maxPoles', val);
                     }}
-                    className="bg-transparent text-slate-500 dark:text-slate-400 font-medium border-none text-[10px] focus:outline-none cursor-pointer"
+                    className="bg-slate-900 text-slate-100 font-bold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
                   >
-                    <option value="" className="bg-slate-900 text-slate-100">-- Estándar --</option>
-                    {[12, 24, 30, 42, 48, 60, 72, 84, 96].map(opt => (
+                    {TABLERO_CANTIDAD_POLOS_ESTANDAR.map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt} Polos</option>
                     ))}
                   </select>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Fases:</span>
+                {/* 4. Montaje y Accesibilidad (Protección Mecánica) */}
+                <div className="flex flex-col gap-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Montaje:</span>
                   <select
-                    value={tableroData.fases !== undefined ? tableroData.fases : 3}
-                    onChange={(e) => updateField('fases', parseInt(e.target.value, 10))}
-                    className="bg-transparent text-slate-900 dark:text-slate-100 font-bold border-none text-[11px] focus:outline-none cursor-pointer"
+                    value={montaje}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      let t = 'superficial';
+                      if (val.toLowerCase().includes('empotrar') || val.toLowerCase().includes('embutir')) t = 'empotrado';
+                      else if (val.toLowerCase().includes('autosoportado')) t = 'autosoportado';
+                      updateField('montaje', val);
+                      updateField('tipo', t);
+                    }}
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
                   >
-                    {[1, 2, 3].map(opt => (
-                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt} Fase(s)</option>
+                    {TABLERO_MONTAJE_OPCIONES.map(opt => (
+                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
                     ))}
                   </select>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">Tensión Nominal (COVENIN 159:1997):</span>
+                {/* 5. Nivel de Hermeticidad (Protección Ambiental NEMA / IP) */}
+                <div className="flex flex-col gap-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Hermeticidad:</span>
+                  <select
+                    value={nivelHermeticidad}
+                    disabled={readOnly}
+                    onChange={(e) => {
+                      updateField('nivelHermeticidad', e.target.value);
+                      updateField('nemaIp', e.target.value);
+                    }}
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                  >
+                    {TABLERO_HERMETICIDAD_NEMA_IP.map(opt => (
+                      <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 6. Tensión Nominal (COVENIN 159:1997) */}
+                <div className="flex flex-col gap-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Tensión (COVENIN):</span>
                   <input
                     type="text"
                     list="covenin-voltajes-tablero"
@@ -869,47 +1005,25 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         saveCustomOption('tensiones_todas', tableroData.tension);
                       }
                     }}
-                    placeholder="Ej: 208Y/120 V (3Φ - 4 hilos Estrella)"
-                    className="bg-transparent text-slate-900 dark:text-amber-400 font-bold border border-slate-300 dark:border-slate-700 rounded px-2 py-0.5 text-[11px] focus:outline-none w-64 font-mono"
+                    placeholder="Ej: 208Y/120 V"
+                    className="bg-slate-900 text-slate-100 font-bold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 font-mono w-full"
                   />
                   <datalist id="covenin-voltajes-tablero">
                     {getCustomOptions('tensiones_bt', TENSIONES_COVENIN_159_BT).map(v => <option key={v} value={v}>{v}</option>)}
                   </datalist>
                 </div>
+
               </div>
             </td>
           </tr>
 
-          {/* Fila 4: Encabezados de Parámetros */}
+          {/* Fila 4: Encabezados de Parámetros y Breaker Principal */}
           <tr className="border-b border-slate-800 dark:border-slate-700 text-center font-semibold bg-slate-50 dark:bg-slate-800/60">
-            <td colSpan={2} className="border-r border-slate-800 dark:border-slate-700 p-1 uppercase">
+            <td colSpan={2} className="border-r border-slate-800 dark:border-slate-700 p-2 uppercase font-bold text-slate-300">
               Barras Principales
             </td>
-            <td colSpan={3} className="border-r border-slate-800 dark:border-slate-700 p-0 uppercase">
-              <div className="flex items-center justify-between px-2 py-1 bg-slate-100 dark:bg-slate-800 border-b border-slate-800 dark:border-slate-700">
-                <span className="text-[10px]">Tipo de Tablero</span>
-                <div className="flex gap-3">
-                  <label className="flex items-center gap-1 cursor-pointer select-none">
-                    <input
-                      type="radio"
-                      checked={tipo === 'superficial'}
-                      onChange={() => updateField('tipo', 'superficial')}
-                      className="accent-amber-500 w-3 h-3 cursor-pointer"
-                    />
-                    <span className={tipo === 'superficial' ? 'font-bold text-amber-500' : ''}>Superficial</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer select-none">
-                    <input
-                      type="radio"
-                      checked={tipo === 'empotrado'}
-                      onChange={() => updateField('tipo', 'empotrado')}
-                      className="accent-amber-500 w-3 h-3 cursor-pointer"
-                    />
-                    <span className={tipo === 'empotrado' ? 'font-bold text-amber-500' : ''}>Empotrado</span>
-                  </label>
-                </div>
-              </div>
-              <div className="py-1">BREAKER PRINCIPAL</div>
+            <td colSpan={3} className="border-r border-slate-800 dark:border-slate-700 p-2 uppercase font-bold text-amber-400">
+              BREAKER PRINCIPAL
             </td>
             <td className="border-r border-slate-800 dark:border-slate-700 p-1 uppercase w-20">
               Voltaje
@@ -1046,33 +1160,37 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
           <span>Foto de Inspección</span>
         </div>
         
-        {fotoBlob || foto ? (
+        {isUploadingPhoto ? (
+          <div 
+            className="rounded overflow-hidden border border-slate-800 bg-slate-900 flex flex-col items-center justify-center gap-2 p-4 text-center shadow w-full"
+            style={{ height: `${tableroData.fotoScale || 220}px` }}
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+            <span className="text-[11px] font-bold text-amber-300">Optimizando imagen...</span>
+            <span className="text-[9px] text-slate-400 font-mono">Comprimiendo para almacenamiento offline</span>
+          </div>
+        ) : (fotoBlob || foto) ? (
           <div 
             className="relative rounded overflow-hidden border border-slate-800 bg-slate-900 flex items-center justify-center group shadow w-full"
             style={{ height: `${tableroData.fotoScale || 220}px` }}
           >
             <SafeImage 
-              blob={fotoBlob} 
-              src={foto} 
+              blob={fotoBlob instanceof Blob || fotoBlob instanceof File ? fotoBlob : null} 
+              src={foto || (typeof fotoBlob === 'string' ? fotoBlob : null)} 
               alt="Inspección del tablero" 
               className="w-full h-full object-cover" 
               style={{ maxHeight: `${tableroData.fotoScale || 220}px` }}
             />
-            <button
-              type="button"
-              onClick={() => {
-                onUpdateTablero({
-                  ...tableroData,
-                  fotoBlob: null,
-                  foto: null,
-                  eliminarFoto: true
-                });
-              }}
-              className="no-print absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer transition-colors shadow"
-              title="Eliminar foto"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                className="no-print absolute top-1.5 right-1.5 p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-lg cursor-pointer transition-all shadow-md active:scale-95"
+                title="Eliminar foto del tablero"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 p-1">
@@ -1083,28 +1201,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 type="file"
                 accept="image/*"
                 capture="environment"
-                onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-                  if (file.size > 10 * 1024 * 1024) {
-                    customAlert("La imagen es demasiado grande. Máximo 10MB.");
-                    return;
-                  }
-                  try {
-                    const base64Url = await compressImageToBase64(file);
-                    onUpdateTablero({
-                      ...tableroData,
-                      fotoBlob: file,
-                      foto: base64Url
-                    });
-                  } catch (err) {
-                    console.error("Error procesando imagen Base64:", err);
-                    onUpdateTablero({
-                      ...tableroData,
-                      fotoBlob: file,
-                      foto: null
-                    });
-                  }
+                disabled={readOnly}
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (file) handlePhotoSelected(file);
                 }}
                 className="hidden"
               />
@@ -1115,28 +1215,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <input
                 type="file"
                 accept="image/*"
-                onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-                  if (file.size > 10 * 1024 * 1024) {
-                    customAlert("La imagen es demasiado grande. Máximo 10MB.");
-                    return;
-                  }
-                  try {
-                    const base64Url = await compressImageToBase64(file);
-                    onUpdateTablero({
-                      ...tableroData,
-                      fotoBlob: file,
-                      foto: base64Url
-                    });
-                  } catch (err) {
-                    console.error("Error procesando imagen Base64:", err);
-                    onUpdateTablero({
-                      ...tableroData,
-                      fotoBlob: file,
-                      foto: null
-                    });
-                  }
+                disabled={readOnly}
+                onChange={(e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (file) handlePhotoSelected(file);
                 }}
                 className="hidden"
               />

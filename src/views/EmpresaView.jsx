@@ -10,7 +10,12 @@ import TensionNominalInput from '../components/TensionNominalInput';
 import { 
   TENSIONES_COVENIN_159_BT, 
   TENSIONES_COVENIN_159_MT, 
-  TENSIONES_COVENIN_TODAS 
+  TENSIONES_COVENIN_TODAS,
+  TABLERO_CAPACIDADES_POLOS,
+  TABLERO_CANTIDAD_POLOS_ESTANDAR,
+  TABLERO_USO_ELECTRICO,
+  TABLERO_MONTAJE_OPCIONES,
+  TABLERO_HERMETICIDAD_NEMA_IP
 } from '../utils/constants';
 import { 
   ArrowLeft, 
@@ -217,6 +222,11 @@ export const EmpresaView = () => {
 
   // Campos de Tablero
   const [maxPoles, setMaxPoles] = useState(24);
+  const [tableroCapacidadPolos, setTableroCapacidadPolos] = useState('Tripolar (3F)');
+  const [tableroUsoElectrico, setTableroUsoElectrico] = useState('TDF - Tablero de Distribución y Fuerza');
+  const [tableroMontaje, setTableroMontaje] = useState('Superficial');
+  const [tableroHermeticidad, setTableroHermeticidad] = useState('Uso Interior Seco (NEMA 1 / IP20)');
+  const [tableroTension, setTableroTension] = useState('208Y/120 V (Trifásico 4H)');
 
   // Campos de Transformador
   const [kvaTrafo, setKvaTrafo] = useState('');
@@ -405,8 +415,18 @@ export const EmpresaView = () => {
     let datosTecnicos = {};
 
     if (tipoElemento === 'TABLERO') {
+      const fasesCalc = tableroCapacidadPolos?.includes('Monopolar') ? 1 : (tableroCapacidadPolos?.includes('Bipolar') ? 2 : 3);
+      const tipoCalc = tableroMontaje?.toLowerCase().includes('empotrar') ? 'empotrado' : (tableroMontaje?.toLowerCase().includes('autosoportado') ? 'autosoportado' : 'superficial');
+
       datosTecnicos = {
-        maxPoles: parseInt(maxPoles, 10),
+        maxPoles: parseInt(maxPoles, 10) || 24,
+        capacidadPolos: tableroCapacidadPolos || 'Tripolar (3F)',
+        fases: fasesCalc,
+        usoElectrico: tableroUsoElectrico || 'TDF - Tablero de Distribución y Fuerza',
+        montaje: tableroMontaje || 'Superficial',
+        tipo: tipoCalc,
+        nivelHermeticidad: tableroHermeticidad || 'Uso Interior Seco (NEMA 1 / IP20)',
+        tensionNominal: tableroTension || '208Y/120 V (Trifásico 4H)',
         barrasPrincipales: { ia: '0', ib: '0', ic: '0' },
         breakerPrincipal: { marca: '', tipo: '', amp: '' },
         voltaje: { va: '208', vb: '205', vc: '205' },
@@ -549,6 +569,12 @@ export const EmpresaView = () => {
       setSuministroPosteTrafo('');
       setFoto(null);
       setFotoBlob(null);
+      setMaxPoles(24);
+      setTableroCapacidadPolos('Tripolar (3F)');
+      setTableroUsoElectrico('TDF - Tablero de Distribución y Fuerza');
+      setTableroMontaje('Superficial');
+      setTableroHermeticidad('Uso Interior Seco (NEMA 1 / IP20)');
+      setTableroTension('208Y/120 V (Trifásico 4H)');
       if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
       setShowElementoModal(false);
@@ -1400,39 +1426,108 @@ export const EmpresaView = () => {
 
               {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}
 
-              {/* TABLERO */}
+              {/* TABLERO - FICHA TÉCNICA */}
               {tipoElemento === 'TABLERO' && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                     Número Máximo de Polos
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={maxPoles}
-                      onChange={(e) => setMaxPoles(parseInt(e.target.value, 10) || 0)}
-                      placeholder="Escribe el nro. de polos"
-                      className="w-2/3 px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all"
-                    />
-                    <select
-                      value={maxPoles}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (val) setMaxPoles(val);
-                      }}
-                      className="w-1/3 px-3 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none h-11"
-                    >
-                      <option value="">-- Estándar --</option>
-                      <option value={12}>12 Polos</option>
-                      <option value={24}>24 Polos</option>
-                      <option value={30}>30 Polos</option>
-                      <option value={42}>42 Polos</option>
-                      <option value={48}>48 Polos</option>
-                      <option value={60}>60 Polos</option>
-                      <option value={72}>72 Polos</option>
-                      <option value={84}>84 Polos</option>
-                      <option value={96}>96 Polos</option>
-                    </select>
+                <div className="space-y-3 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5" /> Ficha Técnica del Tablero
+                    </span>
+                    <span className="text-[9px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                      Norma de Clasificación
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* 1. Uso Eléctrico */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
+                        Uso Eléctrico (Función Principal)
+                      </label>
+                      <select
+                        value={tableroUsoElectrico}
+                        onChange={(e) => setTableroUsoElectrico(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        {TABLERO_USO_ELECTRICO.map((opc) => (
+                          <option key={opc.value} value={opc.value}>
+                            {opc.sigla} - {opc.descripcion}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. Capacidad (Número de Polos) */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
+                        Capacidad (Fases / Polos Alimentación)
+                      </label>
+                      <select
+                        value={tableroCapacidadPolos}
+                        onChange={(e) => setTableroCapacidadPolos(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        {TABLERO_CAPACIDADES_POLOS.map((opc) => (
+                          <option key={opc.value} value={opc.value}>
+                            {opc.label} ({opc.fases}F)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 3. Cantidad de Polos Normalizada */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
+                        Cantidad de Polos (Normalizados)
+                      </label>
+                      <select
+                        value={maxPoles}
+                        onChange={(e) => setMaxPoles(parseInt(e.target.value, 10))}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs font-mono font-bold text-amber-400 h-10"
+                      >
+                        {TABLERO_CANTIDAD_POLOS_ESTANDAR.map((p) => (
+                          <option key={p} value={p}>
+                            {p} Polos
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 4. Montaje y Accesibilidad */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
+                        Montaje y Accesibilidad
+                      </label>
+                      <select
+                        value={tableroMontaje}
+                        onChange={(e) => setTableroMontaje(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        {TABLERO_MONTAJE_OPCIONES.map((opc) => (
+                          <option key={opc.value} value={opc.value}>
+                            {opc.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 5. Nivel de Hermeticidad */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
+                        Nivel de Hermeticidad (Protección Ambiental)
+                      </label>
+                      <select
+                        value={tableroHermeticidad}
+                        onChange={(e) => setTableroHermeticidad(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
+                      >
+                        {TABLERO_HERMETICIDAD_NEMA_IP.map((opc) => (
+                          <option key={opc.value} value={opc.value}>
+                            {opc.label} ({opc.nema} / {opc.ip})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
