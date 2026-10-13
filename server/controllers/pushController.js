@@ -1,13 +1,23 @@
 import webpush from 'web-push';
 
-// Configurar llaves VAPID desde variables de entorno
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:soporte@selectric.com';
+// Función para sanitizar claves VAPID (remover comillas, espacios y caracteres de escape)
+const cleanKey = (val) => (typeof val === 'string' ? val.trim().replace(/^["']|["']$/g, '').trim() : '');
+
+const DEFAULT_SERVER_VAPID_PUBLIC_KEY = 'BEvczk5jNzJMDSBNa_C__C-ZwvWwrdIJLiI9WRXpraE1XoEIuW5PyvLklmz4tPo2kotyBlYz6hwKqkP6cgg6u1g';
+const DEFAULT_SERVER_VAPID_PRIVATE_KEY = 'qTORyOyE70hMrBbw-L1rZR65iyzW-2Qo7GBCvj_3PME';
+
+// Configurar llaves VAPID desde variables de entorno o respaldo seguro
+const VAPID_PUBLIC_KEY = cleanKey(process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY) || DEFAULT_SERVER_VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = cleanKey(process.env.VAPID_PRIVATE_KEY) || DEFAULT_SERVER_VAPID_PRIVATE_KEY;
+const VAPID_SUBJECT = cleanKey(process.env.VAPID_SUBJECT) || 'mailto:soporte@selectric.com';
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  console.log('✅ WebPush VAPID configurado correctamente.');
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    console.log('✅ WebPush VAPID configurado correctamente en el servidor.');
+  } catch (err) {
+    console.error('❌ Error al inicializar web-push con VAPID:', err.message);
+  }
 } else {
   console.warn('⚠️ Advertencia: VAPID keys no encontradas en las variables de entorno.');
 }

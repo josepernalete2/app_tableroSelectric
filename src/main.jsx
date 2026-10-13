@@ -5,7 +5,7 @@ import App from './App.jsx'
 
 // Registro del Service Worker para PWA y Notificaciones Push
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
+  const registerServiceWorker = () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).then((reg) => {
       console.log('✅ [PWA] Service Worker registrado exitosamente con ámbito:', reg.scope);
       // Forzar chequeo de actualización al cargar
@@ -24,7 +24,13 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
     }).catch((err) => {
       console.warn('⚠️ [PWA] No se pudo registrar el Service Worker:', err);
     });
-  });
+  };
+
+  if (document.readyState === 'complete') {
+    registerServiceWorker();
+  } else {
+    window.addEventListener('load', registerServiceWorker);
+  }
 
   // Capturar evento beforeinstallprompt para soporte en tablets Android y Chrome
   window.addEventListener('beforeinstallprompt', (e) => {
