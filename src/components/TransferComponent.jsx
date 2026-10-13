@@ -263,7 +263,10 @@ export default function TransferComponent({
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                {modoOperativo === 'ATS' ? '🔄 TRANSFERENCIA AUTOMÁTICA (ATS)' : '🔀 TRANSFERENCIA MANUAL (MTS)'}
+                🔄 TRANSFERENCIA (ATS/MTS)
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-900 border border-slate-700 text-slate-300 uppercase">
+                {modoOperativo === 'ATS' ? 'Modo: Automático (ATS)' : 'Modo: Manual (MTS)'}
               </span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${estadoServicio === 'En Servicio' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'}`}>
                 {estadoServicio}
@@ -344,7 +347,7 @@ export default function TransferComponent({
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <span className="text-[10px] font-mono font-bold tracking-widest text-amber-400 uppercase">
-                SISTEMA DE CONMUTACIÓN DE POTENCIA • {modoOperativo === 'ATS' ? 'AUTOMATIC TRANSFER SWITCH' : 'MANUAL TRANSFER SWITCH'}
+                SISTEMA DE CONMUTACIÓN DE POTENCIA • TRANSFERENCIA (ATS/MTS)
               </span>
               <h2 className="text-xl font-black text-slate-100 tracking-wide uppercase font-mono print:text-black">
                 {isEditing ? (
@@ -356,7 +359,7 @@ export default function TransferComponent({
                     className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold placeholder-slate-600"
                   />
                 ) : (
-                  nombre || 'ATS - Transferencia'
+                  nombre || 'TRANSFERENCIA (ATS/MTS)'
                 )}
               </h2>
             </div>
@@ -391,7 +394,7 @@ export default function TransferComponent({
           <div className="lg:col-span-5 p-5 space-y-4 bg-slate-900/40">
             <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Cpu className="w-4 h-4 text-amber-400" />
-              Especificaciones Constructivas del ATS / MTS
+              Especificaciones Constructivas de Transferencia (ATS/MTS)
             </h3>
 
             <div className="space-y-3 text-xs font-mono">
@@ -508,7 +511,7 @@ export default function TransferComponent({
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-2">
                 <Zap className="w-4 h-4 text-emerald-400" />
-                Doble Fuente de Alimentación de la Transferencia
+                Doble Fuente de Alimentación • Transferencia (ATS/MTS)
               </h3>
               <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                 Jerarquía Activa

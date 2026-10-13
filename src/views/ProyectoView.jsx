@@ -1535,7 +1535,7 @@ export const ProyectoView = () => {
                           )}
                           {isTransfer && (
                             <span className="px-3.5 py-1 bg-amber-950/90 text-amber-500 border border-amber-800/50 rounded-full text-[10px] font-bold font-mono">
-                              🔀 TRANSFERENCIA
+                              🔀 TRANSFERENCIA (ATS/MTS)
                             </span>
                           )}
                           {isPuntoSuministro && (
@@ -1746,7 +1746,7 @@ export const ProyectoView = () => {
                     { id: 'PUNTO_SUMINISTRO', label: '🔌 PTO. SUMINISTRO' },
                     { id: 'GENERADOR', label: '🔋 GENERADOR' },
                     { id: 'TRANSFORMADOR', label: '🔄 TRANSFORMADOR' },
-                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA' },
+                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA (ATS/MTS)' },
                     { id: 'CCM', label: '⚙️ CCM (MOTORES)' },
                     { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' }
                   ].map((t) => (
@@ -2016,7 +2016,7 @@ export const ProyectoView = () => {
                 </div>
               )}
 
-              {/* TRANSFER */}
+              {/* TRANSFERENCIA (ATS/MTS) */}
               {tipoElemento === 'TRANSFER' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -2024,7 +2024,7 @@ export const ProyectoView = () => {
                     <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 3200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transferencia</label>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Modo de Operación (ATS/MTS)</label>
                     <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
                       <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
                       <option value="MANUAL">MANUAL (MTS)</option>

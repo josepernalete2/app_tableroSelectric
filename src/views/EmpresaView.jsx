@@ -1013,7 +1013,7 @@ export const EmpresaView = () => {
                         )}
                         {isTransfer && (
                           <span className="px-2.5 py-0.5 rounded-lg text-[9px] font-bold bg-emerald-950/95 text-emerald-400 border border-emerald-800/40 font-mono">
-                            🔄 TRANSFERENCIA
+                            🔄 TRANSFERENCIA (ATS/MTS)
                           </span>
                         )}
                         {item.tipoElemento === 'PUNTO_SUMINISTRO' && (
@@ -1347,7 +1347,7 @@ export const EmpresaView = () => {
                     { id: 'PUNTO_SUMINISTRO', label: '🔌 PTO. SUMINISTRO' },
                     { id: 'GENERADOR', label: '🔋 GENERADOR' },
                     { id: 'TRANSFORMADOR', label: '🔄 TRANSFORMADOR' },
-                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA' },
+                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA (ATS/MTS)' },
                     { id: 'CCM', label: '⚙️ CCM (MOTORES)' },
                     { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' }
                   ].map((t) => (
@@ -1614,6 +1614,23 @@ export const EmpresaView = () => {
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Malla / Ubicación</label>
                     <input type="text" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value)} placeholder="Ej. Malla debajo de concreto" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                  </div>
+                </div>
+              )}
+
+              {/* TRANSFERENCIA (ATS/MTS) */}
+              {tipoElemento === 'TRANSFER' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
+                    <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 3200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Modo de Operación (ATS/MTS)</label>
+                    <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
+                      <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
+                      <option value="MANUAL">MANUAL (MTS)</option>
+                    </select>
                   </div>
                 </div>
               )}

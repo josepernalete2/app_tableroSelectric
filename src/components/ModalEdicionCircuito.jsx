@@ -34,7 +34,7 @@ const normalizeText = (str) => {
 const MOCK_ELEMENTOS_CREADOS = [
   { id: 'TAB-1', nombre: 'TABLERO PRINCIPAL DE BAJA TENSIÓN', tipo: 'TABLERO' },
   { id: 'SUB-1', nombre: 'SUBESTACIÓN PRINCIPAL 13.8KV', tipo: 'SUBESTACION' },
-  { id: 'ATS-1', nombre: 'TRANSFERENCIA AUTOMÁTICA SÓTANO', tipo: 'TRANSFER' },
+  { id: 'ATS-1', nombre: 'TRANSFERENCIA (ATS/MTS) SÓTANO', tipo: 'TRANSFER' },
   { id: 'CCM-1', nombre: 'CCM BOMBAS DE AGUA', tipo: 'CCM' }
 ];
 
@@ -149,7 +149,7 @@ export const ModalEdicionCircuito = ({
 
       if (val === 'NEW_TRANSFER') {
         mappedType = 'TRANSFER';
-        typeLabel = 'Transferencia Automática (ATS)';
+        typeLabel = 'Transferencia (ATS/MTS)';
       } else if (val === 'NEW_CCM') {
         mappedType = 'CCM';
         typeLabel = 'Centro de Control de Motores (CCM)';
@@ -196,7 +196,7 @@ export const ModalEdicionCircuito = ({
       setSelectedLink(found);
 
       const tipoLabel = t === 'CCM' ? 'CCM' :
-                        t === 'TRANSFER' ? 'Transferencia ATS' :
+                        t === 'TRANSFER' ? 'Transferencia (ATS/MTS)' :
                         t === 'GENERADOR' ? 'Generador' :
                         t === 'SUBESTACION' ? 'Subestación' :
                         t === 'TRANSFORMADOR' ? 'Transformador' :
@@ -604,7 +604,7 @@ export const ModalEdicionCircuito = ({
         {showCreateOptions && (
           <optgroup label="➕ NUEVO ELEMENTO POR CREAR (RESERVA FUTURA)">
             <option value="NEW_TABLERO">➕ Crear Nuevo Sub-Tablero / Panel</option>
-            <option value="NEW_TRANSFER">➕ Crear Nueva Transferencia Automática (ATS/MTS)</option>
+            <option value="NEW_TRANSFER">➕ Crear Nueva Transferencia (ATS/MTS)</option>
             <option value="NEW_CCM">➕ Crear Nuevo Centro de Control de Motores (CCM)</option>
             <option value="NEW_GENERADOR">➕ Crear Nuevo Generador / Planta Eléctrica</option>
             <option value="NEW_TRANSFORMADOR">➕ Crear Nuevo Transformador de Potencia</option>
@@ -1365,13 +1365,13 @@ export const ModalEdicionCircuito = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setRotulo('TRANSFERENCIA AUTOMÁTICA (ATS)');
+                    setRotulo('TRANSFERENCIA (ATS/MTS)');
                     setStep('FORMULARIO_POTENCIA_TRANSFO_BT');
                   }}
                   className="p-4 rounded-xl border border-slate-800 hover:border-amber-500 bg-slate-950/60 text-left hover:bg-amber-500/5 transition-all cursor-pointer"
                 >
                   <span className="text-xl block mb-1">🔄</span>
-                  <span className="font-bold text-xs text-slate-200 block">Transferencia (ATS)</span>
+                  <span className="font-bold text-xs text-slate-200 block">Transferencia (ATS/MTS)</span>
                   <span className="text-[9px] text-slate-500">Entrada Fuente Normal</span>
                 </button>
                 <button
@@ -1479,26 +1479,26 @@ export const ModalEdicionCircuito = ({
                     <button
                       type="button"
                       onClick={() => {
-                        setRotulo('TRANSFERENCIA AUTOMÁTICA (ATS)');
+                        setRotulo('TRANSFERENCIA (ATS/MTS) - AUTOMÁTICA');
                         setStep('FORMULARIO_POTENCIA_GEN');
                       }}
                       className="p-4 rounded-xl border border-slate-800 hover:border-amber-500 bg-slate-950/60 text-left hover:bg-amber-500/5 transition-all cursor-pointer"
                     >
                       <span className="text-xl block mb-1">🔄</span>
-                      <span className="font-bold text-xs text-slate-200 block">Transferencia ATS</span>
-                      <span className="text-[9px] text-slate-500">Conmutación Automática</span>
+                      <span className="font-bold text-xs text-slate-200 block">Transferencia (ATS/MTS) - Auto</span>
+                      <span className="text-[9px] text-slate-500">Conmutación Automática (ATS)</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => {
-                        setRotulo('TRANSFERENCIA MANUAL (MTS)');
+                        setRotulo('TRANSFERENCIA (ATS/MTS) - MANUAL');
                         setStep('FORMULARIO_POTENCIA_GEN');
                       }}
                       className="p-4 rounded-xl border border-slate-800 hover:border-amber-500 bg-slate-950/60 text-left hover:bg-amber-500/5 transition-all cursor-pointer"
                     >
                       <span className="text-xl block mb-1">🔀</span>
-                      <span className="font-bold text-xs text-slate-200 block">Transferencia Manual (MTS)</span>
-                      <span className="text-[9px] text-slate-500">Conmutación Manual</span>
+                      <span className="font-bold text-xs text-slate-200 block">Transferencia (ATS/MTS) - Manual</span>
+                      <span className="text-[9px] text-slate-500">Conmutación Manual (MTS)</span>
                     </button>
                     <button
                       type="button"
@@ -1597,7 +1597,7 @@ export const ModalEdicionCircuito = ({
                   <div className="text-center">
                     <ShieldCheck className="w-12 h-12 text-amber-500 mx-auto mb-2" />
                     <h4 className="text-base font-bold text-slate-100">
-                      Configuración de Conexión de Transferencia (ATS)
+                      Configuración de Conexión de Transferencia (ATS/MTS)
                     </h4>
                     <p className="text-xs text-slate-400">Selecciona la fuente o carga a configurar en el conmutador.</p>
                   </div>
@@ -2105,7 +2105,7 @@ export const ModalEdicionCircuito = ({
                     className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-900 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
                   >
                     <option value="TABLERO">🏢 Sub-Tablero / Panel Eléctrico</option>
-                    <option value="TRANSFER">🔄 Transferencia Automática (ATS/MTS)</option>
+                    <option value="TRANSFER">🔄 Transferencia (ATS/MTS)</option>
                     <option value="CCM">⚙️ Centro de Control de Motores (CCM)</option>
                     <option value="GENERADOR">⚡ Generador / Planta Eléctrica</option>
                     <option value="TRANSFORMADOR">🔌 Transformador de Potencia</option>

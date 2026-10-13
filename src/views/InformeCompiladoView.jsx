@@ -51,7 +51,7 @@ export default function InformeCompiladoView() {
   useEffect(() => {
     if (company && proyecto && !introText) {
       setIntroText(
-        `El presente informe técnico de ingeniería eléctrica documenta la auditoría, levantamiento dimensional y unifilar del sistema de distribución eléctrica en las instalaciones de ${company.nombre}, correspondiente al proyecto "${proyecto.nombre}".\n\nLas actividades de campo comprendieron el inventario exhaustivo de fuentes de alimentación, transformadores, grupos electrógenos, sistemas de transferencia automática (ATS/MTS), tableros principales y seccionales, centros de control de motores (CCM), bancos de compensación reactiva y mallas de puesta a tierra (PAT).\n\nTodos los parámetros recopilados han sido cotejados con las normativas eléctricas vigentes (Código Eléctrico Nacional / COVENIN 200 / NFPA 70) para garantizar la confiabilidad operativa, la seguridad del personal y la eficiencia energética de la infraestructura.`
+        `El presente informe técnico de ingeniería eléctrica documenta la auditoría, levantamiento dimensional y unifilar del sistema de distribución eléctrica en las instalaciones de ${company.nombre}, correspondiente al proyecto "${proyecto.nombre}".\n\nLas actividades de campo comprendieron el inventario exhaustivo de fuentes de alimentación, transformadores, grupos electrógenos, sistemas de transferencia (ATS/MTS), tableros principales y seccionales, centros de control de motores (CCM), bancos de compensación reactiva y mallas de puesta a tierra (PAT).\n\nTodos los parámetros recopilados han sido cotejados con las normativas eléctricas vigentes (Código Eléctrico Nacional / COVENIN 200 / NFPA 70) para garantizar la confiabilidad operativa, la seguridad del personal y la eficiencia energética de la infraestructura.`
       );
     }
   }, [company, proyecto, introText]);
@@ -331,7 +331,7 @@ export default function InformeCompiladoView() {
               <span className="font-mono">Ficha 2.3</span>
             </div>
             <div className="flex justify-between items-end gap-2 pl-4 py-0.5 text-slate-400 print:text-slate-700">
-              <span>• Sistemas de Transferencia ATS / MTS ({transferencias.length})</span>
+              <span>• Sistemas de Transferencia (ATS/MTS) ({transferencias.length})</span>
               <span className="border-b border-dashed border-slate-850 flex-1 h-1 min-w-[20px] print:border-slate-200"></span>
               <span className="font-mono">Ficha 2.4</span>
             </div>
@@ -514,7 +514,7 @@ export default function InformeCompiladoView() {
             {/* Transferencias (ATS / MTS) */}
             <div className="space-y-2 break-inside-avoid">
               <h3 className="text-xs font-bold uppercase tracking-wide text-slate-200 print:text-slate-800 flex items-center justify-between">
-                <span>2.4 Sistemas de Transferencia (ATS / MTS)</span>
+                <span>2.4 Sistemas de Transferencia (ATS/MTS)</span>
                 <span className="text-[10px] text-slate-500 font-normal">Total: {transferencias.length}</span>
               </h3>
               {transferencias.length > 0 ? (
@@ -535,7 +535,7 @@ export default function InformeCompiladoView() {
                           <span>{cleanElementName(e.nombre, e.id, e.codigo)}</span>
                           <span className="text-[9px] font-mono text-amber-400 print:text-slate-700">[{getElementCode(e, 'TRANSFER')}]</span>
                         </td>
-                        <td className="py-1.5 px-2.5">{e.datosTecnicos?.tipoTransferencia || e.datosTecnicos?.tipo || 'Automática (ATS)'}</td>
+                        <td className="py-1.5 px-2.5">{e.datosTecnicos?.tipoTransferencia || e.datosTecnicos?.tipo || 'Transferencia (ATS/MTS)'}</td>
                         <td className="py-1.5 px-2.5 font-mono font-bold text-amber-400 print:text-slate-900">{e.datosTecnicos?.amperajeNominal || e.datosTecnicos?.amperaje || e.datosTecnicos?.capacidadNominal || '—'} A</td>
                         <td className="py-1.5 px-2.5">{e.datosTecnicos?.marcaControlador || e.datosTecnicos?.marca || '—'}</td>
                         <td className="py-1.5 px-2.5">{e.ubicacion || '—'}</td>

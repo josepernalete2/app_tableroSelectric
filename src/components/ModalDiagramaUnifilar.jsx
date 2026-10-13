@@ -112,8 +112,8 @@ export default function ModalDiagramaUnifilar({
     },
     { 
       type: 'TRANSFER', 
-      label: 'ATS / Transferencia', 
-      desc: 'Conmutación de red', 
+      label: 'TRANSFERENCIA (ATS/MTS)', 
+      desc: 'Conmutador ATS / MTS', 
       icon: <div className="w-7 h-4 border border-emerald-500 rounded text-[7px] font-black text-center text-emerald-400 bg-emerald-950/20 leading-tight">ATS</div> 
     },
     { 
@@ -161,7 +161,7 @@ export default function ModalDiagramaUnifilar({
       TABLERO: `Tablero Distribución ${count}`,
       TRANSFORMADOR: `Transformador Principal ${count}`,
       GENERADOR: `Generador Emergencia ${count}`,
-      TRANSFER: `ATS Transferencia ${count}`,
+      TRANSFER: `Transferencia (ATS/MTS) ${count}`,
       PUESTA_TIERRA: `Malla de Tierra ${count}`,
       SUBESTACION: `Celda Subestación ${count}`,
       OTRO: `Equipo Especial ${count}`
@@ -506,7 +506,7 @@ export default function ModalDiagramaUnifilar({
                           <option value="TABLERO">Tablero Eléctrico</option>
                           <option value="TRANSFORMADOR">Transformador</option>
                           <option value="GENERADOR">Generador / Planta</option>
-                          <option value="TRANSFER">ATS / Transferencia</option>
+                          <option value="TRANSFER">Transferencia (ATS/MTS)</option>
                           <option value="PUESTA_TIERRA">Puesta a Tierra</option>
                           <option value="SUBESTACION">Celda Subestación</option>
                           <option value="OTRO">Otro Elemento</option>

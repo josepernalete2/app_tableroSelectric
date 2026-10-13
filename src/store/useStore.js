@@ -276,7 +276,7 @@ const initialCompanies = [
             nombre: 'Tablero Principal (No. 20)',
             tipoElemento: 'TABLERO',
             ubicacion: 'SOTANO SALA DE TABLEROS',
-            alimentadoPor: 'ATS SOTANO (TRANSFERENCIA AUTOMATICA) transferecia 580',
+            alimentadoPor: 'ATS SOTANO (TRANSFERENCIA (ATS/MTS)) transferecia 580',
             foto: null,
             fotoBlob: null,
             observacionesGenerales: 'SALEN ACOMETIDAS 1 X 500 Y 1X250 MCM DE LA BARRA PARTE INFERIOR. LA ACOMETIDA 250 MCM VA A CAJA CON UN BREAKER AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR EATON, Ki400, 350 A. SALEN UNA ACOMETIDA 4/0 QUE ALIMENTA TRANSFERENCIA 160. LA ACOMETIDA 500 MCM VA A UNA CAJA AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR ABB, TIPO 6520, 400 A, SALEN 2X500 Y ALIMENTAN TABLERO EN PRIMER PISO.',

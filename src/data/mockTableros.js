@@ -124,7 +124,7 @@ export const initialTablerosData = {
   "20": {
     id: "20",
     ubicacion: "SOTANO SALA DE TABLEROS",
-    alimentadoPor: "ATS SOTANO (TRANSFERENCIA AUTOMATICA) transferecia 580",
+    alimentadoPor: "ATS SOTANO (TRANSFERENCIA (ATS/MTS)) transferecia 580",
     tipo: "superficial",
     barrasPrincipales: {
       ia: "",

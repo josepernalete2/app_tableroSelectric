@@ -198,7 +198,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     if (t === 'TRANSFER' || t === 'ATS' || t === 'MTS') {
       return (
         <span className="inline-flex items-center w-max px-1 py-0.5 rounded text-[8px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 mt-1">
-          🔄 TRANSFERENCIA (ATS)
+          🔄 TRANSFERENCIA (ATS/MTS)
         </span>
       );
     }
