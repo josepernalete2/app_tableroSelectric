@@ -46,7 +46,8 @@ import {
   FolderOpen,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  Activity
 } from 'lucide-react';
 import HelpModal from '../components/HelpModal';
 import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
@@ -654,7 +655,8 @@ export const ProyectoView = () => {
     e.preventDefault();
     if (!isElementoFormValid) return;
 
-    let datosTecnicos = {};
+    try {
+      let datosTecnicos = {};
 
     if (tipoElemento === 'TABLERO') {
       const fasesCalc = tableroCapacidadPolos?.includes('Monopolar') ? 1 : (tableroCapacidadPolos?.includes('Bipolar') ? 2 : 3);
@@ -871,7 +873,11 @@ export const ProyectoView = () => {
         customAlert(result.error);
       }
     }
-  };
+  } catch (err) {
+    console.error("Error al registrar o actualizar elemento:", err);
+    showToast?.("No se pudo completar el registro: " + (err.message || 'Error inesperado'), "error");
+  }
+};
 
   const handleCreateInspeccion = (e) => {
     e.preventDefault();

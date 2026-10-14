@@ -576,8 +576,8 @@ export const useStore = create(
           }
 
           if (res.ok) {
-            const data = await res.json();
-            if (data.ok && Array.isArray(data.data) && data.data.length > 0) {
+            const data = await res.json().catch(() => ({}));
+            if (data?.ok && Array.isArray(data.data) && data.data.length > 0) {
               get().importCompanies(data.data);
               return { success: true, count: data.data.length };
             }
@@ -595,15 +595,17 @@ export const useStore = create(
               return { success: false, error: 'Token expirado' };
             }
             if (resBackup.ok) {
-              const dataBackup = await resBackup.json();
-              if (dataBackup.ok && Array.isArray(dataBackup.data) && dataBackup.data.length > 0) {
+              const dataBackup = await resBackup.json().catch(() => ({}));
+              if (dataBackup?.ok && Array.isArray(dataBackup.data) && dataBackup.data.length > 0) {
                 get().importCompanies(dataBackup.data);
                 return { success: true, count: dataBackup.data.length };
               }
             }
           }
+          return { success: true, count: 0 };
         } catch (e) {
-          console.error('Error al sincronizar datos iniciales desde el servidor:', e);
+          console.warn('Advertencia no fatal al sincronizar /api/sync/pull:', e);
+          return { success: false, error: e?.message || 'Error de conexión' };
         }
       },
 
