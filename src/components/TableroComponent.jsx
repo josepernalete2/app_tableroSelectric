@@ -996,9 +996,12 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   <input
                     type="text"
                     list="covenin-voltajes-tablero"
-                    value={tableroData.tension || ''}
+                    value={tableroData.tension || tableroData?.datosTecnicos?.tensionNominal || ''}
                     disabled={readOnly}
-                    onChange={(e) => updateField('tension', e.target.value)}
+                    onChange={(e) => {
+                      updateField('tension', e.target.value);
+                      updateField('datosTecnicos.tensionNominal', e.target.value);
+                    }}
                     onBlur={() => {
                       if (tableroData.tension) {
                         saveCustomOption('tensiones_bt', tableroData.tension, TENSIONES_COVENIN_159_BT);

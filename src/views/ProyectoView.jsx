@@ -14,7 +14,10 @@ import {
   TABLERO_CANTIDAD_POLOS_ESTANDAR,
   TABLERO_USO_ELECTRICO,
   TABLERO_MONTAJE_OPCIONES,
-  TABLERO_HERMETICIDAD_NEMA_IP
+  TABLERO_HERMETICIDAD_NEMA_IP,
+  MARCA_OPTIONS,
+  AMP_OPTIONS,
+  TIPO_OPTIONS
 } from '../utils/constants';
 import { 
   ArrowLeft, 
@@ -23,6 +26,7 @@ import {
   Search, 
   AlertTriangle,
   X,
+  Check,
   Camera,
   Calendar,
   User,
@@ -340,10 +344,20 @@ export const ProyectoView = () => {
       if (editingElemento.tipoElemento === 'TABLERO') {
         setMaxPoles(tech.maxPoles || 24);
         setTableroCapacidadPolos(tech.capacidadPolos || (tech.fases === 1 ? 'Monopolar (1F)' : (tech.fases === 2 ? 'Bipolar (2F)' : 'Tripolar (3F)')));
-        setTableroUsoElectrico(tech.usoElectrico || 'TDF - Tablero de Distribución y Fuerza');
+        setTableroUsoElectrico(tech.usoElectrico || 'TDF (Tablero de Distribución y Fuerza)');
         setTableroMontaje(tech.montaje || (tech.tipo === 'empotrado' ? 'Empotrar / Embutir' : (tech.tipo === 'autosoportado' ? 'Autosoportado (Gabinete de Piso / Switchgear)' : 'Superficial')));
         setTableroHermeticidad(tech.nivelHermeticidad || 'Uso Interior Seco (NEMA 1 / IP20)');
-        setTableroTension(tech.tensionNominal || '208Y/120 V (Trifásico 4H)');
+        setTableroTension(tech.tensionNominal || editingElemento.tension || '208Y/120 V (3Φ - 4 hilos Estrella)');
+        setBreakerMarca(tech.breakerPrincipal?.marca || '');
+        setBreakerTipo(tech.breakerPrincipal?.tipo || '');
+        setBreakerAmp(tech.breakerPrincipal?.amp || '100');
+        setVoltajeVa(tech.voltaje?.va || '208');
+        setVoltajeVb(tech.voltaje?.vb || '205');
+        setVoltajeVc(tech.voltaje?.vc || '205');
+        setCorrienteIa(tech.barrasPrincipales?.ia || '0');
+        setCorrienteIb(tech.barrasPrincipales?.ib || '0');
+        setCorrienteIc(tech.barrasPrincipales?.ic || '0');
+        setAcometidaConductor(tech.acometida || '');
       } else if (editingElemento.tipoElemento === 'TRANSFORMADOR') {
         setKvaTrafo(tech.kva || tech.potenciaKva || '');
         setMarcaTrafo(tech.marca || '');
@@ -400,10 +414,20 @@ export const ProyectoView = () => {
       setTipoElemento('TABLERO');
       setMaxPoles(24);
       setTableroCapacidadPolos('Tripolar (3F)');
-      setTableroUsoElectrico('TDF - Tablero de Distribución y Fuerza');
+      setTableroUsoElectrico('TDF (Tablero de Distribución y Fuerza)');
       setTableroMontaje('Superficial');
       setTableroHermeticidad('Uso Interior Seco (NEMA 1 / IP20)');
-      setTableroTension('208Y/120 V (Trifásico 4H)');
+      setTableroTension('208Y/120 V (3Φ - 4 hilos Estrella)');
+      setBreakerMarca('');
+      setBreakerTipo('');
+      setBreakerAmp('100');
+      setVoltajeVa('208');
+      setVoltajeVb('205');
+      setVoltajeVc('205');
+      setCorrienteIa('0');
+      setCorrienteIb('0');
+      setCorrienteIc('0');
+      setAcometidaConductor('');
       setEliminarFoto(false);
       setKvaTrafo('');
       setMarcaTrafo('');
@@ -460,11 +484,23 @@ export const ProyectoView = () => {
   // Campos de Tablero
   const [maxPoles, setMaxPoles] = useState(24);
   const [tableroCapacidadPolos, setTableroCapacidadPolos] = useState('Tripolar (3F)');
-  const [tableroUsoElectrico, setTableroUsoElectrico] = useState('TDF - Tablero de Distribución y Fuerza');
+  const [tableroUsoElectrico, setTableroUsoElectrico] = useState('TDF (Tablero de Distribución y Fuerza)');
   const [tableroMontaje, setTableroMontaje] = useState('Superficial');
   const [tableroHermeticidad, setTableroHermeticidad] = useState('Uso Interior Seco (NEMA 1 / IP20)');
-  const [tableroTension, setTableroTension] = useState('208Y/120 V (Trifásico 4H)');
+  const [tableroTension, setTableroTension] = useState('208Y/120 V (3Φ - 4 hilos Estrella)');
   const [eliminarFoto, setEliminarFoto] = useState(false);
+
+  // Parámetros Técnicos de Interruptor Principal, Metrología y Acometida
+  const [breakerMarca, setBreakerMarca] = useState('');
+  const [breakerTipo, setBreakerTipo] = useState('');
+  const [breakerAmp, setBreakerAmp] = useState('100');
+  const [voltajeVa, setVoltajeVa] = useState('208');
+  const [voltajeVb, setVoltajeVb] = useState('205');
+  const [voltajeVc, setVoltajeVc] = useState('205');
+  const [corrienteIa, setCorrienteIa] = useState('0');
+  const [corrienteIb, setCorrienteIb] = useState('0');
+  const [corrienteIc, setCorrienteIc] = useState('0');
+  const [acometidaConductor, setAcometidaConductor] = useState('');
 
   // Campos de Transformador
   const [kvaTrafo, setKvaTrafo] = useState('');
@@ -629,15 +665,27 @@ export const ProyectoView = () => {
         maxPoles: parseInt(maxPoles, 10) || 24,
         capacidadPolos: tableroCapacidadPolos || 'Tripolar (3F)',
         fases: fasesCalc,
-        usoElectrico: tableroUsoElectrico || 'TDF - Tablero de Distribución y Fuerza',
+        usoElectrico: tableroUsoElectrico || 'TDF (Tablero de Distribución y Fuerza)',
         montaje: tableroMontaje || 'Superficial',
         tipo: tipoCalc,
         nivelHermeticidad: tableroHermeticidad || 'Uso Interior Seco (NEMA 1 / IP20)',
-        tensionNominal: tableroTension || editingElemento?.datosTecnicos?.tensionNominal || '208Y/120 V (Trifásico 4H)',
-        barrasPrincipales: editingElemento?.datosTecnicos?.barrasPrincipales || { ia: '0', ib: '0', ic: '0' },
-        breakerPrincipal: editingElemento?.datosTecnicos?.breakerPrincipal || { marca: '', tipo: '', amp: '' },
-        voltaje: editingElemento?.datosTecnicos?.voltaje || { va: '208', vb: '205', vc: '205' },
-        acometida: editingElemento?.datosTecnicos?.acometida || '',
+        tensionNominal: tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)',
+        barrasPrincipales: {
+          ia: String(corrienteIa !== undefined && corrienteIa !== null ? corrienteIa : '0').trim(),
+          ib: String(corrienteIb !== undefined && corrienteIb !== null ? corrienteIb : '0').trim(),
+          ic: String(corrienteIc !== undefined && corrienteIc !== null ? corrienteIc : '0').trim()
+        },
+        breakerPrincipal: {
+          marca: breakerMarca || '',
+          tipo: breakerTipo || '',
+          amp: String(breakerAmp || '100').trim()
+        },
+        voltaje: {
+          va: String(voltajeVa !== undefined && voltajeVa !== null ? voltajeVa : '208').trim(),
+          vb: String(voltajeVb !== undefined && voltajeVb !== null ? voltajeVb : '205').trim(),
+          vc: String(voltajeVc !== undefined && voltajeVc !== null ? voltajeVc : '205').trim()
+        },
+        acometida: acometidaConductor.trim(),
         circuits: editingElemento?.datosTecnicos?.circuits || [],
         neutroLlegada: editingElemento?.datosTecnicos?.neutroLlegada || { calibre: '', observaciones: '' },
         puestaTierra: editingElemento?.datosTecnicos?.puestaTierra || { calibre: '', observaciones: '' }
@@ -778,6 +826,7 @@ export const ProyectoView = () => {
       updateElementoUnifilar(proyectoId, editingElemento.id, {
         nombre: nombre.trim(),
         tipoElemento,
+        tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : (editingElemento.tension || ''),
         ubicacion: ubicacion.trim() || 'Sin ubicación',
         alimentadoPor: alimentadoPor.trim() || 'No definido',
         foto: eliminarFoto ? null : (foto !== undefined ? foto : editingElemento.foto),
@@ -798,6 +847,7 @@ export const ProyectoView = () => {
         codigo: assignedCode,
         nombre: nombre.trim(),
         tipoElemento,
+        tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : '',
         ubicacion: ubicacion.trim() || 'Sin ubicación',
         alimentadoPor: alimentadoPor.trim() || 'No definido',
         foto,
@@ -1715,605 +1765,746 @@ export const ProyectoView = () => {
 
       </main>
 
-      {/* MODAL MULTI-PLANTILLA DE ELEMENTOS UNIFILARES */}
+            {/* MODAL MULTI-PLANTILLA DE ELEMENTOS UNIFILARES (RESPONSIVE GRID FLUIDO & STICKY ACTIONS) */}
       {showElementoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
+          <div 
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150" 
+            onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
+          />
           
-          <div className="relative w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800 shrink-0">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" /> {editingElemento ? `Editar Plantilla: ${editingElemento.nombre}` : 'Registrar Plantilla Técnica'}
-              </h3>
-              <button 
-                onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
-                className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          <div className="relative w-full max-w-5xl xl:max-w-6xl max-h-[92vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-150">
+            {/* CABECERA FIJA */}
+            <div className="px-5 py-3.5 border-b border-slate-800/80 shrink-0 flex items-center justify-between bg-slate-950/90 backdrop-blur">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <Zap className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-100 flex items-center gap-2">
+                    {editingElemento ? `Editar Plantilla: ${editingElemento.nombre}` : 'Registrar Plantilla Técnica'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Ficha técnica estandarizada y metrología eléctrica de ingeniería
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg font-mono text-[10.5px] font-bold">
+                  Código: {editingElemento ? getElementCode(editingElemento, editingElemento.tipoElemento) : getNextElementId(tipoElemento, proyectoId)}
+                </span>
+                <button 
+                  type="button"
+                  onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
+                  className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-slate-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleCreateElemento} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
+            {/* CUERPO DEL FORMULARIO CON SCROLL INTERNO Y GRID FLUIDO */}
+            <form id="elemento-form" onSubmit={handleCreateElemento} className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-xs">
               
-              {/* Selector de Tipo de Elemento (7 Opciones de Capa 1) */}
+              {/* Selector de Tipo de Elemento (Grid Responsivo Compacto) */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Tipo de Elemento Eléctrico
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-slate-900 p-1.5 rounded-xl border border-slate-800 text-[9px]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    Tipo de Elemento Eléctrico (Plantilla Técnica)
+                  </label>
+                  <span className="text-[10px] text-amber-400 font-semibold font-mono">
+                    {tipoElemento}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-slate-900/60 p-1.5 rounded-xl border border-slate-800 text-[10px]">
                   {[
                     { id: 'TABLERO', label: '⚡ PANEL ELÉCTRICO' },
                     { id: 'PUNTO_SUMINISTRO', label: '🔌 PTO. SUMINISTRO' },
                     { id: 'GENERADOR', label: '🔋 GENERADOR' },
                     { id: 'TRANSFORMADOR', label: '🔄 TRANSFORMADOR' },
-                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA (ATS/MTS)' },
+                    { id: 'TRANSFER', label: '🔀 TRANSFERENCIA' },
                     { id: 'CCM', label: '⚙️ CCM (MOTORES)' },
-                    { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' }
+                    { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' },
+                    { id: 'PUESTA_TIERRA', label: '🛡️ PUESTA TIERRA' }
                   ].map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setTipoElemento(t.id)}
-                      className={`py-2 px-2 font-black rounded-lg transition-all text-center cursor-pointer ${
+                      className={`py-2 px-2.5 font-bold rounded-lg transition-all text-center cursor-pointer flex items-center justify-center gap-1.5 ${
                         tipoElemento === t.id 
-                          ? 'bg-amber-500 text-slate-950 shadow-md' 
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                          ? 'bg-amber-500 text-slate-950 shadow-md font-black' 
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/80'
                       }`}
                     >
-                      {t.label}
+                      <span className="truncate">{t.label}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Nombre descriptivo */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                    Nombre descriptivo del equipo
-                  </label>
-                  <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-md font-mono text-[10px] font-bold">
-                    Código: {editingElemento ? getElementCode(editingElemento, editingElemento.tipoElemento) : getNextElementId(tipoElemento, proyectoId)}
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder={`Ej. ${PREFIX_MAP[tipoElemento] || 'tab'}-1: Nombre Descriptivo`}
-                  className={`w-full px-3.5 py-2 bg-slate-900 border focus:ring-1 rounded-xl text-sm text-slate-100 focus:outline-none h-11 transition-all ${
-                    nombreElementoDuplicado 
-                      ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
-                      : 'border-slate-800 focus:border-amber-500 focus:ring-amber-500'
-                  }`}
-                />
-                {nombreElementoDuplicado && (
-                  <p className="text-[10px] text-red-550 font-bold flex items-center gap-1.5 mt-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Nombre duplicado: ya existe este equipo en el proyecto.
-                  </p>
-                )}
-              </div>
-
-              {/* Ubicación */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Ubicación Física
-                </label>
-                <input
-                  type="text"
-                  value={ubicacion}
-                  onChange={(e) => setUbicacion(e.target.value)}
-                  placeholder="Ej. Sótano Sala Técnica o Estacionamiento Exterior"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
-                />
-              </div>
-
-              {/* Alimentación Jerárquica Dinámica */}
-              <div>
-                <SelectorAlimentadorJerarquico
-                  proyectoId={proyectoId}
-                  tableroActualId={editingElemento?.id}
-                  elementosList={elementos}
-                  value={alimentadoPor}
-                  onChange={(val) => setAlimentadoPor(val)}
-                  label="Alimentado Por (Procedencia / Jerarquía)"
-                  placeholder="Seleccionar Subestación, Trafo, CCM o Tablero..."
-                />
-              </div>
-
-              {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}
-
-              {/* TABLERO - FICHA TÉCNICA */}
-              {tipoElemento === 'TABLERO' && (
-                <div className="space-y-3 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" /> Ficha Técnica del Tablero
-                    </span>
-                    <span className="text-[9px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                      Norma de Clasificación
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* 1. Uso Eléctrico */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
-                        Uso Eléctrico (Función Principal)
-                      </label>
-                      <select
-                        value={tableroUsoElectrico}
-                        onChange={(e) => setTableroUsoElectrico(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
-                      >
-                        {TABLERO_USO_ELECTRICO.map((opc) => (
-                          <option key={opc.value} value={opc.value}>
-                            {opc.sigla} - {opc.descripcion}
-                          </option>
-                        ))}
-                      </select>
+              {/* GRID PRINCIPAL DE 3 COLUMNAS FLUIDAS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                
+                {/* ============================================================== */}
+                {/* COLUMNA 1: Identificación, Ubicación y Procedencia */}
+                {/* ============================================================== */}
+                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800">
+                      <Tag className="w-3.5 h-3.5 text-amber-400" />
+                      <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider">
+                        Identificación y Jerarquía
+                      </h4>
                     </div>
 
-                    {/* 2. Capacidad (Número de Polos) */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
-                        Capacidad (Fases / Polos Alimentación)
-                      </label>
-                      <select
-                        value={tableroCapacidadPolos}
-                        onChange={(e) => setTableroCapacidadPolos(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
-                      >
-                        {TABLERO_CAPACIDADES_POLOS.map((opc) => (
-                          <option key={opc.value} value={opc.value}>
-                            {opc.label} ({opc.fases}F)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 3. Cantidad de Polos Normalizada */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
-                        Cantidad de Polos (Normalizados)
-                      </label>
-                      <select
-                        value={maxPoles}
-                        onChange={(e) => setMaxPoles(parseInt(e.target.value, 10))}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs font-mono font-bold text-amber-400 h-10"
-                      >
-                        {TABLERO_CANTIDAD_POLOS_ESTANDAR.map((p) => (
-                          <option key={p} value={p}>
-                            {p} Polos
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 4. Montaje y Accesibilidad */}
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
-                        Montaje y Accesibilidad
-                      </label>
-                      <select
-                        value={tableroMontaje}
-                        onChange={(e) => setTableroMontaje(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
-                      >
-                        {TABLERO_MONTAJE_OPCIONES.map((opc) => (
-                          <option key={opc.value} value={opc.value}>
-                            {opc.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 5. Nivel de Hermeticidad */}
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] font-bold text-slate-350 uppercase tracking-wide mb-1">
-                        Nivel de Hermeticidad (Protección Ambiental)
-                      </label>
-                      <select
-                        value={tableroHermeticidad}
-                        onChange={(e) => setTableroHermeticidad(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-10"
-                      >
-                        {TABLERO_HERMETICIDAD_NEMA_IP.map((opc) => (
-                          <option key={opc.value} value={opc.value}>
-                            {opc.label} ({opc.nema} / {opc.ip})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TRANSFORMADOR */}
-              {tipoElemento === 'TRANSFORMADOR' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia KVA</label>
-                      <input type="text" value={kvaTrafo} onChange={(e) => setKvaTrafo(e.target.value)} placeholder="Ej. 500 KVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Marca</label>
-                      <input type="text" value={marcaTrafo} onChange={(e) => setMarcaTrafo(e.target.value)} placeholder="Ej. GE" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transformador</label>
-                      <select value={tipoTrafo} onChange={(e) => setTipoTrafo(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                        <option value="Aceite">Aceite (Sumergido / Exterior)</option>
-                        <option value="Seco">Seco (Encapsulado / Interior)</option>
-                        <option value="Pedestal">Pedestal (Aceite)</option>
-                        <option value="Poste">Montaje en Poste (Aceite)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conexión</label>
-                      <input type="text" value={conexionTrafo} onChange={(e) => setConexionTrafo(e.target.value)} placeholder="Ej. Estrella - Estrella" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* GENERADOR */}
-              {tipoElemento === 'GENERADOR' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad kVA</label>
-                      <input type="text" value={kvaGen} onChange={(e) => setKvaGen(e.target.value)} placeholder="Ej. 580 kVA" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Combustible</label>
-                      <select value={combustibleGen} onChange={(e) => setCombustibleGen(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                        <option value="DIESEL">DIÉSEL / GASOIL</option>
-                        <option value="GAS">GAS NATURAL</option>
-                        <option value="GASOLINA">GASOLINA</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Voltaje Generación</label>
-                      <TensionNominalInput
-                        tipo="BT"
-                        value={voltajeGen}
-                        onChange={(val) => setVoltajeGen(val)}
-                        placeholder="Ej. 208/120 V o escribir..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Interruptor Amperaje</label>
-                      <input type="text" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* PUESTA A TIERRA */}
-              {tipoElemento === 'PUESTA_TIERRA' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Resistencia (Ω)</label>
-                      <input type="text" value={resistenciaOhmios} onChange={(e) => setResistenciaOhmios(e.target.value)} placeholder="Ej. 0.5 Ω" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Corriente Fuga (A)</label>
-                      <input type="text" value={corrienteFuga} onChange={(e) => setCorrienteFuga(e.target.value)} placeholder="Ej. 6.4 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono text-amber-400" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Malla / Ubicación</label>
-                    <input type="text" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value)} placeholder="Ej. Malla debajo de concreto" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
-                  </div>
-                </div>
-              )}
-
-              {/* TRANSFERENCIA (ATS/MTS) */}
-              {tipoElemento === 'TRANSFER' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
-                    <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 3200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Modo de Operación (ATS/MTS)</label>
-                    <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                      <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
-                      <option value="MANUAL">MANUAL (MTS)</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* BANCO CONDENSADOR */}
-              {tipoElemento === 'BANCO_CONDENSADOR' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (kVAR)</label>
-                      <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value)} placeholder="Ej. 150 kVAR" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pasos / Escalones</label>
-                      <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value)} placeholder="Ej. 6 pasos" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Banco</label>
-                      <select value={tipoBanco} onChange={(e) => setTipoBanco(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10">
-                        <option value="AUTOMATICO">AUTOMÁTICO (CONTROLADOR)</option>
-                        <option value="FIJO">FIJO</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
-                      <TensionNominalInput
-                        tipo="BT"
-                        value={tensionBanco}
-                        onChange={(val) => setTensionBanco(val)}
-                        placeholder="Ej. 208 V o 480 V"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* PUNTO DE SUMINISTRO */}
-              {tipoElemento === 'PUNTO_SUMINISTRO' && (
-                <div className="space-y-4">
-                  {/* Tension y Carga Contratada */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Nombre descriptivo */}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                        Tensión de Suministro (COVENIN 159:1997)
-                      </label>
-                      <TensionNominalInput
-                        tipo="TODAS"
-                        value={suministroTension}
-                        onChange={(val) => setSuministroTension(val)}
-                        placeholder="Ej. 13.8 kV o 208/120 V"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                        Carga Contratada (kVA)
+                        Nombre descriptivo del equipo <span className="text-amber-500">*</span>
                       </label>
                       <input
                         type="text"
-                        value={suministroCapacidad}
-                        onChange={(e) => setSuministroCapacidad(e.target.value)}
-                        placeholder="Ej. 1000 kVA o 500"
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono"
+                        required
+                        value={nombre}
+                        onChange={(e) => setNombre(e.target.value)}
+                        placeholder={`Ej. ${PREFIX_MAP[tipoElemento] || 'tab'}-1: Nombre Descriptivo`}
+                        className={`w-full px-3 py-2 bg-slate-950 border focus:ring-1 rounded-xl text-xs text-slate-100 focus:outline-none h-9.5 transition-all ${
+                          nombreElementoDuplicado 
+                            ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                            : 'border-slate-800 focus:border-amber-500 focus:ring-amber-500'
+                        }`}
+                      />
+                      {nombreElementoDuplicado && (
+                        <p className="text-[10px] text-red-400 font-bold flex items-center gap-1 mt-1">
+                          <AlertTriangle className="w-3 h-3" /> Nombre duplicado en este proyecto.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Ubicación física */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                        Ubicación Física
+                      </label>
+                      <input
+                        type="text"
+                        value={ubicacion}
+                        onChange={(e) => setUbicacion(e.target.value)}
+                        placeholder="Ej. Sótano Sala Técnica o Piso 2"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-9.5"
+                      />
+                    </div>
+
+                    {/* Procedencia / Alimentado Por */}
+                    <div>
+                      <SelectorAlimentadorJerarquico
+                        proyectoId={proyectoId}
+                        tableroActualId={editingElemento?.id}
+                        elementosList={elementos}
+                        value={alimentadoPor}
+                        onChange={(val) => setAlimentadoPor(val)}
+                        label="Alimentado Por (Procedencia / Jerarquía)"
+                        placeholder="Seleccionar Subestación, Trafo, CCM o Tablero..."
                       />
                     </div>
                   </div>
 
-                  {/* Tipo de Medición Eléctrica (Obs 23) */}
-                  <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80 space-y-2">
-                    <label className="block text-[10px] font-bold text-amber-400 uppercase tracking-wide">
-                      ⚡ Tipo de Medición Eléctrica (Obligatorio)
-                    </label>
-                    <select
-                      value={suministroTipoMedicion}
-                      onChange={(e) => setSuministroTipoMedicion(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 h-10 focus:border-amber-500 font-semibold"
-                    >
-                      <option value="Medición Directa (Baja Tensión)">1. Medición Directa (Baja Tensión)</option>
-                      <option value="Medición Indirecta BT">2. Medición Indirecta BT (con transformadores de corriente TCs)</option>
-                      <option value="Medición Indirecta AT/MT">3. Medición Indirecta AT/MT (con TCs y TPs para media/alta tensión)</option>
-                    </select>
+                  {/* Nota informativa técnica */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-[10px] text-slate-400">
+                    <p className="font-bold text-amber-400 flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Marco Normativo:
+                    </p>
+                    <p className="text-[9.5px] text-slate-400 mt-0.5">COVENIN 159:1997 / Código Eléctrico Nacional (CEN 200)</p>
+                  </div>
+                </div>
+
+                {/* ============================================================== */}
+                {/* COLUMNA 2: Ficha Técnica y Clasificación según tipo */}
+                {/* ============================================================== */}
+                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800">
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider">
+                      Ficha Técnica y Clasificación
+                    </h4>
                   </div>
 
-                  {/* Bloque Enlace Corpoelec / Red Pública (Obs 20) */}
-                  <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-800/60">
-                      <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wide flex items-center gap-2">
-                        <Gauge className="w-4 h-4 text-blue-400" /> Acometida de Servicio / Red Corpoelec
-                      </span>
-                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400">
-                        <input
-                          type="checkbox"
-                          checked={suministroEnlaceCorpoelec}
-                          onChange={(e) => setSuministroEnlaceCorpoelec(e.target.checked)}
-                          className="rounded border-slate-700 text-amber-500 focus:ring-amber-500 h-4 w-4 bg-slate-900"
-                        />
-                        <span className="text-[10px] font-semibold">Enlace Activo</span>
-                      </label>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* TABLERO */}
+                  {tipoElemento === 'TABLERO' && (
+                    <div className="space-y-2.5">
+                      {/* 1. Uso Eléctrico */}
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Empresa Distribuidora</label>
-                        <input
-                          type="text"
-                          value={suministroEmpresa}
-                          onChange={(e) => setSuministroEmpresa(e.target.value)}
-                          placeholder="Ej. CORPOELEC"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9"
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                          Uso Eléctrico (Función Principal)
+                        </label>
+                        <select
+                          value={tableroUsoElectrico}
+                          onChange={(e) => setTableroUsoElectrico(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9"
+                        >
+                          {TABLERO_USO_ELECTRICO.map((opc) => (
+                            <option key={opc} value={opc}>{opc}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 2. Capacidad y Cantidad de Polos */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                            Alimentación / Fases
+                          </label>
+                          <select
+                            value={tableroCapacidadPolos}
+                            onChange={(e) => setTableroCapacidadPolos(e.target.value)}
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9"
+                          >
+                            {TABLERO_CAPACIDADES_POLOS.map((opc) => (
+                              <option key={opc} value={opc}>{opc}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                            Cantidad de Polos
+                          </label>
+                          <select
+                            value={maxPoles}
+                            onChange={(e) => setMaxPoles(parseInt(e.target.value, 10))}
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs font-mono font-bold text-amber-400 h-9"
+                          >
+                            {TABLERO_CANTIDAD_POLOS_ESTANDAR.map((p) => (
+                              <option key={p} value={p}>{p} Polos</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* 3. Montaje y Hermeticidad */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                            Montaje
+                          </label>
+                          <select
+                            value={tableroMontaje}
+                            onChange={(e) => setTableroMontaje(e.target.value)}
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9 truncate"
+                          >
+                            {TABLERO_MONTAJE_OPCIONES.map((opc) => (
+                              <option key={opc} value={opc}>{opc}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                            Hermeticidad NEMA/IP
+                          </label>
+                          <select
+                            value={tableroHermeticidad}
+                            onChange={(e) => setTableroHermeticidad(e.target.value)}
+                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9 truncate"
+                          >
+                            {TABLERO_HERMETICIDAD_NEMA_IP.map((opc) => (
+                              <option key={opc} value={opc}>{opc}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* 4. Tensión Nominal COVENIN 159 */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                          Tensión Nominal (COVENIN 159:1997)
+                        </label>
+                        <TensionNominalInput
+                          tipo="BT"
+                          value={tableroTension}
+                          onChange={(val) => setTableroTension(val)}
+                          placeholder="Ej. 208Y/120 V (3Φ - 4 hilos Estrella)"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TRANSFORMADOR */}
+                  {tipoElemento === 'TRANSFORMADOR' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia KVA</label>
+                          <input type="text" value={kvaTrafo} onChange={(e) => setKvaTrafo(e.target.value)} placeholder="Ej. 500 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Marca</label>
+                          <input type="text" value={marcaTrafo} onChange={(e) => setMarcaTrafo(e.target.value)} placeholder="Ej. GE / ABB" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transformador</label>
+                          <select value={tipoTrafo} onChange={(e) => setTipoTrafo(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
+                            <option value="Pedestal">Pedestal (Aceite)</option>
+                            <option value="Seco">Seco (Encapsulado)</option>
+                            <option value="Aceite">Aceite (Sumergido)</option>
+                            <option value="Poste">Montaje en Poste</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conexión</label>
+                          <input type="text" value={conexionTrafo} onChange={(e) => setConexionTrafo(e.target.value)} placeholder="Delta - Estrella (Dyn11)" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Primaria MT</label>
+                        <TensionNominalInput
+                          tipo="MT"
+                          value={voltajePrimario}
+                          onChange={(val) => setVoltajePrimario(val)}
+                          placeholder="Ej. 13800 V (13.8 kV)"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Tipo de Acometida</label>
-                        <select
-                          value={suministroTipoAcometida}
-                          onChange={(e) => setSuministroTipoAcometida(e.target.value)}
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9"
-                        >
-                          <option value="Subterránea">Subterránea</option>
-                          <option value="Aérea">Aérea</option>
-                          <option value="Mixta">Mixta (Aéreo - Subterráneo)</option>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Secundaria BT</label>
+                        <TensionNominalInput
+                          tipo="BT"
+                          value={voltajeSecundario}
+                          onChange={(val) => setVoltajeSecundario(val)}
+                          placeholder="Ej. 208Y/120 V o 480Y/277 V"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* GENERADOR */}
+                  {tipoElemento === 'GENERADOR' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad kVA</label>
+                          <input type="text" value={kvaGen} onChange={(e) => setKvaGen(e.target.value)} placeholder="Ej. 500 kVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia kW</label>
+                          <input type="text" value={potenciaKwGen} onChange={(e) => setPotenciaKwGen(e.target.value)} placeholder="Ej. 400 kW" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Voltaje Generación</label>
+                          <TensionNominalInput tipo="BT" value={voltajeGen} onChange={(val) => setVoltajeGen(val)} placeholder="Ej. 208/120 V" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Amperaje Breaker</label>
+                          <input type="text" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Combustible</label>
+                        <select value={combustibleGen} onChange={(e) => setCombustibleGen(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
+                          <option value="DIESEL">DIÉSEL / GASOIL</option>
+                          <option value="GAS">GAS NATURAL</option>
+                          <option value="GASOLINA">GASOLINA</option>
                         </select>
                       </div>
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">N° Contrato / NIC</label>
-                        <input
-                          type="text"
-                          value={suministroNumeroContrato}
-                          onChange={(e) => setSuministroNumeroContrato(e.target.value)}
-                          placeholder="Ej. 1000284759"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9 font-mono"
-                        />
+                  {/* PUNTO DE SUMINISTRO */}
+                  {tipoElemento === 'PUNTO_SUMINISTRO' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Suministro</label>
+                          <TensionNominalInput tipo="TODAS" value={suministroTension} onChange={(val) => setSuministroTension(val)} placeholder="Ej. 13.8 kV o 208 V" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Carga Contratada</label>
+                          <input type="text" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value)} placeholder="Ej. 1000 kVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">N° Medidor</label>
-                        <input
-                          type="text"
-                          value={suministroNic}
-                          onChange={(e) => setSuministroNic(e.target.value)}
-                          placeholder="Ej. MED-883921"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9 font-mono"
-                        />
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Medición</label>
+                        <select value={suministroTipoMedicion} onChange={(e) => setSuministroTipoMedicion(e.target.value)} className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
+                          <option value="Medición Directa (Baja Tensión)">Medición Directa (Baja Tensión)</option>
+                          <option value="Medición Indirecta BT">Medición Indirecta BT (con TCs)</option>
+                          <option value="Medición Indirecta AT/MT">Medición Indirecta AT/MT (TCs y TPs)</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">NIC / Medidor</label>
+                          <input type="text" value={suministroNic} onChange={(e) => setSuministroNic(e.target.value)} placeholder="Ej. NIC 49210" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. Contrato</label>
+                          <input type="text" value={suministroNumeroContrato} onChange={(e) => setSuministroNumeroContrato(e.target.value)} placeholder="Ej. C-84920" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TRANSFERENCIA (ATS/MTS) */}
+                  {tipoElemento === 'TRANSFER' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
+                          <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Modo Operación</label>
+                          <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
+                            <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
+                            <option value="MANUAL">MANUAL (MTS)</option>
+                          </select>
+                        </div>
                       </div>
                       <div>
-                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Poste / Trafo Servicio</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                        <TensionNominalInput tipo="BT" value={tensionOperativa} onChange={(val) => setTensionOperativa(val)} placeholder="Ej. 208Y/120 V o 480Y/277 V" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CCM (MOTORES) */}
+                  {tipoElemento === 'CCM' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Barra (A)</label>
+                          <input type="text" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value)} placeholder="Ej. 1200 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                          <TensionNominalInput tipo="BT" value={ccmTension} onChange={(val) => setCcmTension(val)} placeholder="Ej. 480 V o 208 V" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Breaker Principal</label>
+                          <input type="text" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value)} placeholder="Ej. 1200A 3P" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. de Gavetas</label>
+                          <input type="number" min="1" max="48" value={ccmNumeroGavetas} onChange={(e) => setCcmNumeroGavetas(e.target.value)} placeholder="8" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* BANCO DE CONDENSADORES */}
+                  {tipoElemento === 'BANCO_CONDENSADOR' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (kVAR)</label>
+                          <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value)} placeholder="Ej. 150 kVAR" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pasos / Escalones</label>
+                          <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value)} placeholder="Ej. 6 pasos" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Banco</label>
+                          <select value={tipoBanco} onChange={(e) => setTipoBanco(e.target.value)} className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
+                            <option value="AUTOMATICO">AUTOMÁTICO</option>
+                            <option value="FIJO">FIJO</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
+                          <TensionNominalInput tipo="BT" value={tensionBanco} onChange={(val) => setTensionBanco(val)} placeholder="Ej. 208 V o 480 V" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PUESTA A TIERRA */}
+                  {tipoElemento === 'PUESTA_TIERRA' && (
+                    <div className="space-y-2.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Resistencia (Ω)</label>
+                          <input type="text" value={resistenciaOhmios} onChange={(e) => setResistenciaOhmios(e.target.value)} placeholder="Ej. 0.5 Ω" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Corriente Fuga (A)</label>
+                          <input type="text" value={corrienteFuga} onChange={(e) => setCorrienteFuga(e.target.value)} placeholder="Ej. 4.2 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono text-amber-400" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Malla / Ubicación</label>
+                        <input type="text" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value)} placeholder="Ej. Malla debajo de losa / Sala Eléctrica" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cable Acometida Tierra</label>
+                        <input type="text" value={cableAcometidaTierra} onChange={(e) => setCableAcometidaTierra(e.target.value)} placeholder="Ej. #2/0 AWG Cu Desnudo" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OTRO */}
+                  {tipoElemento === 'OTRO' && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Especificaciones Técnicas</label>
+                      <textarea value={descripcionOtro} onChange={(e) => setDescripcionOtro(e.target.value)} rows={3} placeholder="Detalles técnicos específicos..." className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none resize-none" />
+                    </div>
+                  )}
+                </div>
+
+                {/* ============================================================== */}
+                {/* COLUMNA 3: Metrología Eléctrica, Interruptor, Foto y Notas */}
+                {/* ============================================================== */}
+                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800">
+                    <Gauge className="w-3.5 h-3.5 text-amber-400" />
+                    <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider">
+                      {tipoElemento === 'TABLERO' ? 'Metrología e Interruptor Principal' : 'Mediciones y Parámetros'}
+                    </h4>
+                  </div>
+
+                  {/* Campos específicos de TABLERO en Columna 3 */}
+                  {tipoElemento === 'TABLERO' && (
+                    <div className="space-y-2.5">
+                      {/* Interruptor Principal */}
+                      <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Interruptor Principal (Main Breaker)
+                        </span>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <div>
+                            <label className="block text-[9px] text-slate-400 uppercase">Marca</label>
+                            <input
+                              type="text"
+                              list="breaker-marcas"
+                              value={breakerMarca}
+                              onChange={(e) => setBreakerMarca(e.target.value)}
+                              placeholder="Ej. GE"
+                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-bold h-8 text-center"
+                            />
+                            <datalist id="breaker-marcas">
+                              {MARCA_OPTIONS.map(m => <option key={m} value={m} />)}
+                            </datalist>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-400 uppercase">Tipo</label>
+                            <input
+                              type="text"
+                              list="breaker-tipos"
+                              value={breakerTipo}
+                              onChange={(e) => setBreakerTipo(e.target.value)}
+                              placeholder="Ej. TQD"
+                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 h-8 text-center"
+                            />
+                            <datalist id="breaker-tipos">
+                              {TIPO_OPTIONS.map(t => <option key={t} value={t} />)}
+                            </datalist>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] text-slate-400 uppercase">Amperaje</label>
+                            <input
+                              type="text"
+                              list="breaker-amps"
+                              value={breakerAmp}
+                              onChange={(e) => setBreakerAmp(e.target.value)}
+                              placeholder="100"
+                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold h-8 text-center"
+                            />
+                            <datalist id="breaker-amps">
+                              {AMP_OPTIONS.map(a => <option key={a} value={a} />)}
+                            </datalist>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metrología Inicial (Voltajes y Corrientes) */}
+                      <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                        <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide flex items-center gap-1">
+                          <Activity className="w-3 h-3" /> Metrología Inicial (Mediciones)
+                        </span>
+                        
+                        <div className="grid grid-cols-3 gap-1.5 text-center">
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-mono">Va (V)</span>
+                            <input
+                              type="text"
+                              value={voltajeVa}
+                              onChange={(e) => setVoltajeVa(e.target.value)}
+                              placeholder="208"
+                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-mono">Vb (V)</span>
+                            <input
+                              type="text"
+                              value={voltajeVb}
+                              onChange={(e) => setVoltajeVb(e.target.value)}
+                              placeholder="205"
+                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-mono">Vc (V)</span>
+                            <input
+                              type="text"
+                              value={voltajeVc}
+                              onChange={(e) => setVoltajeVc(e.target.value)}
+                              placeholder="205"
+                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-1.5 text-center pt-1 border-t border-slate-800">
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-mono">Ia (A)</span>
+                            <input
+                              type="text"
+                              value={corrienteIa}
+                              onChange={(e) => setCorrienteIa(e.target.value)}
+                              placeholder="0"
+                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-mono">Ib (A)</span>
+                            <input
+                              type="text"
+                              value={corrienteIb}
+                              onChange={(e) => setCorrienteIb(e.target.value)}
+                              placeholder="0"
+                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-slate-400 font-mono">Ic (A)</span>
+                            <input
+                              type="text"
+                              value={corrienteIc}
+                              onChange={(e) => setCorrienteIc(e.target.value)}
+                              placeholder="0"
+                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Acometida */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                          Acometida / Calibre Conductor
+                        </label>
                         <input
                           type="text"
-                          value={suministroPosteTrafo}
-                          onChange={(e) => setSuministroPosteTrafo(e.target.value)}
-                          placeholder="Ej. P-142 / Trafo 50kVA"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-9 font-mono"
+                          value={acometidaConductor}
+                          onChange={(e) => setAcometidaConductor(e.target.value)}
+                          placeholder="Ej. 3x 3/0 AWG + 1x 1/0 N (Cu)"
+                          className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-blue-400 font-mono h-8.5"
                         />
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {/* CCM (CENTRO DE CONTROL DE MOTORES) */}
-              {tipoElemento === 'CCM' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Barra (A)</label>
-                      <input type="text" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value)} placeholder="Ej. 1200 A" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa (COVENIN 159)</label>
-                      <TensionNominalInput
-                        tipo="BT"
-                        value={ccmTension}
-                        onChange={(val) => setCcmTension(val)}
-                        placeholder="Ej. 480Y/277 V o 480▲"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Breaker Principal</label>
-                      <input type="text" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value)} placeholder="Ej. 1200A 3P" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. de Gavetas / Buckets</label>
-                      <input type="number" min="1" max="48" value={ccmNumeroGavetas} onChange={(e) => setCcmNumeroGavetas(parseInt(e.target.value, 10) || 1)} placeholder="8" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10 font-mono" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* OTRO */}
-              {tipoElemento === 'OTRO' && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                    Especificaciones Técnicas
-                  </label>
-                  <textarea value={descripcionOtro} onChange={(e) => setDescripcionOtro(e.target.value)} rows={3} placeholder="Detalles técnicos adicionales..." className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none resize-none" />
-                </div>
-              )}
-
-              {/* Observaciones generales */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Observaciones del Informe Técnico
-                </label>
-                <textarea
-                  value={observacionesGenerales}
-                  onChange={(e) => setObservacionesGenerales(e.target.value)}
-                  rows={2}
-                  placeholder="Detalles del estado de mantenimiento, polvo, humedad o recomendaciones..."
-                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-xs text-slate-100 focus:outline-none placeholder-slate-650 transition-all resize-none"
-                />
-              </div>
-
-              {/* Foto Offline Blob */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                  <Camera className="w-4 h-4 text-amber-500" />
-                  Foto o Imagen de la Placa Técnico
-                </label>
-                
-                {previewUrl || foto ? (
-                  <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-900 aspect-video flex items-center justify-center group shadow-md shrink-0">
-                    <img src={previewUrl || foto} alt="Vista previa" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFotoBlob(null);
-                        setFoto(null);
-                        setEliminarFoto(true);
-                        if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-                        setPreviewUrl(null);
-                      }}
-                      className="absolute top-2 right-2 p-1.5 bg-slate-950/80 hover:bg-red-650 text-white rounded-lg cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center w-full">
-                    <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-800 border-dashed rounded-xl cursor-pointer bg-slate-900/20 hover:bg-slate-900/40 hover:border-slate-700 transition-all select-none">
-                      <div className="flex flex-col items-center justify-center pt-3 pb-3">
-                        <Camera className="w-5 h-5 text-slate-500 mb-1" />
-                        <p className="text-[11px] text-slate-450">
-                          <span className="font-bold">Tomar Foto</span> o subir
-                        </p>
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
+                  {/* Foto Offline Blob */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-amber-500" />
+                      Foto de la Placa Técnico / Equipo
                     </label>
+                    
+                    {previewUrl || foto ? (
+                      <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 aspect-video flex items-center justify-center group shadow-md shrink-0">
+                        <img src={previewUrl || foto} alt="Vista previa" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFotoBlob(null);
+                            setFoto(null);
+                            setEliminarFoto(true);
+                            if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+                            setPreviewUrl(null);
+                          }}
+                          className="absolute top-2 right-2 p-1.5 bg-slate-950/80 hover:bg-rose-600 text-white rounded-lg cursor-pointer transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-slate-800 border-dashed rounded-xl cursor-pointer bg-slate-950/40 hover:bg-slate-900/40 hover:border-slate-700 transition-all select-none">
+                          <div className="flex flex-col items-center justify-center py-2">
+                            <Camera className="w-4 h-4 text-slate-500 mb-0.5" />
+                            <p className="text-[10px] text-slate-400">
+                              <span className="font-bold text-amber-400">Adjuntar Foto</span> o capturar
+                            </p>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleImageChange}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {/* Observaciones generales */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                      Observaciones del Informe Técnico
+                    </label>
+                    <textarea
+                      value={observacionesGenerales}
+                      onChange={(e) => setObservacionesGenerales(e.target.value)}
+                      rows={2}
+                      placeholder="Estado de mantenimiento, accesibilidad o recomendaciones..."
+                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 transition-all resize-none h-14"
+                    />
+                  </div>
+
+                </div>
+
               </div>
 
-              {/* Botones de acción con estilo amarillo unificado */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-900 shrink-0">
+            </form>
+
+            {/* PIE DE ACCIONES FIJO (STICKY BOTTOM ACTION BAR) */}
+            <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/95 backdrop-blur shrink-0 flex items-center justify-between">
+              <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span>Ficha técnica lista para diagramación unifilar</span>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                 <button
                   type="button"
                   onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
-                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-xl text-slate-300 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
+                  form="elemento-form"
                   disabled={!isElementoFormValid}
-                  className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
+                  className="bg-amber-500 text-slate-950 font-black hover:bg-amber-400 active:scale-98 transition-all px-5 py-2 rounded-xl flex items-center justify-center gap-2 text-xs cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {editingElemento ? 'Guardar Cambios' : 'Guardar Plantilla'}
                 </button>
               </div>
+            </div>
 
-            </form>
           </div>
         </div>
       )}
+
 
       {/* MODAL CREAR INSPECCIÓN TÉCNICA (CAPA 2 - 4 INSPECCIONES SEPARADAS) */}
       {showInspeccionModal && (
