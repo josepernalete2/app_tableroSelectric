@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
-import { API_BASE_URL } from '../utils/api';
-import { initialTablerosData } from '../data/mockTableros';
+import { API_BASE_URL } from '../utils/api.js';
+import { initialTablerosData } from '../data/mockTableros.js';
 
 // Configurar localforage
 localforage.config({
@@ -443,12 +443,14 @@ export const useStore = create(
       subestacionesLocales: [],
       syncQueue: [],
       isSyncing: false,
+      syncProgress: null,
       socket: null,
       toast: { show: false, message: '', type: 'success', action: null },
       conflictosCircuitos: [],
       isPanelConflictosOpen: false,
 
       setIsSyncing: (isSyncing) => set({ isSyncing }),
+      setSyncProgress: (syncProgress) => set({ syncProgress }),
       setSyncQueue: (syncQueue) => set({ syncQueue: Array.isArray(syncQueue) ? syncQueue : [] }),
       showToast: (message, type = 'success', action = null) => set({ toast: { show: true, message, type, action } }),
       hideToast: () => set((state) => ({ toast: { ...state.toast, show: false } })),
@@ -2678,6 +2680,49 @@ export const useStore = create(
         }));
       },
 
+      markQueueItemError: (id, errorMessage) => {
+        if (!id) return;
+        set((state) => ({
+          syncQueue: (state.syncQueue || []).map((item) => {
+            if (item.id === id || item.payload?.id === id) {
+              return {
+                ...item,
+                syncError: errorMessage || 'Error al sincronizar con el servidor',
+                syncFailedAt: Date.now(),
+                retryCount: (item.retryCount || 0) + 1
+              };
+            }
+            return item;
+          })
+        }));
+      },
+
+      clearQueueItemError: (id) => {
+        if (!id) return;
+        set((state) => ({
+          syncQueue: (state.syncQueue || []).map((item) => {
+            if (item.id === id || item.payload?.id === id) {
+              const copy = { ...item };
+              delete copy.syncError;
+              delete copy.syncFailedAt;
+              return copy;
+            }
+            return item;
+          })
+        }));
+      },
+
+      clearAllQueueErrors: () => {
+        set((state) => ({
+          syncQueue: (state.syncQueue || []).map((item) => {
+            const copy = { ...item };
+            delete copy.syncError;
+            delete copy.syncFailedAt;
+            return copy;
+          })
+        }));
+      },
+
       clearSyncQueue: () => {
         set({
           syncQueue: [],
@@ -2685,7 +2730,8 @@ export const useStore = create(
           elementosLocales: [],
           subestacionesLocales: [],
           puntosMedicionLocales: [],
-          ccmLocales: []
+          ccmLocales: [],
+          syncProgress: null
         });
       },
 

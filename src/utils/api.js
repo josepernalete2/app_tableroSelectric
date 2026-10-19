@@ -11,10 +11,10 @@ const getBaseApiUrl = () => {
   }
 
   // 2. Si viene definida expresamente por variable de entorno Vite y no está vacía:
-  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
+  if (import.meta.env?.VITE_API_URL && import.meta.env.VITE_API_URL.trim() !== '') {
     return import.meta.env.VITE_API_URL.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
-  if (import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim() !== '') {
+  if (import.meta.env?.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL.trim() !== '') {
     return import.meta.env.VITE_API_BASE_URL.trim().replace(/\/$/, '').replace(/\/api$/, '');
   }
 

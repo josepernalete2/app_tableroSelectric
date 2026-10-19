@@ -13,6 +13,7 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
   const user = useStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
   if (!subestacionData) return <div className="text-center p-8 text-slate-400">No hay datos de subestación seleccionados.</div>;
 
   const {
@@ -34,8 +35,6 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
     firmaInspector = "",
     firmaSupervisor = ""
   } = subestacionData;
-
-  const [previewUrl, setPreviewUrl] = useState(null);
 
   const updateField = (field, value) => {
     if (readOnly) return;
