@@ -1,4 +1,5 @@
 import prisma from '../db.js';
+import { calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador.js';
 
 /**
  * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
@@ -178,6 +179,50 @@ export const crearElementoUnifilar = async (req, res, next) => {
           console.warn(`[AF WARNING] Capacidad de polos excedida (${highestPole} > ${maxPolos}). Ajustando capacidad para acomodar inspección...`);
           parsedDatosTecnicos.maxPoles = highestPole;
         }
+      }
+    }
+
+    // SI ES TRANSFORMADOR, APLICAR CÁLCULOS ELÉCTRICOS DE CORRIENTES Y NORMALIZAR ESQUEMA
+    if (cleanTipoElemento === 'TRANSFORMADOR') {
+      const canonConexion = normalizarTipoConexion(
+        parsedDatosTecnicos.tipoConexion || parsedDatosTecnicos.conexionTrafo || parsedDatosTecnicos.conexion,
+        parsedDatosTecnicos.conexion,
+        parsedDatosTecnicos.fases
+      );
+      parsedDatosTecnicos.tipoConexion = canonConexion;
+      parsedDatosTecnicos.conexion = canonConexion;
+
+      const potKva = parsedDatosTecnicos.potenciaKva || parsedDatosTecnicos.kva || req.body.potenciaEstimada;
+      const v1 = parsedDatosTecnicos.tensionPrimaria || parsedDatosTecnicos.voltajePrimario;
+      const u1 = parsedDatosTecnicos.unidadTensionPrimaria || 'kV';
+      const v2 = parsedDatosTecnicos.tensionSecundaria || parsedDatosTecnicos.voltajeSecundario;
+      const uPot = parsedDatosTecnicos.unidadPotencia || 'kVA';
+
+      const calculo = calcularCorrientesTrafo({
+        potencia: potKva,
+        unidadPotencia: uPot,
+        tensionPrimaria: v1,
+        unidadTensionPrimaria: u1,
+        tensionSecundaria: v2,
+        tipoConexion: canonConexion,
+        fases: parsedDatosTecnicos.fases
+      });
+
+      parsedDatosTecnicos.fases = String(calculo.fases);
+      parsedDatosTecnicos.corrientePrimariaCalculada = calculo.i1;
+      parsedDatosTecnicos.corrienteSecundariaCalculada = calculo.i2;
+
+      if (!parsedDatosTecnicos.amperiosPrimaria && calculo.i1 != null) {
+        parsedDatosTecnicos.amperiosPrimaria = String(calculo.i1);
+      }
+      if (!parsedDatosTecnicos.amperiosSecundaria && calculo.i2 != null) {
+        parsedDatosTecnicos.amperiosSecundaria = String(calculo.i2);
+      }
+      if (calculo.i2 != null) {
+        parsedDatosTecnicos.corrienteNominalA = calculo.i2;
+        parsedDatosTecnicos.corrienteNominalB = calculo.i2;
+        parsedDatosTecnicos.corrienteNominalC = calculo.i2;
+        parsedDatosTecnicos.corrienteSecundaria = calculo.i2;
       }
     }
 

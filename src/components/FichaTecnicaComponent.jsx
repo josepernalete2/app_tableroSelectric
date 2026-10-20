@@ -23,6 +23,7 @@ import {
   TENSIONES_COVENIN_159_MT, 
   TENSIONES_COVENIN_TODAS 
 } from '../utils/constants';
+import { TIPOS_CONEXION_TRAFO, calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador';
 
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 import { API_BASE_URL } from '../utils/api';
@@ -103,6 +104,19 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   // datosTecnicos JSON
   const [dt, setDt] = useState(elementoData?.datosTecnicos || {});
 
+  // Sincronizar estado cuando cambie elementoData
+  useEffect(() => {
+    if (elementoData) {
+      setNombre(elementoData.nombre || '');
+      setUbicacion(elementoData.ubicacion || '');
+      setAlimentadoPor(elementoData.alimentadoPor || '');
+      setObservacionesGenerales(elementoData.observacionesGenerales || '');
+      setFotoBlob(elementoData.fotoBlob || null);
+      setFotoSrc(elementoData.foto || null);
+      setDt(elementoData.datosTecnicos || {});
+    }
+  }, [elementoData]);
+
   // Wizard Modal Jerarquía
   const { crearElementoProvisional } = useStore();
   const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
@@ -111,6 +125,33 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
   // Restringir a las opciones permitidas: TABLERO, TRANSFER, GENERADOR, TRANSFORMADOR
   const tipoElemento = elementoData?.tipoElemento || 'TABLERO';
+
+  // Cálculo eléctrico automático para transformadores (IEEE C57 / CEN 200 / COVENIN 159)
+  const calculosTrafo = React.useMemo(() => {
+    if (tipoElemento !== 'TRANSFORMADOR') return null;
+    return calcularCorrientesTrafo({
+      potencia: dt.potenciaKva || dt.kva,
+      unidadPotencia: dt.unidadPotencia || 'kVA',
+      tensionPrimaria: dt.tensionPrimaria || dt.voltajePrimario,
+      unidadTensionPrimaria: dt.unidadTensionPrimaria || 'kV',
+      tensionSecundaria: dt.tensionSecundaria || dt.voltajeSecundario,
+      tipoConexion: dt.tipoConexion || dt.conexion,
+      fases: dt.fases
+    });
+  }, [
+    tipoElemento, 
+    dt.potenciaKva, 
+    dt.kva, 
+    dt.unidadPotencia, 
+    dt.tensionPrimaria, 
+    dt.voltajePrimario, 
+    dt.unidadTensionPrimaria, 
+    dt.tensionSecundaria, 
+    dt.voltajeSecundario, 
+    dt.tipoConexion, 
+    dt.conexion, 
+    dt.fases
+  ]);
 
   if (!elementoData) {
     return <div className="text-center p-8 text-slate-400 font-sans">No hay datos del elemento seleccionados.</div>;
@@ -198,6 +239,44 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   const handleSave = (e) => {
     e.preventDefault();
     if (readOnly) return;
+    let finalDt = { ...dt };
+    if (tipoElemento === 'TRANSFORMADOR' && calculosTrafo) {
+      finalDt.tipoConexion = calculosTrafo.tipoConexion;
+      finalDt.conexion = calculosTrafo.tipoConexion;
+      finalDt.fases = String(calculosTrafo.fases);
+      finalDt.corrientePrimariaCalculada = calculosTrafo.i1;
+      finalDt.corrienteSecundariaCalculada = calculosTrafo.i2;
+      if (!finalDt.amperiosPrimaria && calculosTrafo.i1 != null) {
+        finalDt.amperiosPrimaria = String(calculosTrafo.i1);
+      }
+      if (!finalDt.amperiosSecundaria && calculosTrafo.i2 != null) {
+        finalDt.amperiosSecundaria = String(calculosTrafo.i2);
+      }
+      if (calculosTrafo.i2 != null) {
+        finalDt.corrienteNominalA = calculosTrafo.i2;
+        finalDt.corrienteNominalB = calculosTrafo.i2;
+        finalDt.corrienteNominalC = calculosTrafo.i2;
+        finalDt.corrienteSecundaria = calculosTrafo.i2;
+      }
+    }
+    if (tipoElemento === 'GENERADOR') {
+      finalDt.kva = dt.kva || dt.potenciaKva || '';
+      finalDt.potenciaKva = dt.kva || dt.potenciaKva || '';
+      finalDt.kw = dt.kw || dt.potenciaKw || '';
+      finalDt.potenciaKw = dt.kw || dt.potenciaKw || '';
+      finalDt.voltaje = dt.voltajeGeneracion || dt.voltaje || '';
+      finalDt.voltajeGeneracion = dt.voltajeGeneracion || dt.voltaje || '';
+      finalDt.hz = dt.hz || dt.frecuencia || '60 Hz';
+      finalDt.frecuencia = dt.frecuencia || dt.hz || '60 Hz';
+      finalDt.rpm = dt.rpm || dt.velocidadRpm || '1800 RPM';
+      finalDt.velocidadRpm = dt.rpm || dt.velocidadRpm || '1800 RPM';
+      finalDt.amperaje = dt.amperaje || '';
+      finalDt.combustible = dt.combustible || dt.tipoCombustible || 'DIÉSEL';
+      finalDt.tipoCombustible = dt.combustible || dt.tipoCombustible || 'DIÉSEL';
+      finalDt.marca = dt.marca || '';
+      finalDt.fases = dt.fases || '3';
+      finalDt.fp = dt.fp || '0.8';
+    }
     if (onUpdate) {
       onUpdate({
         ...elementoData,
@@ -207,7 +286,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         observacionesGenerales,
         fotoBlob,
         foto: fotoSrc,
-        datosTecnicos: dt
+        datosTecnicos: finalDt
       });
     }
     setIsEditing(false);
@@ -592,43 +671,17 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </h2>
           </div>
 
-          {/* Cuadro de Destino y Ubicación */}
+          {/* Cuadro de Destino y Ubicación (Generador es fuente primaria independiente) */}
           <table className="w-full text-xs text-left border-collapse border-b border-slate-700 font-mono print:border-black">
             <tbody>
               <tr className="border-b border-slate-800 print:border-gray-300">
-                <td className="w-1/3 bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300 flex items-center justify-between">
-                  <span>GENERADOR ALIMENTA A:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWizardModo('SALIDA');
-                      setCircuitDataWizard({
-                        id: 'GENERADOR_SALIDA',
-                        nombre: 'Salida del Generador',
-                        equipo: alimentadoPor || '',
-                        poles: [3],
-                        breaker: { amp: dt.amperaje || '', marca: dt.marca || '', tipo: '' }
-                      });
-                      setModalJerarquiaOpen(true);
-                    }}
-                    className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all"
-                    title="Configurar Equipo Alimentado (Wizard)"
-                  >
-                    <Settings className="w-3 h-3 text-amber-400" /> Configurar Jerarquía
-                  </button>
+                <td className="w-1/3 bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  TIPO DE FUENTE DE ENERGÍA:
                 </td>
-                <td className="p-3 text-slate-100 font-semibold print:text-black">
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={alimentadoPor}
-                      onChange={(e) => setAlimentadoPor(e.target.value)}
-                      placeholder="Ej. TRANSFERENCIA PRINCIPAL (ATS-1)"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
-                    />
-                  ) : (
-                    renderElementWithId(alimentadoPor || '—')
-                  )}
+                <td className="p-3 text-amber-400 font-bold print:text-black flex items-center gap-2">
+                  <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs">
+                    ⚡ FUENTE PRIMARIA INDEPENDIENTE (GRUPO ELECTRÓGENO AUTÓNOMO)
+                  </span>
                 </td>
               </tr>
               <tr>
@@ -720,6 +773,49 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   )}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">VOLTIOS</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">FRECUENCIA NOMINAL</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <select
+                      value={dt.frecuencia || dt.hz || '60 Hz'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleDtChange('frecuencia', val);
+                        handleDtChange('hz', val);
+                      }}
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 font-mono text-xs px-2 py-1"
+                    >
+                      <option value="60 Hz">60 Hz</option>
+                      <option value="50 Hz">50 Hz</option>
+                    </select>
+                  ) : (
+                    dt.frecuencia || dt.hz || '60 Hz'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">Hz</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">VELOCIDAD DE ROTACIÓN</td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={dt.rpm || dt.velocidadRpm || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleDtChange('rpm', val);
+                        handleDtChange('velocidadRpm', val);
+                      }}
+                      placeholder="Ej. 1800 RPM"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600 font-mono text-xs px-2 py-1"
+                    />
+                  ) : (
+                    dt.rpm || dt.velocidadRpm || '—'
+                  )}
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">RPM</td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERAJE NOMINAL</td>
@@ -1115,17 +1211,65 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
               </tr>
               <tr className="border-b border-slate-800 print:border-gray-300">
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  ESQUEMA DE CONEXIÓN
+                </td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <select
+                      value={dt.tipoConexion || normalizarTipoConexion(dt.conexion, '', dt.fases)}
+                      onChange={(e) => {
+                        const nuevaConexion = e.target.value;
+                        handleDtChange('tipoConexion', nuevaConexion);
+                        handleDtChange('conexion', nuevaConexion);
+                        const selMeta = TIPOS_CONEXION_TRAFO.find(t => t.id === nuevaConexion);
+                        if (selMeta) {
+                          handleDtChange('fases', String(selMeta.fases));
+                          if (!dt.tensionSecundaria && !dt.voltajeSecundario) {
+                            handleDtChange('tensionSecundaria', selMeta.tensionSecundariaSugerida);
+                            handleDtChange('voltajeSecundario', selMeta.tensionSecundariaSugerida);
+                          }
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-violet-300 font-bold focus:outline-none focus:border-violet-500 text-xs"
+                    >
+                      {TIPOS_CONEXION_TRAFO.map((tipo) => (
+                        <option key={tipo.id} value={tipo.id}>
+                          {tipo.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-violet-400 print:text-black">
+                        {calculosTrafo?.metaConexion?.label || dt.tipoConexion || dt.conexion || 'Trifásico Estrella (3F - 4H)'}
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/30 print:hidden">
+                        {calculosTrafo?.metaConexion?.shortLabel || '3F - 4H (Y)'}
+                      </span>
+                    </div>
+                  )}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-800 print:border-gray-300">
                 <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">FASES</td>
                 <td className="p-3 text-slate-100 font-semibold print:text-black">
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={dt.fases || ''}
-                      onChange={(e) => handleDtChange('fases', e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={dt.fases || String(calculosTrafo?.fases || 3)}
+                        onChange={(e) => handleDtChange('fases', e.target.value)}
+                        className="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500 text-center"
+                      />
+                      <span className="text-slate-400 text-xs">
+                        ({calculosTrafo?.esTrifasico ? 'Trifásico 3Φ' : dt.fases === '2' ? 'Bifásico 2Φ' : 'Monofásico 1Φ'})
+                      </span>
+                    </div>
                   ) : (
-                    dt.fases || '—'
+                    <span>
+                      {dt.fases || String(calculosTrafo?.fases || 3)} Fases ({calculosTrafo?.esTrifasico ? '3Φ' : dt.fases === '2' ? '2Φ' : '1Φ'})
+                    </span>
                   )}
                 </td>
               </tr>
@@ -1156,7 +1300,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                         handleDtChange('kva', val);
                       }}
                       placeholder="Ej. 500"
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-violet-400 focus:outline-none focus:border-violet-500"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-violet-400 focus:outline-none focus:border-violet-500 font-bold"
                     />
                   ) : (
                     dt.potenciaKva || dt.kva || '—'
@@ -1239,7 +1383,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                         handleDtChange('voltajePrimario', val);
                       }}
                       placeholder="Ej. 13.8"
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500 font-bold"
                     />
                   ) : (
                     dt.tensionPrimaria || dt.voltajePrimario || '—'
@@ -1260,6 +1404,30 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   )}
                 </td>
               </tr>
+
+              {/* CORRIENTE PRIMARIA CALCULADA (I₁) */}
+              <tr className="bg-violet-950/20 print:bg-transparent">
+                <td className="p-2.5 bg-slate-900/40 font-bold text-violet-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">
+                  <div className="flex items-center justify-between">
+                    <span>CORRIENTE PRIMARIA (I₁)</span>
+                    <span className="text-[9px] font-mono font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20 print:hidden" title={calculosTrafo?.formulaI1}>
+                      AUTO
+                    </span>
+                  </div>
+                </td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-black text-violet-400 print:text-black print:border-gray-300 font-mono text-sm">
+                  <div className="flex flex-col items-center">
+                    <span>{calculosTrafo?.i1Formateada || '—'}</span>
+                    {calculosTrafo?.formulaI1 && (
+                      <span className="text-[9px] text-slate-500 font-mono print:hidden font-normal">
+                        {calculosTrafo.formulaI1}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
+              </tr>
+
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TENSIÓN SECUNDARIA</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
@@ -1273,7 +1441,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                         handleDtChange('voltajeSecundario', val);
                       }}
                       placeholder="Ej. 208/120"
-                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
+                      className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500 font-bold"
                     />
                   ) : (
                     dt.tensionSecundaria || dt.voltajeSecundario || '—'
@@ -1281,18 +1449,43 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">V</td>
               </tr>
+
+              {/* CORRIENTE SECUNDARIA CALCULADA (I₂) */}
+              <tr className="bg-violet-950/20 print:bg-transparent">
+                <td className="p-2.5 bg-slate-900/40 font-bold text-violet-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">
+                  <div className="flex items-center justify-between">
+                    <span>CORRIENTE SECUNDARIA (I₂)</span>
+                    <span className="text-[9px] font-mono font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20 print:hidden" title={calculosTrafo?.formulaI2}>
+                      AUTO
+                    </span>
+                  </div>
+                </td>
+                <td className="p-2.5 border-r border-slate-800 text-center font-black text-violet-400 print:text-black print:border-gray-300 font-mono text-sm">
+                  <div className="flex flex-col items-center">
+                    <span>{calculosTrafo?.i2Formateada || '—'}</span>
+                    {calculosTrafo?.formulaI2 && (
+                      <span className="text-[9px] text-slate-500 font-mono print:hidden font-normal">
+                        {calculosTrafo.formulaI2}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
+              </tr>
+
               <tr>
-                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS SEC.</td>
+                <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS SEC. (PLACA)</td>
                 <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
                   {isEditing ? (
                     <input
                       type="text"
                       value={dt.amperiosSecundaria || ''}
                       onChange={(e) => handleDtChange('amperiosSecundaria', e.target.value)}
+                      placeholder={calculosTrafo?.i2 ? `${calculosTrafo.i2} (Sugerido)` : 'Ej. 1388'}
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
-                    dt.amperiosSecundaria || '—'
+                    dt.amperiosSecundaria || (calculosTrafo?.i2 ? `${calculosTrafo.i2} A` : '—')
                   )}
                 </td>
                 <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>

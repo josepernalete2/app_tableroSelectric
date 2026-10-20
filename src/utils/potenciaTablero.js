@@ -66,12 +66,21 @@ export const calcularPotenciaEstimadaTablero = (tablero) => {
       }
     }
   } else if (typeof voltRaw === 'object' && voltRaw !== null) {
-    const va = parseFloat(voltRaw.va || voltRaw.vab || 0);
-    const vb = parseFloat(voltRaw.vb || voltRaw.vbc || 0);
-    const vc = parseFloat(voltRaw.vc || voltRaw.vca || 0);
-    if (va > 0 || vb > 0 || vc > 0) {
-      const vals = [va, vb, vc].filter(v => v > 0);
-      const vAvg = vals.reduce((acc, v) => acc + v, 0) / vals.length;
+    const vab = parseFloat(voltRaw.vab || 0);
+    const vbc = parseFloat(voltRaw.vbc || 0);
+    const vca = parseFloat(voltRaw.vca || 0);
+    const lineVals = [vab, vbc, vca].filter(v => v > 0);
+
+    const va = parseFloat(voltRaw.va || 0);
+    const vb = parseFloat(voltRaw.vb || 0);
+    const vc = parseFloat(voltRaw.vc || 0);
+    const phaseVals = [va, vb, vc].filter(v => v > 0);
+
+    if (lineVals.length > 0) {
+      vLL = lineVals.reduce((acc, v) => acc + v, 0) / lineVals.length;
+      vLN = phaseVals.length > 0 ? (phaseVals.reduce((acc, v) => acc + v, 0) / phaseVals.length) : (vLL / Math.sqrt(3));
+    } else if (phaseVals.length > 0) {
+      const vAvg = phaseVals.reduce((acc, v) => acc + v, 0) / phaseVals.length;
       if (vAvg > 150) {
         vLL = vAvg;
         vLN = vAvg / Math.sqrt(3);

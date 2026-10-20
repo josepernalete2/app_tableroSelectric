@@ -50,6 +50,8 @@ import {
 import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
+  const [isEditable, setIsEditable] = useState(false);
+  const effectivelyReadOnly = Boolean(readOnly || !isEditable);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [editingCircuit, setEditingCircuit] = useState(null);
   const [elementosPorCrear, setElementosPorCrear] = useState(
@@ -338,7 +340,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   // Update specific fields of the main tablero structure
   const updateField = (path, value) => {
-    if (readOnly) return;
+    if (effectivelyReadOnly) return;
     const newData = { ...tableroData };
     
     if (path.includes('.')) {
@@ -353,7 +355,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   // Manejo de fotografía robusto con compresión Base64 y soporte offline multipart
   const handlePhotoSelected = async (file) => {
-    if (readOnly || !file) return;
+    if (effectivelyReadOnly || !file) return;
     if (file.size > 10 * 1024 * 1024) {
       customAlert("La imagen seleccionada supera los 10MB. Por favor elija un archivo más liviano.");
       return;
@@ -394,7 +396,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   // Eliminación limpia de fotografía con sincronización
   const handleRemovePhoto = async () => {
-    if (readOnly) return;
+    if (effectivelyReadOnly) return;
     const isConfirmed = await confirm({
       title: 'Eliminar Fotografía',
       message: '¿Estás seguro de que deseas eliminar la fotografía adjunta de este tablero?',
@@ -415,7 +417,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   // Update a single circuit's properties
   const updateCircuit = (circuitId, field, value) => {
-    if (readOnly) return;
+    if (effectivelyReadOnly) return;
     const newData = { ...tableroData };
     newData.circuits = normalizedCircuits.map(c => {
       if (c.id === circuitId) {
@@ -484,7 +486,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   };
 
   const saveCircuitFromModal = (circuitId, updatedFields) => {
-    if (readOnly) return;
+    if (effectivelyReadOnly) return;
     const newData = { ...tableroData };
     const projId = project?.id || tableroData?.proyectoId;
 
@@ -652,7 +654,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   // Split a multi-pole circuit: preserves the primary circuit on minPole and releases joined poles
   const splitCircuit = (circuitId) => {
-    if (readOnly) return;
+    if (effectivelyReadOnly) return;
     const circuit = normalizedCircuits.find(c => c.id === circuitId);
     const newData = { ...tableroData };
 
@@ -686,7 +688,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
   // Delete / Reset a circuit back to default RESERVA
   const handleDeleteCircuit = async (circuitId) => {
-    if (readOnly) return;
+    if (effectivelyReadOnly) return;
     const circuit = normalizedCircuits.find(c => c.id === circuitId);
     if (!circuit) return;
 
@@ -779,9 +781,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         <div className="lg:col-span-3 print:col-span-3">
           <table className="w-full border-collapse border-2 border-slate-800 dark:border-slate-700 text-xs table-fixed mb-0">
         <tbody>
-          {/* Fila 1: Título General */}
+          {/* Fila 1: Título General y Barra de Acciones */}
           <tr className="border-b border-slate-800 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/80">
-            <td colSpan={7} className="p-0 font-bold text-sm tracking-wide">
+            <td colSpan={8} className="p-0 font-bold text-sm tracking-wide">
               <div className="flex flex-row items-center justify-between gap-4 py-2.5 px-4 uppercase font-bold text-slate-800 dark:text-slate-200 w-full">
                 <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <Zap className="w-4 h-4 text-amber-500 fill-amber-500/20 shrink-0" />
@@ -808,6 +810,40 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   </div>
                 </div>
                 <div className="flex items-center gap-2 no-print">
+                  {/* Botón Modo Seguro / Editar Planilla (Obs Fase 2) */}
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isEditable;
+                        setIsEditable(next);
+                        showToast(
+                          next 
+                            ? 'Planilla desbloqueada. Los campos ahora son editables.' 
+                            : 'Modo Seguro activado. Planilla protegida contra toques accidentales.',
+                          next ? 'success' : 'info'
+                        );
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer border ${
+                        isEditable 
+                          ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-400 ring-2 ring-amber-400/30' 
+                          : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/40'
+                      }`}
+                      title={isEditable ? 'Planilla desbloqueada. Haz clic para bloquear en Modo Seguro.' : 'Modo Seguro activo. Haz clic para editar la planilla.'}
+                    >
+                      {isEditable ? (
+                        <>
+                          <Pencil className="w-3.5 h-3.5 text-slate-950" />
+                          <span>Bloquear Planilla</span>
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Editar Planilla</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleExportDXF}
@@ -836,11 +872,12 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             <td className="w-24 p-2 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase">
               Ubicación:
             </td>
-            <td colSpan={6} className="p-0 font-medium">
+            <td colSpan={7} className="p-0 font-medium">
               <EditableCell
                 value={ubicacion}
                 onSave={(val) => updateField('ubicacion', val)}
                 placeholder="Indique la ubicación física detallada del tablero..."
+                disabled={effectivelyReadOnly}
                 className="px-3"
               />
             </td>
@@ -851,11 +888,12 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             <td className="w-28 p-2.5 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase text-xs">
               Alimentado Por:
             </td>
-            <td colSpan={6} className="p-2.5 font-medium">
+            <td colSpan={7} className="p-2.5 font-medium">
               <SelectorAlimentadorJerarquico
                 proyectoId={project?.id}
                 tableroActualId={tableroData?.id}
                 value={alimentadoPor}
+                disabled={effectivelyReadOnly}
                 onChange={(val, selectedObj) => {
                   updateField('alimentadoPor', val);
                   if (selectedObj?.tipoElemento === 'ALIMENTADOR') {
@@ -877,7 +915,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             <td className="w-28 p-2.5 bg-slate-50 dark:bg-slate-800/60 font-black border-r border-slate-800 dark:border-slate-700 uppercase tracking-wider text-amber-500 font-mono text-[11px] align-top py-3">
               FICHA TÉCNICA
             </td>
-            <td colSpan={6} className="p-3 font-medium">
+            <td colSpan={7} className="p-3 font-medium">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 text-xs">
                 
                 {/* 1. Uso Eléctrico (Función Principal con Siglas) */}
@@ -885,12 +923,12 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Uso Eléctrico:</span>
                   <select
                     value={usoElectrico}
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onChange={(e) => {
                       updateField('usoElectrico', e.target.value);
                       updateField('funcionPrincipal', e.target.value);
                     }}
-                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {TABLERO_USO_ELECTRICO.map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
@@ -903,7 +941,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Capacidad (Alimentación):</span>
                   <select
                     value={capacidadPolos}
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onChange={(e) => {
                       const val = e.target.value;
                       let f = 3;
@@ -912,7 +950,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       updateField('capacidadPolos', val);
                       updateField('fases', f);
                     }}
-                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {TABLERO_CAPACIDADES_POLOS.map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
@@ -928,7 +966,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   </div>
                   <select
                     value={maxPoles}
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
                       if (!val) return;
@@ -942,7 +980,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       }
                       updateField('maxPoles', val);
                     }}
-                    className="bg-slate-900 text-slate-100 font-bold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                    className="bg-slate-900 text-slate-100 font-bold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {TABLERO_CANTIDAD_POLOS_ESTANDAR.map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt} Polos</option>
@@ -955,7 +993,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Montaje:</span>
                   <select
                     value={montaje}
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onChange={(e) => {
                       const val = e.target.value;
                       let t = 'superficial';
@@ -964,7 +1002,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       updateField('montaje', val);
                       updateField('tipo', t);
                     }}
-                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {TABLERO_MONTAJE_OPCIONES.map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
@@ -977,12 +1015,12 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider truncate">Hermeticidad:</span>
                   <select
                     value={nivelHermeticidad}
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onChange={(e) => {
                       updateField('nivelHermeticidad', e.target.value);
                       updateField('nemaIp', e.target.value);
                     }}
-                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full"
+                    className="bg-slate-900 text-slate-100 font-semibold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 cursor-pointer w-full disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {TABLERO_HERMETICIDAD_NEMA_IP.map(opt => (
                       <option key={opt} value={opt} className="bg-slate-900 text-slate-100">{opt}</option>
@@ -997,7 +1035,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                     type="text"
                     list="covenin-voltajes-tablero"
                     value={tableroData.tension || tableroData?.datosTecnicos?.tensionNominal || ''}
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onChange={(e) => {
                       updateField('tension', e.target.value);
                       updateField('datosTecnicos.tensionNominal', e.target.value);
@@ -1009,7 +1047,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       }
                     }}
                     placeholder="Ej: 208Y/120 V"
-                    className="bg-slate-900 text-slate-100 font-bold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 font-mono w-full"
+                    className="bg-slate-900 text-slate-100 font-bold border border-slate-700 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-amber-500 font-mono w-full disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                   <datalist id="covenin-voltajes-tablero">
                     {getCustomOptions('tensiones_bt', TENSIONES_COVENIN_159_BT).map(v => <option key={v} value={v}>{v}</option>)}
@@ -1020,7 +1058,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             </td>
           </tr>
 
-          {/* Fila 4: Encabezados de Parámetros y Breaker Principal */}
+          {/* Fila 4: Encabezados de Parámetros, Breaker Principal y Voltajes (Fase y Línea) */}
           <tr className="border-b border-slate-800 dark:border-slate-700 text-center font-semibold bg-slate-50 dark:bg-slate-800/60">
             <td colSpan={2} className="border-r border-slate-800 dark:border-slate-700 p-2 uppercase font-bold text-slate-300">
               Barras Principales
@@ -1028,21 +1066,22 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
             <td colSpan={3} className="border-r border-slate-800 dark:border-slate-700 p-2 uppercase font-bold text-amber-400">
               BREAKER PRINCIPAL
             </td>
-            <td className="border-r border-slate-800 dark:border-slate-700 p-1 uppercase w-20">
-              Voltaje
+            <td colSpan={2} className="border-r border-slate-800 dark:border-slate-700 p-1 uppercase font-bold text-sky-400">
+              Voltajes
             </td>
             <td className="p-1 uppercase">
               Acometida
             </td>
           </tr>
 
-          {/* Fila 5: Sub-encabezados de Breaker */}
+          {/* Fila 5: Sub-encabezados de Breaker y Voltajes */}
           <tr className="border-b border-slate-800 dark:border-slate-700 text-center font-bold text-[10px] bg-slate-100 dark:bg-slate-800/80">
             <td colSpan={2} className="border-r border-slate-800 dark:border-slate-700 p-0.5">FASE / AMPERIOS</td>
-            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-24">MARCA</td>
+            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-20">MARCA</td>
             <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-20">TIPO</td>
-            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-20">AMP</td>
-            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5">V-FASE</td>
+            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-16">AMP</td>
+            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-18 text-sky-400 font-mono">V (F-N)</td>
+            <td className="border-r border-slate-800 dark:border-slate-700 p-0.5 w-18 text-amber-400 font-mono">V (L-L)</td>
             <td className="p-0.5">CALIBRE/DETALLES</td>
           </tr>
 
@@ -1054,6 +1093,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={barrasPrincipales.ia}
                 onSave={(val) => updateField('barrasPrincipales.ia', val)}
                 placeholder="0"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
             </td>
@@ -1065,6 +1105,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 type="select"
                 options={MARCA_OPTIONS}
                 placeholder="Marca"
+                disabled={effectivelyReadOnly}
                 className="text-center font-bold"
               />
             </td>
@@ -1073,7 +1114,10 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={breakerPrincipal.tipo}
                 onSave={(val) => updateField('breakerPrincipal.tipo', val)}
+                type="select"
+                options={TIPO_OPTIONS}
                 placeholder="Tipo"
+                disabled={effectivelyReadOnly}
                 className="text-center"
               />
             </td>
@@ -1084,16 +1128,29 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 onSave={(val) => updateField('breakerPrincipal.amp', val)}
                 type="select"
                 options={AMP_OPTIONS}
-                placeholder="Amp"
+                placeholder="Ej: 225A"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono text-amber-600 dark:text-amber-400"
               />
             </td>
+            {/* Voltaje Fase Va */}
             <td className="p-0 border-r border-slate-800 dark:border-slate-700 text-center">
               <EditableCell
                 value={voltaje.va}
                 onSave={(val) => updateField('voltaje.va', val)}
-                placeholder="0"
+                placeholder="Ej: 120V"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
+              />
+            </td>
+            {/* Voltaje Línea Vab */}
+            <td className="p-0 border-r border-slate-800 dark:border-slate-700 text-center bg-slate-50/30 dark:bg-slate-900/20">
+              <EditableCell
+                value={voltaje.vab}
+                onSave={(val) => updateField('voltaje.vab', val)}
+                placeholder="Ej: 208V"
+                disabled={effectivelyReadOnly}
+                className="text-center font-mono font-semibold text-amber-600 dark:text-amber-400"
               />
             </td>
             {/* Acometida (spans 3 rows) */}
@@ -1102,6 +1159,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={acometida}
                 onSave={(val) => updateField('acometida', val)}
                 placeholder="3X 3/0..."
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono text-blue-600 dark:text-blue-400"
               />
             </td>
@@ -1115,15 +1173,28 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={barrasPrincipales.ib}
                 onSave={(val) => updateField('barrasPrincipales.ib', val)}
                 placeholder="0"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
             </td>
+            {/* Voltaje Fase Vb */}
             <td className="p-0 border-r border-slate-800 dark:border-slate-700 text-center">
               <EditableCell
                 value={voltaje.vb}
                 onSave={(val) => updateField('voltaje.vb', val)}
-                placeholder="0"
+                placeholder="Ej: 120V"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
+              />
+            </td>
+            {/* Voltaje Línea Vbc */}
+            <td className="p-0 border-r border-slate-800 dark:border-slate-700 text-center bg-slate-50/30 dark:bg-slate-900/20">
+              <EditableCell
+                value={voltaje.vbc}
+                onSave={(val) => updateField('voltaje.vbc', val)}
+                placeholder="Ej: 208V"
+                disabled={effectivelyReadOnly}
+                className="text-center font-mono font-semibold text-amber-600 dark:text-amber-400"
               />
             </td>
           </tr>
@@ -1136,15 +1207,28 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={barrasPrincipales.ic}
                 onSave={(val) => updateField('barrasPrincipales.ic', val)}
                 placeholder="0"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
             </td>
+            {/* Voltaje Fase Vc */}
             <td className="p-0 border-r border-slate-800 dark:border-slate-700 text-center">
               <EditableCell
                 value={voltaje.vc}
                 onSave={(val) => updateField('voltaje.vc', val)}
-                placeholder="0"
+                placeholder="Ej: 120V"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
+              />
+            </td>
+            {/* Voltaje Línea Vca */}
+            <td className="p-0 border-r border-slate-800 dark:border-slate-700 text-center bg-slate-50/30 dark:bg-slate-900/20">
+              <EditableCell
+                value={voltaje.vca}
+                onSave={(val) => updateField('voltaje.vca', val)}
+                placeholder="Ej: 208V"
+                disabled={effectivelyReadOnly}
+                className="text-center font-mono font-semibold text-amber-600 dark:text-amber-400"
               />
             </td>
           </tr>
@@ -1184,7 +1268,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               className="w-full h-full object-cover" 
               style={{ maxHeight: `${tableroData.fotoScale || 220}px` }}
             />
-            {!readOnly && (
+            {!effectivelyReadOnly && (
               <button
                 type="button"
                 onClick={handleRemovePhoto}
@@ -1197,14 +1281,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 p-1">
-            <label className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-sm">
+            <label className={`flex items-center justify-center gap-1.5 w-full py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold transition-all shadow-sm ${effectivelyReadOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}>
               <Camera className="w-4 h-4 text-amber-400" />
               <span>Cámara en Vivo</span>
               <input
                 type="file"
                 accept="image/*"
                 capture="environment"
-                disabled={readOnly}
+                disabled={effectivelyReadOnly}
                 onChange={(e) => {
                   const file = e.target.files && e.target.files[0];
                   if (file) handlePhotoSelected(file);
@@ -1212,13 +1296,13 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 className="hidden"
               />
             </label>
-            <label className="flex items-center justify-center gap-1.5 w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded-xl text-xs font-semibold cursor-pointer transition-all active:scale-95">
+            <label className={`flex items-center justify-center gap-1.5 w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-750 rounded-xl text-xs font-semibold transition-all ${effectivelyReadOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}>
               <Image className="w-4 h-4 text-slate-400" />
               <span>Galería / Archivos</span>
               <input
                 type="file"
                 accept="image/*"
-                disabled={readOnly}
+                disabled={effectivelyReadOnly}
                 onChange={(e) => {
                   const file = e.target.files && e.target.files[0];
                   if (file) handlePhotoSelected(file);
@@ -1310,7 +1394,13 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       <td
                         rowSpan={rowSpanLeft}
                         className="border-r border-slate-800 dark:border-slate-700 p-1.5 font-medium align-middle cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors relative group/cell"
-                        onClick={() => setEditingCircuit(cLeft)}
+                        onClick={() => {
+                          if (effectivelyReadOnly) {
+                            showToast('Planilla bloqueada en Modo Seguro. Pulsa "Editar Planilla" para desbloquear.', 'info');
+                            return;
+                          }
+                          setEditingCircuit(cLeft);
+                        }}
                       >
                         <div className="flex flex-col justify-center min-h-[2rem] pr-6">
                           <div className="flex items-center justify-between">
@@ -1325,34 +1415,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         </div>
 
                         {/* Botones de acción contextual sobre el circuito */}
-                        <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-                          {rowSpanLeft > 1 && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                splitCircuit(cLeft.id);
-                              }}
-                              title="Separar Polos"
-                              className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                          )}
-                          {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCircuit(cLeft.id);
-                              }}
-                              title={`Eliminar circuito ${cLeft.equipo || ''} (Polos [${cLeft.poles?.join(', ')}])`}
-                              className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
+                        {!effectivelyReadOnly && (
+                          <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+                            {rowSpanLeft > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  splitCircuit(cLeft.id);
+                                }}
+                                title="Separar Polos"
+                                className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                            )}
+                            {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCircuit(cLeft.id);
+                                }}
+                                title={`Eliminar circuito ${cLeft.equipo || ''} (Polos [${cLeft.poles?.join(', ')}])`}
+                                className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Breaker Marca */}
@@ -1366,6 +1458,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={MARCA_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center font-bold font-sans"
                         />
                       </td>
@@ -1381,6 +1474,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={TIPO_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center"
                         />
                       </td>
@@ -1396,6 +1490,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={AMP_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center font-mono text-amber-600 dark:text-amber-400"
                         />
                       </td>
@@ -1411,6 +1506,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={COND_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center font-mono text-slate-700 dark:text-slate-300"
                         />
                       </td>
@@ -1423,34 +1519,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{oddPole}</span>
                       
                       {/* Botones de acción en cada polo seleccionado */}
-                      <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole:opacity-100 transition-opacity z-10 px-0.5">
-                        {oddPole < maxPoles - 1 && isFirstLeft && rowSpanLeft === 1 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              groupWithNext(cLeft.id, 'left');
-                            }}
-                            title="Agrupar con siguiente polo"
-                            className="p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded cursor-pointer shadow transition-all"
-                          >
-                            <Plus className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                        {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteCircuit(cLeft.id);
-                            }}
-                            title={`Eliminar circuito del polo ${oddPole}`}
-                            className="p-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded cursor-pointer shadow transition-all"
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
+                      {!effectivelyReadOnly && (
+                        <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole:opacity-100 transition-opacity z-10 px-0.5">
+                          {oddPole < maxPoles - 1 && isFirstLeft && rowSpanLeft === 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                groupWithNext(cLeft.id, 'left');
+                              }}
+                              title="Agrupar con siguiente polo"
+                              className="p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded cursor-pointer shadow transition-all"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                          {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCircuit(cLeft.id);
+                              }}
+                              title={`Eliminar circuito del polo ${oddPole}`}
+                              className="p-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded cursor-pointer shadow transition-all"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </td>
 
@@ -1461,34 +1559,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{evenPole}</span>
                       
                       {/* Botones de acción en cada polo seleccionado */}
-                      <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole-right:opacity-100 transition-opacity z-10 px-0.5">
-                        {evenPole < maxPoles && isFirstRight && rowSpanRight === 1 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              groupWithNext(cRight.id, 'right');
-                            }}
-                            title="Agrupar con siguiente polo"
-                            className="p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded cursor-pointer shadow transition-all"
-                          >
-                            <Plus className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                        {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteCircuit(cRight.id);
-                            }}
-                            title={`Eliminar circuito del polo ${evenPole}`}
-                            className="p-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded cursor-pointer shadow transition-all"
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
+                      {!effectivelyReadOnly && (
+                        <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole-right:opacity-100 transition-opacity z-10 px-0.5">
+                          {evenPole < maxPoles && isFirstRight && rowSpanRight === 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                groupWithNext(cRight.id, 'right');
+                              }}
+                              title="Agrupar con siguiente polo"
+                              className="p-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded cursor-pointer shadow transition-all"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                          {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCircuit(cRight.id);
+                              }}
+                              title={`Eliminar circuito del polo ${evenPole}`}
+                              className="p-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded cursor-pointer shadow transition-all"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </td>
 
@@ -1505,6 +1605,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={COND_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center font-mono text-slate-700 dark:text-slate-300"
                         />
                       </td>
@@ -1520,6 +1621,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={AMP_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center font-mono text-amber-600 dark:text-amber-400"
                         />
                       </td>
@@ -1535,6 +1637,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={TIPO_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center"
                         />
                       </td>
@@ -1550,6 +1653,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           type="select"
                           options={MARCA_OPTIONS}
                           placeholder=""
+                          disabled={effectivelyReadOnly}
                           className="text-center font-bold font-sans"
                         />
                       </td>
@@ -1558,7 +1662,13 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       <td
                         rowSpan={rowSpanRight}
                         className="p-1.5 font-medium align-middle cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors relative group/cell"
-                        onClick={() => setEditingCircuit(cRight)}
+                        onClick={() => {
+                          if (effectivelyReadOnly) {
+                            showToast('Planilla bloqueada en Modo Seguro. Pulsa "Editar Planilla" para desbloquear.', 'info');
+                            return;
+                          }
+                          setEditingCircuit(cRight);
+                        }}
                       >
                         <div className="flex flex-col justify-center min-h-[2rem] pr-6">
                           <div className="flex items-center justify-between">
@@ -1573,34 +1683,36 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         </div>
 
                         {/* Botones de acción contextual sobre el circuito derecho */}
-                        <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-                          {rowSpanRight > 1 && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                splitCircuit(cRight.id);
-                              }}
-                              title="Separar Polos"
-                              className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-                          )}
-                          {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCircuit(cRight.id);
-                              }}
-                              title={`Eliminar circuito ${cRight.equipo || ''} (Polos [${cRight.poles?.join(', ')}])`}
-                              className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
+                        {!effectivelyReadOnly && (
+                          <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+                            {rowSpanRight > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  splitCircuit(cRight.id);
+                                }}
+                                title="Separar Polos"
+                                className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                            )}
+                            {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCircuit(cRight.id);
+                                }}
+                                title={`Eliminar circuito ${cRight.equipo || ''} (Polos [${cRight.poles?.join(', ')}])`}
+                                className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </>
                   )}
@@ -1627,6 +1739,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 type="select"
                 options={COND_OPTIONS}
                 placeholder="Calibre"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
             </td>
@@ -1636,6 +1749,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={neutroLlegada.observaciones}
                 onSave={(val) => updateField('neutroLlegada.observaciones', val)}
                 placeholder="Observaciones de Neutro (ej: Color de cable, barra)..."
+                disabled={effectivelyReadOnly}
                 className="px-3 text-slate-700 dark:text-slate-300 font-mono"
               />
             </td>
@@ -1654,6 +1768,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 type="select"
                 options={COND_OPTIONS}
                 placeholder="Calibre"
+                disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
             </td>
@@ -1663,6 +1778,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={puestaTierra.observaciones}
                 onSave={(val) => updateField('puestaTierra.observaciones', val)}
                 placeholder="Observaciones de Puesta a Tierra (ej: Malla, malla del edificio)..."
+                disabled={effectivelyReadOnly}
                 className="px-3 text-slate-700 dark:text-slate-300 font-mono"
               />
             </td>
@@ -1679,6 +1795,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 onSave={(val) => updateField('observacionesGenerales', val)}
                 type="textarea"
                 placeholder="Describa el estado general del tablero, hallazgos, reparaciones pendientes o recomendaciones..."
+                disabled={effectivelyReadOnly}
                 className="px-3 py-2 text-slate-800 dark:text-slate-200 min-h-[4rem] font-sans"
               />
             </td>

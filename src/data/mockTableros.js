@@ -17,7 +17,10 @@ export const initialTablerosData = {
     voltaje: {
       va: "208",
       vb: "205",
-      vc: "205"
+      vc: "205",
+      vab: "208",
+      vbc: "205",
+      vca: "205"
     },
     acometida: "3X 3/0",
     maxPoles: 30,
@@ -139,7 +142,10 @@ export const initialTablerosData = {
     voltaje: {
       va: "211,5",
       vb: "207,4",
-      vc: "208,6"
+      vc: "208,6",
+      vab: "",
+      vbc: "",
+      vca: ""
     },
     acometida: "3X500 MCM",
     maxPoles: 30,

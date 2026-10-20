@@ -1,4 +1,5 @@
 import prisma from '../db.js';
+import { calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador.js';
 
 /**
  * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
@@ -345,6 +346,44 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           if (!Array.isArray(dt.circuits)) {
             dt.circuits = Array.isArray(dt.circuitos) ? dt.circuitos : (Array.isArray(rawData.circuits) ? rawData.circuits : (Array.isArray(rawData.circuitos) ? rawData.circuitos : []));
           }
+
+          // Si es TRANSFORMADOR, calcular corrientes nominales y normalizar tipo de conexión
+          if (targetTipo === 'TRANSFORMADOR') {
+            const canonConexion = normalizarTipoConexion(
+              dt.tipoConexion || dt.conexionTrafo || dt.conexion,
+              dt.conexion,
+              dt.fases
+            );
+            dt.tipoConexion = canonConexion;
+            dt.conexion = canonConexion;
+            const potKva = dt.potenciaKva || dt.kva || rawData.potenciaEstimada;
+            const v1 = dt.tensionPrimaria || dt.voltajePrimario;
+            const u1 = dt.unidadTensionPrimaria || 'kV';
+            const v2 = dt.tensionSecundaria || dt.voltajeSecundario;
+            const uPot = dt.unidadPotencia || 'kVA';
+
+            const calc = calcularCorrientesTrafo({
+              potencia: potKva,
+              unidadPotencia: uPot,
+              tensionPrimaria: v1,
+              unidadTensionPrimaria: u1,
+              tensionSecundaria: v2,
+              tipoConexion: canonConexion,
+              fases: dt.fases
+            });
+            dt.fases = String(calc.fases);
+            dt.corrientePrimariaCalculada = calc.i1;
+            dt.corrienteSecundariaCalculada = calc.i2;
+            if (!dt.amperiosPrimaria && calc.i1 != null) dt.amperiosPrimaria = String(calc.i1);
+            if (!dt.amperiosSecundaria && calc.i2 != null) dt.amperiosSecundaria = String(calc.i2);
+            if (calc.i2 != null) {
+              dt.corrienteNominalA = calc.i2;
+              dt.corrienteNominalB = calc.i2;
+              dt.corrienteNominalC = calc.i2;
+              dt.corrienteSecundaria = calc.i2;
+            }
+          }
+
           rawData.datosTecnicos = dt;
 
           // 4. Normalización segura de tipos numéricos y textos para Prisma
@@ -786,6 +825,43 @@ export const sincronizarElementoMultipart = async (req, res) => {
     if (!parsedDatosTecnicos.norma) parsedDatosTecnicos.norma = 'COVENIN 159:1997 / CEN 200';
     if (!Array.isArray(parsedDatosTecnicos.circuits)) {
       parsedDatosTecnicos.circuits = Array.isArray(parsedDatosTecnicos.circuitos) ? parsedDatosTecnicos.circuitos : [];
+    }
+
+    // Si es TRANSFORMADOR, calcular corrientes nominales y normalizar tipo de conexión
+    if (cleanTipoElemento === 'TRANSFORMADOR') {
+      const canonConexion = normalizarTipoConexion(
+        parsedDatosTecnicos.tipoConexion || parsedDatosTecnicos.conexionTrafo || parsedDatosTecnicos.conexion,
+        parsedDatosTecnicos.conexion,
+        parsedDatosTecnicos.fases
+      );
+      parsedDatosTecnicos.tipoConexion = canonConexion;
+      parsedDatosTecnicos.conexion = canonConexion;
+      const potKva = parsedDatosTecnicos.potenciaKva || parsedDatosTecnicos.kva || req.body.potenciaEstimada;
+      const v1 = parsedDatosTecnicos.tensionPrimaria || parsedDatosTecnicos.voltajePrimario;
+      const u1 = parsedDatosTecnicos.unidadTensionPrimaria || 'kV';
+      const v2 = parsedDatosTecnicos.tensionSecundaria || parsedDatosTecnicos.voltajeSecundario;
+      const uPot = parsedDatosTecnicos.unidadPotencia || 'kVA';
+
+      const calc = calcularCorrientesTrafo({
+        potencia: potKva,
+        unidadPotencia: uPot,
+        tensionPrimaria: v1,
+        unidadTensionPrimaria: u1,
+        tensionSecundaria: v2,
+        tipoConexion: canonConexion,
+        fases: parsedDatosTecnicos.fases
+      });
+      parsedDatosTecnicos.fases = String(calc.fases);
+      parsedDatosTecnicos.corrientePrimariaCalculada = calc.i1;
+      parsedDatosTecnicos.corrienteSecundariaCalculada = calc.i2;
+      if (!parsedDatosTecnicos.amperiosPrimaria && calc.i1 != null) parsedDatosTecnicos.amperiosPrimaria = String(calc.i1);
+      if (!parsedDatosTecnicos.amperiosSecundaria && calc.i2 != null) parsedDatosTecnicos.amperiosSecundaria = String(calc.i2);
+      if (calc.i2 != null) {
+        parsedDatosTecnicos.corrienteNominalA = calc.i2;
+        parsedDatosTecnicos.corrienteNominalB = calc.i2;
+        parsedDatosTecnicos.corrienteNominalC = calc.i2;
+        parsedDatosTecnicos.corrienteSecundaria = calc.i2;
+      }
     }
 
     // 3. Auto-resolución de dependencias padre (Proyecto y Empresa) para garantizar integridad referencial

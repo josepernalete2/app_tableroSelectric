@@ -443,9 +443,9 @@ export default function SelectorAlimentadorJerarquico({
             </div>
           </div>
 
-          {/* MENÚ DESPLEGABLE CON BÚSQUEDA Y CATEGORÍAS (AMPLIO, FLOTANTE Z-100 Y ADAPTABLE A TABLETS) */}
+          {/* MENÚ DESPLEGABLE CON BÚSQUEDA Y CATEGORÍAS (AMPLIO, FLOTANTE Z-50 Y ADAPTABLE A TABLETS) */}
           {isOpen && (
-            <div className="absolute z-[100] left-0 right-0 sm:left-0 sm:right-auto w-full sm:w-[500px] md:w-[600px] max-w-[96vw] mt-2 bg-slate-900/98 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-2xl overflow-hidden ring-1 ring-amber-500/20 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute z-50 left-0 right-0 sm:left-0 sm:right-auto w-full sm:w-[500px] md:w-[600px] max-w-[96vw] mt-2 bg-slate-900/98 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-2xl overflow-hidden ring-1 ring-amber-500/20 animate-in fade-in zoom-in-95 duration-150">
               
               {/* Barra superior de búsqueda y controles de selección múltiple */}
               <div className="p-3.5 sm:p-4 border-b border-slate-800 bg-slate-950/80 space-y-2.5">
@@ -491,7 +491,7 @@ export default function SelectorAlimentadorJerarquico({
               </div>
 
               {/* Lista de opciones agrupadas con casillas de verificación (Desplazamiento vertical fluido) */}
-              <div className="max-h-80 sm:max-h-96 md:max-h-[30rem] overflow-y-auto divide-y divide-slate-800/60 p-2.5 overscroll-contain custom-scrollbar scroll-smooth">
+              <div className="max-h-60 overflow-y-auto z-50 divide-y divide-slate-800/60 p-2.5 overscroll-contain custom-scrollbar scroll-smooth">
                 {loading ? (
                   <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2.5">
                     <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />

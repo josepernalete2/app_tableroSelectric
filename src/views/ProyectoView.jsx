@@ -55,6 +55,7 @@ import TensionNominalInput from '../components/TensionNominalInput';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 import { API_BASE_URL } from '../utils/api';
 import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
+import { TIPOS_CONEXION_TRAFO, calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador';
 
 // Componente para renderizar Base64 / Blobs / URLs de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -183,6 +184,31 @@ export const ProyectoView = () => {
   const puntosMedicion = useMemo(() => {
     return sortElementsByOrder(proyecto?.puntosMedicion || []);
   }, [proyecto]);
+
+  // Lista jerárquica sincronizada para selectores de procedencia/alimentador
+  const todosElementosJerarquia = useMemo(() => {
+    const unifilares = (elementos || []).map(e => ({
+      ...e,
+      tipoElemento: e.tipoElemento || 'TABLERO',
+      tipo: e.tipoElemento || 'TABLERO'
+    }));
+    const subs = (inspecciones || []).map(s => ({
+      ...s,
+      tipoElemento: 'SUBESTACION',
+      tipo: 'SUBESTACION'
+    }));
+    const puntos = (puntosMedicion || []).map(p => ({
+      ...p,
+      tipoElemento: 'PUNTO_MEDICION',
+      tipo: 'PUNTO_MEDICION'
+    }));
+    const ccms = (proyecto?.ccmList || []).map(c => ({
+      ...c,
+      tipoElemento: 'CCM',
+      tipo: 'CCM'
+    }));
+    return [...unifilares, ...subs, ...puntos, ...ccms];
+  }, [elementos, inspecciones, puntosMedicion, proyecto?.ccmList]);
 
   const filteredElementos = useMemo(() => {
     if (!searchQuery.trim()) return elementos;
@@ -351,27 +377,33 @@ export const ProyectoView = () => {
         setTableroTension(tech.tensionNominal || editingElemento.tension || '208Y/120 V (3Φ - 4 hilos Estrella)');
         setBreakerMarca(tech.breakerPrincipal?.marca || '');
         setBreakerTipo(tech.breakerPrincipal?.tipo || '');
-        setBreakerAmp(tech.breakerPrincipal?.amp || '100');
-        setVoltajeVa(tech.voltaje?.va || '208');
-        setVoltajeVb(tech.voltaje?.vb || '205');
-        setVoltajeVc(tech.voltaje?.vc || '205');
+        setBreakerAmp(tech.breakerPrincipal?.amp || '');
+        setVoltajeVa(tech.voltaje?.va || '');
+        setVoltajeVb(tech.voltaje?.vb || '');
+        setVoltajeVc(tech.voltaje?.vc || '');
+        setVoltajeVab(tech.voltaje?.vab || '');
+        setVoltajeVbc(tech.voltaje?.vbc || '');
+        setVoltajeVca(tech.voltaje?.vca || '');
         setCorrienteIa(tech.barrasPrincipales?.ia || '0');
         setCorrienteIb(tech.barrasPrincipales?.ib || '0');
         setCorrienteIc(tech.barrasPrincipales?.ic || '0');
         setAcometidaConductor(tech.acometida || '');
+        setMostrarMetrologiaAvanzada(true);
       } else if (editingElemento.tipoElemento === 'TRANSFORMADOR') {
         setKvaTrafo(tech.kva || tech.potenciaKva || '');
         setMarcaTrafo(tech.marca || '');
         setTipoTrafo(tech.tipoTransformador || 'Pedestal');
-        setConexionTrafo(tech.conexion || '');
+        setConexionTrafo(tech.tipoConexion || normalizarTipoConexion(tech.conexion, '', tech.fases));
         setVoltajePrimario(tech.voltajePrimario || tech.tensionPrimaria || '');
         setVoltajeSecundario(tech.voltajeSecundario || tech.tensionSecundaria || '');
       } else if (editingElemento.tipoElemento === 'GENERADOR') {
-        setKvaGen(tech.kva || '');
+        setKvaGen(tech.kva || tech.potenciaKva || '');
         setCombustibleGen(tech.combustible || tech.tipoCombustible || 'DIESEL');
         setVoltajeGen(tech.voltajeGeneracion || tech.voltaje || '');
         setPotenciaKwGen(tech.potenciaKw || tech.kw || '');
         setAmperajeGen(tech.amperaje || '');
+        setHzGen(tech.hz || tech.frecuencia || '60 Hz');
+        setRpmGen(tech.rpm || tech.velocidadRpm || '1800 RPM');
       } else if (editingElemento.tipoElemento === 'PUESTA_TIERRA') {
         setResistenciaOhmios(tech.resistenciaOhmios || '');
         setCorrienteFuga(tech.corrienteFugaAmperios || '');
@@ -421,14 +453,18 @@ export const ProyectoView = () => {
       setTableroTension('208Y/120 V (3Φ - 4 hilos Estrella)');
       setBreakerMarca('');
       setBreakerTipo('');
-      setBreakerAmp('100');
-      setVoltajeVa('208');
-      setVoltajeVb('205');
-      setVoltajeVc('205');
+      setBreakerAmp('');
+      setVoltajeVa('');
+      setVoltajeVb('');
+      setVoltajeVc('');
+      setVoltajeVab('');
+      setVoltajeVbc('');
+      setVoltajeVca('');
       setCorrienteIa('0');
       setCorrienteIb('0');
       setCorrienteIc('0');
       setAcometidaConductor('');
+      setMostrarMetrologiaAvanzada(false);
       setEliminarFoto(false);
       setKvaTrafo('');
       setMarcaTrafo('');
@@ -439,6 +475,8 @@ export const ProyectoView = () => {
       setVoltajeGen('');
       setPotenciaKwGen('');
       setAmperajeGen('');
+      setHzGen('60 Hz');
+      setRpmGen('1800 RPM');
       setResistenciaOhmios('');
       setCorrienteFuga('');
       setTipoMalla('');
@@ -494,20 +532,24 @@ export const ProyectoView = () => {
   // Parámetros Técnicos de Interruptor Principal, Metrología y Acometida
   const [breakerMarca, setBreakerMarca] = useState('');
   const [breakerTipo, setBreakerTipo] = useState('');
-  const [breakerAmp, setBreakerAmp] = useState('100');
-  const [voltajeVa, setVoltajeVa] = useState('208');
-  const [voltajeVb, setVoltajeVb] = useState('205');
-  const [voltajeVc, setVoltajeVc] = useState('205');
+  const [breakerAmp, setBreakerAmp] = useState('');
+  const [voltajeVa, setVoltajeVa] = useState('');
+  const [voltajeVb, setVoltajeVb] = useState('');
+  const [voltajeVc, setVoltajeVc] = useState('');
+  const [voltajeVab, setVoltajeVab] = useState('');
+  const [voltajeVbc, setVoltajeVbc] = useState('');
+  const [voltajeVca, setVoltajeVca] = useState('');
   const [corrienteIa, setCorrienteIa] = useState('0');
   const [corrienteIb, setCorrienteIb] = useState('0');
   const [corrienteIc, setCorrienteIc] = useState('0');
   const [acometidaConductor, setAcometidaConductor] = useState('');
+  const [mostrarMetrologiaAvanzada, setMostrarMetrologiaAvanzada] = useState(false);
 
   // Campos de Transformador
   const [kvaTrafo, setKvaTrafo] = useState('');
   const [marcaTrafo, setMarcaTrafo] = useState('');
   const [tipoTrafo, setTipoTrafo] = useState('Pedestal'); // 'Pedestal' | 'Seco' | 'Poste'
-  const [conexionTrafo, setConexionTrafo] = useState('');
+  const [conexionTrafo, setConexionTrafo] = useState('TRIFASICO_ESTRELLA');
   const [voltajePrimario, setVoltajePrimario] = useState('');
   const [voltajeSecundario, setVoltajeSecundario] = useState('');
 
@@ -517,6 +559,8 @@ export const ProyectoView = () => {
   const [voltajeGen, setVoltajeGen] = useState('');
   const [potenciaKwGen, setPotenciaKwGen] = useState('');
   const [amperajeGen, setAmperajeGen] = useState('');
+  const [hzGen, setHzGen] = useState('60 Hz');
+  const [rpmGen, setRpmGen] = useState('1800 RPM');
 
   // Campos de Puesta a Tierra
   const [resistenciaOhmios, setResistenciaOhmios] = useState('');
@@ -680,12 +724,15 @@ export const ProyectoView = () => {
         breakerPrincipal: {
           marca: breakerMarca || '',
           tipo: breakerTipo || '',
-          amp: String(breakerAmp || '100').trim()
+          amp: String(breakerAmp || '').trim()
         },
         voltaje: {
-          va: String(voltajeVa !== undefined && voltajeVa !== null ? voltajeVa : '208').trim(),
-          vb: String(voltajeVb !== undefined && voltajeVb !== null ? voltajeVb : '205').trim(),
-          vc: String(voltajeVc !== undefined && voltajeVc !== null ? voltajeVc : '205').trim()
+          va: String(voltajeVa || '').trim(),
+          vb: String(voltajeVb || '').trim(),
+          vc: String(voltajeVc || '').trim(),
+          vab: String(voltajeVab || '').trim(),
+          vbc: String(voltajeVbc || '').trim(),
+          vca: String(voltajeVca || '').trim(),
         },
         acometida: acometidaConductor.trim(),
         circuits: editingElemento?.datosTecnicos?.circuits || [],
@@ -693,15 +740,23 @@ export const ProyectoView = () => {
         puestaTierra: editingElemento?.datosTecnicos?.puestaTierra || { calibre: '', observaciones: '' }
       };
     } else if (tipoElemento === 'TRANSFORMADOR') {
-      const kvaNum = parseFloat(String(kvaTrafo || editingElemento?.datosTecnicos?.kva || editingElemento?.datosTecnicos?.potenciaKva || 0).replace(/[^0-9.]/g, '')) || null;
+      const canonConexion = normalizarTipoConexion(conexionTrafo || editingElemento?.datosTecnicos?.tipoConexion, editingElemento?.datosTecnicos?.conexion);
+      const calcTrafo = calcularCorrientesTrafo({
+        potencia: kvaTrafo || editingElemento?.datosTecnicos?.potenciaKva || editingElemento?.datosTecnicos?.kva,
+        tensionPrimaria: voltajePrimario || editingElemento?.datosTecnicos?.tensionPrimaria,
+        tensionSecundaria: voltajeSecundario || editingElemento?.datosTecnicos?.tensionSecundaria,
+        tipoConexion: canonConexion
+      });
+
+      const kvaNum = calcTrafo.kva;
       const fpTrafo = parseFloat(editingElemento?.datosTecnicos?.factorPotencia || 0.9) || 0.9;
       const kvarCalc = kvaNum ? Math.round(kvaNum * Math.sqrt(Math.max(0, 1 - Math.pow(fpTrafo, 2))) * 100) / 100 : null;
-      const secVolts = parseFloat(String(voltajeSecundario || editingElemento?.datosTecnicos?.voltajeSecundario || '208').replace(/[^0-9.]/g, '')) || 208;
-      const secAmps = kvaNum && secVolts > 0 ? Math.round(((kvaNum * 1000) / (Math.sqrt(3) * secVolts)) * 100) / 100 : null;
+      const secAmps = calcTrafo.i2;
+      const primAmps = calcTrafo.i1;
 
       datosTecnicos = {
         marca: marcaTrafo || editingElemento?.datosTecnicos?.marca || '',
-        fases: editingElemento?.datosTecnicos?.fases || '3',
+        fases: String(calcTrafo.fases),
         potenciaKva: kvaTrafo || editingElemento?.datosTecnicos?.potenciaKva || '',
         kva: kvaNum || kvaTrafo || '',
         capEx: editingElemento?.datosTecnicos?.capEx || kvaNum || null,
@@ -712,17 +767,20 @@ export const ProyectoView = () => {
         corrienteNominalB: editingElemento?.datosTecnicos?.corrienteNominalB || secAmps,
         corrienteNominalC: editingElemento?.datosTecnicos?.corrienteNominalC || secAmps,
         corrienteSecundaria: editingElemento?.datosTecnicos?.corrienteSecundaria || secAmps,
+        corrientePrimariaCalculada: primAmps,
+        corrienteSecundariaCalculada: secAmps,
         tipoTransformador: tipoTrafo || editingElemento?.datosTecnicos?.tipoTransformador || 'Pedestal',
-        conexion: conexionTrafo || editingElemento?.datosTecnicos?.conexion || '',
+        tipoConexion: canonConexion,
+        conexion: canonConexion,
         voltajePrimario: voltajePrimario || editingElemento?.datosTecnicos?.voltajePrimario || '',
         voltajeSecundario: voltajeSecundario || editingElemento?.datosTecnicos?.voltajeSecundario || '',
         impedanciaPct: editingElemento?.datosTecnicos?.impedanciaPct || '',
         impedanciaAmp: editingElemento?.datosTecnicos?.impedanciaAmp || '',
         impedanciaTemp: editingElemento?.datosTecnicos?.impedanciaTemp || '',
         tensionPrimaria: editingElemento?.datosTecnicos?.tensionPrimaria || voltajePrimario || '',
-        amperiosPrimaria: editingElemento?.datosTecnicos?.amperiosPrimaria || '',
+        amperiosPrimaria: primAmps ? String(primAmps) : (editingElemento?.datosTecnicos?.amperiosPrimaria || ''),
         tensionSecundaria: editingElemento?.datosTecnicos?.tensionSecundaria || voltajeSecundario || '',
-        amperiosSecundaria: editingElemento?.datosTecnicos?.amperiosSecundaria || secAmps || '',
+        amperiosSecundaria: editingElemento?.datosTecnicos?.amperiosSecundaria || (secAmps ? String(secAmps) : ''),
         aislamiento: editingElemento?.datosTecnicos?.aislamiento || '',
         aceite: editingElemento?.datosTecnicos?.aceite || '',
         seco: editingElemento?.datosTecnicos?.seco || '',
@@ -752,12 +810,17 @@ export const ProyectoView = () => {
 
       datosTecnicos = {
         kva: kvaGenNum || kvaGen,
+        potenciaKva: kvaGenNum || kvaGen,
         kw: kwGenNum || potenciaKwGen,
         potenciaKw: kwGenNum || potenciaKwGen,
         kvar: editingElemento?.datosTecnicos?.kvar || kvarGen,
         factorPotencia: fpGen,
         voltajeGeneracion: voltajeGen || editingElemento?.datosTecnicos?.voltajeGeneracion || editingElemento?.datosTecnicos?.voltaje || '',
         voltaje: voltajeGen || editingElemento?.datosTecnicos?.voltaje || editingElemento?.datosTecnicos?.voltajeGeneracion || '',
+        hz: hzGen || '60 Hz',
+        frecuencia: hzGen || '60 Hz',
+        rpm: rpmGen || '1800 RPM',
+        velocidadRpm: rpmGen || '1800 RPM',
         amperaje: ampGenNum || amperajeGen,
         tipoCombustible: combustibleGen || editingElemento?.datosTecnicos?.tipoCombustible || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
         combustible: combustibleGen || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
@@ -1903,18 +1966,29 @@ export const ProyectoView = () => {
                       />
                     </div>
 
-                    {/* Procedencia / Alimentado Por */}
-                    <div>
-                      <SelectorAlimentadorJerarquico
-                        proyectoId={proyectoId}
-                        tableroActualId={editingElemento?.id}
-                        elementosList={elementos}
-                        value={alimentadoPor}
-                        onChange={(val) => setAlimentadoPor(val)}
-                        label="Alimentado Por (Procedencia / Jerarquía)"
-                        placeholder="Seleccionar Subestación, Trafo, CCM o Tablero..."
-                      />
-                    </div>
+                    {/* Procedencia / Alimentado Por (Excluido en Generadores por ser fuentes primarias independientes) */}
+                    {tipoElemento === 'GENERADOR' ? (
+                      <div className="p-3 bg-slate-950/80 border border-amber-500/30 rounded-xl space-y-1">
+                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
+                          <Zap className="w-3.5 h-3.5 text-amber-400" /> Fuente de Energía Primaria Independiente
+                        </span>
+                        <p className="text-[10.5px] text-slate-400 leading-relaxed">
+                          Los generadores operan como fuentes autónomas de energía primaria. No poseen alimentación externa aguas arriba.
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <SelectorAlimentadorJerarquico
+                          proyectoId={proyectoId}
+                          tableroActualId={editingElemento?.id}
+                          elementosList={todosElementosJerarquia}
+                          value={alimentadoPor}
+                          onChange={(val) => setAlimentadoPor(val)}
+                          label="Alimentado Por (Procedencia / Jerarquía)"
+                          placeholder="Seleccionar Subestación, Trafo, CCM o Tablero..."
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Nota informativa técnica */}
@@ -2059,8 +2133,18 @@ export const ProyectoView = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conexión</label>
-                          <input type="text" value={conexionTrafo} onChange={(e) => setConexionTrafo(e.target.value)} placeholder="Delta - Estrella (Dyn11)" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Esquema de Conexión</label>
+                          <select 
+                            value={conexionTrafo} 
+                            onChange={(e) => setConexionTrafo(e.target.value)} 
+                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-violet-300 font-semibold h-9 focus:border-violet-500"
+                          >
+                            {TIPOS_CONEXION_TRAFO.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
                       <div>
@@ -2081,6 +2165,38 @@ export const ProyectoView = () => {
                           placeholder="Ej. 208Y/120 V o 480Y/277 V"
                         />
                       </div>
+
+                      {/* Preview de Corrientes Eléctricas Calculadas */}
+                      {(() => {
+                        const calc = calcularCorrientesTrafo({
+                          potencia: kvaTrafo,
+                          tensionPrimaria: voltajePrimario,
+                          tensionSecundaria: voltajeSecundario,
+                          tipoConexion: conexionTrafo
+                        });
+                        return (
+                          <div className="p-3 bg-violet-950/25 border border-violet-800/40 rounded-xl space-y-1.5 font-mono">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-violet-300">
+                              <span className="flex items-center gap-1.5">⚡ Corrientes Nominales Calculadas</span>
+                              <span className="text-[9px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded border border-violet-500/30">
+                                {calc.esTrifasico ? 'Trifásico (√3·V)' : 'Monofásico (V)'}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                              <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
+                                <span className="block text-[10px] text-slate-400 font-sans">Corriente Primaria (I₁)</span>
+                                <span className="text-sm font-black text-violet-400 font-mono">{calc.i1Formateada}</span>
+                                <span className="block text-[9px] text-slate-500 font-mono mt-0.5">{calc.formulaI1}</span>
+                              </div>
+                              <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
+                                <span className="block text-[10px] text-slate-400 font-sans">Corriente Secundaria (I₂)</span>
+                                <span className="text-sm font-black text-violet-400 font-mono">{calc.i2Formateada}</span>
+                                <span className="block text-[9px] text-slate-500 font-mono mt-0.5">{calc.formulaI2}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -2105,6 +2221,19 @@ export const ProyectoView = () => {
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Amperaje Breaker</label>
                           <input type="text" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Frecuencia (Hz)</label>
+                          <select value={hzGen} onChange={(e) => setHzGen(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono">
+                            <option value="60 Hz">60 Hz</option>
+                            <option value="50 Hz">50 Hz</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Velocidad (RPM)</label>
+                          <input type="text" value={rpmGen} onChange={(e) => setRpmGen(e.target.value)} placeholder="Ej. 1800 RPM" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                       <div>
@@ -2277,143 +2406,210 @@ export const ProyectoView = () => {
                   {/* Campos específicos de TABLERO en Columna 3 */}
                   {tipoElemento === 'TABLERO' && (
                     <div className="space-y-2.5">
-                      {/* Interruptor Principal */}
-                      <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
-                          <Zap className="w-3 h-3" /> Interruptor Principal (Main Breaker)
-                        </span>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <div>
-                            <label className="block text-[9px] text-slate-400 uppercase">Marca</label>
-                            <input
-                              type="text"
-                              list="breaker-marcas"
-                              value={breakerMarca}
-                              onChange={(e) => setBreakerMarca(e.target.value)}
-                              placeholder="Ej. GE"
-                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-bold h-8 text-center"
-                            />
-                            <datalist id="breaker-marcas">
-                              {MARCA_OPTIONS.map(m => <option key={m} value={m} />)}
-                            </datalist>
+                      {/* Banner Registro Inicial Ágil (Obs 3) */}
+                      {!editingElemento && (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Registro Inicial Ágil</span>
                           </div>
-                          <div>
-                            <label className="block text-[9px] text-slate-400 uppercase">Tipo</label>
-                            <input
-                              type="text"
-                              list="breaker-tipos"
-                              value={breakerTipo}
-                              onChange={(e) => setBreakerTipo(e.target.value)}
-                              placeholder="Ej. TQD"
-                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 h-8 text-center"
-                            />
-                            <datalist id="breaker-tipos">
-                              {TIPO_OPTIONS.map(t => <option key={t} value={t} />)}
-                            </datalist>
-                          </div>
-                          <div>
-                            <label className="block text-[9px] text-slate-400 uppercase">Amperaje</label>
-                            <input
-                              type="text"
-                              list="breaker-amps"
-                              value={breakerAmp}
-                              onChange={(e) => setBreakerAmp(e.target.value)}
-                              placeholder="100"
-                              className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold h-8 text-center"
-                            />
-                            <datalist id="breaker-amps">
-                              {AMP_OPTIONS.map(a => <option key={a} value={a} />)}
-                            </datalist>
-                          </div>
+                          <p className="text-[10px] text-slate-400 leading-relaxed">
+                            Los parámetros detallados de metrología (voltajes de fase y línea), interruptor principal y circuitos se completan directamente en la <strong>Planilla Definitiva</strong> tras el guardado.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setMostrarMetrologiaAvanzada(!mostrarMetrologiaAvanzada)}
+                            className="text-[10.5px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer flex items-center gap-1 pt-0.5"
+                          >
+                            {mostrarMetrologiaAvanzada ? 'Ocultar Parámetros Técnicos' : '+ Configurar Mediciones / Breaker Ahora (Opcional)'}
+                          </button>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Metrología Inicial (Voltajes y Corrientes) */}
-                      <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                        <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide flex items-center gap-1">
-                          <Activity className="w-3 h-3" /> Metrología Inicial (Mediciones)
-                        </span>
-                        
-                        <div className="grid grid-cols-3 gap-1.5 text-center">
-                          <div>
-                            <span className="text-[9px] text-slate-400 font-mono">Va (V)</span>
-                            <input
-                              type="text"
-                              value={voltajeVa}
-                              onChange={(e) => setVoltajeVa(e.target.value)}
-                              placeholder="208"
-                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
-                            />
+                      {/* Campos profundos de Metrología e Interruptor (visibles si es edición o si el usuario expande) */}
+                      {(editingElemento || mostrarMetrologiaAvanzada) && (
+                        <>
+                          {/* Interruptor Principal */}
+                          <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5 animate-in fade-in duration-150">
+                            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
+                              <Zap className="w-3 h-3" /> Interruptor Principal (Main Breaker)
+                            </span>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <div>
+                                <label className="block text-[9px] text-slate-400 uppercase">Marca</label>
+                                <input
+                                  type="text"
+                                  list="breaker-marcas"
+                                  value={breakerMarca}
+                                  onChange={(e) => setBreakerMarca(e.target.value)}
+                                  placeholder="Ej. GE"
+                                  className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-bold h-8 text-center"
+                                />
+                                <datalist id="breaker-marcas">
+                                  {MARCA_OPTIONS.map(m => <option key={m} value={m} />)}
+                                </datalist>
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-400 uppercase">Tipo</label>
+                                <input
+                                  type="text"
+                                  list="breaker-tipos"
+                                  value={breakerTipo}
+                                  onChange={(e) => setBreakerTipo(e.target.value)}
+                                  placeholder="Ej. THQC"
+                                  className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 h-8 text-center"
+                                />
+                                <datalist id="breaker-tipos">
+                                  {TIPO_OPTIONS.map(t => <option key={t} value={t} />)}
+                                </datalist>
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-400 uppercase">Amperaje</label>
+                                <input
+                                  type="text"
+                                  list="breaker-amps"
+                                  value={breakerAmp}
+                                  onChange={(e) => setBreakerAmp(e.target.value)}
+                                  placeholder="Ej: 225A"
+                                  className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold h-8 text-center"
+                                />
+                                <datalist id="breaker-amps">
+                                  {AMP_OPTIONS.map(a => <option key={a} value={a} />)}
+                                </datalist>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 font-mono">Vb (V)</span>
-                            <input
-                              type="text"
-                              value={voltajeVb}
-                              onChange={(e) => setVoltajeVb(e.target.value)}
-                              placeholder="205"
-                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 font-mono">Vc (V)</span>
-                            <input
-                              type="text"
-                              value={voltajeVc}
-                              onChange={(e) => setVoltajeVc(e.target.value)}
-                              placeholder="205"
-                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
-                            />
-                          </div>
-                        </div>
 
-                        <div className="grid grid-cols-3 gap-1.5 text-center pt-1 border-t border-slate-800">
-                          <div>
-                            <span className="text-[9px] text-slate-400 font-mono">Ia (A)</span>
-                            <input
-                              type="text"
-                              value={corrienteIa}
-                              onChange={(e) => setCorrienteIa(e.target.value)}
-                              placeholder="0"
-                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 font-mono">Ib (A)</span>
-                            <input
-                              type="text"
-                              value={corrienteIb}
-                              onChange={(e) => setCorrienteIb(e.target.value)}
-                              placeholder="0"
-                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 font-mono">Ic (A)</span>
-                            <input
-                              type="text"
-                              value={corrienteIc}
-                              onChange={(e) => setCorrienteIc(e.target.value)}
-                              placeholder="0"
-                              className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
-                            />
-                          </div>
-                        </div>
-                      </div>
+                          {/* Metrología Inicial (Voltajes de Fase y Línea, Corrientes) */}
+                          <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-2 animate-in fade-in duration-150">
+                            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide flex items-center gap-1">
+                              <Activity className="w-3 h-3" /> Metrología (Voltajes Fase y Línea)
+                            </span>
+                            
+                            {/* Voltajes Fase-Neutro */}
+                            <div>
+                              <span className="block text-[8.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">Voltajes de Fase (Vf-n)</span>
+                              <div className="grid grid-cols-3 gap-1.5 text-center">
+                                <div>
+                                  <span className="text-[9px] text-slate-400 font-mono">Va (V)</span>
+                                  <input
+                                    type="text"
+                                    value={voltajeVa}
+                                    onChange={(e) => setVoltajeVa(e.target.value)}
+                                    placeholder="Ej: 120V"
+                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-[9px] text-slate-400 font-mono">Vb (V)</span>
+                                  <input
+                                    type="text"
+                                    value={voltajeVb}
+                                    onChange={(e) => setVoltajeVb(e.target.value)}
+                                    placeholder="Ej: 120V"
+                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-[9px] text-slate-400 font-mono">Vc (V)</span>
+                                  <input
+                                    type="text"
+                                    value={voltajeVc}
+                                    onChange={(e) => setVoltajeVc(e.target.value)}
+                                    placeholder="Ej: 120V"
+                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
+                                  />
+                                </div>
+                              </div>
+                            </div>
 
-                      {/* Acometida */}
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                          Acometida / Calibre Conductor
-                        </label>
-                        <input
-                          type="text"
-                          value={acometidaConductor}
-                          onChange={(e) => setAcometidaConductor(e.target.value)}
-                          placeholder="Ej. 3x 3/0 AWG + 1x 1/0 N (Cu)"
-                          className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-blue-400 font-mono h-8.5"
-                        />
-                      </div>
+                            {/* Voltajes Línea-Línea */}
+                            <div className="pt-1.5 border-t border-slate-800/80">
+                              <span className="block text-[8.5px] font-bold text-amber-500/80 uppercase tracking-wider mb-1">Voltajes de Línea (VL-L)</span>
+                              <div className="grid grid-cols-3 gap-1.5 text-center">
+                                <div>
+                                  <span className="text-[9px] text-amber-400 font-mono">Vab (V)</span>
+                                  <input
+                                    type="text"
+                                    value={voltajeVab}
+                                    onChange={(e) => setVoltajeVab(e.target.value)}
+                                    placeholder="Ej: 208V"
+                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-300 font-mono text-center h-8 font-semibold"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-[9px] text-amber-400 font-mono">Vbc (V)</span>
+                                  <input
+                                    type="text"
+                                    value={voltajeVbc}
+                                    onChange={(e) => setVoltajeVbc(e.target.value)}
+                                    placeholder="Ej: 208V"
+                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-300 font-mono text-center h-8 font-semibold"
+                                  />
+                                </div>
+                                <div>
+                                  <span className="text-[9px] text-amber-400 font-mono">Vca (V)</span>
+                                  <input
+                                    type="text"
+                                    value={voltajeVca}
+                                    onChange={(e) => setVoltajeVca(e.target.value)}
+                                    placeholder="Ej: 208V"
+                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-300 font-mono text-center h-8 font-semibold"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Corrientes de Barra */}
+                            <div className="grid grid-cols-3 gap-1.5 text-center pt-1.5 border-t border-slate-800">
+                              <div>
+                                <span className="text-[9px] text-slate-400 font-mono">Ia (A)</span>
+                                <input
+                                  type="text"
+                                  value={corrienteIa}
+                                  onChange={(e) => setCorrienteIa(e.target.value)}
+                                  placeholder="0"
+                                  className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-slate-400 font-mono">Ib (A)</span>
+                                <input
+                                  type="text"
+                                  value={corrienteIb}
+                                  onChange={(e) => setCorrienteIb(e.target.value)}
+                                  placeholder="0"
+                                  className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
+                                />
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-slate-400 font-mono">Ic (A)</span>
+                                <input
+                                  type="text"
+                                  value={corrienteIc}
+                                  onChange={(e) => setCorrienteIc(e.target.value)}
+                                  placeholder="0"
+                                  className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Acometida */}
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                              Acometida / Calibre Conductor
+                            </label>
+                            <input
+                              type="text"
+                              value={acometidaConductor}
+                              onChange={(e) => setAcometidaConductor(e.target.value)}
+                              placeholder="Ej. 3x 3/0 AWG + 1x 1/0 N (Cu)"
+                              className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-blue-400 font-mono h-8.5"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 

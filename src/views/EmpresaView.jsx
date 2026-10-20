@@ -7,6 +7,7 @@ import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
 import AvanceProgressBar from '../components/AvanceProgressBar';
 import ElementoCardActions from '../components/ElementoCardActions';
 import TensionNominalInput from '../components/TensionNominalInput';
+import SelectorAlimentadorJerarquico from '../components/SelectorAlimentadorJerarquico';
 import { 
   TENSIONES_COVENIN_159_BT, 
   TENSIONES_COVENIN_159_MT, 
@@ -17,6 +18,7 @@ import {
   TABLERO_MONTAJE_OPCIONES,
   TABLERO_HERMETICIDAD_NEMA_IP
 } from '../utils/constants';
+import { TIPOS_CONEXION_TRAFO, calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador';
 import { 
   ArrowLeft, 
   Plus, 
@@ -232,7 +234,7 @@ export const EmpresaView = () => {
   const [kvaTrafo, setKvaTrafo] = useState('');
   const [marcaTrafo, setMarcaTrafo] = useState('');
   const [tipoTrafo, setTipoTrafo] = useState('Pedestal');
-  const [conexionTrafo, setConexionTrafo] = useState('');
+  const [conexionTrafo, setConexionTrafo] = useState('TRIFASICO_ESTRELLA');
   const [voltajePrimario, setVoltajePrimario] = useState('');
   const [voltajeSecundario, setVoltajeSecundario] = useState('');
 
@@ -293,6 +295,9 @@ export const EmpresaView = () => {
       company.proyectos.forEach((p) => {
         const pList = p.elementosUnifilares || p.tableros || [];
         list.push(...pList);
+        if (p.subestaciones && Array.isArray(p.subestaciones)) list.push(...p.subestaciones);
+        if (p.puntosMedicion && Array.isArray(p.puntosMedicion)) list.push(...p.puntosMedicion);
+        if (p.ccms && Array.isArray(p.ccms)) list.push(...p.ccms);
       });
     }
     return sortElementsByOrder(list);
@@ -429,29 +434,44 @@ export const EmpresaView = () => {
         tensionNominal: tableroTension || '208Y/120 V (Trifásico 4H)',
         barrasPrincipales: { ia: '0', ib: '0', ic: '0' },
         breakerPrincipal: { marca: '', tipo: '', amp: '' },
-        voltaje: { va: '208', vb: '205', vc: '205' },
+        voltaje: { va: '', vb: '', vc: '', vab: '', vbc: '', vca: '' },
         acometida: '',
         circuits: [],
         neutroLlegada: { calibre: '', observaciones: '' },
         puestaTierra: { calibre: '', observaciones: '' }
       };
     } else if (tipoElemento === 'TRANSFORMADOR') {
+      const canonConexion = normalizarTipoConexion(conexionTrafo);
+      const calcTrafo = calcularCorrientesTrafo({
+        potencia: kvaTrafo,
+        tensionPrimaria: voltajePrimario,
+        tensionSecundaria: voltajeSecundario,
+        tipoConexion: canonConexion
+      });
+
       datosTecnicos = {
         marca: marcaTrafo || '',
-        fases: '3',
+        fases: String(calcTrafo.fases),
         potenciaKva: kvaTrafo || '',
-        kva: kvaTrafo || '',
+        kva: calcTrafo.kva || kvaTrafo || '',
         tipoTransformador: tipoTrafo || 'Pedestal',
-        conexion: conexionTrafo || '',
+        tipoConexion: canonConexion,
+        conexion: canonConexion,
         voltajePrimario: voltajePrimario || '',
         voltajeSecundario: voltajeSecundario || '',
         impedanciaPct: '',
         impedanciaAmp: '',
         impedanciaTemp: '',
         tensionPrimaria: voltajePrimario || '',
-        amperiosPrimaria: '',
+        amperiosPrimaria: calcTrafo.i1 ? String(calcTrafo.i1) : '',
         tensionSecundaria: voltajeSecundario || '',
-        amperiosSecundaria: '',
+        amperiosSecundaria: calcTrafo.i2 ? String(calcTrafo.i2) : '',
+        corrientePrimariaCalculada: calcTrafo.i1,
+        corrienteSecundariaCalculada: calcTrafo.i2,
+        corrienteNominalA: calcTrafo.i2,
+        corrienteNominalB: calcTrafo.i2,
+        corrienteNominalC: calcTrafo.i2,
+        corrienteSecundaria: calcTrafo.i2,
         aislamiento: '',
         aceite: '',
         seco: '',
@@ -532,6 +552,25 @@ export const EmpresaView = () => {
         tipoTransferencia,
         tensionOperativa
       };
+    } else if (tipoElemento === 'GENERADOR') {
+      datosTecnicos = {
+        marca: '',
+        kva: '',
+        potenciaKva: '',
+        kw: '',
+        potenciaKw: '',
+        voltaje: '208/120 V',
+        voltajeGeneracion: '208/120 V',
+        amperaje: '',
+        frecuencia: '60 Hz',
+        hz: '60 Hz',
+        rpm: '1800 RPM',
+        velocidadRpm: '1800 RPM',
+        combustible: 'DIÉSEL',
+        tipoCombustible: 'DIÉSEL',
+        fases: '3',
+        fp: '0.8'
+      };
     } else {
       datosTecnicos = {
         descripcionEspecificaciones: descripcionOtro
@@ -546,7 +585,7 @@ export const EmpresaView = () => {
       nombre: elementoNombre.trim(),
       tipoElemento,
       ubicacion: ubicacion.trim() || 'Sin ubicación',
-      alimentadoPor: alimentadoPor.trim() || 'No definido',
+      alimentadoPor: tipoElemento === 'GENERADOR' ? 'Fuente Primaria Independiente' : (alimentadoPor.trim() || 'No definido'),
       foto,
       fotoBlob,
       observacionesGenerales: observacionesGenerales.trim(),
@@ -1410,19 +1449,25 @@ export const EmpresaView = () => {
                 />
               </div>
 
-              {/* Alimentación */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Alimentado Por (Procedencia)
-                </label>
-                <input
-                  type="text"
+              {/* Alimentación (Omitida en Generadores por ser fuente primaria independiente) */}
+              {tipoElemento === 'GENERADOR' ? (
+                <div className="p-3 bg-slate-900/80 border border-amber-500/30 rounded-xl space-y-1">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" /> Fuente de Energía Primaria Independiente
+                  </span>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Los generadores operan como fuentes autónomas de energía primaria. No poseen alimentación externa aguas arriba.
+                  </p>
+                </div>
+              ) : (
+                <SelectorAlimentadorJerarquico
                   value={alimentadoPor}
-                  onChange={(e) => setAlimentadoPor(e.target.value)}
-                  placeholder="Ej. Transformador 500 KVA o CORPOELEC"
-                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-slate-100 focus:outline-none placeholder-slate-600 h-11 transition-all"
+                  onChange={setAlimentadoPor}
+                  elementosList={companyElementos}
+                  label="Alimentado Por (Procedencia Jerárquica)"
+                  placeholder="Seleccione elemento o escriba procedencia..."
                 />
-              </div>
+              )}
 
               {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}
 
@@ -1556,10 +1601,70 @@ export const EmpresaView = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Conexión</label>
-                      <input type="text" value={conexionTrafo} onChange={(e) => setConexionTrafo(e.target.value)} placeholder="Ej. Estrella - Estrella" className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-100 h-10" />
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Esquema de Conexión</label>
+                      <select 
+                        value={conexionTrafo} 
+                        onChange={(e) => setConexionTrafo(e.target.value)} 
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-violet-300 font-semibold h-10 focus:border-violet-500"
+                      >
+                        {TIPOS_CONEXION_TRAFO.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Primaria MT</label>
+                    <TensionNominalInput
+                      tipo="MT"
+                      value={voltajePrimario}
+                      onChange={(val) => setVoltajePrimario(val)}
+                      placeholder="Ej. 13800 V (13.8 kV)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Secundaria BT</label>
+                    <TensionNominalInput
+                      tipo="BT"
+                      value={voltajeSecundario}
+                      onChange={(val) => setVoltajeSecundario(val)}
+                      placeholder="Ej. 208Y/120 V o 480Y/277 V"
+                    />
+                  </div>
+
+                  {/* Preview de Corrientes Eléctricas Calculadas */}
+                  {(() => {
+                    const calc = calcularCorrientesTrafo({
+                      potencia: kvaTrafo,
+                      tensionPrimaria: voltajePrimario,
+                      tensionSecundaria: voltajeSecundario,
+                      tipoConexion: conexionTrafo
+                    });
+                    return (
+                      <div className="p-3 bg-violet-950/25 border border-violet-800/40 rounded-xl space-y-1.5 font-mono">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-violet-300">
+                          <span className="flex items-center gap-1.5">⚡ Corrientes Nominales Calculadas</span>
+                          <span className="text-[9px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded border border-violet-500/30">
+                            {calc.esTrifasico ? 'Trifásico (√3·V)' : 'Monofásico (V)'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                          <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                            <span className="block text-[10px] text-slate-400 font-sans">Corriente Primaria (I₁)</span>
+                            <span className="text-sm font-black text-violet-400 font-mono">{calc.i1Formateada}</span>
+                            <span className="block text-[9px] text-slate-500 font-mono mt-0.5">{calc.formulaI1}</span>
+                          </div>
+                          <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                            <span className="block text-[10px] text-slate-400 font-sans">Corriente Secundaria (I₂)</span>
+                            <span className="text-sm font-black text-violet-400 font-mono">{calc.i2Formateada}</span>
+                            <span className="block text-[9px] text-slate-500 font-mono mt-0.5">{calc.formulaI2}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

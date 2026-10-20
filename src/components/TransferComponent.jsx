@@ -20,7 +20,9 @@ import {
   Settings,
   Info,
   RotateCcw,
-  X
+  X,
+  Link2,
+  Plus
 } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
@@ -61,72 +63,98 @@ export default function TransferComponent({
   const [newSourceCapacidad, setNewSourceCapacidad] = useState('');
   const [newSourceTension, setNewSourceTension] = useState('208/120 V');
 
-  // Lista de elementos de jerarquía del proyecto para alimentar los selectores (completa con todos los activos)
+  // Modo selector dual para Fuente Emergencia: 'EXISTENTE' o 'NUEVO'
+  const [modoFuenteEmergencia, setModoFuenteEmergencia] = useState('EXISTENTE');
+  const [salidaModo, setSalidaModo] = useState('SELECT'); // 'SELECT' | 'CARGA_DIRECTA'
+
+  // Lista de elementos de jerarquía del proyecto para alimentar los selectores (filtrado estrictamente por el proyecto activo)
   const projectElements = useMemo(() => {
     const list = [];
+    const currentProjId = data?.proyectoId || data?.projectId;
     const compId = data?.empresaId || data?.companyId;
-    const company = companies.find(c => c.id === compId);
 
     const extractFromProject = (p) => {
-      if (p.elementosUnifilares) list.push(...p.elementosUnifilares);
-      if (p.tableros) list.push(...p.tableros);
-      if (p.subestaciones) list.push(...p.subestaciones);
-      if (p.inspeccionesSubestacion) list.push(...p.inspeccionesSubestacion);
-      if (p.puntosMedicion) list.push(...p.puntosMedicion);
-      if (p.ccmList) list.push(...p.ccmList);
+      if (!p) return;
+      if (Array.isArray(p.elementosUnifilares)) list.push(...p.elementosUnifilares);
+      if (Array.isArray(p.tableros)) list.push(...p.tableros);
+      if (Array.isArray(p.subestaciones)) list.push(...p.subestaciones);
+      if (Array.isArray(p.inspeccionesSubestacion)) list.push(...p.inspeccionesSubestacion);
+      if (Array.isArray(p.puntosMedicion)) list.push(...p.puntosMedicion);
+      if (Array.isArray(p.ccmList)) list.push(...p.ccmList);
     };
 
-    if (!company) {
-      companies.forEach(c => {
-        if (c.elementosUnifilares) list.push(...c.elementosUnifilares);
-        if (c.proyectos) c.proyectos.forEach(extractFromProject);
-      });
-    } else {
-      if (company.elementosUnifilares) list.push(...company.elementosUnifilares);
-      if (company.proyectos) company.proyectos.forEach(extractFromProject);
+    if (currentProjId) {
+      // Búsqueda estricta por proyecto activo
+      for (const c of companies) {
+        if (c.proyectos) {
+          const targetP = c.proyectos.find(p => String(p.id) === String(currentProjId));
+          if (targetP) {
+            extractFromProject(targetP);
+            break;
+          }
+        }
+      }
+    } else if (compId) {
+      const company = companies.find(c => String(c.id) === String(compId));
+      if (company && Array.isArray(company.elementosUnifilares)) {
+        list.push(...company.elementosUnifilares);
+      }
     }
 
     // Deduplicar por ID y excluir al propio elemento transfer
     const seen = new Set();
     return list.filter(e => {
-      if (!e || !e.id || e.id === data?.id || seen.has(e.id)) return false;
+      if (!e || !e.id || String(e.id) === String(data?.id) || seen.has(e.id)) return false;
       seen.add(e.id);
       return true;
     });
   }, [companies, data]);
 
+  const tablerosDestino = useMemo(() => projectElements.filter(e => e.tipoElemento === 'TABLERO'), [projectElements]);
+  const ccmsDestino = useMemo(() => projectElements.filter(e => e.tipoElemento === 'CCM'), [projectElements]);
+  const otrosDestino = useMemo(() => projectElements.filter(e => e.tipoElemento !== 'TABLERO' && e.tipoElemento !== 'CCM'), [projectElements]);
+
   // Handler para guardar nueva fuente rápida
-  const handleCreateQuickSource = async (e) => {
-    if (e) e.preventDefault();
-    if (!newSourceNombre.trim()) {
+  const handleCreateQuickSource = async (e, customTipo, customNombre, customCapacidad) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const tipo = customTipo || newSourceTipo;
+    const nombreFuente = (customNombre || newSourceNombre).trim();
+    const capacidad = (customCapacidad || newSourceCapacidad).trim();
+    if (!nombreFuente) {
       showToast('Por favor introduce un nombre para la fuente.', 'error');
       return;
     }
 
-    const targetProjId = data.proyectoId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
+    const targetProjId = data.proyectoId || data.projectId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
 
     const payload = {
-      nombre: newSourceNombre.trim(),
-      tipoElemento: newSourceTipo,
-      ubicacion: newSourceUbicacion.trim() || 'Sala Eléctrica',
+      nombre: nombreFuente,
+      tipoElemento: tipo,
+      ubicacion: newSourceUbicacion.trim() || 'Sala Eléctrica / Caseta de Generación',
       datosTecnicos: {
-        kva: newSourceCapacidad.trim(),
-        amperaje: newSourceCapacidad.trim(),
-        tensionNominal: newSourceTension
+        kva: capacidad,
+        potenciaKva: capacidad,
+        amperaje: capacidad,
+        tensionNominal: newSourceTension || dt.tensionNominal || '208/120 V',
+        voltajeGeneracion: newSourceTension || dt.tensionNominal || '208/120 V',
+        frecuencia: '60 Hz',
+        hz: '60 Hz',
+        rpm: '1800 RPM',
+        velocidadRpm: '1800 RPM',
+        combustible: 'DIESEL'
       }
     };
 
     const res = await addElementoUnifilar(targetProjId, payload);
     if (res && res.success) {
       const createdElem = res.elemento;
-      const createdName = createdElem.nombre || newSourceNombre;
+      const createdName = createdElem.nombre || nombreFuente;
       
       if (quickCreateTargetField === 'fuenteNormal') {
         handleDtChange('fuenteNormalNombre', createdName);
-        if (newSourceTension) handleDtChange('fuenteNormalTension', newSourceTension);
       } else {
         handleDtChange('fuenteEmergenciaNombre', createdName);
-        if (newSourceTension) handleDtChange('fuenteEmergenciaTension', newSourceTension);
+        setModoFuenteEmergencia('EXISTENTE');
       }
 
       showToast(`Fuente "${createdName}" creada y asignada exitosamente.`, 'success');
@@ -243,10 +271,10 @@ export default function TransferComponent({
   const fuenteEmergenciaAmperaje = dt.fuenteEmergenciaAmperaje || dt.amperaje || '';
   const fuenteEmergenciaConductor = dt.fuenteEmergenciaConductor || dt.conductorFuenteEmergencia || '';
 
-  // Salida a Carga
+  // Salida a Carga y Acometida de Carga (Renombrado técnico)
   const salidaCargaNombre = dt.salidaCargaNombre || dt.carga || '';
   const salidaCargaConductor = dt.salidaCargaConductor || '';
-  const neutroConductor = dt.neutroConductor || dt.neutro || '';
+  const acometidaCargaConductor = dt.acometidaCarga || dt.acometidaCargaConductor || dt.neutroConductor || dt.neutro || '';
   const tierraConductor = dt.tierraConductor || dt.tierra || '';
 
   return (
@@ -561,35 +589,20 @@ export default function TransferComponent({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono pt-1 border-t border-slate-800/80">
-                  <div>
-                    <span className="text-slate-500 block font-bold">TENSIÓN:</span>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={fuenteNormalTension}
-                        onChange={(e) => handleDtChange('fuenteNormalTension', e.target.value)}
-                        placeholder="Ej. 208/120V"
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100 text-[10px]"
-                      />
-                    ) : (
-                      <span className="text-slate-300 font-bold">{fuenteNormalTension || '—'}</span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block font-bold">CAPACIDAD BREAKER:</span>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={fuenteNormalAmperaje}
-                        onChange={(e) => handleDtChange('fuenteNormalAmperaje', e.target.value)}
-                        placeholder="Ej. 3200 A"
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100 text-[10px]"
-                      />
-                    ) : (
-                      <span className="text-slate-300 font-bold">{fuenteNormalAmperaje || '—'}</span>
-                    )}
-                  </div>
+                {/* Simplificación de Fuente Normal: Sin campos de tensión redundantes */}
+                <div className="text-[10px] font-mono pt-1 border-t border-slate-800/80">
+                  <span className="text-slate-500 block font-bold">CAPACIDAD BREAKER PRINCIPAL:</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={fuenteNormalAmperaje}
+                      onChange={(e) => handleDtChange('fuenteNormalAmperaje', e.target.value)}
+                      placeholder="Ej. 3200 A"
+                      className="w-full mt-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-mono font-bold"
+                    />
+                  ) : (
+                    <span className="text-slate-300 font-bold block mt-0.5">{fuenteNormalAmperaje || '—'}</span>
+                  )}
                 </div>
 
                 <div className="text-[10px] font-mono pt-1 border-t border-slate-800/80">
@@ -608,7 +621,7 @@ export default function TransferComponent({
                 </div>
               </div>
 
-              {/* Tarjeta 2: FUENTE EMERGENCIA (ÁMBAR/ROJO) */}
+              {/* Tarjeta 2: FUENTE EMERGENCIA (ÁMBAR/ROJO) - SELECTOR DUAL */}
               <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-10 focus-within:z-40">
                 <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40">
@@ -618,30 +631,103 @@ export default function TransferComponent({
                   <span className="text-[10px] font-mono font-bold text-amber-400">GEN</span>
                 </div>
 
-                <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Origen / Planta Generador:
-                  </label>
-                  {isEditing ? (
-                    <SelectorAlimentadorJerarquico
-                      value={fuenteEmergenciaNombre}
-                      onChange={(val) => handleDtChange('fuenteEmergenciaNombre', val)}
-                      proyectoId={data.proyectoId}
-                      tableroActualId={data.id}
-                      elementosList={projectElements}
-                      placeholder="Seleccionar Generador / Planta..."
-                      className="text-xs"
-                      label=""
-                      allowQuickCreate={true}
-                      onQuickCreate={() => {
+                {/* Selector Dual en Modo Edición */}
+                {isEditing && (
+                  <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800 mb-1">
+                    <button
+                      type="button"
+                      onClick={() => setModoFuenteEmergencia('EXISTENTE')}
+                      className={`flex-1 py-1 px-2 rounded text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        modoFuenteEmergencia === 'EXISTENTE'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Link2 className="w-3 h-3" /> Conectar Existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoFuenteEmergencia('NUEVO');
                         setQuickCreateTargetField('fuenteEmergencia');
                         setNewSourceTipo('GENERADOR');
                         setNewSourceNombre(`Generador Emergencia ${projectElements.filter(e => e.tipoElemento === 'GENERADOR').length + 1}`);
                         setNewSourceCapacidad(dt.amperaje || '500');
                         setNewSourceTension(dt.tensionNominal || '208/120 V');
-                        setQuickCreateOpen(true);
                       }}
-                    />
+                      className={`flex-1 py-1 px-2 rounded text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        modoFuenteEmergencia === 'NUEVO'
+                          ? 'bg-amber-500 text-slate-950 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Plus className="w-3 h-3" /> Registrar al Vuelo
+                    </button>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Origen / Planta Generador:
+                  </label>
+                  {isEditing ? (
+                    modoFuenteEmergencia === 'EXISTENTE' ? (
+                      <SelectorAlimentadorJerarquico
+                        value={fuenteEmergenciaNombre}
+                        onChange={(val) => handleDtChange('fuenteEmergenciaNombre', val)}
+                        proyectoId={data.proyectoId || data.projectId}
+                        tableroActualId={data.id}
+                        elementosList={projectElements}
+                        placeholder="Seleccionar Generador del proyecto..."
+                        className="text-xs"
+                        label=""
+                        allowQuickCreate={true}
+                        onQuickCreate={() => {
+                          setModoFuenteEmergencia('NUEVO');
+                          setQuickCreateTargetField('fuenteEmergencia');
+                          setNewSourceTipo('GENERADOR');
+                          setNewSourceNombre(`Generador Emergencia ${projectElements.filter(e => e.tipoElemento === 'GENERADOR').length + 1}`);
+                          setNewSourceCapacidad(dt.amperaje || '500');
+                          setNewSourceTension(dt.tensionNominal || '208/120 V');
+                        }}
+                      />
+                    ) : (
+                      <div className="bg-slate-950/80 p-2.5 rounded-xl border border-amber-500/40 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-amber-400 uppercase font-mono">Nuevo Generador al Vuelo:</span>
+                          <button
+                            type="button"
+                            onClick={() => setModoFuenteEmergencia('EXISTENTE')}
+                            className="text-[9px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={newSourceNombre}
+                          onChange={(e) => setNewSourceNombre(e.target.value)}
+                          placeholder="Nombre (Ej. Planta Diésel Sótano)"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={newSourceCapacidad}
+                            onChange={(e) => setNewSourceCapacidad(e.target.value)}
+                            placeholder="Capacidad (Ej. 500 kVA)"
+                            className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => handleCreateQuickSource(e, 'GENERADOR', newSourceNombre, newSourceCapacidad)}
+                            className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded transition-all cursor-pointer shadow"
+                          >
+                            Crear y Asignar
+                          </button>
+                        </div>
+                      </div>
+                    )
                   ) : (
                     <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteEmergenciaNombre}>
                       {fuenteEmergenciaNombre || '—'}
@@ -821,21 +907,111 @@ export default function TransferComponent({
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+            {/* LÍNEA DE SALIDA FLEXIBLE (HOMOLOGADA CON CIRCUITOS DE TABLEROS) */}
             <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">
-                CARGA O TABLERO ALIMENTADO:
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                  CARGA O TABLERO ALIMENTADO:
+                </span>
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => setSalidaModo(salidaModo === 'CARGA_DIRECTA' ? 'SELECT' : 'CARGA_DIRECTA')}
+                    className="text-[9px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                  >
+                    {salidaModo === 'CARGA_DIRECTA' ? 'Ver Lista Proyecto' : 'Escribir Carga Directa'}
+                  </button>
+                )}
+              </div>
+
               {isEditing ? (
-                <SelectorAlimentadorJerarquico
-                  value={salidaCargaNombre}
-                  onChange={(val) => handleDtChange('salidaCargaNombre', val)}
-                  proyectoId={data.proyectoId}
-                  tableroActualId={data.id}
-                  elementosList={projectElements}
-                  placeholder="Seleccionar Tablero Destino..."
-                  className="text-xs"
-                  label=""
-                />
+                salidaModo === 'CARGA_DIRECTA' ? (
+                  <input
+                    type="text"
+                    value={salidaCargaNombre}
+                    onChange={(e) => handleDtChange('salidaCargaNombre', e.target.value)}
+                    placeholder="Ej. Bomba Contra Incendio / Chiller 1"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 text-xs font-mono placeholder-slate-600 focus:border-amber-500"
+                  />
+                ) : (
+                  <select
+                    value={salidaCargaNombre}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      if (val === '__CARGA_DIRECTA__') {
+                        setSalidaModo('CARGA_DIRECTA');
+                        handleDtChange('salidaCargaNombre', 'CARGA DIRECTA');
+                      } else if (val.startsWith('__NEW_')) {
+                        const targetProjId = data.proyectoId || data.projectId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
+                        let newTipo = 'TABLERO';
+                        let defaultName = 'Sub-Tablero Derivado';
+                        if (val === '__NEW_CCM__') {
+                          newTipo = 'CCM';
+                          defaultName = 'CCM Derivado';
+                        } else if (val === '__NEW_TRANSFER__') {
+                          newTipo = 'TRANSFER';
+                          defaultName = 'Transferencia Secundaria';
+                        }
+                        const nombreSugerido = `${defaultName} ${projectElements.filter(el => el.tipoElemento === newTipo).length + 1}`;
+                        const payload = {
+                          nombre: nombreSugerido,
+                          tipoElemento: newTipo,
+                          ubicacion: ubicacion || 'Área de Cargas',
+                          alimentadoPor: nombre || 'Transferencia (ATS/MTS)',
+                          datosTecnicos: {
+                            amperaje: dt.amperaje || '225',
+                            tensionNominal: dt.tensionNominal || '208Y/120 V'
+                          }
+                        };
+                        const res = await addElementoUnifilar(targetProjId, payload);
+                        if (res && res.success) {
+                          const createdName = res.elemento?.nombre || nombreSugerido;
+                          handleDtChange('salidaCargaNombre', createdName);
+                          showToast(`Elemento "${createdName}" creado y enlazado.`, 'success');
+                        }
+                      } else {
+                        handleDtChange('salidaCargaNombre', val);
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-medium focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">-- Seleccionar Carga / Elemento Destino --</option>
+                    
+                    <optgroup label="⚡ CARGA DIRECTA">
+                      <option value="__CARGA_DIRECTA__">⚡ Escribir Carga Directa (Motor, Bomba, etc.)</option>
+                    </optgroup>
+
+                    <optgroup label="➕ NUEVO ELEMENTO POR CREAR (RESERVA)">
+                      <option value="__NEW_TABLERO__">➕ Crear Nuevo Sub-Tablero / Panel</option>
+                      <option value="__NEW_CCM__">➕ Crear Nuevo Centro de Control (CCM)</option>
+                      <option value="__NEW_TRANSFER__">➕ Crear Nueva Transferencia Secundaria</option>
+                    </optgroup>
+
+                    {tablerosDestino.length > 0 && (
+                      <optgroup label="🏢 Tableros y Sub-Tableros del Proyecto">
+                        {tablerosDestino.map(t => (
+                          <option key={t.id} value={t.nombre}>{t.nombre}</option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {ccmsDestino.length > 0 && (
+                      <optgroup label="⚙️ CCMs del Proyecto">
+                        {ccmsDestino.map(c => (
+                          <option key={c.id} value={c.nombre}>{c.nombre}</option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {otrosDestino.length > 0 && (
+                      <optgroup label="⚡ Otros Elementos del Proyecto">
+                        {otrosDestino.map(o => (
+                          <option key={o.id} value={o.nombre}>{o.nombre}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                )
               ) : (
                 <p className="text-slate-100 font-black text-sm truncate" title={salidaCargaNombre}>
                   {salidaCargaNombre || '—'}
@@ -849,7 +1025,7 @@ export default function TransferComponent({
                     value={salidaCargaConductor}
                     onChange={(e) => handleDtChange('salidaCargaConductor', e.target.value)}
                     placeholder="Ej. 2(3X500 MCM)"
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs mt-0.5"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs mt-0.5 font-mono"
                   />
                 ) : (
                   <span className="text-slate-300 font-bold text-xs">{salidaCargaConductor || '—'}</span>
@@ -857,22 +1033,28 @@ export default function TransferComponent({
               </div>
             </div>
 
+            {/* RENOMBRADO TÉCNICO: ACOMETIDA DE CARGA (ANTES BARRA Y CONDUCTOR DE NEUTRO) */}
             <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
               <span className="text-[10px] text-cyan-400 font-bold uppercase block">
-                BARRA Y CONDUCTOR DE NEUTRO (N):
+                ACOMETIDA DE CARGA:
               </span>
               {isEditing ? (
                 <input
                   type="text"
-                  value={neutroConductor}
-                  onChange={(e) => handleDtChange('neutroConductor', e.target.value)}
-                  placeholder="Ej. 1X500 MCM (Barra directa)"
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
+                  value={acometidaCargaConductor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    handleDtChange('acometidaCarga', val);
+                    handleDtChange('acometidaCargaConductor', val);
+                    handleDtChange('neutroConductor', val);
+                  }}
+                  placeholder="Ej. 3(1X500 MCM) + 1X500 MCM (N)"
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-mono"
                 />
               ) : (
-                <p className="text-slate-200 font-bold text-xs">{neutroConductor || '—'}</p>
+                <p className="text-slate-200 font-bold text-xs">{acometidaCargaConductor || '—'}</p>
               )}
-              <span className="text-[10px] text-slate-500 block">Configuración: Barra sólida pasante</span>
+              <span className="text-[10px] text-slate-500 block">Conductor general de acometida hacia barra de carga común</span>
             </div>
 
             <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
