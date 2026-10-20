@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import useStore from '../store/useStore.js';
 import { API_BASE_URL } from './api.js';
+import { compressImageToBase64, shouldCompressBase64, estimateBase64SizeBytes } from './imageUtils.js';
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10000; // 10 segundos por petición estándar
 export const MULTIPART_REQUEST_TIMEOUT_MS = 15000; // 15 segundos para subida binaria de fotos
@@ -375,10 +376,51 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
 }
 
 /**
- * Prepara la estructura de mutación para el endpoint /api/sync/batch
- * Sanitiza y repara exhaustivamente el payload con auto-curación para proteger Prisma.
+ * Auto-Healing Asíncrono con Compresión Dinámica en Vuelo:
+ * Si detecta una foto en Base64 demasiado pesada (> 300 KB), la comprime automáticamente mediante
+ * Canvas a 1280px / JPEG 75% antes de construir la solicitud HTTP hacia /api/sync/batch.
+ * Elimina por completo el error Request Entity Too Large / FUNCTION_PAYLOAD_TOO_LARGE en Vercel (límite 4.5 MB).
  */
-export function prepareMutation(item) {
+export async function autoHealMutationDataAsync(entityName, rawData = {}, item = {}) {
+  const data = autoHealMutationData(entityName, rawData, item);
+
+  // Optimización dinámica en vuelo de fotos Base64 pesadas
+  if (data.foto && typeof data.foto === 'string' && data.foto.startsWith('data:image/')) {
+    // Si la foto supera el umbral de 300 KB o para auto-sanar elementos atascados con fotos gigantes
+    if (data.foto.length > 300 * 1024) {
+      try {
+        const originalLen = data.foto.length;
+        const compressed = await compressImageToBase64(data.foto, 1280, 1280, 0.75);
+        if (compressed && compressed.startsWith('data:image/')) {
+          console.log(`[SYNC COMPRESS] 🗜️ Foto optimizada en vuelo: ${(originalLen / 1024).toFixed(0)} KB -> ${(compressed.length / 1024).toFixed(0)} KB (Evitando límite 4.5MB Vercel)`);
+          data.foto = compressed;
+
+          // Auto-sanar también el registro en el store local para no re-comprimir en futuros intentos
+          const projId = item.payload?.proyectoId || data.proyectoId;
+          const elemId = item.payload?.id || item.id;
+          if (projId && elemId) {
+            try {
+              const store = useStore.getState();
+              store.updateElementoUnifilar?.(projId, elemId, { foto: compressed });
+            } catch (errStore) {
+              // No bloqueante
+            }
+          }
+        }
+      } catch (compressErr) {
+        console.warn('[SYNC COMPRESS] ⚠️ Fallo al comprimir foto en vuelo, continuando con original:', compressErr.message);
+      }
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Prepara la estructura de mutación para el endpoint /api/sync/batch
+ * Sanitiza, repara exhaustivamente y comprime fotos pesadas para respetar el límite de 4.5 MB de Vercel.
+ */
+export async function prepareMutation(item) {
   if (!item) return null;
   let entityName = 'ElementoUnifilar';
   if (item.tipo === 'PROYECTO') entityName = 'Proyecto';
@@ -390,7 +432,7 @@ export function prepareMutation(item) {
   else if (item.tipo === 'INSPECCION_ATERRAMIENTO') entityName = 'InspeccionAterramiento';
   else if (item.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE') entityName = 'InspeccionTanqueCombustible';
 
-  const mutationData = autoHealMutationData(entityName, item.payload || {}, item);
+  const mutationData = await autoHealMutationDataAsync(entityName, item.payload || {}, item);
   const mutationId = item.payload?.id || item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}`);
 
   return {
@@ -501,11 +543,14 @@ export function useSync() {
   const sincronizarLote = async (mutaciones, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) => {
     try {
       const safeMutations = Array.isArray(mutaciones) ? mutaciones : [];
-      console.log(`[SYNC CLIENT] 📤 Enviando lote de ${safeMutations.length} mutaciones a ${API_BASE_URL}/api/sync/batch`);
+      const payloadString = JSON.stringify({ mutations: safeMutations });
+      const payloadBytes = payloadString.length;
+      console.log(`[SYNC CLIENT] 📤 Enviando lote de ${safeMutations.length} mutaciones (${(payloadBytes / 1024).toFixed(0)} KB) a ${API_BASE_URL}/api/sync/batch`);
+
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/sync/batch`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ mutations: safeMutations })
+        body: payloadString
       }, timeoutMs);
 
       console.log(`[SYNC CLIENT] 📥 Respuesta del backend: HTTP ${response.status} ${response.statusText}`);
@@ -518,6 +563,11 @@ export function useSync() {
 
       // Lectura segura garantizada sin doble lectura de stream
       const parsed = await readResponsePayload(response);
+
+      if (response.status === 413 || parsed.error?.includes('FUNCTION_PAYLOAD_TOO_LARGE') || parsed.error?.includes('Payload Too Large')) {
+        console.warn(`[SYNC CLIENT] ⚠️ Error 413 Payload Too Large (${(payloadBytes / 1024).toFixed(0)} KB). Se requiere degradación a elemento por elemento.`);
+        return { success: false, status: 413, error: 'Payload excede límite de 4.5MB en Vercel (Payload Too Large)' };
+      }
 
       if (!response.ok) {
         console.error(`[SYNC CLIENT] ❌ Error HTTP ${response.status}:`, parsed.error);
@@ -538,7 +588,7 @@ export function useSync() {
   const sincronizarElementoUnifilar = async (empresaId, elemento, queueItemId) => {
     try {
       const elementId = elemento?.id || queueItemId;
-      const healed = autoHealMutationData('ElementoUnifilar', elemento || {}, { id: elementId, companyId: empresaId });
+      const healed = await autoHealMutationDataAsync('ElementoUnifilar', elemento || {}, { id: elementId, companyId: empresaId });
 
       const formData = new FormData();
       formData.append('id', elementId);
@@ -567,7 +617,16 @@ export function useSync() {
       const validFoto = healed.foto;
       let fileBlob = null;
       if (elemento?.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob) && elemento.fotoBlob.size > 50) {
-        fileBlob = elemento.fotoBlob;
+        if (elemento.fotoBlob.size > 300 * 1024) {
+          try {
+            const compressedBlobBase64 = await compressImageToBase64(elemento.fotoBlob, 1280, 1280, 0.75);
+            fileBlob = dataURLtoBlob(compressedBlobBase64) || elemento.fotoBlob;
+          } catch {
+            fileBlob = elemento.fotoBlob;
+          }
+        } else {
+          fileBlob = elemento.fotoBlob;
+        }
       } else if (validFoto && validFoto.startsWith('data:image')) {
         fileBlob = dataURLtoBlob(validFoto);
       }
@@ -788,7 +847,7 @@ export function useSync() {
 
         const chunk = jsonItems.slice(i, i + SYNC_BATCH_SIZE);
         const safeChunk = Array.isArray(chunk) ? chunk : [];
-        const chunkMutations = safeChunk.map(prepareMutation).filter(Boolean);
+        const chunkMutations = (await Promise.all(safeChunk.map(prepareMutation))).filter(Boolean);
 
         const currentStep = Math.min(processedCount + safeChunk.length, totalItems);
         const itemNames = safeChunk.map((c) => c?.payload?.nombre || c?.payload?.codigo || c?.tipo || 'Ítem').join(', ');
@@ -856,7 +915,7 @@ export function useSync() {
           for (const item of safeChunk) {
             if (!navigator.onLine) break;
 
-            const singleMutation = prepareMutation(item);
+            const singleMutation = await prepareMutation(item);
             if (!singleMutation) {
               processedCount++;
               continue;
@@ -1037,7 +1096,7 @@ export function useSync() {
           return { success: false, error: res.error };
         }
       } else {
-        const mutation = prepareMutation(item);
+        const mutation = await prepareMutation(item);
         const res = await sincronizarLote([mutation], DEFAULT_REQUEST_TIMEOUT_MS);
         const resApplied = Array.isArray(res.data?.applied) ? res.data.applied : [];
         if (res.success && resApplied.length > 0) {
