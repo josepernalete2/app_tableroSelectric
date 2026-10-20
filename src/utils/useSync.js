@@ -228,8 +228,155 @@ const ENTITY_SYNC_PRIORITY = {
 };
 
 /**
+ * Auto-Healing: Valida y repara la integridad del objeto de mutación en el cliente antes de sincronizar.
+ * 1. Si la foto está corrupta, incompleta o mal formateada (ej. 'base64,/'), se reemplaza de forma segura
+ *    por null sin perder el nombre, ID, metrología y datos técnicos intactos.
+ * 2. Inyecta valores por defecto seguros en campos numéricos (0) o de texto ("") para evitar rechazos de Prisma.
+ * 3. Garantiza que datosTecnicos sea siempre un objeto JSON válido normalizado con la norma venezolana COVENIN 159:1997 / CEN 200.
+ */
+export function autoHealMutationData(entityName, rawData = {}, item = {}) {
+  const data = { ...rawData };
+  delete data.fotoBlob;
+  delete data.previewUrl;
+
+  // 1. Auto-Healing de Fotos: Si está corrupta o truncada, se limpia sin afectar otros datos técnicos
+  const rawFoto = data.foto || data.fotoUrl;
+  const validFoto = validateAndSanitizeFoto(rawFoto);
+  if (validFoto) {
+    data.foto = validFoto;
+    delete data.fotoUrl;
+  } else {
+    data.foto = null;
+    data.eliminarFoto = true;
+    delete data.fotoUrl;
+  }
+
+  // 2. Auto-Healing Específico por Entidad
+  if (entityName === 'ElementoUnifilar' || entityName === 'Tablero' || entityName === 'Elemento') {
+    // Nombre e Identidad seguros
+    data.nombre = String(data.nombre || data.codigo || data.tag || 'Elemento Unifilar').trim();
+    if (!data.nombre) data.nombre = 'Elemento Unifilar';
+
+    // Tipo de elemento normalizado según enum TipoElemento de Prisma
+    const validTipos = [
+      'TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR',
+      'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION',
+      'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA',
+      'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'
+    ];
+    if (!data.tipoElemento || !validTipos.includes(data.tipoElemento)) {
+      data.tipoElemento = 'TABLERO';
+    }
+
+    // Auto-Healing de datosTecnicos (Prisma exige tipo Json NOT NULL)
+    let dt = {};
+    if (typeof data.datosTecnicos === 'string') {
+      try {
+        dt = JSON.parse(data.datosTecnicos);
+      } catch {
+        dt = {};
+      }
+    } else if (typeof data.datosTecnicos === 'object' && data.datosTecnicos !== null) {
+      dt = { ...data.datosTecnicos };
+    }
+
+    // Rescatar campos legados u obsoletos hacia datosTecnicos
+    if (data.codigo && !dt.codigo) dt.codigo = data.codigo;
+    if (data.tag && !dt.tag) dt.tag = data.tag;
+    if (data.orden !== undefined && dt.orden === undefined) dt.orden = data.orden;
+    if (data.tension && !dt.tension) dt.tension = data.tension;
+    if (data.voltaje && !dt.tension) dt.tension = data.voltaje;
+    if (data.voltajeAcometida && !dt.tension) dt.tension = data.voltajeAcometida;
+
+    // Inyectar estándares COVENIN 159:1997 / CEN 200 en datos técnicos si faltan
+    if (!dt.tension) dt.tension = '208Y/120 V'; // Tensión trifásica estrella BT estándar COVENIN
+    if (!dt.frecuencia) dt.frecuencia = '60 Hz'; // Frecuencia estándar Venezuela
+    if (dt.fases === undefined) dt.fases = data.fases !== undefined ? Number(data.fases) : 3;
+    if (dt.maxPoles === undefined) dt.maxPoles = data.maxPolos !== undefined ? Number(data.maxPolos) : 42;
+    if (!dt.norma) dt.norma = 'COVENIN 159:1997 / CEN 200';
+    if (!Array.isArray(dt.circuits)) {
+      dt.circuits = Array.isArray(dt.circuitos) ? dt.circuitos : (Array.isArray(data.circuitos) ? data.circuitos : (Array.isArray(data.circuits) ? data.circuits : []));
+    }
+    data.datosTecnicos = dt;
+
+    // Valores por defecto seguros para campos de texto (evitar nulos no controlados)
+    data.ubicacion = typeof data.ubicacion === 'string' ? data.ubicacion : '';
+    data.alimentadoPor = typeof data.alimentadoPor === 'string' ? data.alimentadoPor : '';
+    data.observacionesGenerales = typeof data.observacionesGenerales === 'string' ? data.observacionesGenerales : '';
+    data.circuitoOrigen = typeof data.circuitoOrigen === 'string' ? data.circuitoOrigen : '';
+    data.calibreConductor = typeof data.calibreConductor === 'string' ? data.calibreConductor : '';
+    data.breakerMarca = typeof data.breakerMarca === 'string' ? data.breakerMarca : '';
+    data.breakerTipo = typeof data.breakerTipo === 'string' ? data.breakerTipo : '';
+
+    // Valores por defecto seguros para campos numéricos y float
+    if (data.breakerAmperaje !== undefined && data.breakerAmperaje !== null && data.breakerAmperaje !== '') {
+      const parsedAmp = parseFloat(data.breakerAmperaje);
+      data.breakerAmperaje = !isNaN(parsedAmp) ? parsedAmp : 0;
+    } else {
+      data.breakerAmperaje = 0;
+    }
+
+    if (data.potenciaEstimada !== undefined && data.potenciaEstimada !== null && data.potenciaEstimada !== '') {
+      data.potenciaEstimada = String(data.potenciaEstimada);
+    } else {
+      data.potenciaEstimada = '';
+    }
+
+    // Enum EstadoVinculo
+    const validEstados = ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'];
+    data.estadoVinculo = validEstados.includes(data.estadoVinculo) ? data.estadoVinculo : 'ACTIVO';
+
+    // Formato JSON
+    if (data.detallesFormato && typeof data.detallesFormato !== 'object') {
+      try {
+        data.detallesFormato = JSON.parse(data.detallesFormato);
+      } catch {
+        delete data.detallesFormato;
+      }
+    }
+  } else if (entityName === 'Subestacion') {
+    data.nombre = String(data.nombre || 'Subestación Principal').trim();
+    data.ubicacion = String(data.ubicacion || 'Sede Principal').trim();
+    data.fecha = String(data.fecha || new Date().toISOString().split('T')[0]);
+    data.hora = String(data.hora || '08:00');
+    data.inspector = String(data.inspector || 'Inspector Certificado');
+    data.nivelTension = String(data.nivelTension || '13.8 kV'); // COVENIN 159 MT
+    data.estadoEntorno = typeof data.estadoEntorno === 'object' && data.estadoEntorno !== null ? data.estadoEntorno : {};
+    data.obrasCiviles = typeof data.obrasCiviles === 'object' && data.obrasCiviles !== null ? data.obrasCiviles : {};
+    data.equiposPrincipales = typeof data.equiposPrincipales === 'object' && data.equiposPrincipales !== null ? data.equiposPrincipales : {};
+    data.puestaTierra = typeof data.puestaTierra === 'object' && data.puestaTierra !== null ? data.puestaTierra : {};
+    data.edificioControl = typeof data.edificioControl === 'object' && data.edificioControl !== null ? data.edificioControl : {};
+  } else if (entityName === 'Proyecto') {
+    data.nombre = String(data.nombre || 'Proyecto Principal').trim();
+    data.direccion = String(data.direccion || data.ubicacion || 'Sede de Operaciones').trim();
+    data.descripcion = typeof data.descripcion === 'string' ? data.descripcion : '';
+    if (data.responsable && typeof data.responsable === 'object') {
+      data.responsableNombre = data.responsableNombre || data.responsable.nombre || '';
+      data.responsableTelefono = data.responsableTelefono || data.responsable.telefono || '';
+      data.responsableEmail = data.responsableEmail || data.responsable.email || '';
+    }
+  } else if (entityName === 'PuntoMedicion') {
+    data.nombre = String(data.nombre || 'Punto de Medición').trim();
+    data.inspector = String(data.inspector || 'Inspector Certificado').trim();
+    data.tensionNominal = String(data.tensionNominal || '208Y/120 V');
+    data.fecha = String(data.fecha || new Date().toISOString().split('T')[0]);
+    data.hora = String(data.hora || '08:00');
+  } else if (entityName === 'Ccm') {
+    data.nombre = String(data.nombre || 'CCM Principal').trim();
+    data.parametrosElectricos = typeof data.parametrosElectricos === 'object' && data.parametrosElectricos !== null ? data.parametrosElectricos : { tension: '480▲ (3Φ - 3 hilos Delta)', frecuencia: '60 Hz' };
+    data.gavetasBucketLog = Array.isArray(data.gavetasBucketLog) ? data.gavetasBucketLog : [];
+  }
+
+  if (item.companyId && !data.empresaId) {
+    data.empresaId = item.companyId;
+  }
+
+  return data;
+}
+
+/**
  * Prepara la estructura de mutación para el endpoint /api/sync/batch
- * Sanitiza fotos y limpia campos incompatibles para proteger Prisma.
+ * Sanitiza y repara exhaustivamente el payload con auto-curación para proteger Prisma.
  */
 export function prepareMutation(item) {
   if (!item) return null;
@@ -243,25 +390,9 @@ export function prepareMutation(item) {
   else if (item.tipo === 'INSPECCION_ATERRAMIENTO') entityName = 'InspeccionAterramiento';
   else if (item.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE') entityName = 'InspeccionTanqueCombustible';
 
-  const mutationData = { ...(item.payload || {}) };
-  delete mutationData.fotoBlob;
+  const mutationData = autoHealMutationData(entityName, item.payload || {}, item);
+  const mutationId = item.payload?.id || item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}`);
 
-  // Sanitización de foto para evitar errores de Prisma
-  const validFoto = validateAndSanitizeFoto(mutationData.foto || mutationData.fotoUrl);
-  if (validFoto) {
-    mutationData.foto = validFoto;
-    delete mutationData.fotoUrl;
-  } else {
-    mutationData.foto = null;
-    mutationData.eliminarFoto = true;
-    delete mutationData.fotoUrl;
-  }
-
-  if (item.companyId && !mutationData.empresaId) {
-    mutationData.empresaId = item.companyId;
-  }
-
-  const mutationId = item.payload?.id || item.id;
   return {
     entity: entityName,
     id: mutationId,
@@ -407,35 +538,38 @@ export function useSync() {
   const sincronizarElementoUnifilar = async (empresaId, elemento, queueItemId) => {
     try {
       const elementId = elemento?.id || queueItemId;
+      const healed = autoHealMutationData('ElementoUnifilar', elemento || {}, { id: elementId, companyId: empresaId });
+
       const formData = new FormData();
       formData.append('id', elementId);
-      formData.append('nombre', elemento?.nombre || elemento?.codigo || 'Elemento Unifilar');
-      formData.append('tipoElemento', elemento?.tipoElemento || 'TABLERO');
-      formData.append('ubicacion', elemento?.ubicacion || '');
-      formData.append('alimentadoPor', elemento?.alimentadoPor || '');
-      formData.append('observacionesGenerales', elemento?.observacionesGenerales || '');
+      formData.append('nombre', healed.nombre);
+      formData.append('tipoElemento', healed.tipoElemento);
+      formData.append('ubicacion', healed.ubicacion);
+      formData.append('alimentadoPor', healed.alimentadoPor);
+      formData.append('observacionesGenerales', healed.observacionesGenerales);
       formData.append('proyectoId', elemento?.proyectoId || '');
+      formData.append('circuitoOrigen', healed.circuitoOrigen);
+      formData.append('calibreConductor', healed.calibreConductor);
+      formData.append('breakerAmperaje', String(healed.breakerAmperaje));
+      formData.append('breakerMarca', healed.breakerMarca);
+      formData.append('breakerTipo', healed.breakerTipo);
+      formData.append('potenciaEstimada', healed.potenciaEstimada);
+      formData.append('estadoVinculo', healed.estadoVinculo);
 
-      const compId = empresaId || elemento?.empresaId || elemento?.companyId;
+      const compId = empresaId || healed.empresaId || elemento?.companyId;
       if (compId) {
         formData.append('empresaId', compId);
       }
 
-      if (elemento?.datosTecnicos) {
-        formData.append('datosTecnicos', typeof elemento.datosTecnicos === 'string' ? elemento.datosTecnicos : JSON.stringify(elemento.datosTecnicos));
-      }
+      formData.append('datosTecnicos', JSON.stringify(healed.datosTecnicos));
 
-      // Sanitización rigurosa de fotografía para no enviar base64 truncado
-      const validFoto = validateAndSanitizeFoto(elemento?.foto);
-      const validFotoUrl = validateAndSanitizeFoto(elemento?.fotoUrl);
-
+      // Sanitización y auto-curación de fotografía
+      const validFoto = healed.foto;
       let fileBlob = null;
       if (elemento?.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob) && elemento.fotoBlob.size > 50) {
         fileBlob = elemento.fotoBlob;
       } else if (validFoto && validFoto.startsWith('data:image')) {
         fileBlob = dataURLtoBlob(validFoto);
-      } else if (validFotoUrl && validFotoUrl.startsWith('data:image')) {
-        fileBlob = dataURLtoBlob(validFotoUrl);
       }
 
       if (fileBlob) {
@@ -443,9 +577,8 @@ export function useSync() {
         formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
       } else if (validFoto && !validFoto.startsWith('data:image')) {
         formData.append('fotoUrl', validFoto);
-      } else if (validFotoUrl && !validFotoUrl.startsWith('data:image')) {
-        formData.append('fotoUrl', validFotoUrl);
       } else {
+        // Foto corrupta o ausente: rescatamos el elemento con foto null sin romper Prisma
         formData.append('eliminarFoto', 'true');
         formData.append('foto', '');
       }

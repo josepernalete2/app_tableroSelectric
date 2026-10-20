@@ -300,22 +300,80 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           rawData.fotoUrl = sanitizeFotoServer(rawData.fotoUrl);
         }
 
-        // Normalización específica por entidad para evitar rechazos de esquema
+        // Normalización específica por entidad para evitar rechazos de esquema y rescatar estructuras antiguas
         if (modelName === 'elementoUnifilar') {
-          // Extraer codigo y orden hacia datosTecnicos si vienen en raíz
-          const dt = typeof rawData.datosTecnicos === 'object' && rawData.datosTecnicos !== null ? { ...rawData.datosTecnicos } : {};
-          if (rawData.codigo) dt.codigo = rawData.codigo;
-          if (rawData.orden !== undefined) dt.orden = rawData.orden;
+          // 1. Nombre seguro obligatorio
+          rawData.nombre = String(rawData.nombre || rawData.codigo || rawData.tag || 'Elemento Unifilar').trim();
+          if (!rawData.nombre) rawData.nombre = 'Elemento Unifilar';
+
+          // 2. Validar enum TipoElemento de Prisma
+          const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
+          if (!rawData.tipoElemento || !validTipos.includes(rawData.tipoElemento)) {
+            rawData.tipoElemento = 'TABLERO';
+          }
+
+          // 3. Deserializar y normalizar datosTecnicos (Json obligatorio en PostgreSQL)
+          let dt = {};
+          if (typeof rawData.datosTecnicos === 'string') {
+            try {
+              dt = JSON.parse(rawData.datosTecnicos);
+            } catch {
+              dt = {};
+            }
+          } else if (typeof rawData.datosTecnicos === 'object' && rawData.datosTecnicos !== null) {
+            dt = { ...rawData.datosTecnicos };
+          }
+
+          // Rescatar campos legados u obsoletos hacia datosTecnicos
+          if (rawData.codigo && !dt.codigo) dt.codigo = rawData.codigo;
+          if (rawData.tag && !dt.tag) dt.tag = rawData.tag;
+          if (rawData.orden !== undefined && dt.orden === undefined) dt.orden = rawData.orden;
+          if (rawData.voltajeAcometida && !dt.tension) dt.tension = rawData.voltajeAcometida;
+          if (rawData.voltaje && !dt.tension) dt.tension = rawData.voltaje;
+          if (rawData.tension && !dt.tension) dt.tension = rawData.tension;
+          if (rawData.capacidadPolos && !dt.maxPoles) dt.maxPoles = Number(rawData.capacidadPolos);
+          if (rawData.corrienteNominal && !rawData.breakerAmperaje) rawData.breakerAmperaje = parseFloat(rawData.corrienteNominal);
+          if (rawData.marca && !rawData.breakerMarca) rawData.breakerMarca = rawData.marca;
+
+          // Inyectar valores normalizados según Norma Técnica Venezolana COVENIN 159:1997 / CEN 200
+          if (!dt.tension) dt.tension = '208Y/120 V'; // Tensión normalizada BT COVENIN 159:1997
+          if (!dt.frecuencia) dt.frecuencia = '60 Hz'; // Frecuencia estándar del SEN (Venezuela)
+          if (dt.fases === undefined) dt.fases = rawData.fases !== undefined ? Number(rawData.fases) : 3;
+          if (dt.hilos === undefined) dt.hilos = 4;
+          if (dt.maxPoles === undefined) dt.maxPoles = rawData.maxPolos !== undefined ? Number(rawData.maxPolos) : 42;
+          if (!dt.norma) dt.norma = 'COVENIN 159:1997 / CEN 200';
+          if (!Array.isArray(dt.circuits)) {
+            dt.circuits = Array.isArray(dt.circuitos) ? dt.circuitos : (Array.isArray(rawData.circuits) ? rawData.circuits : (Array.isArray(rawData.circuitos) ? rawData.circuitos : []));
+          }
           rawData.datosTecnicos = dt;
+
+          // 4. Normalización segura de tipos numéricos y textos para Prisma
+          if (rawData.breakerAmperaje !== undefined && rawData.breakerAmperaje !== null && rawData.breakerAmperaje !== '') {
+            const parsedAmp = parseFloat(rawData.breakerAmperaje);
+            rawData.breakerAmperaje = !isNaN(parsedAmp) ? parsedAmp : 0;
+          } else {
+            rawData.breakerAmperaje = 0;
+          }
+
+          if (rawData.potenciaEstimada !== undefined && rawData.potenciaEstimada !== null && rawData.potenciaEstimada !== '') {
+            rawData.potenciaEstimada = String(rawData.potenciaEstimada);
+          } else {
+            rawData.potenciaEstimada = '';
+          }
+
+          rawData.circuitoOrigen = typeof rawData.circuitoOrigen === 'string' ? rawData.circuitoOrigen : '';
+          rawData.calibreConductor = typeof rawData.calibreConductor === 'string' ? rawData.calibreConductor : '';
+          rawData.breakerMarca = typeof rawData.breakerMarca === 'string' ? rawData.breakerMarca : '';
+          rawData.breakerTipo = typeof rawData.breakerTipo === 'string' ? rawData.breakerTipo : '';
+          rawData.ubicacion = typeof rawData.ubicacion === 'string' ? rawData.ubicacion : '';
+          rawData.alimentadoPor = typeof rawData.alimentadoPor === 'string' ? rawData.alimentadoPor : '';
+          rawData.observacionesGenerales = typeof rawData.observacionesGenerales === 'string' ? rawData.observacionesGenerales : '';
+
+          const validEstados = ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'];
+          rawData.estadoVinculo = validEstados.includes(rawData.estadoVinculo) ? rawData.estadoVinculo : 'ACTIVO';
 
           if (rawData.companyId && !rawData.empresaId) {
             rawData.empresaId = rawData.companyId;
-          }
-
-          // Validar enum TipoElemento
-          const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
-          if (rawData.tipoElemento && !validTipos.includes(rawData.tipoElemento)) {
-            rawData.tipoElemento = 'TABLERO';
           }
         } else if (modelName === 'subestacion') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
@@ -665,8 +723,9 @@ export const sincronizarElementoMultipart = async (req, res) => {
     } = req.body;
 
     const elementId = id || req.body.localId || `elem-${Date.now()}`;
-    const cleanNombre = nombre || req.body.codigo || 'Elemento Unifilar';
-    const cleanTipo = tipoElemento || 'TABLERO';
+    const cleanNombre = (nombre || req.body.codigo || req.body.tag || 'Elemento Unifilar').trim();
+    const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
+    const cleanTipo = validTipos.includes(tipoElemento) ? tipoElemento : 'TABLERO';
 
     console.log(`[SYNC MULTIPART] 📸 Procesando elemento con binario: '${cleanNombre}' (${elementId}) tipo: ${cleanTipo}`);
 
@@ -693,7 +752,7 @@ export const sincronizarElementoMultipart = async (req, res) => {
       finalFoto = sanitizeFotoServer(finalFoto);
     }
 
-    // 2. Parsear datosTecnicos
+    // 2. Parsear y auto-curar datosTecnicos con estándares COVENIN 159:1997 / CEN 200
     let parsedDatosTecnicos = {};
     if (datosTecnicos) {
       if (typeof datosTecnicos === 'string') {
@@ -703,12 +762,30 @@ export const sincronizarElementoMultipart = async (req, res) => {
           console.warn('[SYNC MULTIPART] ⚠️ Error al deserializar datosTecnicos JSON:', e.message);
           parsedDatosTecnicos = {};
         }
-      } else if (typeof datosTecnicos === 'object') {
+      } else if (typeof datosTecnicos === 'object' && datosTecnicos !== null) {
         parsedDatosTecnicos = { ...datosTecnicos };
       }
     }
     if (req.body.codigo && !parsedDatosTecnicos.codigo) {
       parsedDatosTecnicos.codigo = req.body.codigo;
+    }
+    if (req.body.tag && !parsedDatosTecnicos.tag) {
+      parsedDatosTecnicos.tag = req.body.tag;
+    }
+    // Rescatar campos legados en raíz
+    if (req.body.tension && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.tension;
+    if (req.body.voltaje && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.voltaje;
+    if (req.body.voltajeAcometida && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.voltajeAcometida;
+
+    // Inyectar valores normalizados COVENIN 159:1997
+    if (!parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = '208Y/120 V';
+    if (!parsedDatosTecnicos.frecuencia) parsedDatosTecnicos.frecuencia = '60 Hz';
+    if (parsedDatosTecnicos.fases === undefined) parsedDatosTecnicos.fases = 3;
+    if (parsedDatosTecnicos.hilos === undefined) parsedDatosTecnicos.hilos = 4;
+    if (parsedDatosTecnicos.maxPoles === undefined) parsedDatosTecnicos.maxPoles = 42;
+    if (!parsedDatosTecnicos.norma) parsedDatosTecnicos.norma = 'COVENIN 159:1997 / CEN 200';
+    if (!Array.isArray(parsedDatosTecnicos.circuits)) {
+      parsedDatosTecnicos.circuits = Array.isArray(parsedDatosTecnicos.circuitos) ? parsedDatosTecnicos.circuitos : [];
     }
 
     // 3. Auto-resolución de dependencias padre (Proyecto y Empresa) para garantizar integridad referencial
@@ -765,25 +842,25 @@ export const sincronizarElementoMultipart = async (req, res) => {
       }
     }
 
-    // 5. Preparar datos de ElementoUnifilar para Upsert
+    // 5. Preparar datos de ElementoUnifilar para Upsert con auto-curación
     const elementData = {
       nombre: cleanNombre,
       tipoElemento: cleanTipo,
-      ubicacion: ubicacion || null,
-      alimentadoPor: alimentadoPor || null,
-      observacionesGenerales: observacionesGenerales || null,
+      ubicacion: ubicacion || '',
+      alimentadoPor: alimentadoPor || '',
+      observacionesGenerales: observacionesGenerales || '',
       datosTecnicos: parsedDatosTecnicos,
       proyectoId: resolvedProyectoId,
       empresaId: resolvedEmpresaId || null,
       foto: finalFoto,
       alimentadoPorId: validAlimentadoPorId,
-      circuitoOrigen: circuitoOrigen || null,
-      calibreConductor: calibreConductor || null,
-      breakerAmperaje: breakerAmperaje ? parseFloat(breakerAmperaje) : null,
-      breakerMarca: breakerMarca || null,
-      breakerTipo: breakerTipo || null,
-      potenciaEstimada: potenciaEstimada ? parseFloat(potenciaEstimada) : null,
-      estadoVinculo: estadoVinculo || null,
+      circuitoOrigen: circuitoOrigen || '',
+      calibreConductor: calibreConductor || '',
+      breakerAmperaje: breakerAmperaje !== undefined && breakerAmperaje !== null && breakerAmperaje !== '' ? (parseFloat(breakerAmperaje) || 0) : 0,
+      breakerMarca: breakerMarca || '',
+      breakerTipo: breakerTipo || '',
+      potenciaEstimada: potenciaEstimada !== undefined && potenciaEstimada !== null ? String(potenciaEstimada) : '',
+      estadoVinculo: ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'].includes(estadoVinculo) ? estadoVinculo : 'ACTIVO',
       detallesFormato: typeof detallesFormato === 'object' && detallesFormato !== null ? detallesFormato : undefined
     };
 

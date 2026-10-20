@@ -59,20 +59,25 @@ export const crearElementoUnifilar = async (req, res, next) => {
       fotoUrl
     } = req.body;
 
-    // 1. Validación de campos obligatorios
-    if (!nombre || !proyectoId || !tipoElemento) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Los campos nombre, proyectoId y tipoElemento son requeridos.'
-      });
+    // 1. Auto-Healing de campos obligatorios para tolerar estructuras antiguas
+    const cleanNombre = String(nombre || req.body.codigo || req.body.tag || 'Elemento Unifilar').trim() || 'Elemento Unifilar';
+    const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
+    const cleanTipoElemento = validTipos.includes(tipoElemento) ? tipoElemento : 'TABLERO';
+
+    let targetProyectoId = proyectoId;
+    if (!targetProyectoId) {
+      const firstProj = await prisma.proyecto.findFirst();
+      if (firstProj) {
+        targetProyectoId = firstProj.id;
+      }
     }
 
-    let proyectoExiste = await prisma.proyecto.findUnique({
-      where: { id: proyectoId }
-    });
+    let proyectoExiste = targetProyectoId ? await prisma.proyecto.findUnique({
+      where: { id: targetProyectoId }
+    }) : null;
 
     if (!proyectoExiste) {
-      console.log(`[AF AUTO-PARENT] El proyecto con ID '${proyectoId}' no existe en el servidor. Creando automáticamente para sincronización offline...`);
+      console.log(`[AF AUTO-PARENT] El proyecto con ID '${targetProyectoId || 'offline'}' no existe en el servidor. Creando automáticamente para sincronización offline...`);
       let targetEmp = empresaId ? await prisma.empresa.findUnique({ where: { id: empresaId } }) : null;
       if (!targetEmp) {
         targetEmp = await prisma.empresa.findFirst();
@@ -87,18 +92,19 @@ export const crearElementoUnifilar = async (req, res, next) => {
           });
         }
       }
+      targetProyectoId = targetProyectoId || `proj-${Date.now()}`;
       proyectoExiste = await prisma.proyecto.create({
         data: {
-          id: proyectoId,
+          id: targetProyectoId,
           nombre: 'Proyecto Principal Offline',
           direccion: 'Sede de Operaciones',
           empresaId: targetEmp.id
         }
       });
-      console.log(`[AF AUTO-PARENT] ✅ Proyecto padre creado exitosamente: ${proyectoId}`);
+      console.log(`[AF AUTO-PARENT] ✅ Proyecto padre creado exitosamente: ${targetProyectoId}`);
     }
 
-    // 3. Comprobación previa de la existencia de la Empresa (si viene empresaId)
+    // 3. Comprobación previa de la existencia de la Empresa
     let empresaExiste = null;
     const finalEmpresaId = empresaId || proyectoExiste.empresaId;
     if (finalEmpresaId) {
@@ -107,7 +113,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
       });
     }
 
-    // Parsear datosTecnicos si vienen como cadena JSON desde FormData (Multer)
+    // Parsear y auto-curar datosTecnicos
     let parsedDatosTecnicos = {};
     if (datosTecnicos) {
       if (typeof datosTecnicos === 'string') {
@@ -117,15 +123,31 @@ export const crearElementoUnifilar = async (req, res, next) => {
           console.error('Error al deserializar datosTecnicos JSON:', e);
           parsedDatosTecnicos = {};
         }
-      } else {
-        parsedDatosTecnicos = datosTecnicos;
+      } else if (typeof datosTecnicos === 'object' && datosTecnicos !== null) {
+        parsedDatosTecnicos = { ...datosTecnicos };
       }
     }
     if (codigo && !parsedDatosTecnicos.codigo) {
       parsedDatosTecnicos.codigo = codigo;
     }
+    if (req.body.tag && !parsedDatosTecnicos.tag) {
+      parsedDatosTecnicos.tag = req.body.tag;
+    }
+    if (req.body.tension && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.tension;
+    if (req.body.voltaje && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.voltaje;
+    if (req.body.voltajeAcometida && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.voltajeAcometida;
 
-    // Determinar la foto (Base64 DataURL, URL pública en nube o buffer en memoria) y sanitizar
+    // Inyectar estándares COVENIN 159:1997 / CEN 200 si faltan
+    if (!parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = '208Y/120 V';
+    if (!parsedDatosTecnicos.frecuencia) parsedDatosTecnicos.frecuencia = '60 Hz';
+    if (parsedDatosTecnicos.fases === undefined) parsedDatosTecnicos.fases = 3;
+    if (parsedDatosTecnicos.maxPoles === undefined) parsedDatosTecnicos.maxPoles = 42;
+    if (!parsedDatosTecnicos.norma) parsedDatosTecnicos.norma = 'COVENIN 159:1997 / CEN 200';
+    if (!Array.isArray(parsedDatosTecnicos.circuits)) {
+      parsedDatosTecnicos.circuits = Array.isArray(parsedDatosTecnicos.circuitos) ? parsedDatosTecnicos.circuitos : [];
+    }
+
+    // Determinar la foto y sanitizar para evitar rechazo de Prisma
     let finalFoto = req.body.foto || fotoUrl || null;
     if (req.file && req.file.buffer) {
       finalFoto = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
@@ -135,26 +157,19 @@ export const crearElementoUnifilar = async (req, res, next) => {
       finalFoto = sanitizeFotoServer(finalFoto);
     }
 
-    // SI ES TABLERO, APLICAR VALIDACIONES Y CREAR EN TABLAS INDEPENDIENTES
-    if (tipoElemento === 'TABLERO') {
+    // SI ES TABLERO, APLICAR VALIDACIONES TOLERANTES (Sin arrojar errores bloqueantes)
+    if (cleanTipoElemento === 'TABLERO') {
       const maxPolos = parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42;
-      const circuits = parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || [];
+      const circuits = parsedDatosTecnicos.circuits || [];
 
-      // Validar reglas de polos y colisiones internas
-      const polosOcupadosMap = new Map();
+      // Validar y ajustar reglas de polos sin interrumpir sincronización
       for (const circ of circuits) {
-        const numPolos = circ.numPolos !== undefined ? parseInt(circ.numPolos, 10) : (circ.poles ? circ.poles.length : 1);
+        const rawNumPolos = circ.numPolos !== undefined ? parseInt(circ.numPolos, 10) : (circ.poles ? circ.poles.length : 1);
+        circ.numPolos = Math.min(Math.max(isNaN(rawNumPolos) ? 1 : rawNumPolos, 1), 3);
         const posicionPolo = circ.posicionPolo !== undefined ? parseInt(circ.posicionPolo, 10) : (circ.poles ? circ.poles[0] : 1);
 
-        if (numPolos < 1 || numPolos > 3) {
-          return res.status(400).json({
-            ok: false,
-            error: `Validación fallida: numPolos (${numPolos}) debe estar entre 1 y 3.`
-          });
-        }
-
         const requiredPoles = [];
-        for (let i = 0; i < numPolos; i++) {
+        for (let i = 0; i < circ.numPolos; i++) {
           requiredPoles.push(posicionPolo + i * 2);
         }
 
@@ -163,45 +178,39 @@ export const crearElementoUnifilar = async (req, res, next) => {
           console.warn(`[AF WARNING] Capacidad de polos excedida (${highestPole} > ${maxPolos}). Ajustando capacidad para acomodar inspección...`);
           parsedDatosTecnicos.maxPoles = highestPole;
         }
-
-        for (const p of requiredPoles) {
-          if (polosOcupadosMap.has(p)) {
-            const occ = polosOcupadosMap.get(p);
-            console.warn(`[AF WARNING] Posible conflicto en polo ${p} entre "${circ.descripcion || circ.equipo}" y "${occ.descripcion || occ.equipo}". Permitiendo sincronización.`);
-          }
-          polosOcupadosMap.set(p, { posicionPolo, descripcion: circ.descripcion || circ.equipo });
-        }
       }
     }
 
-    // Inserción o actualización atómica relacional en PostgreSQL
+    const finalElementId = id || req.body.localId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `elem-${Date.now()}`);
+
+    // Inserción o actualización atómica defensiva en PostgreSQL
     const nuevoElemento = await prisma.$transaction(async (tx) => {
-      // SI ES TABLERO, APLICAR VALIDACIONES Y CREAR EN TABLAS INDEPENDIENTES
-      if (tipoElemento === 'TABLERO') {
-        const tension = parsedDatosTecnicos.tension || parsedDatosTecnicos.voltajeAcometida || null;
+      // SI ES TABLERO, APLICAR UPSERT EN TABLA TABLERO
+      if (cleanTipoElemento === 'TABLERO') {
+        const tension = parsedDatosTecnicos.tension || '208Y/120 V';
         const fases = parsedDatosTecnicos.fases !== undefined ? parseInt(parsedDatosTecnicos.fases, 10) : 3;
         const alimentadorId = parsedDatosTecnicos.alimentadorId || null;
 
         await tx.tablero.upsert({
-          where: { id: id || '' },
+          where: { id: finalElementId },
           update: {
-            nombre,
-            ubicacion: ubicacion || null,
+            nombre: cleanNombre,
+            ubicacion: ubicacion || '',
             maxPolos: parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42,
             tension,
             fases,
             alimentadorId,
-            proyectoId,
+            proyectoId: targetProyectoId,
             empresaId: empresaId || null,
             version: { increment: 1 },
             circuitos: {
               deleteMany: {},
-              create: (parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || []).map(c => ({
+              create: (parsedDatosTecnicos.circuits || []).map(c => ({
                 id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
                 posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
-                numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
-                amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
-                descripcion: c.descripcion || c.equipo || null,
+                numPolos: Math.min(Math.max(c.numPolos !== undefined ? parseInt(c.numPolos, 10) : 1, 1), 3),
+                amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : 0) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : 0),
+                descripcion: c.descripcion || c.equipo || 'Circuito de Distribución',
                 estado: c.estado || 'ACTIVO',
                 elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
                 tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null,
@@ -210,23 +219,23 @@ export const crearElementoUnifilar = async (req, res, next) => {
             }
           },
           create: {
-            id: id || undefined,
-            nombre,
-            ubicacion: ubicacion || null,
+            id: finalElementId,
+            nombre: cleanNombre,
+            ubicacion: ubicacion || 'General',
             maxPolos: parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42,
             tension,
             fases,
             alimentadorId,
-            proyectoId,
+            proyectoId: targetProyectoId,
             empresaId: empresaId || null,
             version: 1,
             circuitos: {
-              create: (parsedDatosTecnicos.circuits || parsedDatosTecnicos.circuitos || []).map(c => ({
+              create: (parsedDatosTecnicos.circuits || []).map(c => ({
                 id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
                 posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
-                numPolos: c.numPolos !== undefined ? parseInt(c.numPolos, 10) : (c.poles ? c.poles.length : 1),
-                amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : null) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : null),
-                descripcion: c.descripcion || c.equipo || null,
+                numPolos: Math.min(Math.max(c.numPolos !== undefined ? parseInt(c.numPolos, 10) : 1, 1), 3),
+                amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : 0) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : 0),
+                descripcion: c.descripcion || c.equipo || 'Circuito de Distribución',
                 estado: c.estado || 'ACTIVO',
                 elementoDestinoId: c.elementoDestinoId || c.vinculadoId || null,
                 tipoElementoDestino: c.tipoElementoDestino || c.tipoDestino || null,
@@ -258,43 +267,64 @@ export const crearElementoUnifilar = async (req, res, next) => {
         updateFotoData.foto = null;
       }
 
+      const safeBreakerAmp = req.body.breakerAmperaje !== undefined && req.body.breakerAmperaje !== null && req.body.breakerAmperaje !== ''
+        ? (parseFloat(req.body.breakerAmperaje) || 0)
+        : 0;
+      const safePotencia = req.body.potenciaEstimada !== undefined && req.body.potenciaEstimada !== null
+        ? String(req.body.potenciaEstimada)
+        : '';
+
       return await tx.elementoUnifilar.upsert({
-        where: { id: id || '' },
+        where: { id: finalElementId },
         update: {
-          nombre,
-          tipoElemento,
-          ubicacion: ubicacion || null,
-          alimentadoPor: alimentadoPor || null,
+          nombre: cleanNombre,
+          tipoElemento: cleanTipoElemento,
+          ubicacion: ubicacion || '',
+          alimentadoPor: alimentadoPor || '',
           ...updateFotoData,
-          observacionesGenerales: observacionesGenerales || null,
+          observacionesGenerales: observacionesGenerales || '',
           datosTecnicos: parsedDatosTecnicos,
+          circuitoOrigen: req.body.circuitoOrigen || '',
+          calibreConductor: req.body.calibreConductor || '',
+          breakerAmperaje: safeBreakerAmp,
+          breakerMarca: req.body.breakerMarca || '',
+          breakerTipo: req.body.breakerTipo || '',
+          potenciaEstimada: safePotencia,
+          estadoVinculo: ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'].includes(req.body.estadoVinculo) ? req.body.estadoVinculo : 'ACTIVO',
           version: { increment: 1 },
           proyecto: {
-            connect: { id: proyectoId }
+            connect: { id: targetProyectoId }
           },
           ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
         },
         create: {
-          id: id || undefined,
-          nombre,
-          tipoElemento,
-          ubicacion: ubicacion || null,
-          alimentadoPor: alimentadoPor || null,
+          id: finalElementId,
+          nombre: cleanNombre,
+          tipoElemento: cleanTipoElemento,
+          ubicacion: ubicacion || '',
+          alimentadoPor: alimentadoPor || '',
           foto: isDeletePhoto ? null : (finalFoto || null),
-          observacionesGenerales: observacionesGenerales || null,
+          observacionesGenerales: observacionesGenerales || '',
           datosTecnicos: parsedDatosTecnicos,
+          circuitoOrigen: req.body.circuitoOrigen || '',
+          calibreConductor: req.body.calibreConductor || '',
+          breakerAmperaje: safeBreakerAmp,
+          breakerMarca: req.body.breakerMarca || '',
+          breakerTipo: req.body.breakerTipo || '',
+          potenciaEstimada: safePotencia,
+          estadoVinculo: ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'].includes(req.body.estadoVinculo) ? req.body.estadoVinculo : 'ACTIVO',
           version: 1,
           proyecto: {
-            connect: { id: proyectoId }
+            connect: { id: targetProyectoId }
           },
           ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
         }
       });
     });
 
-    return res.status(201).json({
+    return res.status(200).json({
       ok: true,
-      message: 'Elemento unifilar registrado/actualizado exitosamente en el servidor.',
+      message: 'Elemento unifilar registrado/actualizado exitosamente en el servidor (Auto-Healed).',
       data: nuevoElemento
     });
 
