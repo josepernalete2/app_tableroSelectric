@@ -19,7 +19,8 @@ import {
 
 export default function SyncStatusBanner() {
   const { confirm: customConfirm } = useConfirm();
-  const syncQueue = useStore((state) => state.syncQueue || []);
+  const rawQueue = useStore((state) => state.syncQueue);
+  const syncQueue = Array.isArray(rawQueue) ? rawQueue : [];
   const pendingCount = syncQueue.length;
   const isStoreSyncing = useStore((state) => state.isSyncing || false);
   const showToast = useStore((state) => state.showToast);
@@ -46,8 +47,8 @@ export default function SyncStatusBanner() {
   const isSyncing = isHookSyncing || isStoreSyncing || isManualSyncing;
   const wasSyncingRef = useRef(isSyncing);
 
-  // Elementos con error registrado
-  const failedItems = syncQueue.filter((item) => Boolean(item.syncError));
+  // Elementos con error registrado protegidos
+  const failedItems = syncQueue.filter((item) => Boolean(item?.syncError));
   const failedCount = failedItems.length;
 
   // Efecto reactivo: al terminar cualquier sincronización con éxito y vaciarse la cola
@@ -301,6 +302,7 @@ export default function SyncStatusBanner() {
             {/* Lista scrollable de ítems pendientes */}
             <div className="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {syncQueue.map((item, idx) => {
+                if (!item) return null;
                 const tieneFoto = tieneImagenAdjunta(item);
                 const itemName = item.payload?.nombre || item.payload?.codigo || 'Elemento sin nombre';
                 const itemTipo = item.tipo || 'ELEMENTO';

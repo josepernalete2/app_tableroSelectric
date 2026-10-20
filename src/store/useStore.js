@@ -1044,12 +1044,12 @@ export const useStore = create(
           return {
             companies: updatedCompanies,
             elementosLocales: (state.elementosLocales || []).map(updateElement),
-            syncQueue: payload ? [...state.syncQueue, {
+            syncQueue: payload ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
               id: tableroId,
               tipo: 'ELEMENTO_UNIFILAR',
               companyId: updatedElement ? (updatedElement.companyId || updatedElement.empresaId) : null,
               payload
-            }] : state.syncQueue
+            }] : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
           };
         });
       },
@@ -1138,12 +1138,13 @@ export const useStore = create(
         };
 
         set((state) => {
-          const existingInQueue = state.syncQueue.some(
-            (item) => item.id === proyectoId && item.tipo === 'PROYECTO'
+          const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          const existingInQueue = currentQueue.some(
+            (item) => item?.id === proyectoId && item?.tipo === 'PROYECTO'
           );
           const updatedSyncQueue = existingInQueue
-            ? state.syncQueue.map((item) => {
-                if (item.id === proyectoId && item.tipo === 'PROYECTO') {
+            ? currentQueue.map((item) => {
+                if (item?.id === proyectoId && item?.tipo === 'PROYECTO') {
                   return {
                     ...item,
                     companyId: companyId || item.companyId,
@@ -1153,7 +1154,7 @@ export const useStore = create(
                 return item;
               })
             : [
-                ...state.syncQueue,
+                ...currentQueue,
                 {
                   id: proyectoId,
                   tipo: 'PROYECTO',
@@ -1206,7 +1207,7 @@ export const useStore = create(
 
       deleteProyecto: async (companyId, proyectoId) => {
         set((state) => ({
-          companies: state.companies.map((c) => {
+          companies: (state.companies || []).map((c) => {
             if (c.id === companyId) {
               return {
                 ...c,
@@ -1216,7 +1217,7 @@ export const useStore = create(
             return c;
           }),
           proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== proyectoId),
-          syncQueue: state.syncQueue.filter((item) => item.id !== proyectoId)
+          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== proyectoId)
         }));
 
         if (navigator.onLine) {
@@ -1239,8 +1240,8 @@ export const useStore = create(
 
         const state = get();
         const currentCompanies = state.companies || [];
-        const syncQueue = state.syncQueue || [];
-        const pendingQueueIds = new Set(syncQueue.map((item) => item.id || item.payload?.id));
+        const syncQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+        const pendingQueueIds = new Set(syncQueue.map((item) => item?.id || item?.payload?.id).filter(Boolean));
 
         const enrichedIncoming = companiesList.map((c) => ({
           ...c,
@@ -1435,7 +1436,7 @@ export const useStore = create(
             return c;
           }),
           proyectosLocales: [...(state.proyectosLocales || []), nuevoProyecto],
-          syncQueue: [...state.syncQueue, {
+          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
             id: uuidId,
             tipo: 'PROYECTO',
             companyId,
@@ -1558,7 +1559,7 @@ export const useStore = create(
             return c;
           }),
           elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
-          syncQueue: [...state.syncQueue, {
+          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
             id: uuidId,
             tipo: 'ELEMENTO_UNIFILAR',
             companyId: parentCompanyId,
@@ -1611,11 +1612,12 @@ export const useStore = create(
             return e;
           });
 
+          const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let inQueue = false;
-          const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === elementoId && (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO')) {
+          const updatedSyncQueue = currentQueue.map((item) => {
+            if (item?.id === elementoId && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
               inQueue = true;
-              return { ...item, payload: { ...item.payload, ...updatedData } };
+              return { ...item, payload: { ...(item.payload || {}), ...updatedData } };
             }
             return item;
           });
@@ -1677,7 +1679,7 @@ export const useStore = create(
             };
           }),
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== elementoId),
-          syncQueue: state.syncQueue.filter((item) => item.id !== elementoId)
+          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== elementoId)
         }));
 
         if (navigator.onLine) {
@@ -1787,7 +1789,7 @@ export const useStore = create(
             return c;
           }),
           subestacionesLocales: [...(state.subestacionesLocales || []), nuevaSubestacion],
-          syncQueue: [...state.syncQueue, {
+          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
             id: uuidId,
             tipo: 'SUBESTACION',
             companyId: parentCompanyId,
@@ -1826,11 +1828,12 @@ export const useStore = create(
             return s;
           });
 
+          const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let inQueue = false;
-          const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === subestacionId && item.tipo === 'SUBESTACION') {
+          const updatedSyncQueue = currentQueue.map((item) => {
+            if (item?.id === subestacionId && item?.tipo === 'SUBESTACION') {
               inQueue = true;
-              return { ...item, payload: { ...item.payload, ...updatedData } };
+              return { ...item, payload: { ...(item.payload || {}), ...updatedData } };
             }
             return item;
           });
@@ -1881,7 +1884,7 @@ export const useStore = create(
             })
           })),
           subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.id !== subestacionId),
-          syncQueue: state.syncQueue.filter((item) => item.id !== subestacionId)
+          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== subestacionId)
         }));
 
         if (navigator.onLine) {
@@ -1962,7 +1965,7 @@ export const useStore = create(
             return c;
           }),
           puntosMedicionLocales: [...(state.puntosMedicionLocales || []), nuevoPunto],
-          syncQueue: [...state.syncQueue, {
+          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
             id: uuidId,
             tipo: 'PUNTO_MEDICION',
             companyId: parentCompanyId,
@@ -2012,11 +2015,12 @@ export const useStore = create(
             return item;
           });
 
+          const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let inQueue = false;
-          const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === puntoId && (item.tipo === 'PUNTO_MEDICION' || item.tipo === 'ELEMENTO_UNIFILAR')) {
+          const updatedSyncQueue = currentQueue.map((item) => {
+            if (item?.id === puntoId && (item?.tipo === 'PUNTO_MEDICION' || item?.tipo === 'ELEMENTO_UNIFILAR')) {
               inQueue = true;
-              return { ...item, payload: { ...item.payload, ...updatedData } };
+              return { ...item, payload: { ...(item?.payload || {}), ...updatedData } };
             }
             return item;
           });
@@ -2068,8 +2072,8 @@ export const useStore = create(
               return p;
             })
           })),
-          puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((item) => item.id !== puntoId),
-          syncQueue: state.syncQueue.filter((item) => item.id !== puntoId)
+          puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((item) => item?.id !== puntoId),
+          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== puntoId)
         }));
 
         if (navigator.onLine) {
@@ -2150,7 +2154,7 @@ export const useStore = create(
             return c;
           }),
           ccmLocales: [...(state.ccmLocales || []), nuevoCcm],
-          syncQueue: [...state.syncQueue, {
+          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
             id: uuidId,
             tipo: 'CCM',
             companyId: parentCompanyId,
@@ -2189,11 +2193,12 @@ export const useStore = create(
             return item;
           });
 
+          const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let inQueue = false;
-          const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === ccmId && item.tipo === 'CCM') {
+          const updatedSyncQueue = currentQueue.map((item) => {
+            if (item?.id === ccmId && item?.tipo === 'CCM') {
               inQueue = true;
-              return { ...item, payload: { ...item.payload, ...updatedData } };
+              return { ...item, payload: { ...(item.payload || {}), ...updatedData } };
             }
             return item;
           });
@@ -2243,8 +2248,8 @@ export const useStore = create(
               return p;
             })
           })),
-          ccmLocales: (state.ccmLocales || []).filter((item) => item.id !== ccmId),
-          syncQueue: state.syncQueue.filter((item) => item.id !== ccmId)
+          ccmLocales: (state.ccmLocales || []).filter((item) => item?.id !== ccmId),
+          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== ccmId)
         }));
 
         if (navigator.onLine) {
@@ -2383,9 +2388,10 @@ export const useStore = create(
             return ccm;
           });
 
+          const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let inQueue = false;
-          const updatedSyncQueue = state.syncQueue.map((item) => {
-            if (item.id === elementoId) {
+          const updatedSyncQueue = currentQueue.map((item) => {
+            if (item?.id === elementoId) {
               inQueue = true;
               const p = item.payload || {};
               const dt = { ...(p.datosTecnicos || {}), codigo: cleanCode };
@@ -2746,11 +2752,11 @@ export const useStore = create(
               'Content-Type': 'application/json',
               ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
             },
-            body: JSON.stringify({ mutations: syncQueue.map(item => ({
-              entity: item.tipo,
-              id: item.id,
+            body: JSON.stringify({ mutations: (Array.isArray(syncQueue) ? syncQueue : []).map(item => ({
+              entity: item?.tipo,
+              id: item?.id,
               operation: 'CREATE',
-              data: item.payload
+              data: item?.payload
             })) })
           });
 
@@ -3025,15 +3031,20 @@ export const useStore = create(
         puntosMedicionLocales: state.puntosMedicionLocales || [],
         ccmLocales: state.ccmLocales || [],
         conflictosCircuitos: state.conflictosCircuitos || [],
-        syncQueue: state.syncQueue
+        syncQueue: Array.isArray(state.syncQueue) ? state.syncQueue : []
       }),
       onRehydrateStorage: () => (state) => {
-        if (state && state.token && state.token !== 'mock-offline-token' && typeof navigator !== 'undefined' && navigator.onLine) {
-          // Prioridad Local-First: Solo descargar datos del servidor tras rehidratar si NO hay mutaciones pendientes locales en la cola
-          if (!state.syncQueue || state.syncQueue.length === 0) {
-            state.pullInitialData?.();
+        if (state) {
+          if (!Array.isArray(state.syncQueue)) state.syncQueue = [];
+          if (!Array.isArray(state.companies)) state.companies = [];
+          if (!Array.isArray(state.elementosLocales)) state.elementosLocales = [];
+          if (state.token && state.token !== 'mock-offline-token' && typeof navigator !== 'undefined' && navigator.onLine) {
+            // Prioridad Local-First: Solo descargar datos del servidor tras rehidratar si NO hay mutaciones pendientes locales en la cola
+            if (state.syncQueue.length === 0) {
+              state.pullInitialData?.();
+            }
+            state.fetchUsersList?.();
           }
-          state.fetchUsersList?.();
         }
       }
     }

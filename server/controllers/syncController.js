@@ -1,5 +1,44 @@
 import prisma from '../db.js';
 
+/**
+ * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
+ * ante cadenas Base64 incompletas, truncadas (ej. 'base64,/') o sobredimensionadas.
+ */
+export function sanitizeFotoServer(foto) {
+  if (!foto || typeof foto !== 'string') return null;
+  const trimmed = foto.trim();
+  if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return null;
+
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('data:image/')) {
+    const commaIndex = trimmed.indexOf(',');
+    if (commaIndex === -1) {
+      console.warn('[SERVER SYNC] ⚠️ DataURL sin separador coma. Descartando.');
+      return null;
+    }
+    const base64Data = trimmed.substring(commaIndex + 1).trim();
+    if (base64Data.length < 50 || base64Data === '/' || base64Data.endsWith(',/') || (base64Data.startsWith('/') && base64Data.length < 100)) {
+      console.warn('[SERVER SYNC] ⚠️ Foto base64 incompleta o truncada recibida. Omitiendo foto para evitar error de Prisma.');
+      return null;
+    }
+    if (base64Data.length > 14 * 1024 * 1024) {
+      console.warn('[SERVER SYNC] ⚠️ Foto base64 excede límite permitido (14MB). Descartando.');
+      return null;
+    }
+    return trimmed;
+  }
+
+  return null;
+}
+
 // Lista blanca estricta de entidades permitidas para sincronización offline
 const ALLOWED_SYNC_ENTITIES = new Set([
   'tablero',
@@ -253,6 +292,13 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
         delete rawData.fotoBlob;
         delete rawData.previewUrl;
         delete rawData.elementosPorCrear;
+
+        if (rawData.foto) {
+          rawData.foto = sanitizeFotoServer(rawData.foto);
+        }
+        if (rawData.fotoUrl) {
+          rawData.fotoUrl = sanitizeFotoServer(rawData.fotoUrl);
+        }
 
         // Normalización específica por entidad para evitar rechazos de esquema
         if (modelName === 'elementoUnifilar') {
@@ -643,6 +689,8 @@ export const sincronizarElementoMultipart = async (req, res) => {
       finalFoto = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
     } else if (req.file && req.file.filename) {
       finalFoto = `/uploads/${req.file.filename}`;
+    } else if (typeof finalFoto === 'string') {
+      finalFoto = sanitizeFotoServer(finalFoto);
     }
 
     // 2. Parsear datosTecnicos

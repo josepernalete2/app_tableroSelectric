@@ -1,6 +1,45 @@
 import prisma from '../db.js';
 
 /**
+ * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
+ * ante cadenas Base64 incompletas, truncadas (ej. 'base64,/') o sobredimensionadas.
+ */
+export function sanitizeFotoServer(foto) {
+  if (!foto || typeof foto !== 'string') return null;
+  const trimmed = foto.trim();
+  if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return null;
+
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('data:image/')) {
+    const commaIndex = trimmed.indexOf(',');
+    if (commaIndex === -1) {
+      console.warn('[SERVER ELEMENTO] ⚠️ DataURL sin separador coma. Descartando.');
+      return null;
+    }
+    const base64Data = trimmed.substring(commaIndex + 1).trim();
+    if (base64Data.length < 50 || base64Data === '/' || base64Data.endsWith(',/') || (base64Data.startsWith('/') && base64Data.length < 100)) {
+      console.warn('[SERVER ELEMENTO] ⚠️ Foto base64 incompleta o truncada recibida. Omitiendo foto para evitar error de Prisma.');
+      return null;
+    }
+    if (base64Data.length > 14 * 1024 * 1024) {
+      console.warn('[SERVER ELEMENTO] ⚠️ Foto base64 excede límite permitido (14MB). Descartando.');
+      return null;
+    }
+    return trimmed;
+  }
+
+  return null;
+}
+
+/**
  * POST /api/elementos-unifilares
  * Registra un ElementoUnifilar en PostgreSQL con auto-resuelto de Proyecto y Empresa (P2025 prevention).
  */
@@ -86,12 +125,14 @@ export const crearElementoUnifilar = async (req, res, next) => {
       parsedDatosTecnicos.codigo = codigo;
     }
 
-    // Determinar la foto (Base64 DataURL, URL pública en nube o buffer en memoria)
+    // Determinar la foto (Base64 DataURL, URL pública en nube o buffer en memoria) y sanitizar
     let finalFoto = req.body.foto || fotoUrl || null;
     if (req.file && req.file.buffer) {
-      finalFoto = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      finalFoto = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
     } else if (req.file && req.file.filename) {
       finalFoto = `/uploads/${req.file.filename}`;
+    } else if (typeof finalFoto === 'string') {
+      finalFoto = sanitizeFotoServer(finalFoto);
     }
 
     // SI ES TABLERO, APLICAR VALIDACIONES Y CREAR EN TABLAS INDEPENDIENTES

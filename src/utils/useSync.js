@@ -33,18 +33,153 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_RE
 }
 
 /**
+ * Lee el cuerpo de una respuesta HTTP de manera segura mediante res.clone() y lectura única.
+ * Previene de raíz el error 'TypeError: Failed to execute text/json on Response: body stream already read'.
+ */
+export async function readResponsePayload(response) {
+  if (!response) {
+    return { ok: false, status: 0, data: null, text: '', error: 'Respuesta nula del servidor' };
+  }
+
+  try {
+    // Clonamos la respuesta para salvaguardar el stream original intacto
+    const cloned = typeof response.clone === 'function' ? response.clone() : response;
+
+    // Leemos el stream COMO TEXTO UNA SOLA VEZ en memoria
+    const rawText = await cloned.text();
+
+    if (!rawText || !rawText.trim()) {
+      return {
+        ok: response.ok,
+        status: response.status,
+        data: null,
+        text: '',
+        error: response.ok ? null : `HTTP ${response.status} ${response.statusText}`
+      };
+    }
+
+    try {
+      const json = JSON.parse(rawText);
+      const extractedError = json?.error || json?.message || (response.ok ? null : JSON.stringify(json));
+      return {
+        ok: response.ok,
+        status: response.status,
+        data: json,
+        text: rawText,
+        error: extractedError
+      };
+    } catch {
+      // Si el servidor devolvió HTML (ej. 500 error page) o texto plano
+      return {
+        ok: response.ok,
+        status: response.status,
+        data: null,
+        text: rawText,
+        error: response.ok ? null : rawText.substring(0, 300)
+      };
+    }
+  } catch (streamErr) {
+    console.warn('[HTTP READ] ⚠️ Error al leer stream de respuesta:', streamErr.message);
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: null,
+      text: '',
+      error: `Error de lectura HTTP ${response.status}: ${streamErr.message}`
+    };
+  }
+}
+
+/**
+ * Valida y sanitiza exhaustivamente el campo de fotografía (Base64 DataURL, URLs remotas o locales).
+ * Si la foto está truncada (ej. 'data:image/...;base64,/'), corrupta, vacía o supera 14MB,
+ * se descarta retornando null para evitar rechazos fatales en PostgreSQL y Prisma ORM.
+ */
+export function validateAndSanitizeFoto(foto) {
+  if (!foto || typeof foto !== 'string') return null;
+
+  const trimmed = foto.trim();
+  if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return null;
+
+  // 1. URLs remotas o locales estándar válidas
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+
+  // 2. DataURL Base64
+  if (trimmed.startsWith('data:image/')) {
+    const commaIndex = trimmed.indexOf(',');
+    if (commaIndex === -1) {
+      console.warn('[FOTO VALIDATOR] ⚠️ DataURL sin separador de coma. Omitiendo foto corrupta.');
+      return null;
+    }
+
+    const header = trimmed.substring(0, commaIndex);
+    const base64Data = trimmed.substring(commaIndex + 1).trim();
+
+    // Validar cabecera MIME
+    if (!/^data:image\/(jpeg|jpg|png|webp|gif|svg\+xml);base64$/i.test(header)) {
+      console.warn(`[FOTO VALIDATOR] ⚠️ Cabecera MIME corrupta (${header}). Omitiendo.`);
+      return null;
+    }
+
+    // Comprobar tamaño mínimo: un 1x1 png válido tiene ~70 chars. Si tiene < 50 chars está truncada
+    if (base64Data.length < 50) {
+      console.warn(`[FOTO VALIDATOR] ⚠️ Base64 truncado o incompleto (${base64Data.length} chars). Omitiendo.`);
+      return null;
+    }
+
+    // Comprobar secuencias truncadas evidentes como 'base64,/' o '/'
+    if (base64Data === '/' || (base64Data.startsWith('/') && base64Data.length < 100) || base64Data.endsWith(',/')) {
+      console.warn('[FOTO VALIDATOR] ⚠️ Base64 corrupto detectado (terminación anómala). Omitiendo.');
+      return null;
+    }
+
+    // Límite de tamaño máximo seguro para persistencia en base de datos (14MB)
+    const MAX_BASE64_LENGTH = 14 * 1024 * 1024;
+    if (base64Data.length > MAX_BASE64_LENGTH) {
+      console.warn(`[FOTO VALIDATOR] ⚠️ Imagen base64 excede el límite permitido (${(base64Data.length / 1024 / 1024).toFixed(1)}MB). Omitiendo.`);
+      return null;
+    }
+
+    // Validación de decodificación básica de una muestra (primeros 512 bytes)
+    try {
+      if (typeof atob === 'function') {
+        const sample = base64Data.substring(0, Math.min(512, base64Data.length));
+        const paddedSample = sample.padEnd(Math.ceil(sample.length / 4) * 4, '=');
+        atob(paddedSample);
+      }
+    } catch (e) {
+      console.warn('[FOTO VALIDATOR] ⚠️ Base64 malformado (atob falló):', e.message);
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  return null;
+}
+
+/**
  * Convierte un DataURL (Base64) a un objeto binario Blob nativo del navegador.
  */
 export function dataURLtoBlob(dataUrl) {
-  if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+  const sanitized = validateAndSanitizeFoto(dataUrl);
+  if (!sanitized || !sanitized.startsWith('data:')) {
     return null;
   }
   try {
-    const arr = dataUrl.split(',');
+    const arr = sanitized.split(',');
     const mimeMatch = arr[0].match(/:(.*?);/);
     const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
     const bstr = atob(arr[1]);
     let n = bstr.length;
+    if (n === 0) return null;
     const u8arr = new Uint8Array(n);
     while (n--) {
       u8arr[n] = bstr.charCodeAt(n);
@@ -57,19 +192,20 @@ export function dataURLtoBlob(dataUrl) {
 }
 
 /**
- * Determina de forma exhaustiva si un elemento de la cola posee una imagen adjunta
- * (ya sea como Blob en memoria o como DataURL Base64 persistido).
+ * Determina de forma exhaustiva y segura si un elemento de la cola posee una imagen adjunta válida.
  */
 export function tieneImagenAdjunta(item) {
   if (!item || !item.payload) return false;
   const p = item.payload;
-  if (p.fotoBlob && (typeof Blob !== 'undefined' && p.fotoBlob instanceof Blob)) {
+  if (p.fotoBlob && (typeof Blob !== 'undefined' && p.fotoBlob instanceof Blob) && p.fotoBlob.size > 50) {
     return true;
   }
-  if (typeof p.foto === 'string' && p.foto.startsWith('data:image')) {
+  const sanitizedFoto = validateAndSanitizeFoto(p.foto);
+  if (sanitizedFoto && sanitizedFoto.startsWith('data:image')) {
     return true;
   }
-  if (typeof p.fotoUrl === 'string' && p.fotoUrl.startsWith('data:image')) {
+  const sanitizedFotoUrl = validateAndSanitizeFoto(p.fotoUrl);
+  if (sanitizedFotoUrl && sanitizedFotoUrl.startsWith('data:image')) {
     return true;
   }
   return false;
@@ -93,6 +229,7 @@ const ENTITY_SYNC_PRIORITY = {
 
 /**
  * Prepara la estructura de mutación para el endpoint /api/sync/batch
+ * Sanitiza fotos y limpia campos incompatibles para proteger Prisma.
  */
 export function prepareMutation(item) {
   if (!item) return null;
@@ -109,9 +246,15 @@ export function prepareMutation(item) {
   const mutationData = { ...(item.payload || {}) };
   delete mutationData.fotoBlob;
 
-  if ((item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO' || item.tipo === 'ELEMENTO') && !mutationData.foto) {
+  // Sanitización de foto para evitar errores de Prisma
+  const validFoto = validateAndSanitizeFoto(mutationData.foto || mutationData.fotoUrl);
+  if (validFoto) {
+    mutationData.foto = validFoto;
+    delete mutationData.fotoUrl;
+  } else {
     mutationData.foto = null;
     mutationData.eliminarFoto = true;
+    delete mutationData.fotoUrl;
   }
 
   if (item.companyId && !mutationData.empresaId) {
@@ -130,7 +273,8 @@ export function prepareMutation(item) {
 }
 
 export function useSync() {
-  const syncQueue = useStore((state) => state.syncQueue || []);
+  const syncQueue = useStore((state) => state.syncQueue);
+  const safeSyncQueue = Array.isArray(syncQueue) ? syncQueue : [];
   const removeFromQueue = useStore((state) => state.removeFromQueue);
   const markQueueItemError = useStore((state) => state.markQueueItemError);
   const clearQueueItemError = useStore((state) => state.clearQueueItemError);
@@ -162,7 +306,8 @@ export function useSync() {
     const handleOnline = () => {
       setIsOnline(true);
       const state = useStore.getState();
-      if (state.syncQueue && state.syncQueue.length > 0) {
+      const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+      if (currentQueue.length > 0) {
         procesarColaSincronizacion(false);
       } else if (state.token && state.token !== 'mock-offline-token') {
         state.pullInitialData?.();
@@ -189,8 +334,7 @@ export function useSync() {
 
   // Disparar sincronización automática cuando cambie la red o la cola de elementos (con backoff progresivo)
   useEffect(() => {
-    if (isOnline && syncQueue.length > 0 && !isSyncingRef.current) {
-      // Si ya fallaron 5 intentos automáticos consecutivos, pausar para no saturar la red
+    if (isOnline && safeSyncQueue.length > 0 && !isSyncingRef.current) {
       if (retryCountRef.current >= 5) {
         console.warn('[SYNC CLIENT] ⏸️ Reintentos automáticos en pausa tras 5 intentos. Presione "Sincronizar Ahora" para forzar.');
         return;
@@ -204,7 +348,8 @@ export function useSync() {
         if (!syncTimeoutRef.current) {
           syncTimeoutRef.current = setTimeout(() => {
             syncTimeoutRef.current = null;
-            if (!isSyncingRef.current && useStore.getState().syncQueue.length > 0) {
+            const q = Array.isArray(useStore.getState().syncQueue) ? useStore.getState().syncQueue : [];
+            if (!isSyncingRef.current && q.length > 0) {
               lastSyncAttemptRef.current = Date.now();
               procesarColaSincronizacion(false);
             }
@@ -216,18 +361,20 @@ export function useSync() {
       lastSyncAttemptRef.current = now;
       procesarColaSincronizacion(false);
     }
-  }, [isOnline, syncQueue.length]);
+  }, [isOnline, safeSyncQueue.length]);
 
   /**
    * Envía un micro-lote de mutaciones (máximo 3 elementos) a /api/sync/batch con timeout estricto de 10s.
+   * Utiliza readResponsePayload para evitar errores de stream duplicado.
    */
   const sincronizarLote = async (mutaciones, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) => {
     try {
-      console.log(`[SYNC CLIENT] 📤 Enviando lote de ${mutaciones.length} mutaciones a ${API_BASE_URL}/api/sync/batch`);
+      const safeMutations = Array.isArray(mutaciones) ? mutaciones : [];
+      console.log(`[SYNC CLIENT] 📤 Enviando lote de ${safeMutations.length} mutaciones a ${API_BASE_URL}/api/sync/batch`);
       const response = await fetchWithTimeout(`${API_BASE_URL}/api/sync/batch`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ mutations: mutaciones })
+        body: JSON.stringify({ mutations: safeMutations })
       }, timeoutMs);
 
       console.log(`[SYNC CLIENT] 📥 Respuesta del backend: HTTP ${response.status} ${response.statusText}`);
@@ -238,20 +385,15 @@ export function useSync() {
         return { success: false, status: response.status, error: 'Sesión expirada' };
       }
 
+      // Lectura segura garantizada sin doble lectura de stream
+      const parsed = await readResponsePayload(response);
+
       if (!response.ok) {
-        let errorText = '';
-        try {
-          const errJson = await response.json();
-          errorText = errJson.error || errJson.message || JSON.stringify(errJson);
-        } catch {
-          errorText = await response.text();
-        }
-        console.error(`[SYNC CLIENT] ❌ Error HTTP ${response.status}:`, errorText);
-        return { success: false, status: response.status, error: errorText || `Error HTTP ${response.status}` };
+        console.error(`[SYNC CLIENT] ❌ Error HTTP ${response.status}:`, parsed.error);
+        return { success: false, status: response.status, error: parsed.error || `Error HTTP ${response.status}` };
       }
 
-      const json = await response.json();
-      return { success: true, data: json };
+      return { success: true, data: parsed.data || {} };
     } catch (err) {
       console.error('[SYNC CLIENT] 🔌 Error de red/timeout en sincronizarLote:', err);
       return { success: false, status: 'NETWORK_ERROR', error: err.message || 'Error de conexión' };
@@ -260,44 +402,50 @@ export function useSync() {
 
   /**
    * Sincronización individual de elemento multipart con fotografía vía FormData y timeout de 15s.
+   * Sanitiza la foto antes de enviarla para evitar errores fatales en Prisma.
    */
   const sincronizarElementoUnifilar = async (empresaId, elemento, queueItemId) => {
     try {
-      const elementId = elemento.id || queueItemId;
+      const elementId = elemento?.id || queueItemId;
       const formData = new FormData();
       formData.append('id', elementId);
-      formData.append('nombre', elemento.nombre || elemento.codigo || 'Elemento Unifilar');
-      formData.append('tipoElemento', elemento.tipoElemento || 'TABLERO');
-      formData.append('ubicacion', elemento.ubicacion || '');
-      formData.append('alimentadoPor', elemento.alimentadoPor || '');
-      formData.append('observacionesGenerales', elemento.observacionesGenerales || '');
-      formData.append('proyectoId', elemento.proyectoId || '');
+      formData.append('nombre', elemento?.nombre || elemento?.codigo || 'Elemento Unifilar');
+      formData.append('tipoElemento', elemento?.tipoElemento || 'TABLERO');
+      formData.append('ubicacion', elemento?.ubicacion || '');
+      formData.append('alimentadoPor', elemento?.alimentadoPor || '');
+      formData.append('observacionesGenerales', elemento?.observacionesGenerales || '');
+      formData.append('proyectoId', elemento?.proyectoId || '');
 
-      const compId = empresaId || elemento.empresaId || elemento.companyId;
+      const compId = empresaId || elemento?.empresaId || elemento?.companyId;
       if (compId) {
         formData.append('empresaId', compId);
       }
 
-      if (elemento.datosTecnicos) {
+      if (elemento?.datosTecnicos) {
         formData.append('datosTecnicos', typeof elemento.datosTecnicos === 'string' ? elemento.datosTecnicos : JSON.stringify(elemento.datosTecnicos));
       }
 
-      // Preparación del binario
+      // Sanitización rigurosa de fotografía para no enviar base64 truncado
+      const validFoto = validateAndSanitizeFoto(elemento?.foto);
+      const validFotoUrl = validateAndSanitizeFoto(elemento?.fotoUrl);
+
       let fileBlob = null;
-      if (elemento.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob)) {
+      if (elemento?.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob) && elemento.fotoBlob.size > 50) {
         fileBlob = elemento.fotoBlob;
-      } else if (typeof elemento.foto === 'string' && elemento.foto.startsWith('data:image')) {
-        fileBlob = dataURLtoBlob(elemento.foto);
-      } else if (typeof elemento.fotoUrl === 'string' && elemento.fotoUrl.startsWith('data:image')) {
-        fileBlob = dataURLtoBlob(elemento.fotoUrl);
+      } else if (validFoto && validFoto.startsWith('data:image')) {
+        fileBlob = dataURLtoBlob(validFoto);
+      } else if (validFotoUrl && validFotoUrl.startsWith('data:image')) {
+        fileBlob = dataURLtoBlob(validFotoUrl);
       }
 
       if (fileBlob) {
         const fileExt = fileBlob.type ? (fileBlob.type.split('/')[1] || 'jpg') : 'jpg';
         formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
-      } else if (elemento.foto && typeof elemento.foto === 'string') {
-        formData.append('fotoUrl', elemento.foto);
-      } else if (elemento.eliminarFoto) {
+      } else if (validFoto && !validFoto.startsWith('data:image')) {
+        formData.append('fotoUrl', validFoto);
+      } else if (validFotoUrl && !validFotoUrl.startsWith('data:image')) {
+        formData.append('fotoUrl', validFotoUrl);
+      } else {
         formData.append('eliminarFoto', 'true');
         formData.append('foto', '');
       }
@@ -326,18 +474,13 @@ export function useSync() {
         return { success: false, status: response.status, error: 'Sesión expirada' };
       }
 
+      const parsed = await readResponsePayload(response);
+
       if (!response.ok) {
-        let errText = '';
-        try {
-          const errJson = await response.json();
-          errText = errJson.error || errJson.message || JSON.stringify(errJson);
-        } catch {
-          errText = await response.text();
-        }
-        return { success: false, status: response.status, error: errText || `Error HTTP ${response.status}` };
+        return { success: false, status: response.status, error: parsed.error || `Error HTTP ${response.status}` };
       }
 
-      const resJson = await response.json();
+      const resJson = parsed.data || {};
       const record = resJson.data || resJson;
       if (record) {
         const returnedFoto = record.foto || resJson.foto;
@@ -347,7 +490,7 @@ export function useSync() {
               : `${API_BASE_URL}${returnedFoto}`)
           : null;
 
-        useStore.getState().updateElementoUnifilar(elemento.proyectoId, elementId, {
+        useStore.getState().updateElementoUnifilar(elemento?.proyectoId, elementId, {
           foto: normalizedFoto,
           fotoBlob: null,
           version: record.version || 1
@@ -362,19 +505,19 @@ export function useSync() {
   };
 
   /**
-   * Sincronización individual de proyecto con timeout
+   * Sincronización individual de proyecto con timeout y lectura segura de respuesta
    */
   const sincronizarProyecto = async (empresaId, proyecto) => {
     try {
-      const respNom = proyecto.responsableNombre || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.nombre : proyecto.responsable) || '';
-      const respTel = proyecto.responsableTelefono || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.telefono : '') || '';
-      const respMail = proyecto.responsableEmail || (typeof proyecto.responsable === 'object' ? proyecto.responsable?.email : '') || '';
-      const dir = proyecto.direccion || proyecto.ubicacion || '';
+      const respNom = proyecto?.responsableNombre !== undefined ? proyecto.responsableNombre : (typeof proyecto?.responsable === 'object' ? proyecto.responsable?.nombre : proyecto?.responsable) || '';
+      const respTel = proyecto?.responsableTelefono !== undefined ? proyecto.responsableTelefono : (typeof proyecto?.responsable === 'object' ? proyecto.responsable?.telefono : '') || '';
+      const respMail = proyecto?.responsableEmail !== undefined ? proyecto.responsableEmail : (typeof proyecto?.responsable === 'object' ? proyecto.responsable?.email : '') || '';
+      const dir = proyecto?.direccion || proyecto?.ubicacion || '';
 
       const payload = {
-        id: proyecto.id,
-        nombre: proyecto.nombre,
-        descripcion: proyecto.descripcion || '',
+        id: proyecto?.id,
+        nombre: proyecto?.nombre,
+        descripcion: proyecto?.descripcion || '',
         direccion: dir,
         ubicacion: dir,
         responsableNombre: respNom,
@@ -395,12 +538,13 @@ export function useSync() {
         return { success: false, status: response.status, error: 'Sesión expirada' };
       }
 
+      const parsed = await readResponsePayload(response);
+
       if (!response.ok) {
-        const errText = await response.text();
-        return { success: false, status: response.status, error: errText };
+        return { success: false, status: response.status, error: parsed.error };
       }
 
-      return { success: true };
+      return { success: true, data: parsed.data };
     } catch (error) {
       return { success: false, status: 'NETWORK_ERROR', error: error.message };
     }
@@ -460,16 +604,16 @@ export function useSync() {
       setIsSyncing(true);
       useStore.getState().setIsSyncing?.(true);
 
-      const initialQueue = [...(useStore.getState().syncQueue || [])];
+      const initialQueue = Array.isArray(useStore.getState().syncQueue) ? [...useStore.getState().syncQueue] : [];
       if (initialQueue.length === 0) {
         useStore.getState().setSyncProgress?.(null);
         return { success: true, count: 0 };
       }
 
-      // Ordenar por prioridad relacional
-      const sortedQueue = [...initialQueue].sort((a, b) => {
-        const prioA = ENTITY_SYNC_PRIORITY[a.tipo] || 99;
-        const prioB = ENTITY_SYNC_PRIORITY[b.tipo] || 99;
+      // Ordenar por prioridad relacional con respaldos de array
+      const sortedQueue = initialQueue.sort((a, b) => {
+        const prioA = ENTITY_SYNC_PRIORITY[a?.tipo] || 99;
+        const prioB = ENTITY_SYNC_PRIORITY[b?.tipo] || 99;
         return prioA - prioB;
       });
 
@@ -510,10 +654,11 @@ export function useSync() {
         }
 
         const chunk = jsonItems.slice(i, i + SYNC_BATCH_SIZE);
-        const chunkMutations = chunk.map(prepareMutation).filter(Boolean);
+        const safeChunk = Array.isArray(chunk) ? chunk : [];
+        const chunkMutations = safeChunk.map(prepareMutation).filter(Boolean);
 
-        const currentStep = Math.min(processedCount + chunk.length, totalItems);
-        const itemNames = chunk.map((c) => c.payload?.nombre || c.payload?.codigo || c.tipo).join(', ');
+        const currentStep = Math.min(processedCount + safeChunk.length, totalItems);
+        const itemNames = safeChunk.map((c) => c?.payload?.nombre || c?.payload?.codigo || c?.tipo || 'Ítem').join(', ');
 
         useStore.getState().setSyncProgress?.({
           current: currentStep,
@@ -524,7 +669,7 @@ export function useSync() {
           errorCount
         });
 
-        console.log(`[SYNC LOTE] Procesando micro-lote (${chunk.length} elementos):`, chunk.map((c) => c.id));
+        console.log(`[SYNC LOTE] Procesando micro-lote (${safeChunk.length} elementos):`, safeChunk.map((c) => c?.id));
         let batchRes = await sincronizarLote(chunkMutations, DEFAULT_REQUEST_TIMEOUT_MS);
 
         if (batchRes.status === 401 || batchRes.status === 403) {
@@ -534,35 +679,35 @@ export function useSync() {
 
         // Si el micro-lote se aplicó con éxito (HTTP 200)
         if (batchRes.success && batchRes.data?.applied) {
-          const applied = batchRes.data.applied || [];
-          const conflicts = batchRes.data.conflicts || [];
-          const appliedIdSet = new Set(applied.map((a) => a.id));
-          const conflictMap = new Map(conflicts.map((c) => [c.id, c.error || 'Conflicto']));
+          const applied = Array.isArray(batchRes.data.applied) ? batchRes.data.applied : [];
+          const conflicts = Array.isArray(batchRes.data.conflicts) ? batchRes.data.conflicts : [];
+          const appliedIdSet = new Set(applied.map((a) => a?.id).filter(Boolean));
+          const conflictMap = new Map(conflicts.map((c) => [c?.id, c?.error || 'Conflicto']));
 
           // Tratar cada elemento del micro-lote de forma individual e inmediata
-          for (const item of chunk) {
-            const mutId = item.payload?.id || item.id;
-            if (appliedIdSet.has(mutId) || appliedIdSet.has(item.id)) {
-              console.log(`[SYNC CLIENT] ✅ Ítem sincronizado exitosamente: ${item.id}. Removiendo de cola local.`);
-              removeFromQueue(item.id);
-              if (item.payload?.id && item.payload.id !== item.id) {
+          for (const item of safeChunk) {
+            const mutId = item?.payload?.id || item?.id;
+            if (appliedIdSet.has(mutId) || appliedIdSet.has(item?.id)) {
+              console.log(`[SYNC CLIENT] ✅ Ítem sincronizado exitosamente: ${item?.id}. Removiendo de cola local.`);
+              removeFromQueue(item?.id);
+              if (item?.payload?.id && item?.payload.id !== item?.id) {
                 removeFromQueue(item.payload.id);
               }
               successCount++;
               processedCount++;
 
-              const appRecord = applied.find((a) => a.id === mutId || a.id === item.id);
+              const appRecord = applied.find((a) => a?.id === mutId || a?.id === item?.id);
               if (appRecord) actualizarRegistroEnStore(appRecord);
-            } else if (conflictMap.has(mutId) || conflictMap.has(item.id)) {
-              const err = conflictMap.get(mutId) || conflictMap.get(item.id);
-              console.warn(`[SYNC CLIENT] ⚠️ Conflicto en ítem ${item.id}:`, err);
-              markQueueItemError(item.id, err);
+            } else if (conflictMap.has(mutId) || conflictMap.has(item?.id)) {
+              const err = conflictMap.get(mutId) || conflictMap.get(item?.id);
+              console.warn(`[SYNC CLIENT] ⚠️ Conflicto en ítem ${item?.id}:`, err);
+              markQueueItemError(item?.id, err);
               errorCount++;
               processedCount++;
             } else {
               // Si no vino explícito en applied ni en conflicts pero el batch fue ok
-              removeFromQueue(item.id);
-              if (item.payload?.id && item.payload.id !== item.id) {
+              removeFromQueue(item?.id);
+              if (item?.payload?.id && item?.payload.id !== item?.id) {
                 removeFromQueue(item.payload.id);
               }
               successCount++;
@@ -575,7 +720,7 @@ export function useSync() {
           // intentamos cada elemento individualmente para que un ítem atascado no bloquee a los otros 2.
           console.warn(`[SYNC CLIENT] ⚠️ Micro-lote falló (${batchRes.error || batchRes.status}). Degradando a sincronización elemento por elemento...`);
 
-          for (const item of chunk) {
+          for (const item of safeChunk) {
             if (!navigator.onLine) break;
 
             const singleMutation = prepareMutation(item);
@@ -584,7 +729,7 @@ export function useSync() {
               continue;
             }
 
-            const singleName = item.payload?.nombre || item.payload?.codigo || item.tipo;
+            const singleName = item?.payload?.nombre || item?.payload?.codigo || item?.tipo || 'Elemento';
             useStore.getState().setSyncProgress?.({
               current: processedCount + 1,
               total: totalItems,
@@ -594,31 +739,32 @@ export function useSync() {
               errorCount
             });
 
-            console.log(`[SYNC INDIVIDUAL] Reintentando ítem individualmente: ${item.id} (${singleName})`);
+            console.log(`[SYNC INDIVIDUAL] Reintentando ítem individualmente: ${item?.id} (${singleName})`);
             const singleRes = await sincronizarLote([singleMutation], DEFAULT_REQUEST_TIMEOUT_MS);
 
             if (singleRes.status === 401 || singleRes.status === 403) {
               break;
             }
 
-            if (singleRes.success && singleRes.data?.applied?.length > 0) {
-              console.log(`[SYNC CLIENT] ✅ Ítem individual sincronizado exitosamente: ${item.id}. Removiendo de cola local.`);
-              removeFromQueue(item.id);
-              if (item.payload?.id && item.payload.id !== item.id) {
+            const singleApplied = Array.isArray(singleRes.data?.applied) ? singleRes.data.applied : [];
+            if (singleRes.success && singleApplied.length > 0) {
+              console.log(`[SYNC CLIENT] ✅ Ítem individual sincronizado exitosamente: ${item?.id}. Removiendo de cola local.`);
+              removeFromQueue(item?.id);
+              if (item?.payload?.id && item?.payload.id !== item?.id) {
                 removeFromQueue(item.payload.id);
               }
-              clearQueueItemError(item.id);
+              clearQueueItemError(item?.id);
               successCount++;
               processedCount++;
 
-              const appRecord = singleRes.data.applied[0];
+              const appRecord = singleApplied[0];
               if (appRecord) actualizarRegistroEnStore(appRecord);
             } else {
               // CAPTURA DE ERROR ESPECÍFICO DEL ÍTEM:
               // Marcamos el error en este ítem puntual y CONTINUAMOS con el siguiente
               const errMsg = singleRes.error || (singleRes.data?.conflicts?.[0]?.error) || `Fallo al sincronizar (HTTP ${singleRes.status || 'ERROR'})`;
-              console.warn(`[SYNC CLIENT] ❌ Error puntual en ítem ${item.id}:`, errMsg);
-              markQueueItemError(item.id, errMsg);
+              console.warn(`[SYNC CLIENT] ❌ Error puntual en ítem ${item?.id}:`, errMsg);
+              markQueueItemError(item?.id, errMsg);
               errorCount++;
               processedCount++;
             }
@@ -633,7 +779,7 @@ export function useSync() {
           break;
         }
 
-        const itemName = item.payload?.nombre || item.payload?.codigo || 'Elemento con fotografía';
+        const itemName = item?.payload?.nombre || item?.payload?.codigo || 'Elemento con fotografía';
         useStore.getState().setSyncProgress?.({
           current: processedCount + 1,
           total: totalItems,
@@ -643,42 +789,39 @@ export function useSync() {
           errorCount
         });
 
-        console.log(`[SYNC MULTIPART] 📸 Subiendo elemento con archivo: ${item.id} (${itemName})`);
+        console.log(`[SYNC MULTIPART] 📸 Subiendo elemento con archivo: ${item?.id} (${itemName})`);
         let res = null;
 
-        if (item.tipo === 'PROYECTO') {
-          res = await sincronizarProyecto(item.companyId, item.payload);
-        } else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO' || item.tipo === 'ELEMENTO' || !item.tipo) {
-          res = await sincronizarElementoUnifilar(item.companyId, item.payload, item.id);
+        if (item?.tipo === 'PROYECTO') {
+          res = await sincronizarProyecto(item?.companyId, item?.payload);
         } else {
-          // Si es otra entidad con foto, enviar por unifilar o proyecto
-          res = await sincronizarElementoUnifilar(item.companyId, item.payload, item.id);
+          res = await sincronizarElementoUnifilar(item?.companyId, item?.payload, item?.id);
         }
 
-        if (res && res.status === 401 || res?.status === 403) {
+        if (res && (res.status === 401 || res?.status === 403)) {
           break;
         }
 
         if (res && res.success) {
-          console.log(`[SYNC MULTIPART] ✅ Fotografía e información subidas para ${item.id}. Removiendo de cola local.`);
-          removeFromQueue(item.id);
-          if (item.payload?.id && item.payload.id !== item.id) {
+          console.log(`[SYNC MULTIPART] ✅ Fotografía e información subidas para ${item?.id}. Removiendo de cola local.`);
+          removeFromQueue(item?.id);
+          if (item?.payload?.id && item?.payload.id !== item?.id) {
             removeFromQueue(item.payload.id);
           }
-          clearQueueItemError(item.id);
+          clearQueueItemError(item?.id);
           successCount++;
           processedCount++;
         } else {
           // Captura de error puntual para esta imagen sin bloquear a los demás
           const errDetail = res?.error || `Error HTTP ${res?.status || 'desconocido'}`;
-          console.warn(`[SYNC MULTIPART] ❌ No se pudo enviar foto de ${item.id}: ${errDetail}. Continuando con la cola.`);
-          markQueueItemError(item.id, errDetail);
+          console.warn(`[SYNC MULTIPART] ❌ No se pudo enviar foto de ${item?.id}: ${errDetail}. Continuando con la cola.`);
+          markQueueItemError(item?.id, errDetail);
           errorCount++;
           processedCount++;
         }
       }
 
-      const finalRemainingQueue = useStore.getState().syncQueue || [];
+      const finalRemainingQueue = Array.isArray(useStore.getState().syncQueue) ? useStore.getState().syncQueue : [];
 
       if (successCount > 0) {
         retryCountRef.current = 0;
@@ -740,8 +883,8 @@ export function useSync() {
    */
   const syncSingleItem = async (itemId) => {
     if (!itemId) return { success: false, error: 'ID no proporcionado' };
-    const currentQueue = useStore.getState().syncQueue || [];
-    const item = currentQueue.find((q) => q.id === itemId || q.payload?.id === itemId);
+    const currentQueue = Array.isArray(useStore.getState().syncQueue) ? useStore.getState().syncQueue : [];
+    const item = currentQueue.find((q) => q?.id === itemId || q?.payload?.id === itemId);
     if (!item) return { success: false, error: 'Elemento no encontrado en la cola' };
 
     clearQueueItemError(item.id);
@@ -763,10 +906,11 @@ export function useSync() {
       } else {
         const mutation = prepareMutation(item);
         const res = await sincronizarLote([mutation], DEFAULT_REQUEST_TIMEOUT_MS);
-        if (res.success && res.data?.applied?.length > 0) {
+        const resApplied = Array.isArray(res.data?.applied) ? res.data.applied : [];
+        if (res.success && resApplied.length > 0) {
           removeFromQueue(item.id);
           if (item.payload?.id) removeFromQueue(item.payload.id);
-          actualizarRegistroEnStore(res.data.applied[0]);
+          actualizarRegistroEnStore(resApplied[0]);
           if (showToast) showToast('Elemento sincronizado exitosamente', 'success');
           return { success: true };
         } else {
@@ -805,7 +949,7 @@ export function useSync() {
   return {
     isOnline,
     isSyncing: isSyncing || isStoreSyncing,
-    pendingCount: syncQueue.length,
+    pendingCount: safeSyncQueue.length,
     syncProgress,
     triggerSync: () => procesarColaSincronizacion(true),
     syncSingleItem,
