@@ -108,6 +108,24 @@ export function useSync() {
     }
     prevQueueLengthRef.current = safeSyncQueue.length;
 
+    // Si la cola está vacía (0 pendientes), limpiar timeouts y forzar el reseteo de flags de sincronización
+    if (safeSyncQueue.length === 0) {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
+      retryCountRef.current = 0;
+      if (isSyncingRef.current) {
+        isSyncingRef.current = false;
+        setIsSyncing(false);
+        useStore.getState().setIsSyncing?.(false);
+      }
+      if (useStore.getState().syncProgress) {
+        useStore.getState().setSyncProgress?.(null);
+      }
+      return;
+    }
+
     if (isOnline && safeSyncQueue.length > 0 && !isSyncingRef.current) {
       if (retryCountRef.current >= 5) {
         console.warn('[SYNC CLIENT] ⏸️ Reintentos automáticos en pausa tras 5 intentos. Presione "Sincronizar Ahora" para forzar.');
@@ -404,6 +422,9 @@ export function useSync() {
       const initialQueue = Array.isArray(useStore.getState().syncQueue) ? [...useStore.getState().syncQueue] : [];
       if (initialQueue.length === 0) {
         useStore.getState().setSyncProgress?.(null);
+        useStore.getState().setIsSyncing?.(false);
+        setIsSyncing(false);
+        isSyncingRef.current = false;
         return { success: true, count: 0 };
       }
 
@@ -643,19 +664,8 @@ export function useSync() {
         }
       }
 
-      // Breve retardo para que el usuario aprecie el estado "Completado" en la barra de progreso
-      useStore.getState().setSyncProgress?.({
-        current: totalItems,
-        total: totalItems,
-        message: finalRemainingQueue.length === 0 ? '¡Sincronización completada!' : `Completado (${successCount} subidos, ${finalRemainingQueue.length} pendientes)`,
-        currentName: '',
-        successCount,
-        errorCount
-      });
-
-      setTimeout(() => {
-        useStore.getState().setSyncProgress?.(null);
-      }, 2500);
+      // Limpiar inmediatamente el indicador de progreso para que la UI no quede pegada
+      useStore.getState().setSyncProgress?.(null);
 
       return {
         success: finalRemainingQueue.length === 0,
@@ -671,6 +681,7 @@ export function useSync() {
       setIsSyncing(false);
       isSyncingRef.current = false;
       useStore.getState().setIsSyncing?.(false);
+      useStore.getState().setSyncProgress?.(null);
       console.groupEnd();
     }
   };

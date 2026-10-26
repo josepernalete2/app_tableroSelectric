@@ -43,7 +43,7 @@ export default function SyncStatusBanner() {
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   const successTimeoutRef = useRef(null);
 
-  // Estado consolidado de sincronización activa
+  // Estado consolidado de sincronización activa (solo si hay ítems pendientes o envío en curso)
   const isSyncing = isHookSyncing || isStoreSyncing || isManualSyncing;
   const wasSyncingRef = useRef(isSyncing);
 
@@ -51,20 +51,28 @@ export default function SyncStatusBanner() {
   const failedItems = syncQueue.filter((item) => Boolean(item?.syncError));
   const failedCount = failedItems.length;
 
-  // Efecto reactivo: al terminar cualquier sincronización con éxito y vaciarse la cola
+  // Efecto reactivo: al terminar cualquier sincronización con éxito o vaciarse la cola
   useEffect(() => {
     const wasSyncing = wasSyncingRef.current;
 
+    // Si estaba sincronizando y terminó, o si la cola quedó en 0 pendientes
     if (wasSyncing && !isSyncing && pendingCount === 0 && isOnline) {
       setShowSuccessBanner(true);
       if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
       successTimeoutRef.current = setTimeout(() => {
         setShowSuccessBanner(false);
-      }, 5000);
+      }, 4000);
+    }
+
+    // Auto-curación de estados: Si no hay elementos pendientes en cola y no hay envío activo,
+    // garantizar que los flags de Zustand queden limpios en false / null inmediatamente
+    if (pendingCount === 0 && (isStoreSyncing || syncProgress)) {
+      useStore.getState().setIsSyncing?.(false);
+      useStore.getState().setSyncProgress?.(null);
     }
 
     wasSyncingRef.current = isSyncing;
-  }, [isSyncing, pendingCount, isOnline]);
+  }, [isSyncing, pendingCount, isOnline, isStoreSyncing, syncProgress]);
 
   useEffect(() => {
     return () => {
@@ -160,11 +168,18 @@ export default function SyncStatusBanner() {
     );
   }
 
-  // 2. SINCRONIZANDO (En progreso activo con retroalimentación visual precisa)
-  if (isSyncing) {
+  // 2. SINCRONIZANDO (Solo mostrar si realmente está sincronizando Y hay elementos pendientes o envío directo en curso)
+  const isActivelySyncing = isSyncing && (pendingCount > 0 || (syncProgress && syncProgress.current < syncProgress.total));
+
+  if (isActivelySyncing) {
     const current = syncProgress?.current || 0;
     const total = syncProgress?.total || pendingCount || 1;
     const percent = Math.min(100, Math.round((current / total) * 100));
+    const displayMessage = syncProgress?.message || (
+      syncProgress?.total > 0
+        ? `Sincronizando ${syncProgress.current} de ${syncProgress.total}${syncProgress.currentName ? ` (${syncProgress.currentName})` : ''}...`
+        : `Sincronizando ${pendingCount > 0 ? `${pendingCount} elemento${pendingCount > 1 ? 's' : ''}` : 'datos'} con el servidor central...`
+    );
 
     return (
       <div className="relative bg-slate-900/95 border-b border-blue-500/30 text-blue-300 px-4 py-2 flex flex-col w-full text-xs font-semibold shadow-md no-print backdrop-blur-sm transition-all duration-300">
@@ -173,14 +188,12 @@ export default function SyncStatusBanner() {
           <div className="flex items-center justify-center gap-2 flex-1 text-center min-w-0">
             <RefreshCw className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
             <span className="truncate font-medium text-slate-200">
-              {syncProgress?.total > 0
-                ? `Sincronizando ${syncProgress.current} de ${syncProgress.total}${syncProgress.currentName ? ` (${syncProgress.currentName})` : ''}...`
-                : `Sincronizando ${pendingCount > 0 ? `${pendingCount} elemento${pendingCount > 1 ? 's' : ''}` : 'datos'} con el servidor central...`}
+              {displayMessage}
             </span>
           </div>
           <div className="w-28 flex justify-end shrink-0">
             <span className="bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-blue-500/30 font-bold">
-              {percent}% (10s timeout)
+              {percent}%
             </span>
           </div>
         </div>
@@ -295,7 +308,7 @@ export default function SyncStatusBanner() {
             </div>
 
             <p className="text-[11px] text-slate-400 mb-3">
-              Los elementos se sincronizan en micro-lotes de 3 en 3 con timeout de 10s. Si un ítem específico falla o está corrupto,
+              Los elementos se sincronizan en micro-lotes de 3 en 3 con timeout de 25s. Si un ítem específico falla o está corrupto,
               puedes reintentarlo individualmente o descartarlo sin afectar a los demás.
             </p>
 

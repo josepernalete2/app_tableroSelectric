@@ -2857,6 +2857,19 @@ export const useStore = create(
         }
 
         try {
+          // Activar retroalimentación de guardado en tiempo real
+          set({
+            isSyncing: true,
+            syncProgress: {
+              current: 1,
+              total: 1,
+              message: `Guardando "${elemento.nombre || elemento.codigo}" en el servidor...`,
+              currentName: elemento.nombre || elemento.codigo,
+              successCount: 0,
+              errorCount: 0
+            }
+          });
+
           const res = await enviarElementoDirectoAlServidor(empresaId, elemento, token);
           if (res.ok) {
             // Confirmación exitosa en base de datos PostgreSQL: asegurar que NO quede en cola local
@@ -2917,6 +2930,12 @@ export const useStore = create(
           console.warn(`[ONLINE REALTIME] ⚠️ Error de red o timeout (${errorMsg}) para elemento ${elemento.id}. NO se retiene en cola offline porque el dispositivo está en línea.`);
           showToast?.(`Error de conexión o tiempo de espera al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Por favor reintenta.`, 'error');
           return { ok: false, error: errorMsg };
+        } finally {
+          // RESET INMEDIATO: Limpiar flags de sincronización al concluir el envío directo
+          set({
+            isSyncing: false,
+            syncProgress: null
+          });
         }
       },
 
@@ -2928,7 +2947,8 @@ export const useStore = create(
           subestacionesLocales: [],
           puntosMedicionLocales: [],
           ccmLocales: [],
-          syncProgress: null
+          syncProgress: null,
+          isSyncing: false
         });
       },
 
