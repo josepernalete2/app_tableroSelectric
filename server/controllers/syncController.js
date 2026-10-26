@@ -40,6 +40,24 @@ export function sanitizeFotoServer(foto) {
   return null;
 }
 
+// Lista exhaustiva y normalizada de tipos de elementos unifilares válidos en Prisma
+export const VALID_TIPOS_ELEMENTO = [
+  'TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR',
+  'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION',
+  'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA',
+  'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'
+];
+
+/**
+ * Limpia y normaliza el tipo de elemento según el enum TipoElemento de Prisma.
+ * Previene ReferenceErrors fatales en el backend y la syncQueue de la PWA.
+ */
+export function cleanTipoElemento(tipo) {
+  if (!tipo || typeof tipo !== 'string') return 'TABLERO';
+  const clean = tipo.trim().toUpperCase();
+  return VALID_TIPOS_ELEMENTO.includes(clean) ? clean : 'TABLERO';
+}
+
 // Lista blanca estricta de entidades permitidas para sincronización offline
 const ALLOWED_SYNC_ENTITIES = new Set([
   'tablero',
@@ -307,11 +325,8 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           rawData.nombre = String(rawData.nombre || rawData.codigo || rawData.tag || 'Elemento Unifilar').trim();
           if (!rawData.nombre) rawData.nombre = 'Elemento Unifilar';
 
-          // 2. Validar enum TipoElemento de Prisma
-          const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
-          if (!rawData.tipoElemento || !validTipos.includes(rawData.tipoElemento)) {
-            rawData.tipoElemento = 'TABLERO';
-          }
+          // 2. Validar enum TipoElemento de Prisma mediante cleanTipoElemento
+          rawData.tipoElemento = cleanTipoElemento(rawData.tipoElemento);
 
           // 3. Deserializar y normalizar datosTecnicos (Json obligatorio en PostgreSQL)
           let dt = {};
@@ -348,7 +363,7 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           }
 
           // Si es TRANSFORMADOR, calcular corrientes nominales y normalizar tipo de conexión
-          if (targetTipo === 'TRANSFORMADOR') {
+          if (rawData.tipoElemento === 'TRANSFORMADOR') {
             const canonConexion = normalizarTipoConexion(
               dt.tipoConexion || dt.conexionTrafo || dt.conexion,
               dt.conexion,
@@ -763,8 +778,7 @@ export const sincronizarElementoMultipart = async (req, res) => {
 
     const elementId = id || req.body.localId || `elem-${Date.now()}`;
     const cleanNombre = (nombre || req.body.codigo || req.body.tag || 'Elemento Unifilar').trim();
-    const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
-    const cleanTipo = validTipos.includes(tipoElemento) ? tipoElemento : 'TABLERO';
+    const cleanTipo = cleanTipoElemento(tipoElemento);
 
     console.log(`[SYNC MULTIPART] 📸 Procesando elemento con binario: '${cleanNombre}' (${elementId}) tipo: ${cleanTipo}`);
 
@@ -828,7 +842,7 @@ export const sincronizarElementoMultipart = async (req, res) => {
     }
 
     // Si es TRANSFORMADOR, calcular corrientes nominales y normalizar tipo de conexión
-    if (cleanTipoElemento === 'TRANSFORMADOR') {
+    if (cleanTipo === 'TRANSFORMADOR') {
       const canonConexion = normalizarTipoConexion(
         parsedDatosTecnicos.tipoConexion || parsedDatosTecnicos.conexionTrafo || parsedDatosTecnicos.conexion,
         parsedDatosTecnicos.conexion,

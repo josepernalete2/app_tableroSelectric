@@ -40,6 +40,19 @@ export function sanitizeFotoServer(foto) {
   return null;
 }
 
+export const VALID_TIPOS_ELEMENTO = [
+  'TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR',
+  'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION',
+  'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA',
+  'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'
+];
+
+export function cleanTipoElemento(tipo) {
+  if (!tipo || typeof tipo !== 'string') return 'TABLERO';
+  const clean = tipo.trim().toUpperCase();
+  return VALID_TIPOS_ELEMENTO.includes(clean) ? clean : 'TABLERO';
+}
+
 /**
  * POST /api/elementos-unifilares
  * Registra un ElementoUnifilar en PostgreSQL con auto-resuelto de Proyecto y Empresa (P2025 prevention).
@@ -62,8 +75,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
     // 1. Auto-Healing de campos obligatorios para tolerar estructuras antiguas
     const cleanNombre = String(nombre || req.body.codigo || req.body.tag || 'Elemento Unifilar').trim() || 'Elemento Unifilar';
-    const validTipos = ['TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR', 'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION', 'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA', 'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'];
-    const cleanTipoElemento = validTipos.includes(tipoElemento) ? tipoElemento : 'TABLERO';
+    const cleanTipo = cleanTipoElemento(tipoElemento);
 
     let targetProyectoId = proyectoId;
     if (!targetProyectoId) {
@@ -159,7 +171,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
     }
 
     // SI ES TABLERO, APLICAR VALIDACIONES TOLERANTES (Sin arrojar errores bloqueantes)
-    if (cleanTipoElemento === 'TABLERO') {
+    if (cleanTipo === 'TABLERO') {
       const maxPolos = parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42;
       const circuits = parsedDatosTecnicos.circuits || [];
 
@@ -183,7 +195,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
     }
 
     // SI ES TRANSFORMADOR, APLICAR CÁLCULOS ELÉCTRICOS DE CORRIENTES Y NORMALIZAR ESQUEMA
-    if (cleanTipoElemento === 'TRANSFORMADOR') {
+    if (cleanTipo === 'TRANSFORMADOR') {
       const canonConexion = normalizarTipoConexion(
         parsedDatosTecnicos.tipoConexion || parsedDatosTecnicos.conexionTrafo || parsedDatosTecnicos.conexion,
         parsedDatosTecnicos.conexion,
@@ -231,7 +243,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
     // Inserción o actualización atómica defensiva en PostgreSQL
     const nuevoElemento = await prisma.$transaction(async (tx) => {
       // SI ES TABLERO, APLICAR UPSERT EN TABLA TABLERO
-      if (cleanTipoElemento === 'TABLERO') {
+      if (cleanTipo === 'TABLERO') {
         const tension = parsedDatosTecnicos.tension || '208Y/120 V';
         const fases = parsedDatosTecnicos.fases !== undefined ? parseInt(parsedDatosTecnicos.fases, 10) : 3;
         const alimentadorId = parsedDatosTecnicos.alimentadorId || null;
@@ -323,7 +335,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
         where: { id: finalElementId },
         update: {
           nombre: cleanNombre,
-          tipoElemento: cleanTipoElemento,
+          tipoElemento: cleanTipo,
           ubicacion: ubicacion || '',
           alimentadoPor: alimentadoPor || '',
           ...updateFotoData,
@@ -345,7 +357,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
         create: {
           id: finalElementId,
           nombre: cleanNombre,
-          tipoElemento: cleanTipoElemento,
+          tipoElemento: cleanTipo,
           ubicacion: ubicacion || '',
           alimentadoPor: alimentadoPor || '',
           foto: isDeletePhoto ? null : (finalFoto || null),

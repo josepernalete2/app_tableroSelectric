@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
 import { API_BASE_URL } from '../utils/api.js';
+import { cleanTipoElemento, enviarElementoDirectoAlServidor } from '../utils/syncService.js';
 import { initialTablerosData } from '../data/mockTableros.js';
 
 // Configurar localforage
@@ -1444,27 +1445,35 @@ export const useStore = create(
             return c;
           }),
           proyectosLocales: [...(state.proyectosLocales || []), nuevoProyecto],
-          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
-            id: uuidId,
-            tipo: 'PROYECTO',
-            companyId,
-            payload: nuevoProyecto
-          }]
+          syncQueue: (!isOnline || !hasActiveSession)
+            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
+                id: uuidId,
+                tipo: 'PROYECTO',
+                companyId,
+                payload: nuevoProyecto
+              }]
+            : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
         }));
 
-        if (navigator.onLine) {
+        if (isOnline && hasActiveSession) {
           try {
             const { token } = get();
-            await fetch(`${API_BASE_URL}/api/proyectos`, {
+            const resp = await fetch(`${API_BASE_URL}/api/proyectos`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+                'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify(nuevoProyecto)
             });
+            if (!resp.ok) {
+              get().enqueueOfflineItem?.('PROYECTO', companyId, nuevoProyecto, `HTTP ${resp.status}`);
+            } else {
+              get().removeFromQueue?.(uuidId);
+            }
           } catch (e) {
-            console.error('Error al registrar proyecto en el servidor:', e);
+            console.error('Error al registrar proyecto en el servidor, retenido en cola local:', e);
+            get().enqueueOfflineItem?.('PROYECTO', companyId, nuevoProyecto, e.message);
           }
         }
 
@@ -1504,7 +1513,7 @@ export const useStore = create(
           uuidId = crypto.randomUUID();
         }
 
-        const tipoElemento = elementoData.tipoElemento || 'TABLERO';
+        const tipoElemento = cleanTipoElemento(elementoData.tipoElemento || 'TABLERO');
         const codigo = elementoData.codigo || getNextElementId(tipoElemento, proyectoId, get());
 
         const existingElements = proyectoId 
@@ -1539,6 +1548,10 @@ export const useStore = create(
           createdAt: new Date().toISOString()
         };
 
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        const { token } = get();
+        const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+
         set((state) => ({
           companies: state.companies.map((c) => {
             if (c.id === parentCompanyId) {
@@ -1567,18 +1580,30 @@ export const useStore = create(
             return c;
           }),
           elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
-          syncQueue: [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
-            id: uuidId,
-            tipo: 'ELEMENTO_UNIFILAR',
-            companyId: parentCompanyId,
-            payload: nuevoElemento
-          }]
+          // REGLA ESTRICTA DE CONECTIVIDAD: Solo si está OFFLINE se retiene localmente en la cola
+          syncQueue: (!isOnline || !hasActiveSession)
+            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
+                id: uuidId,
+                tipo: 'ELEMENTO_UNIFILAR',
+                companyId: parentCompanyId,
+                payload: nuevoElemento
+              }]
+            : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
         }));
+
+        // Si hay conexión activa con el servidor central, enviar DIRECTAMENTE en tiempo real
+        if (isOnline && hasActiveSession) {
+          get().enviarElementoDirectoServidor?.(parentCompanyId, nuevoElemento);
+        }
 
         return { success: true, elemento: nuevoElemento };
       },
 
       updateElementoUnifilar: (proyectoId, elementoId, updatedData) => {
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        const { token } = get();
+        const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+
         set((state) => {
           const updatedCompanies = state.companies.map((c) => {
             if (!proyectoId) {
@@ -1621,36 +1646,41 @@ export const useStore = create(
           });
 
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
-          let inQueue = false;
-          const updatedSyncQueue = currentQueue.map((item) => {
-            if (item?.id === elementoId && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
-              inQueue = true;
-              return { ...item, payload: { ...(item.payload || {}), ...updatedData } };
-            }
-            return item;
-          });
+          let updatedSyncQueue = [...currentQueue];
 
-          if (!inQueue) {
-            let updatedElement = updatedElementosLocales.find(e => e.id === elementoId);
-            if (!updatedElement) {
-              for (const c of updatedCompanies) {
-                const list = proyectoId 
-                  ? (c.proyectos?.find(p => p.id === proyectoId)?.elementosUnifilares || []) 
-                  : (c.elementosUnifilares || []);
-                const found = list.find(e => e.id === elementoId);
-                if (found) {
-                  updatedElement = found;
-                  break;
+          // REGLA ESTRICTA DE CONECTIVIDAD: Solo si está OFFLINE se retiene o actualiza en la cola
+          if (!isOnline || !hasActiveSession) {
+            let inQueue = false;
+            updatedSyncQueue = currentQueue.map((item) => {
+              if (item?.id === elementoId && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
+                inQueue = true;
+                return { ...item, payload: { ...(item?.payload || {}), ...updatedData } };
+              }
+              return item;
+            });
+
+            if (!inQueue) {
+              let updatedElement = updatedElementosLocales.find(e => e.id === elementoId);
+              if (!updatedElement) {
+                for (const c of updatedCompanies) {
+                  const list = proyectoId 
+                    ? (c.proyectos?.find(p => p.id === proyectoId)?.elementosUnifilares || []) 
+                    : (c.elementosUnifilares || []);
+                  const found = list.find(e => e.id === elementoId);
+                  if (found) {
+                    updatedElement = found;
+                    break;
+                  }
                 }
               }
-            }
-            if (updatedElement) {
-              updatedSyncQueue.push({
-                id: elementoId,
-                tipo: 'ELEMENTO_UNIFILAR',
-                companyId: updatedElement.empresaId || updatedElement.companyId || (state.companies[0]?.id || null),
-                payload: updatedElement
-              });
+              if (updatedElement) {
+                updatedSyncQueue.push({
+                  id: elementoId,
+                  tipo: 'ELEMENTO_UNIFILAR',
+                  companyId: updatedElement.empresaId || updatedElement.companyId || (state.companies[0]?.id || null),
+                  payload: updatedElement
+                });
+              }
             }
           }
 
@@ -1660,6 +1690,14 @@ export const useStore = create(
             syncQueue: updatedSyncQueue
           };
         });
+
+        // Si está ONLINE con servidor activo: Enviar la actualización directamente en tiempo real
+        if (isOnline && hasActiveSession) {
+          const el = (get().elementosLocales || []).find(e => e.id === elementoId);
+          if (el) {
+            get().enviarElementoDirectoServidor?.(el.empresaId || el.companyId, el);
+          }
+        }
       },
 
       deleteElementoUnifilar: async (proyectoId, elementoId) => {
@@ -2735,6 +2773,94 @@ export const useStore = create(
             return copy;
           })
         }));
+      },
+
+      enqueueOfflineItem: (tipo, companyId, payload, syncError = null) => {
+        if (!payload || !payload.id) return;
+        set((state) => {
+          const currentQueue = Array.isArray(state.syncQueue) ? [...state.syncQueue] : [];
+          const idx = currentQueue.findIndex((item) => item.id === payload.id || item.payload?.id === payload.id);
+          const queueItem = {
+            id: payload.id,
+            tipo: tipo || 'ELEMENTO_UNIFILAR',
+            companyId: companyId || payload.empresaId || payload.companyId || null,
+            payload,
+            ...(syncError ? { syncError, syncFailedAt: Date.now() } : {})
+          };
+
+          if (idx >= 0) {
+            currentQueue[idx] = { ...currentQueue[idx], ...queueItem };
+          } else {
+            currentQueue.push(queueItem);
+          }
+
+          return { syncQueue: currentQueue };
+        });
+      },
+
+      enviarElementoDirectoServidor: async (empresaId, elemento) => {
+        if (!elemento) return;
+        const { token } = get();
+        if (!token || token === 'mock-offline-token' || !navigator.onLine) {
+          get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento);
+          return;
+        }
+
+        try {
+          const res = await enviarElementoDirectoAlServidor(empresaId, elemento, token);
+          if (res.ok) {
+            // Confirmación exitosa en base de datos PostgreSQL: asegurar que NO quede en cola
+            get().removeFromQueue(elemento.id);
+            const record = res.data;
+            if (record) {
+              const returnedFoto = record.foto || res.foto;
+              const normalizedFoto = returnedFoto
+                ? ((returnedFoto.startsWith('data:') || returnedFoto.startsWith('http://') || returnedFoto.startsWith('https://') || returnedFoto.startsWith('blob:'))
+                    ? returnedFoto
+                    : `${API_BASE_URL}${returnedFoto}`)
+                : null;
+
+              set((state) => ({
+                companies: state.companies.map((c) => ({
+                  ...c,
+                  proyectos: (c.proyectos || []).map((p) => {
+                    if (p.id === elemento.proyectoId) {
+                      return {
+                        ...p,
+                        elementosUnifilares: (p.elementosUnifilares || p.tableros || []).map((el) => {
+                          if (el.id === elemento.id) {
+                            return { ...el, foto: normalizedFoto || el.foto, fotoBlob: null, version: record.version || 1 };
+                          }
+                          return el;
+                        })
+                      };
+                    }
+                    return p;
+                  }),
+                  elementosUnifilares: (c.elementosUnifilares || []).map((el) => {
+                    if (el.id === elemento.id) {
+                      return { ...el, foto: normalizedFoto || el.foto, fotoBlob: null, version: record.version || 1 };
+                    }
+                    return el;
+                  })
+                })),
+                elementosLocales: (state.elementosLocales || []).map((el) => {
+                  if (el.id === elemento.id) {
+                    return { ...el, foto: normalizedFoto || el.foto, fotoBlob: null, version: record.version || 1 };
+                  }
+                  return el;
+                })
+              }));
+            }
+            console.log(`[ONLINE REALTIME] ✅ Elemento ${elemento.id} persistido inmediatamente en BD.`);
+          } else {
+            console.warn(`[ONLINE REALTIME] ⚠️ Servidor devolvió estado no exitoso (${res.error || res.status}). Reteniendo en cola offline:`, elemento.id);
+            get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento, res.error);
+          }
+        } catch (err) {
+          console.warn(`[ONLINE REALTIME] ⚠️ Error de red al sincronizar en tiempo real (${err.message}). Reteniendo en cola offline:`, elemento.id);
+          get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento, err.message);
+        }
       },
 
       clearSyncQueue: () => {

@@ -398,3 +398,16 @@ export const CATALOGO_COVENIN_159 = [
 export const FRECUENCIAS_NORMALIZADAS = ['60 Hz', '50 Hz'];
 export const POLOS_TRANSFERENCIA = ['2P', '3P', '4P'];
 
+export const VALID_TIPOS_ELEMENTO = [
+  'TABLERO', 'PUNTO_SUMINISTRO', 'SUBESTACION', 'TRANSFORMADOR',
+  'GENERADOR', 'PUESTA_TIERRA', 'TRANSFER', 'PUNTO_MEDICION',
+  'CCM', 'BANCO_CONDENSADOR', 'AMBIENTAL_FISICA', 'TERMOGRAFICA',
+  'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'
+];
+
+export function cleanTipoElemento(tipo) {
+  if (!tipo || typeof tipo !== 'string') return 'TABLERO';
+  const clean = tipo.trim().toUpperCase();
+  return VALID_TIPOS_ELEMENTO.includes(clean) ? clean : 'TABLERO';
+}
+
