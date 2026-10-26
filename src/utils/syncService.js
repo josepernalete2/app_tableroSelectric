@@ -1,8 +1,8 @@
 import { API_BASE_URL } from './api.js';
 import { compressImageToBase64, estimateBase64SizeBytes } from './imageUtils.js';
 
-export const DEFAULT_REQUEST_TIMEOUT_MS = 10000; // 10 segundos por petición estándar
-export const MULTIPART_REQUEST_TIMEOUT_MS = 15000; // 15 segundos para subida binaria de fotos
+export const DEFAULT_REQUEST_TIMEOUT_MS = 25000; // 25 segundos por petición estándar (tolerancia para cold-starts de Vercel/Neon)
+export const MULTIPART_REQUEST_TIMEOUT_MS = 30000; // 30 segundos para subida binaria de fotos pesadas
 export const SYNC_BATCH_SIZE = 3; // Lotes pequeños de 3 en 3 para evitar saturación y timeouts
 
 // Enum canónico TipoElemento sincronizado con Prisma ORM

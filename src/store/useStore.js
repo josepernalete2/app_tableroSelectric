@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
 import { API_BASE_URL } from '../utils/api.js';
-import { cleanTipoElemento, enviarElementoDirectoAlServidor } from '../utils/syncService.js';
+import { cleanTipoElemento, enviarElementoDirectoAlServidor, fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS, readResponsePayload } from '../utils/syncService.js';
 import { initialTablerosData } from '../data/mockTableros.js';
 
 // Configurar localforage
@@ -1086,14 +1086,14 @@ export const useStore = create(
         if (navigator.onLine) {
           try {
             const { token } = get();
-            await fetch(`${API_BASE_URL}/api/empresas`, {
+            await fetchWithTimeout(`${API_BASE_URL}/api/empresas`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 ...(token ? { 'Authorization': `Bearer ${token}` } : {})
               },
               body: JSON.stringify(newCompany)
-            });
+            }, DEFAULT_REQUEST_TIMEOUT_MS);
           } catch (e) {
             console.error('Error al registrar empresa en el servidor:', e);
           }
@@ -1445,7 +1445,8 @@ export const useStore = create(
             return c;
           }),
           proyectosLocales: [...(state.proyectosLocales || []), nuevoProyecto],
-          syncQueue: (!isOnline || !hasActiveSession)
+          // REGLA ESTRICTA DE CONECTIVIDAD: La cola offline está reservada EXCLUSIVAMENTE para cuando navigator.onLine === false
+          syncQueue: (!isOnline)
             ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
                 id: uuidId,
                 tipo: 'PROYECTO',
@@ -1458,22 +1459,25 @@ export const useStore = create(
         if (isOnline && hasActiveSession) {
           try {
             const { token } = get();
-            const resp = await fetch(`${API_BASE_URL}/api/proyectos`, {
+            const resp = await fetchWithTimeout(`${API_BASE_URL}/api/proyectos`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
               },
               body: JSON.stringify(nuevoProyecto)
-            });
+            }, DEFAULT_REQUEST_TIMEOUT_MS);
             if (!resp.ok) {
-              get().enqueueOfflineItem?.('PROYECTO', companyId, nuevoProyecto, `HTTP ${resp.status}`);
+              const errPayload = await readResponsePayload(resp);
+              console.warn('[ONLINE REALTIME] ⚠️ Servidor devolvió error al registrar proyecto:', errPayload.error);
+              get().showToast?.(`Error en el servidor al registrar proyecto: ${errPayload.error || `HTTP ${resp.status}`}. Por favor reintenta.`, 'error');
             } else {
               get().removeFromQueue?.(uuidId);
+              console.log('[ONLINE REALTIME] ✅ Proyecto registrado exitosamente en el servidor.');
             }
           } catch (e) {
-            console.error('Error al registrar proyecto en el servidor, retenido en cola local:', e);
-            get().enqueueOfflineItem?.('PROYECTO', companyId, nuevoProyecto, e.message);
+            console.error('[ONLINE REALTIME] ⚠️ Error de red o timeout al registrar proyecto:', e);
+            get().showToast?.(`Error de conexión o tiempo de espera al registrar proyecto: ${e.message}. Por favor reintenta.`, 'error');
           }
         }
 
@@ -1580,8 +1584,8 @@ export const useStore = create(
             return c;
           }),
           elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
-          // REGLA ESTRICTA DE CONECTIVIDAD: Solo si está OFFLINE se retiene localmente en la cola
-          syncQueue: (!isOnline || !hasActiveSession)
+          // REGLA ESTRICTA DE CONECTIVIDAD: La cola offline está reservada EXCLUSIVAMENTE para cuando navigator.onLine === false
+          syncQueue: (!isOnline)
             ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
                 id: uuidId,
                 tipo: 'ELEMENTO_UNIFILAR',
@@ -1591,12 +1595,34 @@ export const useStore = create(
             : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
         }));
 
-        // Si hay conexión activa con el servidor central, enviar DIRECTAMENTE en tiempo real
-        if (isOnline && hasActiveSession) {
-          get().enviarElementoDirectoServidor?.(parentCompanyId, nuevoElemento);
+        let directPromise = null;
+        // Si hay internet, enviar DIRECTAMENTE al servidor en tiempo real
+        if (isOnline) {
+          directPromise = get().enviarElementoDirectoServidor?.(parentCompanyId, nuevoElemento);
         }
 
-        return { success: true, elemento: nuevoElemento };
+        const resultObj = {
+          success: true,
+          elemento: nuevoElemento,
+          then: (resolve, reject) => {
+            if (directPromise) {
+              return directPromise.then((res) => {
+                resolve({ success: res?.ok ?? true, elemento: nuevoElemento, ...res });
+              }, reject);
+            }
+            return Promise.resolve({ success: true, elemento: nuevoElemento }).then(resolve, reject);
+          },
+          catch: (reject) => {
+            if (directPromise) return directPromise.catch(reject);
+            return Promise.resolve({ success: true, elemento: nuevoElemento }).catch(reject);
+          },
+          finally: (cb) => {
+            if (directPromise) return directPromise.finally(cb);
+            return Promise.resolve({ success: true, elemento: nuevoElemento }).finally(cb);
+          }
+        };
+
+        return resultObj;
       },
 
       updateElementoUnifilar: (proyectoId, elementoId, updatedData) => {
@@ -1648,8 +1674,8 @@ export const useStore = create(
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let updatedSyncQueue = [...currentQueue];
 
-          // REGLA ESTRICTA DE CONECTIVIDAD: Solo si está OFFLINE se retiene o actualiza en la cola
-          if (!isOnline || !hasActiveSession) {
+          // REGLA ESTRICTA DE CONECTIVIDAD: Solo si está estrictamente OFFLINE (navigator.onLine === false) se retiene o actualiza en la cola
+          if (!isOnline) {
             let inQueue = false;
             updatedSyncQueue = currentQueue.map((item) => {
               if (item?.id === elementoId && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
@@ -1691,13 +1717,33 @@ export const useStore = create(
           };
         });
 
-        // Si está ONLINE con servidor activo: Enviar la actualización directamente en tiempo real
-        if (isOnline && hasActiveSession) {
+        // Si está ONLINE: Enviar la actualización directamente al servidor en tiempo real
+        let directPromise = null;
+        if (isOnline) {
           const el = (get().elementosLocales || []).find(e => e.id === elementoId);
           if (el) {
-            get().enviarElementoDirectoServidor?.(el.empresaId || el.companyId, el);
+            directPromise = get().enviarElementoDirectoServidor?.(el.empresaId || el.companyId, el);
           }
         }
+
+        return {
+          success: true,
+          elementoId,
+          then: (resolve, reject) => {
+            if (directPromise) {
+              return directPromise.then((res) => resolve({ success: res?.ok ?? true, elementoId, ...res }), reject);
+            }
+            return Promise.resolve({ success: true, elementoId }).then(resolve, reject);
+          },
+          catch: (reject) => {
+            if (directPromise) return directPromise.catch(reject);
+            return Promise.resolve({ success: true, elementoId }).catch(reject);
+          },
+          finally: (cb) => {
+            if (directPromise) return directPromise.finally(cb);
+            return Promise.resolve({ success: true, elementoId }).finally(cb);
+          }
+        };
       },
 
       deleteElementoUnifilar: async (proyectoId, elementoId) => {
@@ -2799,17 +2845,21 @@ export const useStore = create(
       },
 
       enviarElementoDirectoServidor: async (empresaId, elemento) => {
-        if (!elemento) return;
-        const { token } = get();
-        if (!token || token === 'mock-offline-token' || !navigator.onLine) {
+        if (!elemento) return { ok: false, error: 'Elemento no proporcionado' };
+        const { token, showToast } = get();
+
+        // REGLA ESTRICTA DE CONECTIVIDAD:
+        // Si NO hay conexión a internet (navigator.onLine === false), retener en cola local
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
           get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento);
-          return;
+          showToast?.('Sin conexión a internet: Elemento retenido localmente en la tablet para sincronizar al volver en línea.', 'info');
+          return { ok: false, offline: true, error: 'Dispositivo sin conexión a internet' };
         }
 
         try {
           const res = await enviarElementoDirectoAlServidor(empresaId, elemento, token);
           if (res.ok) {
-            // Confirmación exitosa en base de datos PostgreSQL: asegurar que NO quede en cola
+            // Confirmación exitosa en base de datos PostgreSQL: asegurar que NO quede en cola local
             get().removeFromQueue(elemento.id);
             const record = res.data;
             if (record) {
@@ -2852,14 +2902,21 @@ export const useStore = create(
                 })
               }));
             }
-            console.log(`[ONLINE REALTIME] ✅ Elemento ${elemento.id} persistido inmediatamente en BD.`);
+            console.log(`[ONLINE REALTIME] ✅ Elemento ${elemento.id} persistido exitosamente en PostgreSQL en tiempo real.`);
+            return { ok: true, data: record };
           } else {
-            console.warn(`[ONLINE REALTIME] ⚠️ Servidor devolvió estado no exitoso (${res.error || res.status}). Reteniendo en cola offline:`, elemento.id);
-            get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento, res.error);
+            // PROHIBIDO ENVIAR A LA COLA OFFLINE POR ERRORES DE TIMEOUT O 500 CUANDO HAY INTERNET
+            const errorMsg = res.error || `HTTP ${res.status || 'ERROR'}`;
+            console.warn(`[ONLINE REALTIME] ⚠️ Servidor devolvió error (${errorMsg}) para elemento ${elemento.id}. NO se retiene en cola offline porque el dispositivo está en línea.`);
+            showToast?.(`Error en el servidor al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Por favor reintenta.`, 'error');
+            return { ok: false, error: errorMsg };
           }
         } catch (err) {
-          console.warn(`[ONLINE REALTIME] ⚠️ Error de red al sincronizar en tiempo real (${err.message}). Reteniendo en cola offline:`, elemento.id);
-          get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento, err.message);
+          // PROHIBIDO ENVIAR A LA COLA OFFLINE POR TIMEOUT O ERROR DE RED CUANDO HAY INTERNET
+          const errorMsg = err.message || 'Error de comunicación con el servidor';
+          console.warn(`[ONLINE REALTIME] ⚠️ Error de red o timeout (${errorMsg}) para elemento ${elemento.id}. NO se retiene en cola offline porque el dispositivo está en línea.`);
+          showToast?.(`Error de conexión o tiempo de espera al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Por favor reintenta.`, 'error');
+          return { ok: false, error: errorMsg };
         }
       },
 

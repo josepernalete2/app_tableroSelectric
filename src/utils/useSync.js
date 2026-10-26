@@ -138,7 +138,7 @@ export function useSync() {
   }, [isOnline, safeSyncQueue.length]);
 
   /**
-   * Envía un micro-lote de mutaciones (máximo 3 elementos) a /api/sync/batch con timeout estricto de 10s.
+   * Envía un micro-lote de mutaciones (máximo 3 elementos) a /api/sync/batch con timeout robusto de 25s.
    * Utiliza readResponsePayload para evitar errores de stream duplicado.
    */
   const sincronizarLote = async (mutaciones, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) => {
@@ -183,7 +183,7 @@ export function useSync() {
   };
 
   /**
-   * Sincronización individual de elemento multipart con fotografía vía FormData y timeout de 15s.
+   * Sincronización individual de elemento multipart con fotografía vía FormData y timeout de 30s.
    * Sanitiza la foto antes de enviarla para evitar errores fatales en Prisma.
    */
   const sincronizarElementoUnifilar = async (empresaId, elemento, queueItemId) => {
