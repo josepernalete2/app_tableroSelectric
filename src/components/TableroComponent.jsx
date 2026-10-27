@@ -45,7 +45,11 @@ import {
   TABLERO_CANTIDAD_POLOS_ESTANDAR,
   TABLERO_USO_ELECTRICO,
   TABLERO_MONTAJE_OPCIONES,
-  TABLERO_HERMETICIDAD_NEMA_IP
+  TABLERO_HERMETICIDAD_NEMA_IP,
+  BARRAS_AMP_OPTIONS,
+  VOLTAJE_FN_OPTIONS,
+  VOLTAJE_LL_OPTIONS,
+  ACOMETIDA_OPTIONS
 } from '../utils/constants';
 import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 
@@ -420,19 +424,54 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
   const updateCircuit = (circuitId, field, value) => {
     if (effectivelyReadOnly) return;
     const newData = { ...tableroData };
-    newData.circuits = normalizedCircuits.map(c => {
-      if (c.id === circuitId) {
+    let currentCircuits = [...(tableroData.circuits || [])];
+
+    const existingIndex = currentCircuits.findIndex(c => c.id === circuitId);
+
+    if (existingIndex >= 0) {
+      const c = currentCircuits[existingIndex];
+      let updated;
+      if (field.startsWith('breaker.')) {
+        const [_, subField] = field.split('.');
+        updated = {
+          ...c,
+          breaker: { ...(c.breaker || {}), [subField]: value }
+        };
+      } else {
+        updated = { ...c, [field]: value };
+      }
+      currentCircuits[existingIndex] = updated;
+    } else {
+      const base = normalizedCircuits.find(c => c.id === circuitId);
+      if (base) {
+        const persistentId = circuitId.startsWith('auto_')
+          ? `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`
+          : circuitId;
+        let updated = {
+          ...base,
+          id: persistentId
+        };
         if (field.startsWith('breaker.')) {
           const [_, subField] = field.split('.');
-          return {
-            ...c,
-            breaker: { ...c.breaker, [subField]: value }
-          };
+          updated.breaker = { ...(base.breaker || {}), [subField]: value };
+        } else {
+          updated[field] = value;
         }
-        return { ...c, [field]: value };
+        currentCircuits.push(updated);
       }
-      return c;
+    }
+
+    newData.circuits = currentCircuits.filter(c => {
+      const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
+      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
+      const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
+      const hasFicha = c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts);
+      const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
+      const hasPoleLabel = !!(c.codigoPolo || c.polo_label || c.poloLabel);
+      const hasDestino = !!(c.elementoDestinoId || c.vinculadoId || c.tipoElementoDestino || c.tipoDestino);
+      return hasBreaker || hasConductor || hasEquipo || c.fotografia || hasDestino || hasFicha || isMultiPole || hasPoleLabel;
     });
+
     onUpdateTablero(newData);
   };
 
@@ -536,26 +575,34 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
     let currentCircuits = [...(tableroData.circuits || [])];
 
+    const targetPoles = Array.isArray(updatedFields?.poles) && updatedFields.poles.length > 0
+      ? updatedFields.poles
+      : [updatedFields?.posicionPolo || 1];
+
     if (updatedFields === null) {
       // Remove from custom circuits list so it falls back to auto-generated RESERVA
-      currentCircuits = currentCircuits.filter(c => c.id !== circuitId && !c.id.startsWith('auto_'));
+      currentCircuits = currentCircuits.filter(c => c.id !== circuitId && !c.poles?.some(p => targetPoles.includes(p)));
     } else {
-      const isAuto = circuitId.startsWith('auto_');
-      if (isAuto) {
-        // Create new custom circuit
-        currentCircuits.push({
-          id: `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-          ...updatedFields
-        });
-      } else {
-        // Update existing custom circuit
-        currentCircuits = currentCircuits.map(c => {
-          if (c.id === circuitId) {
-            return { ...c, ...updatedFields };
-          }
-          return c;
-        });
-      }
+      // Find existing circuit if any (by circuitId or by pole overlap)
+      const existingCircuit = currentCircuits.find(c => c.id === circuitId || c.poles?.some(p => targetPoles.includes(p)));
+      
+      // Filter out any previous entries for this circuitId or overlapping poles
+      const otherCircuits = currentCircuits.filter(c => c.id !== circuitId && !c.poles?.some(p => targetPoles.includes(p)));
+
+      const persistentId = (existingCircuit && !existingCircuit.id.startsWith('auto_'))
+        ? existingCircuit.id
+        : (!circuitId.startsWith('auto_') ? circuitId : `circ_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`);
+
+      const savedCircuit = {
+        ...(existingCircuit || {}),
+        ...updatedFields,
+        id: persistentId,
+        poles: targetPoles,
+        numPolos: targetPoles.length,
+        posicionPolo: Math.min(...targetPoles)
+      };
+
+      currentCircuits = [...otherCircuits, savedCircuit];
     }
 
     // Filter out completely empty default circuits to prevent database bloat
@@ -1126,7 +1173,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={barrasPrincipales.ia}
                 onSave={(val) => updateField('barrasPrincipales.ia', val)}
-                placeholder="0"
+                category="barras_amperios"
+                options={BARRAS_AMP_OPTIONS}
+                placeholder="Ej: 225A"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
@@ -1137,6 +1186,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={breakerPrincipal.marca}
                 onSave={(val) => updateField('breakerPrincipal.marca', val)}
                 type="select"
+                category="marcas_breaker"
                 options={MARCA_OPTIONS}
                 placeholder="Marca"
                 disabled={effectivelyReadOnly}
@@ -1149,6 +1199,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={breakerPrincipal.tipo}
                 onSave={(val) => updateField('breakerPrincipal.tipo', val)}
                 type="select"
+                category="tipos_breaker"
                 options={TIPO_OPTIONS}
                 placeholder="Tipo"
                 disabled={effectivelyReadOnly}
@@ -1161,6 +1212,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={breakerPrincipal.amp}
                 onSave={(val) => updateField('breakerPrincipal.amp', val)}
                 type="select"
+                category="breaker_amperios"
                 options={AMP_OPTIONS}
                 placeholder="Ej: 225A"
                 disabled={effectivelyReadOnly}
@@ -1172,7 +1224,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={voltaje.va}
                 onSave={(val) => updateField('voltaje.va', val)}
-                placeholder="Ej: 120V"
+                category="voltajes_fn"
+                options={VOLTAJE_FN_OPTIONS}
+                placeholder="Ej: 120 V"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
@@ -1182,7 +1236,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={voltaje.vab}
                 onSave={(val) => updateField('voltaje.vab', val)}
-                placeholder="Ej: 208V"
+                category="voltajes_ll"
+                options={VOLTAJE_LL_OPTIONS}
+                placeholder="Ej: 208 V"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono font-semibold text-amber-600 dark:text-amber-400"
               />
@@ -1192,6 +1248,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={acometida}
                 onSave={(val) => updateField('acometida', val)}
+                category="calibres_acometida"
+                options={ACOMETIDA_OPTIONS}
                 placeholder="3X 3/0..."
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono text-blue-600 dark:text-blue-400"
@@ -1206,7 +1264,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={barrasPrincipales.ib}
                 onSave={(val) => updateField('barrasPrincipales.ib', val)}
-                placeholder="0"
+                category="barras_amperios"
+                options={BARRAS_AMP_OPTIONS}
+                placeholder="Ej: 225A"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
@@ -1216,7 +1276,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={voltaje.vb}
                 onSave={(val) => updateField('voltaje.vb', val)}
-                placeholder="Ej: 120V"
+                category="voltajes_fn"
+                options={VOLTAJE_FN_OPTIONS}
+                placeholder="Ej: 120 V"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
@@ -1226,7 +1288,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={voltaje.vbc}
                 onSave={(val) => updateField('voltaje.vbc', val)}
-                placeholder="Ej: 208V"
+                category="voltajes_ll"
+                options={VOLTAJE_LL_OPTIONS}
+                placeholder="Ej: 208 V"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono font-semibold text-amber-600 dark:text-amber-400"
               />
@@ -1240,7 +1304,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={barrasPrincipales.ic}
                 onSave={(val) => updateField('barrasPrincipales.ic', val)}
-                placeholder="0"
+                category="barras_amperios"
+                options={BARRAS_AMP_OPTIONS}
+                placeholder="Ej: 225A"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
@@ -1250,7 +1316,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={voltaje.vc}
                 onSave={(val) => updateField('voltaje.vc', val)}
-                placeholder="Ej: 120V"
+                category="voltajes_fn"
+                options={VOLTAJE_FN_OPTIONS}
+                placeholder="Ej: 120 V"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono"
               />
@@ -1260,7 +1328,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <EditableCell
                 value={voltaje.vca}
                 onSave={(val) => updateField('voltaje.vca', val)}
-                placeholder="Ej: 208V"
+                category="voltajes_ll"
+                options={VOLTAJE_LL_OPTIONS}
+                placeholder="Ej: 208 V"
                 disabled={effectivelyReadOnly}
                 className="text-center font-mono font-semibold text-amber-600 dark:text-amber-400"
               />
@@ -1427,16 +1497,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       {/* Equipo que Alimenta */}
                       <td
                         rowSpan={rowSpanLeft}
-                        className="border-r border-slate-800 dark:border-slate-700 p-1.5 font-medium align-middle cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors relative group/cell"
-                        onClick={() => {
-                          if (effectivelyReadOnly) {
-                            showToast('Planilla bloqueada en Modo Seguro. Pulsa "Editar Planilla" para desbloquear.', 'info');
-                            return;
-                          }
-                          setEditingCircuit(cLeft);
-                        }}
+                        className="border-r border-slate-800 dark:border-slate-700 p-1.5 font-medium align-middle relative group/cell"
                       >
-                        <div className="flex flex-col justify-center min-h-[2rem] pr-6">
+                        <div className="flex flex-col justify-center min-h-[2rem] pr-14">
                           <div className="flex items-center justify-between">
                             {renderCircuitEquipo(cLeft.equipo, cLeft.vinculadoId, cLeft.elementoDestinoId, cLeft.tipoDestino, cLeft.tipoElementoDestino)}
                             {cLeft.fotografia && (
@@ -1449,36 +1512,53 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         </div>
 
                         {/* Botones de acción contextual sobre el circuito */}
-                        {!effectivelyReadOnly && (
-                          <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-                            {rowSpanLeft > 1 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  splitCircuit(cLeft.id);
-                                }}
-                                title="Separar Polos"
-                                className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                            )}
-                            {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCircuit(cLeft.id);
-                                }}
-                                title={`Eliminar circuito ${cLeft.equipo || ''} (Polos [${cLeft.poles?.join(', ')}])`}
-                                className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (effectivelyReadOnly) {
+                                showToast('Planilla bloqueada en Modo Seguro. Pulsa "Editar Planilla" para desbloquear.', 'info');
+                                return;
+                              }
+                              setEditingCircuit(cLeft);
+                            }}
+                            title={`Editar circuito (Polos [${cLeft.poles?.join(', ')}])`}
+                            className="p-1 opacity-85 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                          {!effectivelyReadOnly && (
+                            <>
+                              {rowSpanLeft > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    splitCircuit(cLeft.id);
+                                  }}
+                                  title="Separar Polos"
+                                  className="p-1 opacity-80 hover:opacity-100 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 rounded cursor-pointer shadow-sm transition-all"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                              )}
+                              {cLeft && (!cLeft.id.startsWith('auto_') || (cLeft.equipo && cLeft.equipo !== 'RESERVA') || (cLeft.breaker && (cLeft.breaker.amp || cLeft.breaker.marca))) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCircuit(cLeft.id);
+                                  }}
+                                  title={`Eliminar circuito ${cLeft.equipo || ''} (Polos [${cLeft.poles?.join(', ')}])`}
+                                  className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
 
                       {/* Breaker Marca */}
@@ -1490,6 +1570,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cLeft.breaker.marca}
                           onSave={(val) => updateCircuit(cLeft.id, 'breaker.marca', val)}
                           type="select"
+                          category="marcas_breaker"
                           options={MARCA_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1506,6 +1587,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cLeft.breaker.tipo}
                           onSave={(val) => updateCircuit(cLeft.id, 'breaker.tipo', val)}
                           type="select"
+                          category="tipos_breaker"
                           options={TIPO_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1522,6 +1604,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cLeft.breaker.amp}
                           onSave={(val) => updateCircuit(cLeft.id, 'breaker.amp', val)}
                           type="select"
+                          category="breaker_amperios"
                           options={AMP_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1538,6 +1621,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cLeft.conductor}
                           onSave={(val) => updateCircuit(cLeft.id, 'conductor', val)}
                           type="select"
+                          category="conductores"
                           options={COND_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1637,6 +1721,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cRight.conductor}
                           onSave={(val) => updateCircuit(cRight.id, 'conductor', val)}
                           type="select"
+                          category="conductores"
                           options={COND_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1653,6 +1738,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cRight.breaker.amp}
                           onSave={(val) => updateCircuit(cRight.id, 'breaker.amp', val)}
                           type="select"
+                          category="breaker_amperios"
                           options={AMP_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1669,6 +1755,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cRight.breaker.tipo}
                           onSave={(val) => updateCircuit(cRight.id, 'breaker.tipo', val)}
                           type="select"
+                          category="tipos_breaker"
                           options={TIPO_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1685,6 +1772,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                           value={cRight.breaker.marca}
                           onSave={(val) => updateCircuit(cRight.id, 'breaker.marca', val)}
                           type="select"
+                          category="marcas_breaker"
                           options={MARCA_OPTIONS}
                           placeholder=""
                           disabled={effectivelyReadOnly}
@@ -1695,16 +1783,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                       {/* Equipo que Alimenta */}
                       <td
                         rowSpan={rowSpanRight}
-                        className="p-1.5 font-medium align-middle cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors relative group/cell"
-                        onClick={() => {
-                          if (effectivelyReadOnly) {
-                            showToast('Planilla bloqueada en Modo Seguro. Pulsa "Editar Planilla" para desbloquear.', 'info');
-                            return;
-                          }
-                          setEditingCircuit(cRight);
-                        }}
+                        className="p-1.5 font-medium align-middle relative group/cell"
                       >
-                        <div className="flex flex-col justify-center min-h-[2rem] pr-6">
+                        <div className="flex flex-col justify-center min-h-[2rem] pr-14">
                           <div className="flex items-center justify-between">
                             {renderCircuitEquipo(cRight.equipo, cRight.vinculadoId, cRight.elementoDestinoId, cRight.tipoDestino, cRight.tipoElementoDestino)}
                             {cRight.fotografia && (
@@ -1717,36 +1798,53 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                         </div>
 
                         {/* Botones de acción contextual sobre el circuito derecho */}
-                        {!effectivelyReadOnly && (
-                          <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-                            {rowSpanRight > 1 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  splitCircuit(cRight.id);
-                                }}
-                                title="Separar Polos"
-                                className="p-1 opacity-80 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </button>
-                            )}
-                            {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteCircuit(cRight.id);
-                                }}
-                                title={`Eliminar circuito ${cRight.equipo || ''} (Polos [${cRight.poles?.join(', ')}])`}
-                                className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <div className="no-print absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (effectivelyReadOnly) {
+                                showToast('Planilla bloqueada en Modo Seguro. Pulsa "Editar Planilla" para desbloquear.', 'info');
+                                return;
+                              }
+                              setEditingCircuit(cRight);
+                            }}
+                            title={`Editar circuito (Polos [${cRight.poles?.join(', ')}])`}
+                            className="p-1 opacity-85 hover:opacity-100 bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-slate-950 border border-amber-500/40 rounded cursor-pointer shadow-sm transition-all"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                          {!effectivelyReadOnly && (
+                            <>
+                              {rowSpanRight > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    splitCircuit(cRight.id);
+                                  }}
+                                  title="Separar Polos"
+                                  className="p-1 opacity-80 hover:opacity-100 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 rounded cursor-pointer shadow-sm transition-all"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                              )}
+                              {cRight && (!cRight.id.startsWith('auto_') || (cRight.equipo && cRight.equipo !== 'RESERVA') || (cRight.breaker && (cRight.breaker.amp || cRight.breaker.marca))) && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteCircuit(cRight.id);
+                                  }}
+                                  title={`Eliminar circuito ${cRight.equipo || ''} (Polos [${cRight.poles?.join(', ')}])`}
+                                  className="p-1 opacity-80 hover:opacity-100 bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 rounded cursor-pointer shadow-sm transition-all"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </>
                   )}
@@ -1771,6 +1869,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={neutroLlegada.calibre}
                 onSave={(val) => updateField('neutroLlegada.calibre', val)}
                 type="select"
+                category="conductores"
                 options={COND_OPTIONS}
                 placeholder="Calibre"
                 disabled={effectivelyReadOnly}
@@ -1800,6 +1899,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={puestaTierra.calibre}
                 onSave={(val) => updateField('puestaTierra.calibre', val)}
                 type="select"
+                category="conductores"
                 options={COND_OPTIONS}
                 placeholder="Calibre"
                 disabled={effectivelyReadOnly}
@@ -1851,7 +1951,11 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               >
                 <div>
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{item.nombre}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Polo Circuito: {item.circuitoId.replace('auto_', '')}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                    Polo Circuito: {Array.isArray(item.polos) && item.polos.length > 0
+                      ? item.polos.join(', ')
+                      : (circuits.find(c => c.id === item.circuitoId)?.poles?.join(', ') || String(item.circuitoId || '').replace('auto_', '').replace(/^circ_\d+_\w+$/, 'Salida Configurada'))}
+                  </p>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
                   PENDIENTE

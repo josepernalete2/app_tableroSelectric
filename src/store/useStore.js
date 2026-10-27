@@ -50,61 +50,115 @@ export const LEGACY_PREFIX_MAP = {
 
 export const getElementCode = (item, defaultType = 'TABLERO') => {
   if (!item) return '';
+
+  const getPfx = (t) => {
+    const raw = (t || defaultType || 'TABLERO').toUpperCase();
+    return (PREFIX_MAP[raw] || LEGACY_PREFIX_MAP[raw] || 'TAB').toUpperCase();
+  };
+
+  const isComplexHash = (str) => {
+    if (!str || typeof str !== 'string') return true;
+    const s = str.trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return true;
+    if (/^[0-9a-f]{20,}$/i.test(s)) return true;
+    if (/^(circ|auto|temp|tablero|elem|nodo|subestacion|punto)_[a-z0-9_]+$/i.test(s)) return true;
+    if (s.length > 12 && !/^[a-zA-Z]{2,6}-\d{1,4}$/.test(s)) return true;
+    return false;
+  };
+
   if (typeof item === 'string') {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item);
-    if (!isUuid && /^[a-z0-9_]+-\d+$/i.test(item)) {
-      const match = item.match(/^([a-zA-Z0-9_]+)-(\d+)$/);
+    const trimmed = item.trim();
+    if (!isComplexHash(trimmed)) {
+      const match = trimmed.match(/^([a-zA-Z0-9_]{1,6})[-_](\d+)$/);
       if (match) {
         const rawPfx = match[1].toUpperCase();
         const num = match[2];
-        const canon = PREFIX_MAP[item] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx.toLowerCase();
+        const canon = (PREFIX_MAP[rawPfx] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx).toUpperCase();
         return `${canon}-${num}`;
       }
-      return item.toLowerCase();
+      if (trimmed.length <= 8 && /^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+        return trimmed.toUpperCase();
+      }
     }
-    if (isUuid) {
-      const prefix = PREFIX_MAP[defaultType] || 'tab';
-      return `${prefix}-1`;
-    }
-    return item;
+    const matchEndNum = trimmed.match(/(\d+)(?!.*\d)/);
+    const num = matchEndNum ? Math.min(parseInt(matchEndNum[1], 10), 99) : 1;
+    return `${getPfx(defaultType)}-${num}`;
   }
 
+  // 1. Verificar si tiene código explícito corto
   if (item.codigo && typeof item.codigo === 'string' && item.codigo.trim()) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.codigo);
-    if (!isUuid) return item.codigo.toLowerCase().trim();
-  }
-  if (item.datosTecnicos?.codigo && typeof item.datosTecnicos.codigo === 'string' && item.datosTecnicos.codigo.trim()) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.datosTecnicos.codigo);
-    if (!isUuid) return item.datosTecnicos.codigo.toLowerCase().trim();
-  }
-
-  // Si item.id tiene formato de código corto (no UUID)
-  if (item.id && typeof item.id === 'string') {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
-    if (!isUuid) {
-      const match = item.id.match(/^([a-zA-Z0-9_]+)-(\d+)$/);
+    const trimmed = item.codigo.trim();
+    if (!isComplexHash(trimmed)) {
+      const match = trimmed.match(/^([a-zA-Z0-9_]{1,6})[-_](\d+)$/);
       if (match) {
         const rawPfx = match[1].toUpperCase();
         const num = match[2];
-        const canonicalPrefix = PREFIX_MAP[item.tipoElemento] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx.toLowerCase();
-        return `${canonicalPrefix}-${num}`;
+        const canon = (PREFIX_MAP[rawPfx] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx).toUpperCase();
+        return `${canon}-${num}`;
       }
-      return item.id.toLowerCase();
+      return trimmed.toUpperCase();
     }
   }
 
-  const tipo = item.tipoElemento || defaultType;
-  const prefix = PREFIX_MAP[tipo] || 'tab';
-  return `${prefix}-1`;
+  // 2. Verificar datosTecnicos.codigo
+  if (item.datosTecnicos?.codigo && typeof item.datosTecnicos.codigo === 'string' && item.datosTecnicos.codigo.trim()) {
+    const trimmed = item.datosTecnicos.codigo.trim();
+    if (!isComplexHash(trimmed)) {
+      const match = trimmed.match(/^([a-zA-Z0-9_]{1,6})[-_](\d+)$/);
+      if (match) {
+        const rawPfx = match[1].toUpperCase();
+        const num = match[2];
+        const canon = (PREFIX_MAP[rawPfx] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx).toUpperCase();
+        return `${canon}-${num}`;
+      }
+      return trimmed.toUpperCase();
+    }
+  }
+
+  // 3. Si item.id tiene formato de código corto (ej. tab-1 o TAB-01)
+  if (item.id && typeof item.id === 'string') {
+    const trimmed = item.id.trim();
+    if (!isComplexHash(trimmed)) {
+      const match = trimmed.match(/^([a-zA-Z0-9_]{1,6})[-_](\d+)$/);
+      if (match) {
+        const rawPfx = match[1].toUpperCase();
+        const num = match[2];
+        const canonicalPrefix = (PREFIX_MAP[item.tipoElemento] || LEGACY_PREFIX_MAP[rawPfx] || rawPfx).toUpperCase();
+        return `${canonicalPrefix}-${num}`;
+      }
+      if (trimmed.length <= 8 && /^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+        return trimmed.toUpperCase();
+      }
+    }
+  }
+
+  // 4. Intentar extraer número consecutivo desde el nombre (ej. "Tablero 2" -> TAB-2)
+  const pfx = getPfx(item.tipoElemento || defaultType);
+  if (item.nombre && typeof item.nombre === 'string') {
+    const nameMatch = item.nombre.trim().match(/(\d+)\s*$/);
+    if (nameMatch) {
+      return `${pfx}-${nameMatch[1]}`;
+    }
+  }
+
+  if (item.consecutivo || item.orden) {
+    return `${pfx}-${item.consecutivo || item.orden}`;
+  }
+
+  // Fallback seguro a formato corto en mayúsculas (ej. TAB-1)
+  return `${pfx}-1`;
 };
 
 export const cleanElementName = (nombre, id, codigo) => {
   if (!nombre) return codigo || (typeof id === 'string' ? getElementCode(id) : '') || '';
   let cleanName = nombre.trim();
   
-  // Limpiar cualquier UUID embebido en el nombre
+  // Limpiar cualquier UUID o hash largo embebido en el nombre
   cleanName = cleanName.replace(/\s*\((?:ID:\s*)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi, '').trim();
   cleanName = cleanName.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*[-:]\s*/gi, '').trim();
+  cleanName = cleanName.replace(/\s*\((?:ID:\s*)?[a-z0-9_-]{14,}\)/gi, '').trim();
+  cleanName = cleanName.replace(/\s*\((?:ID:\s*)?(?:circ|auto|temp|tablero|nodo)_[a-z0-9_]+\)/gi, '').trim();
+  cleanName = cleanName.replace(/^(?:circ|auto|temp|tablero|nodo)_[a-z0-9_]+\s*[-:]\s*/gi, '').trim();
 
   const toClean = [id, codigo].filter(Boolean);
   toClean.forEach(cleanId => {
@@ -244,7 +298,7 @@ export const getNextElementId = (tipoElemento, proyectoIdOrScope, stateParam) =>
   }
 
   const nextNum = Math.max(maxNum, countInScope) + 1;
-  return `${prefix}-${nextNum}`;
+  return `${(prefix || 'TAB').toUpperCase()}-${nextNum}`;
 };
 
 // Almacenamiento personalizado para localforage (soporta objetos Blob binarios)

@@ -21,6 +21,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
+import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
 import DualPhotoUploader from './DualPhotoUploader';
@@ -259,19 +260,42 @@ export const ModalEdicionCircuito = ({
   // Cargar datos al abrir modal
   useEffect(() => {
     if (circuitData && isOpen) {
-      setBreakerAmp(circuitData.breaker?.amp || '');
-      setBreakerMarca(circuitData.breaker?.marca || '');
-      setBreakerTipo(circuitData.breaker?.tipo || '');
-      setConductor(circuitData.conductor || '');
-      setNombreArtefacto(circuitData.tipoDestino === 'ARTEFACTO' ? circuitData.equipo : '');
-      setDescArtefacto(circuitData.ficha?.descripcion || '');
-      setPotenciaWatts(circuitData.ficha?.potenciaWatts || '');
-      setRotulo(circuitData.equipo || circuitData.nombre || '');
+      const isAutoPole = !circuitData.id || String(circuitData.id).startsWith('auto_');
+      const rawEquipo = circuitData.equipo || circuitData.nombre || '';
+      const isReservaPlaceholder = !rawEquipo || rawEquipo === 'RESERVA' || rawEquipo === 'DISPONIBLE';
+
+      // 1. Breaker & Conductor: Precargar siempre datos existentes
+      const initialAmp = circuitData.breaker?.amp || '';
+      const initialMarca = circuitData.breaker?.marca || '';
+      const initialTipo = circuitData.breaker?.tipo || '';
+      const initialConductor = circuitData.conductor || '';
+
+      setBreakerAmp(initialAmp);
+      setBreakerMarca(initialMarca);
+      setBreakerTipo(initialTipo);
+      setConductor(initialConductor);
+
+      // 2. Nombre del Artefacto y Rótulo: Precargar siempre nombre guardado
+      const cleanName = isReservaPlaceholder ? '' : cleanElementName(rawEquipo, circuitData.elementoDestinoId || circuitData.vinculadoId);
+      setNombreArtefacto(cleanName);
+      setRotulo(isReservaPlaceholder ? '' : rawEquipo);
+
+      // 3. Ficha Técnica / Observaciones / Potencia: Precargar siempre
+      const initialDesc = circuitData.ficha?.descripcion || circuitData.observaciones || circuitData.descripcion || '';
+      const initialPotencia = circuitData.ficha?.potenciaWatts || circuitData.potenciaWatts || circuitData.watts || '';
+      setDescArtefacto(initialDesc);
+      setPotenciaWatts(initialPotencia);
+
+      // 4. Fotografía de evidencia
+      const initialFoto = circuitData.fotografia || circuitData.foto || null;
+      setFotoUrl(initialFoto);
+
       setSelectedLinks([]);
       setIsCreatingNewProvisional(false);
-      setProvisionalCustomName('');
+      setProvisionalCustomName(circuitData.nombreProvisional || '');
+      setProvisionalTipo(circuitData.tipoElementoProvisional || 'TABLERO');
 
-      // Pre-inicializar elemento vinculado previamente
+      // 5. Destino vinculado previamente
       const prevDestinoId = circuitData.elementoDestinoId || circuitData.vinculadoId || '';
       const prevTipoDestino = circuitData.tipoElementoDestino || circuitData.tipoDestino || '';
       setSelectedElementoDestinoId(prevDestinoId);
@@ -293,12 +317,25 @@ export const ModalEdicionCircuito = ({
         setSearchQuery('');
       }
 
-      // Cargar parámetros físicos de polos para tableros
+      // 6. Parámetros físicos de polos para tableros
       const initPolo = circuitData.posicionPolo !== undefined ? circuitData.posicionPolo : (circuitData.poles && circuitData.poles.length > 0 ? circuitData.poles[0] : 1);
       const initNum = circuitData.numPolos !== undefined ? circuitData.numPolos : (circuitData.poles && circuitData.poles.length > 0 ? circuitData.poles.length : 1);
       setPosicionPolo(parseInt(initPolo, 10) || 1);
       setNumPolos(parseInt(initNum, 10) || 1);
-      setEstado(circuitData.estado || (circuitData.equipo === 'RESERVA' ? 'RESERVA' : 'ACTIVO'));
+
+      // 7. Estado: ACTIVO por defecto para nuevos o circuitos con datos/carga.
+      // Solo RESERVA si el usuario lo guardó expresamente o el equipo es RESERVA sin breaker ni conductor.
+      let initialEstado = 'ACTIVO';
+      if (circuitData.estado === 'RESERVA') {
+        initialEstado = 'RESERVA';
+      } else if (circuitData.estado === 'ACTIVO') {
+        initialEstado = 'ACTIVO';
+      } else if (rawEquipo === 'RESERVA' && !initialAmp && !initialConductor && !initialMarca) {
+        initialEstado = 'RESERVA';
+      } else {
+        initialEstado = 'ACTIVO';
+      }
+      setEstado(initialEstado);
 
       // Cargar otros campos técnicos si existen
       const dt = circuitData.detallesTecnicos || {};
@@ -322,26 +359,55 @@ export const ModalEdicionCircuito = ({
 
       // Selección de paso según tipoOrigen y modo
       if (isTablero) {
-        if (circuitData.tipoDestino === 'ARTEFACTO') {
-          setAlimentaOtro(false);
-          setStep('FORMULARIO_ARTEFACTO');
-        } else if (circuitData.tipoDestino === 'SUB_TABLERO' || circuitData.tipoDestino === 'ELEMENTO') {
-          setAlimentaOtro(true);
-          setStep('VINCULAR_EXISTENTE');
-          const found = elementosCreados.find(el => el.nombre === circuitData.equipo || el.id === circuitData.vinculadoId);
-          if (found) {
-            setSelectedLink(found);
-            setSearchQuery(found.nombre);
-          } else {
-            setSearchQuery(circuitData.equipo || '');
-          }
-        } else if (circuitData.tipoDestino === 'SUB_TABLERO_PENDIENTE' || circuitData.tipoDestino === 'ELEMENTO_PENDIENTE') {
+        // Determinación inteligente: ¿el circuito ya tiene información/datos guardados o está en blanco/nuevo (reserva sin configurar)?
+        const hasBreakerData = Boolean(initialAmp || initialMarca || initialTipo);
+        const hasConductorData = Boolean(
+          initialConductor && 
+          initialConductor !== 'N/A' && 
+          initialConductor !== 'N/D' && 
+          initialConductor !== '-- Sin especificar --' &&
+          initialConductor !== 'null' &&
+          initialConductor !== 'undefined'
+        );
+        const hasCustomName = !isReservaPlaceholder && Boolean(cleanName && cleanName.trim());
+        const hasFichaData = Boolean(
+          (initialDesc && initialDesc.trim()) || 
+          (initialPotencia && String(initialPotencia).trim() !== '' && String(initialPotencia) !== '0')
+        );
+        const hasFotoData = Boolean(initialFoto && String(initialFoto).trim() !== '');
+        const hasDestinoVinculado = Boolean(
+          prevDestinoId || 
+          (circuitData.tipoDestino && circuitData.tipoDestino !== 'RESERVA' && circuitData.tipoDestino !== 'DISPONIBLE')
+        );
+        const isMultiPole = Boolean(
+          (Array.isArray(circuitData.poles) && circuitData.poles.length > 1) || 
+          (circuitData.numPolos && circuitData.numPolos > 1)
+        );
+        const isExplicitActive = Boolean(!isAutoPole && circuitData.estado === 'ACTIVO');
+
+        const hasSavedData = hasBreakerData || 
+                             hasConductorData || 
+                             hasCustomName || 
+                             hasFichaData || 
+                             hasFotoData || 
+                             hasDestinoVinculado || 
+                             isMultiPole || 
+                             isExplicitActive;
+
+        if (circuitData.tipoDestino === 'SUB_TABLERO_PENDIENTE' || circuitData.tipoDestino === 'ELEMENTO_PENDIENTE') {
           setAlimentaOtro(true);
           setIsCreatingNewProvisional(true);
           setProvisionalCustomName(circuitData.nombreProvisional || circuitData.equipo || '');
           setProvisionalTipo(circuitData.tipoElementoProvisional || 'TABLERO');
           setStep('ALIMENTAR_POR_CREAR');
+        } else if (hasSavedData) {
+          // El circuito ya tiene información o datos guardados (artefacto, cargas/conductores/breaker/etc.):
+          // Se abre DIRECTAMENTE mostrando toda la información ya registrada de golpe
+          setAlimentaOtro(false);
+          setStep('FORMULARIO_ARTEFACTO');
         } else {
+          // El circuito está en blanco o es nuevo (ej. estado Reserva sin configurar):
+          // Mostrar la vista inicial de decisión ("¿El circuito alimenta a un equipo o artefacto final?")
           setAlimentaOtro(false);
           setStep('PREGUNTA_ES_ARTEFACTO');
         }
@@ -366,7 +432,7 @@ export const ModalEdicionCircuito = ({
         }
       }
     }
-  }, [circuitData?.id, isOpen]);
+  }, [circuitData, isOpen]);
 
   // Validación de colisión y ocupación de polos en tiempo real
   const validation = useMemo(() => {
@@ -512,12 +578,18 @@ export const ModalEdicionCircuito = ({
         ...extra
       }
     });
+
+    if (breakerAmp) saveCustomOption('breaker_amperios', breakerAmp, AMP_OPTIONS);
+    if (breakerMarca) saveCustomOption('marcas_breaker', breakerMarca, MARCA_OPTIONS);
+    if (breakerTipo) saveCustomOption('tipos_breaker', breakerTipo, TIPO_OPTIONS);
+    if (conductor) saveCustomOption('conductores', conductor, COND_OPTIONS);
+
     onClose();
   };
 
   const handleSaveArtefacto = () => {
-    if (!nombreArtefacto.trim()) return customAlert('Por favor, ingresa el nombre del artefacto.');
-    handleSaveEquipment(nombreArtefacto, 'ARTEFACTO');
+    const finalName = (nombreArtefacto || '').trim() || (estado === 'RESERVA' ? 'RESERVA' : 'CARGA DIRECTA');
+    handleSaveEquipment(finalName, estado === 'RESERVA' ? 'RESERVA' : 'ARTEFACTO');
   };
 
   const handleSaveVinculo = (linkElement) => {
@@ -555,10 +627,10 @@ export const ModalEdicionCircuito = ({
   };
 
   const handleSaveRotuloFoto = () => {
-    const isReserve = estado === 'RESERVA' || (!rotulo || rotulo.trim().toUpperCase() === 'RESERVA');
+    const isReserve = estado === 'RESERVA';
     const finalRotulo = rotulo?.trim() || (isReserve ? 'RESERVA' : 'CARGA DIRECTA');
     handleSaveEquipment(finalRotulo, isReserve ? 'RESERVA' : 'CARGA_DIRECTA', {
-      estado: isReserve ? 'RESERVA' : estado,
+      estado: isReserve ? 'RESERVA' : 'ACTIVO',
       vinculadoId: null,
       elementoDestinoId: null,
       tipoElementoDestino: null,
@@ -619,7 +691,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🏢 Tableros y Subtableros Existentes">
             {groupedElements.TABLERO.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'TABLERO')})
               </option>
             ))}
           </optgroup>
@@ -628,7 +700,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🔄 Transferencias (ATS/MTS) Existentes">
             {groupedElements.TRANSFER.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'TRANSFER')})
               </option>
             ))}
           </optgroup>
@@ -637,7 +709,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="⚙️ Centros de Control de Motores (CCM) Existentes">
             {groupedElements.CCM.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'CCM')})
               </option>
             ))}
           </optgroup>
@@ -646,7 +718,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="⚡ Generadores y Plantas Existentes">
             {groupedElements.GENERADOR.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'GENERADOR')})
               </option>
             ))}
           </optgroup>
@@ -655,7 +727,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🏛️ Subestaciones Eléctricas Existentes">
             {groupedElements.SUBESTACION.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'SUBESTACION')})
               </option>
             ))}
           </optgroup>
@@ -664,7 +736,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🔌 Transformadores Existentes">
             {groupedElements.TRANSFORMADOR.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'TRANSFORMADOR')})
               </option>
             ))}
           </optgroup>
@@ -673,7 +745,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="📊 Equipos / Puntos de Medida Existentes">
             {groupedElements.PUNTO_MEDICION.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'PUNTO_MEDICION')})
               </option>
             ))}
           </optgroup>
@@ -682,7 +754,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="📦 Otros Elementos Registrados">
             {groupedElements.OTROS.map(el => (
               <option key={el.id} value={el.id}>
-                {el.nombre} ({el.id})
+                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, el.tipo || 'TABLERO')})
               </option>
             ))}
           </optgroup>
@@ -763,7 +835,12 @@ export const ModalEdicionCircuito = ({
                 {getHeaderTitle()}
               </h3>
               <p className="text-xs text-slate-400">
-                Identificador: <span className="font-mono font-bold text-amber-400">{circuitData.nombre || circuitData.id || 'Salida'}</span>
+                Identificador: <span className="font-mono font-bold text-amber-400">
+                  {isTablero
+                    ? (circuitData.codigoPolo || circuitData.polo_label || (Array.isArray(circuitData.poles) && circuitData.poles.length > 1 ? `Polos [${circuitData.poles.join(', ')}]` : `Polo ${circuitData.posicionPolo || circuitData.poles?.[0] || String(circuitData.id || '').replace('auto_', '') || 1}`))
+                    : getElementCode(circuitData, tipoOrigen)
+                  }
+                </span>
               </p>
             </div>
           </div>
@@ -956,7 +1033,10 @@ export const ModalEdicionCircuito = ({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => setStep('FORMULARIO_ARTEFACTO')}
+                  onClick={() => {
+                    setEstado('ACTIVO');
+                    setStep('FORMULARIO_ARTEFACTO');
+                  }}
                   className="flex flex-col items-center justify-center p-6 h-36 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all text-center group cursor-pointer active:scale-95"
                 >
                   <span className="text-3xl mb-2">🔌</span>
@@ -1022,7 +1102,7 @@ export const ModalEdicionCircuito = ({
                       className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     />
                     <datalist id="list-amp-options">
-                      {AMP_OPTIONS.map(opt => <option key={opt} value={opt} />)}
+                      {getCustomOptions('breaker_amperios', AMP_OPTIONS).map(opt => <option key={opt} value={opt} />)}
                     </datalist>
                   </div>
                   <div>
@@ -1038,7 +1118,7 @@ export const ModalEdicionCircuito = ({
                       className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     />
                     <datalist id="list-cond-options">
-                      {COND_OPTIONS.map(opt => <option key={opt} value={opt} />)}
+                      {getCustomOptions('conductores', COND_OPTIONS).map(opt => <option key={opt} value={opt} />)}
                     </datalist>
                   </div>
                 </div>
@@ -1057,7 +1137,7 @@ export const ModalEdicionCircuito = ({
                       className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     />
                     <datalist id="list-marca-options">
-                      {MARCA_OPTIONS.map(opt => <option key={opt} value={opt} />)}
+                      {getCustomOptions('marcas_breaker', MARCA_OPTIONS).map(opt => <option key={opt} value={opt} />)}
                     </datalist>
                   </div>
                   <div>
@@ -1073,7 +1153,7 @@ export const ModalEdicionCircuito = ({
                       className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     />
                     <datalist id="list-tipo-options">
-                      {TIPO_OPTIONS.map(opt => <option key={opt} value={opt} />)}
+                      {getCustomOptions('tipos_breaker', TIPO_OPTIONS).map(opt => <option key={opt} value={opt} />)}
                     </datalist>
                   </div>
                 </div>
@@ -1101,6 +1181,18 @@ export const ModalEdicionCircuito = ({
                     placeholder="Detalles sobre marca, modelo del equipo, ubicación exacta..."
                     rows={2}
                     className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none resize-none"
+                  />
+                </div>
+
+                {/* Fotografía de Evidencia del Circuito / Breaker */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Fotografía de Evidencia (Breaker o Carga)
+                  </label>
+                  <DualPhotoUploader
+                    value={fotoUrl}
+                    onChange={(val) => setFotoUrl(val)}
+                    label="Fotografía del Breaker o Carga"
                   />
                 </div>
               </div>
@@ -2044,11 +2136,57 @@ export const ModalEdicionCircuito = ({
                 )}
               </div>
 
-              <div className="pt-4 border-t border-slate-800 flex justify-end">
+              {/* Parámetros Eléctricos del Alimentador */}
+              <div className="bg-slate-950/80 p-3.5 border border-slate-800 rounded-xl space-y-3 font-sans">
+                <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" /> Parámetros del Alimentador
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Breaker (Amperaje)</label>
+                    <input
+                      type="text"
+                      list="list-amp-options-vincular"
+                      value={breakerAmp}
+                      onChange={(e) => setBreakerAmp(e.target.value)}
+                      placeholder="Ej. 60, 100, 225..."
+                      className="w-full px-2.5 py-1.5 text-xs border border-slate-700 rounded-lg bg-slate-900 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <datalist id="list-amp-options-vincular">
+                      {getCustomOptions('breaker_amperios', AMP_OPTIONS).map(opt => <option key={opt} value={opt} />)}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">Conductor (Calibre)</label>
+                    <input
+                      type="text"
+                      list="list-cond-options-vincular"
+                      value={conductor}
+                      onChange={(e) => setConductor(e.target.value)}
+                      placeholder="Ej. 4 AWG, 2/0..."
+                      className="w-full px-2.5 py-1.5 text-xs border border-slate-700 rounded-lg bg-slate-900 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <datalist id="list-cond-options-vincular">
+                      {getCustomOptions('conductores', COND_OPTIONS).map(opt => <option key={opt} value={opt} />)}
+                    </datalist>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 flex justify-between gap-3">
+                {isTablero && (
+                  <button
+                    type="button"
+                    onClick={() => setStep('FORMULARIO_ARTEFACTO')}
+                    className="px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                  >
+                    Volver a Ficha
+                  </button>
+                )}
                 <button
                   onClick={() => handleSaveVinculo()}
                   disabled={(isMultiSelect ? selectedLinks.length === 0 : (!selectedLink && !selectedElementoDestinoId)) || (isTablero && !validation.isValid)}
-                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors w-full cursor-pointer"
+                  className="px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-colors flex-1 cursor-pointer"
                 >
                   {isTablero && !validation.isValid
                     ? 'Resolver Conflicto de Polos para Guardar'
@@ -2221,7 +2359,8 @@ export const ModalEdicionCircuito = ({
                   onChange={(e) => setConductor(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none cursor-pointer"
                 >
-                  {COND_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  <option value="">-- Sin especificar --</option>
+                  {getCustomOptions('conductores', COND_OPTIONS).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
 

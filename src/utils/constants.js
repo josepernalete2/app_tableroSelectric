@@ -405,6 +405,11 @@ export const VALID_TIPOS_ELEMENTO = [
   'SISTEMA_ATERRAMIENTO', 'TANQUE_COMBUSTIBLE', 'OTRO'
 ];
 
+export const BARRAS_AMP_OPTIONS = ['100A', '125A', '150A', '200A', '225A', '250A', '300A', '400A', '500A', '600A', '800A', '1000A', '1200A', '1600A', '2000A', '2500A'];
+export const VOLTAJE_FN_OPTIONS = ['120 V', '127 V', '220 V', '277 V', '110 V', '115 V'];
+export const VOLTAJE_LL_OPTIONS = ['208 V', '220 V', '240 V', '380 V', '440 V', '460 V', '480 V'];
+export const ACOMETIDA_OPTIONS = ['3X #2 + 1X #4', '3X 1/0 + 1X #2', '3X 2/0 + 1X 1/0', '3X 3/0 + 1X 2/0', '3X 4/0 + 1X 3/0', '3X 250 MCM + 1X 1/0', '3X 350 MCM + 1X 2/0', '3X 500 MCM + 1X 4/0', '2X (3X 500 MCM)'];
+
 export function cleanTipoElemento(tipo) {
   if (!tipo || typeof tipo !== 'string') return 'TABLERO';
   const clean = tipo.trim().toUpperCase();
