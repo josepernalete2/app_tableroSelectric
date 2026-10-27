@@ -374,6 +374,8 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
               value={alimentadoPor}
               disabled={readOnly}
               multiple={false}
+              tipoElementoActual="CCM"
+              direccionRelacion="ALIMENTADO_POR"
               onChange={(val, selectedObj) => {
                 const upperVal = val ? val.toUpperCase() : '';
                 updateField('alimentadoPor', upperVal);
@@ -392,6 +394,8 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
               value={alimentaA}
               disabled={readOnly}
               multiple={true}
+              tipoElementoActual="CCM"
+              direccionRelacion="ALIMENTA_A"
               onChange={(formatted, primaryObj, ids) => {
                 const upperFormatted = formatted ? formatted.toUpperCase() : '';
                 updateField('alimentaA', upperFormatted);

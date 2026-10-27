@@ -286,6 +286,8 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
               value={alimentadoPor}
               disabled={readOnly}
               multiple={false}
+              tipoElementoActual="SUBESTACION"
+              direccionRelacion="ALIMENTADO_POR"
               onChange={(val, selectedObj) => {
                 const upperVal = val ? val.toUpperCase() : '';
                 updateField('alimentadoPor', upperVal);
@@ -304,6 +306,8 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
               value={alimentaA}
               disabled={readOnly}
               multiple={true}
+              tipoElementoActual="SUBESTACION"
+              direccionRelacion="ALIMENTA_A"
               onChange={(formatted, primaryObj, ids) => {
                 const upperFormatted = formatted ? formatted.toUpperCase() : '';
                 updateField('alimentaA', upperFormatted);

@@ -356,6 +356,8 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
               value={alimentadoPor}
               disabled={readOnly}
               multiple={false}
+              tipoElementoActual="PUNTO_MEDICION"
+              direccionRelacion="ALIMENTADO_POR"
               onChange={(val, selectedObj) => {
                 const upperVal = val ? val.toUpperCase() : '';
                 updateField('alimentadoPor', upperVal);
@@ -374,6 +376,8 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
               value={alimentaA}
               disabled={readOnly}
               multiple={true}
+              tipoElementoActual="PUNTO_MEDICION"
+              direccionRelacion="ALIMENTA_A"
               onChange={(formatted, primaryObj, ids) => {
                 const upperFormatted = formatted ? formatted.toUpperCase() : '';
                 updateField('alimentaA', upperFormatted);

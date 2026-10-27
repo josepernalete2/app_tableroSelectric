@@ -897,6 +897,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={alimentadoPor}
                 disabled={effectivelyReadOnly}
                 multiple={false}
+                tipoElementoActual="TABLERO"
+                direccionRelacion="ALIMENTADO_POR"
                 onChange={(val, selectedObj) => {
                   const upperVal = val ? val.toUpperCase() : '';
                   updateField('alimentadoPor', upperVal);
@@ -927,6 +929,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                 value={alimentaA}
                 disabled={effectivelyReadOnly}
                 multiple={true}
+                tipoElementoActual="TABLERO"
+                direccionRelacion="ALIMENTA_A"
                 onChange={(formatted, primaryObj, ids) => {
                   const upperFormatted = formatted ? formatted.toUpperCase() : '';
                   updateField('alimentaA', upperFormatted);

@@ -537,6 +537,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   tableroActualId={elementoData?.id}
                   elementosList={allFeeders}
                   value={alimentadoPor}
+                  tipoElementoActual={tipoElemento}
+                  direccionRelacion="ALIMENTADO_POR"
                   onChange={(val) => setAlimentadoPor(val)}
                   label=""
                   placeholder="Seleccionar o escribir procedencia..."
@@ -560,6 +562,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   elementosList={allFeeders}
                   value={alimentaA}
                   multiple={true}
+                  tipoElementoActual={tipoElemento}
+                  direccionRelacion="ALIMENTA_A"
                   onChange={(formatted, primaryObj, ids) => {
                     setAlimentaA(formatted ? formatted.toUpperCase() : '');
                     setAlimentaAIds(Array.isArray(ids) ? ids : []);
@@ -765,6 +769,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       elementosList={allFeeders}
                       value={alimentaA}
                       multiple={true}
+                      tipoElementoActual="GENERADOR"
+                      direccionRelacion="ALIMENTA_A"
                       onChange={(formatted, primaryObj, ids) => {
                         setAlimentaA(formatted ? formatted.toUpperCase() : '');
                         setAlimentaAIds(Array.isArray(ids) ? ids : []);
@@ -1270,6 +1276,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   elementosList={allFeeders}
                   value={alimentadoPor}
                   multiple={false}
+                  tipoElementoActual="TRANSFORMADOR"
+                  direccionRelacion="ALIMENTADO_POR"
                   onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
                   label=""
                   placeholder="Seleccionar Subestación, Red Eléctrica o Acometida..."
@@ -1293,6 +1301,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   elementosList={allFeeders}
                   value={alimentaA}
                   multiple={true}
+                  tipoElementoActual="TRANSFORMADOR"
+                  direccionRelacion="ALIMENTA_A"
                   onChange={(formatted, primaryObj, ids) => {
                     setAlimentaA(formatted ? formatted.toUpperCase() : '');
                     setAlimentaAIds(Array.isArray(ids) ? ids : []);

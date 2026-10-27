@@ -2241,31 +2241,32 @@ export const ProyectoView = () => {
 
                     {/* Jerarquía Bidireccional Topológica */}
                     {/* 1. ALIMENTADO POR (Origen aguas arriba / Padre) */}
-                    {tipoElemento === 'GENERADOR' ? (
-                      <div className="p-3 bg-slate-950/80 border border-amber-500/30 rounded-xl space-y-1">
-                        <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
-                          <Zap className="w-3.5 h-3.5 text-amber-400" /> Fuente de Energía Primaria Independiente
-                        </span>
-                        <p className="text-[10.5px] text-slate-400 leading-relaxed">
-                          Los generadores operan como fuentes autónomas de energía primaria. No poseen alimentación externa aguas arriba.
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <SelectorAlimentadorJerarquico
-                          proyectoId={proyectoId}
-                          tableroActualId={editingElemento?.id}
-                          elementosList={todosElementosJerarquia}
-                          value={alimentadoPor}
-                          onChange={(val, primaryObj, ids) => {
-                            setAlimentadoPor(val ? val.toUpperCase() : '');
-                            setAlimentadoPorId(primaryObj?.id || ids?.[0] || null);
-                          }}
-                          label="ALIMENTADO POR (Origen Aguas Arriba / Padre)"
-                          placeholder="Seleccionar Subestación, Trafo, Generador, CCM o Tablero..."
-                        />
-                      </div>
-                    )}
+                    <div>
+                      {tipoElemento === 'GENERADOR' && (
+                        <div className="mb-2 p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-1">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
+                            <Zap className="w-3.5 h-3.5 text-emerald-400" /> Fuente de Energía Primaria Autónoma
+                          </span>
+                          <p className="text-[10.5px] text-slate-300 leading-relaxed">
+                            Los generadores operan como fuentes primarias autónomas independientes de la red externa o en sincronismo.
+                          </p>
+                        </div>
+                      )}
+                      <SelectorAlimentadorJerarquico
+                        proyectoId={proyectoId}
+                        tableroActualId={editingElemento?.id}
+                        elementosList={todosElementosJerarquia}
+                        value={alimentadoPor}
+                        onChange={(val, primaryObj, ids) => {
+                          setAlimentadoPor(val ? val.toUpperCase() : '');
+                          setAlimentadoPorId(primaryObj?.id || ids?.[0] || null);
+                        }}
+                        tipoElementoActual={tipoElemento}
+                        direccionRelacion="ALIMENTADO_POR"
+                        label="ALIMENTADO POR (Origen Aguas Arriba / Padre)"
+                        placeholder={tipoElemento === 'GENERADOR' ? 'Seleccionar Generación Autónoma o Cogeneración...' : 'Seleccionar Subestación, Trafo, Generador, CCM o Tablero...'}
+                      />
+                    </div>
 
                     {/* 2. ALIMENTA A (Destinos aguas abajo / Salidas) */}
                     <div>
@@ -2279,6 +2280,8 @@ export const ProyectoView = () => {
                           setAlimentaA(val ? val.toUpperCase() : '');
                           setAlimentaAIds(Array.isArray(ids) ? ids : []);
                         }}
+                        tipoElementoActual={tipoElemento}
+                        direccionRelacion="ALIMENTA_A"
                         label="ALIMENTA A (Destinos Aguas Abajo / Salidas)"
                         placeholder="Enlazar uno o varios equipos secundarios que reciben energía..."
                       />

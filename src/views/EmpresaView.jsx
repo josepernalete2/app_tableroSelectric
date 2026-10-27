@@ -42,7 +42,8 @@ import {
   Edit3,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  Loader2
 } from 'lucide-react';
 
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
@@ -211,6 +212,7 @@ export const EmpresaView = () => {
   const [proyectoRespNombre, setProyectoRespNombre] = useState('');
   const [proyectoRespTelefono, setProyectoRespTelefono] = useState('');
   const [proyectoRespEmail, setProyectoRespEmail] = useState('');
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
 
   // Form states de Elementos (Fuera de Proyectos)
   const [tipoElemento, setTipoElemento] = useState('TABLERO');
@@ -375,43 +377,51 @@ export const EmpresaView = () => {
   };
 
   const handleCreateProyecto = async (e) => {
-    e.preventDefault();
-    if (!isProyectoValid) return;
+    if (e && e.preventDefault) e.preventDefault();
+    if (!isProyectoValid || isCreatingProject) return;
 
-    const finalDireccion = proyectoDireccion.trim() || company?.direccion || company?.ubicacion || '';
-    const finalRespNombre = proyectoRespNombre.trim() || company?.contactoPrincipal || company?.responsable || '';
-    const finalRespTelefono = proyectoRespTelefono.trim() || company?.telefono || '';
-    const finalRespEmail = proyectoRespEmail.trim() || company?.email || '';
+    setIsCreatingProject(true);
+    try {
+      const finalDireccion = proyectoDireccion.trim() || company?.direccion || company?.ubicacion || '';
+      const finalRespNombre = proyectoRespNombre.trim() || company?.contactoPrincipal || company?.responsable || '';
+      const finalRespTelefono = proyectoRespTelefono.trim() || company?.telefono || '';
+      const finalRespEmail = proyectoRespEmail.trim() || company?.email || '';
 
-    const result = await addProyecto(
-      proyectoNombre.trim(),
-      proyectoDescripcion.trim(),
-      companyId,
-      {
-        direccion: finalDireccion,
-        ubicacion: finalDireccion,
-        responsableNombre: finalRespNombre,
-        responsableTelefono: finalRespTelefono,
-        responsableEmail: finalRespEmail,
-        responsable: {
-          nombre: finalRespNombre,
-          telefono: finalRespTelefono,
-          email: finalRespEmail
+      const result = await addProyecto(
+        proyectoNombre.trim(),
+        proyectoDescripcion.trim(),
+        companyId,
+        {
+          direccion: finalDireccion,
+          ubicacion: finalDireccion,
+          responsableNombre: finalRespNombre,
+          responsableTelefono: finalRespTelefono,
+          responsableEmail: finalRespEmail,
+          responsable: {
+            nombre: finalRespNombre,
+            telefono: finalRespTelefono,
+            email: finalRespEmail
+          }
         }
-      }
-    );
+      );
 
-    if (result.success) {
-      setProyectoNombre('');
-      setProyectoDescripcion('');
-      setProyectoDireccion('');
-      setProyectoRespNombre('');
-      setProyectoRespTelefono('');
-      setProyectoRespEmail('');
-      setShowModal(false);
-      showToast?.('Proyecto registrado exitosamente', 'success');
-    } else {
-      customAlert(result.error);
+      if (result && result.success) {
+        setProyectoNombre('');
+        setProyectoDescripcion('');
+        setProyectoDireccion('');
+        setProyectoRespNombre('');
+        setProyectoRespTelefono('');
+        setProyectoRespEmail('');
+        setShowModal(false);
+        showToast?.('Proyecto registrado exitosamente', 'success');
+      } else {
+        customAlert(result?.error || 'No se pudo crear el proyecto.');
+      }
+    } catch (err) {
+      console.error('Error al registrar proyecto:', err);
+      customAlert(`Error inesperado al crear proyecto: ${err.message || 'Error del sistema'}`);
+    } finally {
+      setIsCreatingProject(false);
     }
   };
 
@@ -1349,10 +1359,18 @@ export const EmpresaView = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!isProyectoValid}
+                  onClick={handleCreateProyecto}
+                  disabled={!isProyectoValid || isCreatingProject}
                   className="bg-amber-500 text-slate-950 font-semibold hover:bg-amber-400 active:scale-98 transition-all px-4 py-2.5 rounded-lg flex flex-row items-center justify-center gap-2 h-10 whitespace-nowrap text-xs cursor-pointer shadow-md disabled:opacity-40"
                 >
-                  Crear Proyecto
+                  {isCreatingProject ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Creando Proyecto...</span>
+                    </>
+                  ) : (
+                    'Crear Proyecto'
+                  )}
                 </button>
               </div>
 
@@ -1469,6 +1487,9 @@ export const EmpresaView = () => {
                 <SelectorAlimentadorJerarquico
                   value={alimentadoPor}
                   multiple={false}
+                  companyId={companyId}
+                  tipoElementoActual={tipoElemento}
+                  direccionRelacion="ALIMENTADO_POR"
                   onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
                   elementosList={companyElementos}
                   label="Alimentado Por (Procedencia Jerárquica)"
@@ -1481,6 +1502,9 @@ export const EmpresaView = () => {
                 <SelectorAlimentadorJerarquico
                   value={alimentaA}
                   multiple={true}
+                  companyId={companyId}
+                  tipoElementoActual={tipoElemento}
+                  direccionRelacion="ALIMENTA_A"
                   onChange={(formatted, primaryObj, ids) => {
                     setAlimentaA(formatted ? formatted.toUpperCase() : '');
                     setAlimentaAIds(Array.isArray(ids) ? ids : []);

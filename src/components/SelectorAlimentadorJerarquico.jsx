@@ -98,6 +98,33 @@ export const FUENTES_RED_PRIMARIAS = [
 ];
 
 /**
+ * Fuentes Autónomas Primarias (Generadores y Sistemas de Emergencia/Cogeneración)
+ * Los generadores operan como fuentes primarias autónomas independientes de la red externa
+ */
+export const FUENTES_AUTONOMAS_PRIMARIAS = [
+  {
+    id: 'ORIGEN_AUTONOMO_MECANICO',
+    nombre: 'GENERACIÓN AUTÓNOMA (SISTEMA PRIMARIO / MOTOGENERADOR)',
+    codigo: 'GEN-AUTO',
+    tipoElemento: 'GENERADOR',
+    categoria: 'Fuentes Autónomas / Generación',
+    nivelTension: 'Energía Mecánica / Combustible',
+    ubicacion: 'Caseta de Generación / Sala de Máquinas',
+    detalles: 'Fuente primaria independiente de la red eléctrica'
+  },
+  {
+    id: 'ORIGEN_COGENERACION_PARALELO',
+    nombre: 'SISTEMA DE COGENERACIÓN / SINCRONISMO EN PARALELO',
+    codigo: 'COGEN-PAR',
+    tipoElemento: 'GENERADOR',
+    categoria: 'Fuentes Autónomas / Generación',
+    nivelTension: 'Media / Baja Tensión Sincronizada',
+    ubicacion: 'Subestación / Sala de Sincronismo',
+    detalles: 'Operación en paralelo con la red o fuentes alternas'
+  }
+];
+
+/**
  * Retorna el icono temático y colores según el tipo de elemento eléctrico
  */
 const getIconAndColor = (tipo) => {
@@ -126,9 +153,10 @@ const getIconAndColor = (tipo) => {
 };
 
 /**
- * Extrae de forma automática y reactiva todos los elementos guardados en Zustand store
+ * Extrae EXCLUSIVAMENTE los elementos pertenecientes al proyecto actual.
+ * Aplica aislamiento estricto multitenant: nunca mezcla elementos de otras empresas o proyectos.
  */
-const extractStoreProjectElements = (projId, currentId) => {
+const extractStoreProjectElements = (projId, currentId, companyId = null) => {
   const storeState = useStore.getState();
   const companies = storeState.companies || [];
   const list = [];
@@ -136,7 +164,7 @@ const extractStoreProjectElements = (projId, currentId) => {
 
   const addIfNew = (item, defaultTipo = 'TABLERO') => {
     if (!item || !item.id) return;
-    if (currentId && (String(item.id) === String(currentId) || String(item.nombre) === String(currentId))) return;
+    if (currentId && (String(item.id) === String(currentId) || String(item.nombre || '').toUpperCase() === String(currentId).toUpperCase())) return;
     const key = String(item.id);
     if (seenIds.has(key)) return;
     seenIds.add(key);
@@ -153,45 +181,51 @@ const extractStoreProjectElements = (projId, currentId) => {
     });
   };
 
-  for (const c of companies) {
-    if (Array.isArray(c.elementosUnifilares)) {
-      c.elementosUnifilares.forEach(e => {
-        if (!projId || String(e.proyectoId) === String(projId)) addIfNew(e, e.tipoElemento || 'TABLERO');
-      });
-    }
-    if (Array.isArray(c.proyectos)) {
-      for (const p of c.proyectos) {
-        if (!projId || String(p.id) === String(projId)) {
-          (p.elementosUnifilares || []).forEach(e => addIfNew(e, e.tipoElemento || 'TABLERO'));
-          (p.tableros || []).forEach(t => addIfNew(t, 'TABLERO'));
-          (p.subestaciones || p.inspeccionesSubestacion || []).forEach(s => addIfNew(s, 'SUBESTACION'));
-          (p.puntosMedicion || []).forEach(pm => addIfNew(pm, 'PUNTO_MEDICION'));
-          (p.ccmList || p.ccms || []).forEach(ccm => addIfNew(ccm, 'CCM'));
+  // 1. MODO PROYECTO ESTRICTO: Si hay proyectoId, extraer únicamente de dicho proyecto
+  if (projId) {
+    for (const c of companies) {
+      if (Array.isArray(c.proyectos)) {
+        const targetProj = c.proyectos.find(p => String(p.id) === String(projId));
+        if (targetProj) {
+          (targetProj.elementosUnifilares || []).forEach(e => addIfNew(e, e.tipoElemento || 'TABLERO'));
+          (targetProj.tableros || []).forEach(t => addIfNew(t, 'TABLERO'));
+          (targetProj.subestaciones || targetProj.inspeccionesSubestacion || []).forEach(s => addIfNew(s, 'SUBESTACION'));
+          (targetProj.puntosMedicion || []).forEach(pm => addIfNew(pm, 'PUNTO_MEDICION'));
+          (targetProj.ccmList || targetProj.ccms || []).forEach(ccm => addIfNew(ccm, 'CCM'));
+          break; // Proyecto único encontrado; detener búsqueda para impedir fugas
         }
       }
     }
-  }
 
-  // Complementar con elementos guardados en estado local/offline
-  (storeState.elementosLocales || []).forEach(e => {
-    if (!projId || String(e.proyectoId) === String(projId)) addIfNew(e, e.tipoElemento || 'TABLERO');
-  });
-  (storeState.subestacionesLocales || []).forEach(s => {
-    if (!projId || String(s.proyectoId) === String(projId)) addIfNew(s, 'SUBESTACION');
-  });
-  (storeState.puntosMedicionLocales || []).forEach(pm => {
-    if (!projId || String(pm.proyectoId) === String(projId)) addIfNew(pm, 'PUNTO_MEDICION');
-  });
-  (storeState.ccmLocales || []).forEach(ccm => {
-    if (!projId || String(ccm.proyectoId) === String(projId)) addIfNew(ccm, 'CCM');
-  });
+    // Elementos guardados en cola u offline que coincidan estrictamente con este proyectoId
+    (storeState.elementosLocales || []).forEach(e => {
+      if (String(e.proyectoId) === String(projId)) addIfNew(e, e.tipoElemento || 'TABLERO');
+    });
+    (storeState.subestacionesLocales || []).forEach(s => {
+      if (String(s.proyectoId) === String(projId)) addIfNew(s, 'SUBESTACION');
+    });
+    (storeState.puntosMedicionLocales || []).forEach(pm => {
+      if (String(pm.proyectoId) === String(projId)) addIfNew(pm, 'PUNTO_MEDICION');
+    });
+    (storeState.ccmLocales || []).forEach(ccm => {
+      if (String(ccm.proyectoId) === String(projId)) addIfNew(ccm, 'CCM');
+    });
+  } else if (companyId) {
+    // 2. MODO EMPRESA ESTRICTO: Si no hay proyectoId pero sí companyId (equipos en la raíz de empresa)
+    const targetComp = companies.find(c => String(c.id) === String(companyId));
+    if (targetComp && Array.isArray(targetComp.elementosUnifilares)) {
+      targetComp.elementosUnifilares.forEach(e => {
+        if (!e.proyectoId) addIfNew(e, e.tipoElemento || 'TABLERO');
+      });
+    }
+  }
 
   return list;
 };
 
 /**
  * Componente Selector Dinámico e Inteligente de Jerarquía Eléctrica
- * Consulta todos los equipos registrados en el proyecto y previene entradas manuales por texto
+ * Consulta exclusivamente los equipos registrados en el proyecto actual y previene entradas manuales por texto
  */
 export default function SelectorAlimentadorJerarquico({
   value = '',
@@ -205,7 +239,10 @@ export default function SelectorAlimentadorJerarquico({
   className = '',
   allowQuickCreate = false,
   onQuickCreate = null,
-  multiple = false
+  multiple = false,
+  tipoElementoActual = 'TABLERO',
+  direccionRelacion = null,
+  companyId = null
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -214,6 +251,14 @@ export default function SelectorAlimentadorJerarquico({
 
   const containerRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // Determinar dirección de relación (ALIMENTADO_POR o ALIMENTA_A)
+  const isAlimentaA = useMemo(() => {
+    if (direccionRelacion) return direccionRelacion === 'ALIMENTA_A';
+    const l = String(label || '').toLowerCase();
+    const p = String(placeholder || '').toLowerCase();
+    return l.includes('alimenta a') || l.includes('salidas') || l.includes('suministrados') || p.includes('secundari');
+  }, [direccionRelacion, label, placeholder]);
 
   // Normalizador de categorías para agrupación visual
   const resolverCategoria = (tipo) => {
@@ -264,7 +309,7 @@ export default function SelectorAlimentadorJerarquico({
     return tech.tension || tech.voltaje || 'N/D';
   };
 
-  // Cargar datos remotos desde el backend si hay proyectoId
+  // Cargar datos remotos desde el backend si hay proyectoId (filtrado exclusivo de proyecto)
   useEffect(() => {
     if (!proyectoId) return;
 
@@ -287,7 +332,7 @@ export default function SelectorAlimentadorJerarquico({
           }
         }
       } catch (err) {
-        // En offline continuamos con el store local
+        // En offline continuamos con el store local del proyecto
         console.warn('Operando en modo local/offline para selector jerárquico:', err.message);
       } finally {
         if (isMounted) setLoading(false);
@@ -298,17 +343,24 @@ export default function SelectorAlimentadorJerarquico({
     return () => { isMounted = false; };
   }, [proyectoId, tableroActualId]);
 
-  // Consolidar lista completa: Props externos + Store Local + Backend + Fuentes de Red Primarias
+  // Consolidar lista completa aplicando reglas topológicas por tipo de elemento:
+  // - GENERADORES: fuentes primarias autónomas en ALIMENTADO_POR
+  // - SUBESTACIONES / TRAFOS: Red CORPOELEC en ALIMENTADO_POR
+  // - ALIMENTA_A: nunca inyecta a la Red Pública Nacional; solo enlaza cargas del proyecto
   const items = useMemo(() => {
     const combinedMap = new Map();
 
-    // 1. Incorporar siempre las Fuentes de Red y Acometidas de CORPOELEC/SEN
-    FUENTES_RED_PRIMARIAS.forEach(f => {
-      combinedMap.set(f.id, f);
-    });
+    // 1. Fuentes Primarias de Entrada (Solo para relación aguas arriba / ALIMENTADO_POR)
+    if (!isAlimentaA) {
+      if (tipoElementoActual === 'GENERADOR') {
+        FUENTES_AUTONOMAS_PRIMARIAS.forEach(f => combinedMap.set(f.id, f));
+      } else {
+        FUENTES_RED_PRIMARIAS.forEach(f => combinedMap.set(f.id, f));
+      }
+    }
 
-    // 2. Extraer del Zustand store
-    const storeItems = extractStoreProjectElements(proyectoId, tableroActualId);
+    // 2. Extraer del Zustand store filtrando EXCLUSIVAMENTE por el proyecto actual
+    const storeItems = extractStoreProjectElements(proyectoId, tableroActualId, companyId);
     storeItems.forEach(el => {
       combinedMap.set(el.id, {
         id: el.id,
@@ -322,10 +374,20 @@ export default function SelectorAlimentadorJerarquico({
       });
     });
 
-    // 3. Incorporar lista externa si se pasó por props
+    // 3. Incorporar lista externa si se pasó por props (verificando coincidencia de proyectoId)
     if (Array.isArray(elementosList) && elementosList.length > 0) {
       elementosList
-        .filter(el => !tableroActualId || (el.id !== tableroActualId && el.nombre !== tableroActualId))
+        .filter(el => {
+          if (!el || !el.id) return false;
+          if (tableroActualId && (String(el.id) === String(tableroActualId) || String(el.nombre || '').toUpperCase() === String(tableroActualId).toUpperCase())) {
+            return false;
+          }
+          // Aislamiento: si se pasa proyectoId y el elemento posee proyectoId, deben coincidir exactamente
+          if (proyectoId && el.proyectoId && String(el.proyectoId) !== String(proyectoId)) {
+            return false;
+          }
+          return true;
+        })
         .forEach(el => {
           const tipo = el.tipoElemento || el.tipo || 'TABLERO';
           combinedMap.set(el.id, {
@@ -341,10 +403,16 @@ export default function SelectorAlimentadorJerarquico({
         });
     }
 
-    // 4. Incorporar resultados del backend
+    // 4. Incorporar resultados del backend (ya filtrados por proyectoId)
     if (Array.isArray(remoteItems) && remoteItems.length > 0) {
       remoteItems
-        .filter(el => !tableroActualId || (el.id !== tableroActualId && el.nombre !== tableroActualId))
+        .filter(el => {
+          if (!el || !el.id) return false;
+          if (tableroActualId && (String(el.id) === String(tableroActualId) || String(el.nombre || '').toUpperCase() === String(tableroActualId).toUpperCase())) {
+            return false;
+          }
+          return true;
+        })
         .forEach(el => {
           const tipo = el.tipoElemento || 'TABLERO';
           combinedMap.set(el.id, {
@@ -361,7 +429,7 @@ export default function SelectorAlimentadorJerarquico({
     }
 
     return Array.from(combinedMap.values());
-  }, [elementosList, remoteItems, proyectoId, tableroActualId]);
+  }, [elementosList, remoteItems, proyectoId, tableroActualId, companyId, tipoElementoActual, isAlimentaA]);
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
@@ -452,16 +520,54 @@ export default function SelectorAlimentadorJerarquico({
     );
   }, [items, search]);
 
-  // Agrupación visual por categoría
+  // Agrupación visual por categoría con orden de prioridad industrial
   const groupedItems = useMemo(() => {
-    const groups = {};
+    const rawGroups = {};
     filteredItems.forEach((item) => {
       const cat = item.categoria || 'Otros Equipos';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(item);
+      if (!rawGroups[cat]) rawGroups[cat] = [];
+      rawGroups[cat].push(item);
     });
-    return groups;
-  }, [filteredItems]);
+
+    // Orden de prioridad sugerido por tipo de elemento
+    const priorityCategories = (() => {
+      if (tipoElementoActual === 'GENERADOR') {
+        return ['Fuentes Autónomas / Generación', 'Acometidas y Red Eléctrica (SEN)', 'Sistemas de Transferencia (ATS/MTS)'];
+      }
+      if (tipoElementoActual === 'SUBESTACION') {
+        return ['Acometidas y Red Eléctrica (SEN)', 'Subestaciones', 'Transformadores'];
+      }
+      if (tipoElementoActual === 'TRANSFORMADOR') {
+        return ['Subestaciones', 'Puntos de Medición / Suministro', 'Acometidas y Red Eléctrica (SEN)', 'Generadores y Plantas Eléctricas'];
+      }
+      if (isAlimentaA) {
+        return ['Tableros de Distribución', 'Celdas y CCM', 'Sistemas de Transferencia (ATS/MTS)', 'Bancos de Condensadores'];
+      }
+      return [
+        'Transformadores',
+        'Sistemas de Transferencia (ATS/MTS)',
+        'Celdas y CCM',
+        'Tableros de Distribución',
+        'Generadores y Plantas Eléctricas',
+        'Subestaciones',
+        'Acometidas y Red Eléctrica (SEN)',
+        'Puntos de Medición / Suministro'
+      ];
+    })();
+
+    const sortedGroups = {};
+    priorityCategories.forEach(cat => {
+      if (rawGroups[cat]) {
+        sortedGroups[cat] = rawGroups[cat];
+        delete rawGroups[cat];
+      }
+    });
+    Object.keys(rawGroups).forEach(cat => {
+      sortedGroups[cat] = rawGroups[cat];
+    });
+
+    return sortedGroups;
+  }, [filteredItems, tipoElementoActual, isAlimentaA]);
 
   const emitChange = (newSelectedItems) => {
     const formattedString = newSelectedItems.map(i => i.nombre.toUpperCase().trim()).join(', ');

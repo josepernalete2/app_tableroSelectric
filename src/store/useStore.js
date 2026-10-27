@@ -1402,20 +1402,25 @@ export const useStore = create(
       },
 
       addProyecto: async (nombre, descripcion, companyId, extraData = {}) => {
-        const { companies } = get();
+        const { companies, token } = get();
         const company = companies.find((c) => c.id === companyId);
         if (!company) return { success: false, error: 'Empresa no encontrada.' };
 
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+
         const uuidId = crypto.randomUUID();
-        const dir = extraData.direccion || extraData.ubicacion || company.direccion || company.ubicacion || '';
-        const respNom = extraData.responsableNombre || (typeof extraData.responsable === 'object' ? extraData.responsable?.nombre : extraData.responsable) || company.contactoPrincipal || company.responsable || '';
-        const respTel = extraData.responsableTelefono || (typeof extraData.responsable === 'object' ? extraData.responsable?.telefono : '') || company.telefono || '';
-        const respMail = extraData.responsableEmail || (typeof extraData.responsable === 'object' ? extraData.responsable?.email : '') || company.email || '';
+        const dir = (extraData.direccion || extraData.ubicacion || company.direccion || company.ubicacion || '').trim().toUpperCase();
+        const respNom = (extraData.responsableNombre || (typeof extraData.responsable === 'object' ? extraData.responsable?.nombre : extraData.responsable) || company.contactoPrincipal || company.responsable || '').trim().toUpperCase();
+        const respTel = (extraData.responsableTelefono || (typeof extraData.responsable === 'object' ? extraData.responsable?.telefono : '') || company.telefono || '').trim();
+        const respMail = (extraData.responsableEmail || (typeof extraData.responsable === 'object' ? extraData.responsable?.email : '') || company.email || '').trim();
+        const finalNombre = (nombre || '').trim().toUpperCase();
+        const finalDescripcion = (descripcion || '').trim().toUpperCase();
 
         const nuevoProyecto = {
           id: uuidId,
-          nombre,
-          descripcion: descripcion || '',
+          nombre: finalNombre,
+          descripcion: finalDescripcion,
           direccion: dir,
           ubicacion: dir,
           responsableNombre: respNom,
@@ -1429,6 +1434,7 @@ export const useStore = create(
           empresaId: companyId,
           elementosUnifilares: [],
           inspeccionesSubestacion: [],
+          subestaciones: [],
           puntosMedicion: [],
           ccmList: [],
           createdAt: new Date().toISOString()
@@ -1458,7 +1464,6 @@ export const useStore = create(
 
         if (isOnline && hasActiveSession) {
           try {
-            const { token } = get();
             const resp = await fetchWithTimeout(`${API_BASE_URL}/api/proyectos`, {
               method: 'POST',
               headers: {
