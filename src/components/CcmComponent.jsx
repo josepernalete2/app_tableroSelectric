@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
+import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
@@ -38,6 +39,9 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
   const {
     id,
     nombre = '',
+    alimentadoPor = '',
+    alimentaA = '',
+    alimentaAIds = [],
     plantaInstalacion = '',
     areaProceso = '',
     fabricanteMarca = '',
@@ -354,8 +358,47 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
               type="text"
               value={anoFabricacionInstalacion}
               onChange={(e) => updateField('anoFabricacionInstalacion', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 uppercase"
               placeholder="Ej. 2018 / 2019"
+            />
+          </div>
+        </div>
+
+        {/* Topología y Jerarquía Eléctrica del CCM */}
+        <div className="pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* ALIMENTADO POR */}
+          <div>
+            <SelectorAlimentadorJerarquico
+              proyectoId={ccmData?.proyectoId}
+              tableroActualId={ccmData?.id}
+              value={alimentadoPor}
+              disabled={readOnly}
+              multiple={false}
+              onChange={(val, selectedObj) => {
+                const upperVal = val ? val.toUpperCase() : '';
+                updateField('alimentadoPor', upperVal);
+                updateField('alimentadoPorId', selectedObj?.id || null);
+              }}
+              label="ALIMENTADO POR (Alimentador Principal / Trafo / Subestación)"
+              placeholder="Seleccionar Transformador, Subestación o Tablero General..."
+            />
+          </div>
+
+          {/* ALIMENTA A */}
+          <div>
+            <SelectorAlimentadorJerarquico
+              proyectoId={ccmData?.proyectoId}
+              tableroActualId={ccmData?.id}
+              value={alimentaA}
+              disabled={readOnly}
+              multiple={true}
+              onChange={(formatted, primaryObj, ids) => {
+                const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                updateField('alimentaA', upperFormatted);
+                updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
+              }}
+              label="ALIMENTA A (Cargas y Sub-Paneles Suministrados)"
+              placeholder="Seleccionar Motores, Gavetas, Sub-Tableros o Cargas..."
             />
           </div>
         </div>

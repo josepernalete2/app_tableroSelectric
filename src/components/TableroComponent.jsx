@@ -318,6 +318,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     id,
     ubicacion,
     alimentadoPor,
+    alimentaA = tableroData.alimentaA || tableroData.datosTecnicos?.alimentaA || '',
     tipo,
     montaje = (tipo === 'empotrado' || tipo === 'Empotrar / Embutir') 
       ? 'Empotrar / Embutir' 
@@ -892,20 +893,49 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <SelectorAlimentadorJerarquico
                 proyectoId={project?.id}
                 tableroActualId={tableroData?.id}
+                elementosList={todosElementosCreados}
                 value={alimentadoPor}
                 disabled={effectivelyReadOnly}
+                multiple={false}
                 onChange={(val, selectedObj) => {
-                  updateField('alimentadoPor', val);
+                  const upperVal = val ? val.toUpperCase() : '';
+                  updateField('alimentadoPor', upperVal);
                   if (selectedObj?.tipoElemento === 'ALIMENTADOR') {
                     updateField('datosTecnicos.alimentadorId', selectedObj.id);
                     updateTableroAlimentador(project?.id, tableroData.id, selectedObj.id);
                   } else {
-                    updateField('datosTecnicos.alimentadorId', selectedObj?.id !== 'CUSTOM' ? (selectedObj?.id || null) : null);
-                    updateTableroAlimentador(project?.id, tableroData.id, selectedObj?.id !== 'CUSTOM' ? (selectedObj?.id || null) : null);
+                    updateField('datosTecnicos.alimentadorId', selectedObj?.id || null);
+                    updateTableroAlimentador(project?.id, tableroData.id, selectedObj?.id || null);
                   }
                 }}
                 label=""
-                placeholder="Seleccionar Subestación, Transformador, CCM, Tablero o Acometida..."
+                placeholder="Seleccionar Subestación, Transformador, Generador, CCM o Acometida..."
+              />
+            </td>
+          </tr>
+
+          {/* Fila 3b: Alimenta A Jerárquico Dinámico */}
+          <tr className="border-b border-slate-800 dark:border-slate-700">
+            <td className="w-28 p-2.5 bg-slate-50 dark:bg-slate-800/40 font-semibold border-r border-slate-800 dark:border-slate-700 uppercase text-xs">
+              Alimenta A:
+            </td>
+            <td colSpan={7} className="p-2.5 font-medium">
+              <SelectorAlimentadorJerarquico
+                proyectoId={project?.id}
+                tableroActualId={tableroData?.id}
+                elementosList={todosElementosCreados}
+                value={alimentaA}
+                disabled={effectivelyReadOnly}
+                multiple={true}
+                onChange={(formatted, primaryObj, ids) => {
+                  const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                  updateField('alimentaA', upperFormatted);
+                  updateField('alimentaAIds', ids || []);
+                  updateField('datosTecnicos.alimentaA', upperFormatted);
+                  updateField('datosTecnicos.alimentaAIds', ids || []);
+                }}
+                label=""
+                placeholder="Seleccionar uno o varios equipos secundarios que este tablero alimenta..."
               />
             </td>
           </tr>

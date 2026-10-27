@@ -74,6 +74,27 @@ export default function SyncStatusBanner() {
     wasSyncingRef.current = isSyncing;
   }, [isSyncing, pendingCount, isOnline, isStoreSyncing, syncProgress]);
 
+  // Watchdog de seguridad defensiva: evita que el banner quede "pegado" diciendo "Sincronizando..."
+  useEffect(() => {
+    if (!isSyncing && !syncProgress) return;
+
+    const watchdogTimer = setTimeout(() => {
+      console.warn('[SYNC BANNER WATCHDOG] ⚠️ Tiempo límite de sincronización activa alcanzado. Forzando transición limpia a verde.');
+      useStore.getState().setIsSyncing?.(false);
+      useStore.getState().setSyncProgress?.(null);
+      setIsManualSyncing(false);
+      if (pendingCount === 0 && isOnline) {
+        setShowSuccessBanner(true);
+        if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+        successTimeoutRef.current = setTimeout(() => {
+          setShowSuccessBanner(false);
+        }, 4000);
+      }
+    }, 25000);
+
+    return () => clearTimeout(watchdogTimer);
+  }, [isSyncing, syncProgress?.current, pendingCount, isOnline]);
+
   useEffect(() => {
     return () => {
       if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);

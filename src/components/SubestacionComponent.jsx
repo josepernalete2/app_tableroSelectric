@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw, Edit3 } from 'lucide-react';
+import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw, Edit3, Layers } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import DualPhotoUploader from './DualPhotoUploader';
+import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import { TENSIONES_COVENIN_159_MT, TENSIONES_COVENIN_TODAS } from '../utils/constants';
 import TensionNominalInput from './TensionNominalInput';
 
@@ -20,6 +21,9 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
     id,
     nombre = '',
     ubicacion = '',
+    alimentadoPor = '',
+    alimentaA = '',
+    alimentaAIds = [],
     fecha = '',
     hora = '',
     inspector = '',
@@ -268,6 +272,45 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
               value={hora}
               onChange={(e) => updateField('hora', e.target.value)}
               className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300"
+            />
+          </div>
+        </div>
+
+        {/* Topología y Jerarquía Eléctrica de la Subestación */}
+        <div className="pt-4 border-t border-slate-900 grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* ALIMENTADO POR */}
+          <div>
+            <SelectorAlimentadorJerarquico
+              proyectoId={subestacionData?.proyectoId}
+              tableroActualId={subestacionData?.id}
+              value={alimentadoPor}
+              disabled={readOnly}
+              multiple={false}
+              onChange={(val, selectedObj) => {
+                const upperVal = val ? val.toUpperCase() : '';
+                updateField('alimentadoPor', upperVal);
+                updateField('alimentadoPorId', selectedObj?.id || null);
+              }}
+              label="ALIMENTADO POR (Origen / Red Eléctrica Aguas Arriba)"
+              placeholder="Seleccionar Red CORPOELEC, Acometida Primaria o Generador..."
+            />
+          </div>
+
+          {/* ALIMENTA A */}
+          <div>
+            <SelectorAlimentadorJerarquico
+              proyectoId={subestacionData?.proyectoId}
+              tableroActualId={subestacionData?.id}
+              value={alimentaA}
+              disabled={readOnly}
+              multiple={true}
+              onChange={(formatted, primaryObj, ids) => {
+                const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                updateField('alimentaA', upperFormatted);
+                updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
+              }}
+              label="ALIMENTA A (Cargas y Transformadores Suministrados)"
+              placeholder="Seleccionar Transformadores, CCMs o Tableros alimentados..."
             />
           </div>
         </div>

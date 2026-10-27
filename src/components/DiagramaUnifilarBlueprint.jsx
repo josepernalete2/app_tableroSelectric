@@ -37,6 +37,11 @@ export default function DiagramaUnifilarBlueprint({
       if (el.nombre) {
         nameToNodeMap.set(el.nombre.toLowerCase().trim(), el);
       }
+      if (el.codigo) {
+        const cleanCod = String(el.codigo).toLowerCase().trim();
+        nameToNodeMap.set(cleanCod, el);
+        idToNodeMap.set(cleanCod, el);
+      }
       if (el.id) {
         idToNodeMap.set(el.id.toLowerCase().trim(), el);
         nameToNodeMap.set(el.id.toLowerCase().trim(), el);
@@ -88,16 +93,23 @@ export default function DiagramaUnifilarBlueprint({
         resolvedParentId = idToNodeMap.get(el.origenId.toLowerCase().trim()).id;
       }
 
-      // 2. Verificar por campo alimentadoPor (nombre o ID incrustado)
+      // 2. Verificar por campo alimentadoPor (tokens separados por coma, ID incrustado o nombre exacto)
       if (!resolvedParentId && el.alimentadoPor) {
-        const idFromAlim = extractIdFromText(el.alimentadoPor);
-        if (idFromAlim && idToNodeMap.has(idFromAlim)) {
-          resolvedParentId = idToNodeMap.get(idFromAlim).id;
-        } else {
-          const cleanAlim = el.alimentadoPor.toLowerCase().trim();
-          const parentByName = nameToNodeMap.get(cleanAlim);
-          if (parentByName) {
-            resolvedParentId = parentByName.id;
+        const tokens = String(el.alimentadoPor).split(/[,;\n]/).map(t => t.trim()).filter(Boolean);
+        for (const token of tokens) {
+          const idFromAlim = extractIdFromText(token);
+          if (idFromAlim && idToNodeMap.has(idFromAlim)) {
+            resolvedParentId = idToNodeMap.get(idFromAlim).id;
+            break;
+          }
+          const cleanToken = token.toLowerCase();
+          if (idToNodeMap.has(cleanToken)) {
+            resolvedParentId = idToNodeMap.get(cleanToken).id;
+            break;
+          }
+          if (nameToNodeMap.has(cleanToken)) {
+            resolvedParentId = nameToNodeMap.get(cleanToken).id;
+            break;
           }
         }
       }
@@ -148,6 +160,26 @@ export default function DiagramaUnifilarBlueprint({
         resolvedParentId = circuitFeedsMap.get(el.id.toLowerCase().trim());
       }
 
+      // 5. Bidireccionalidad: Si aún no tiene alimentador, verificar si algún equipo declara este nodo en "alimentaAIds" o "alimentaA"
+      if (!resolvedParentId) {
+        for (const candidate of elementos) {
+          if (candidate.id === el.id) continue;
+          const candDt = typeof candidate.datosTecnicos === 'string'
+            ? JSON.parse(candidate.datosTecnicos || '{}')
+            : (candidate.datosTecnicos || {});
+          const candidateAlimentaIds = candidate.alimentaAIds || candDt.alimentaAIds;
+          if (Array.isArray(candidateAlimentaIds) && candidateAlimentaIds.includes(el.id)) {
+            resolvedParentId = candidate.id;
+            break;
+          }
+          const candidateAlimentaText = candidate.alimentaA || candDt.alimentaA;
+          if (candidateAlimentaText && el.nombre && String(candidateAlimentaText).toUpperCase().includes(String(el.nombre).toUpperCase())) {
+            resolvedParentId = candidate.id;
+            break;
+          }
+        }
+      }
+
       // Evitar auto-referencias circulares
       if (resolvedParentId === el.id) {
         resolvedParentId = null;
@@ -172,12 +204,17 @@ export default function DiagramaUnifilarBlueprint({
       }
     });
 
+    // BFS defensivo con Set visited para evitar que bucles circulares congelen el navegador
     const levelsMap = {};
     const nodeLevels = {};
+    const visited = new Set();
     const queue = roots.map(id => ({ id, level: 0 }));
 
     while (queue.length > 0) {
       const { id, level } = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+
       const node = nodeMap.get(id);
       if (!node) continue;
 
@@ -186,9 +223,21 @@ export default function DiagramaUnifilarBlueprint({
       levelsMap[level].push(id);
 
       node.children.forEach(childId => {
-        queue.push({ id: childId, level: level + 1 });
+        if (!visited.has(childId)) {
+          queue.push({ id: childId, level: level + 1 });
+        }
       });
     }
+
+    // Asegurar que todos los elementos registrados queden incluidos en el diagrama
+    processedNodes.forEach((node) => {
+      if (!visited.has(node.id)) {
+        visited.add(node.id);
+        nodeLevels[node.id] = 0;
+        if (!levelsMap[0]) levelsMap[0] = [];
+        levelsMap[0].push(node.id);
+      }
+    });
 
     const finalNodes = processedNodes.map(n => ({
       ...n,

@@ -217,6 +217,8 @@ export const EmpresaView = () => {
   const [elementoNombre, setElementoNombre] = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [alimentadoPor, setAlimentadoPor] = useState('');
+  const [alimentaA, setAlimentaA] = useState('');
+  const [alimentaAIds, setAlimentaAIds] = useState([]);
   const [observacionesGenerales, setObservacionesGenerales] = useState('');
   const [fotoBlob, setFotoBlob] = useState(null);
   const [foto, setFoto] = useState(null);
@@ -586,6 +588,8 @@ export const EmpresaView = () => {
       tipoElemento,
       ubicacion: ubicacion.trim() || 'Sin ubicación',
       alimentadoPor: tipoElemento === 'GENERADOR' ? 'Fuente Primaria Independiente' : (alimentadoPor.trim() || 'No definido'),
+      alimentaA: alimentaA.trim() || '',
+      alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
       foto,
       fotoBlob,
       observacionesGenerales: observacionesGenerales.trim(),
@@ -596,6 +600,8 @@ export const EmpresaView = () => {
       setElementoNombre('');
       setUbicacion('');
       setAlimentadoPor('');
+      setAlimentaA('');
+      setAlimentaAIds([]);
       setObservacionesGenerales('');
       setSuministroTension('');
       setSuministroEmpresa('CORPOELEC');
@@ -1462,12 +1468,28 @@ export const EmpresaView = () => {
               ) : (
                 <SelectorAlimentadorJerarquico
                   value={alimentadoPor}
-                  onChange={setAlimentadoPor}
+                  multiple={false}
+                  onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
                   elementosList={companyElementos}
                   label="Alimentado Por (Procedencia Jerárquica)"
-                  placeholder="Seleccione elemento o escriba procedencia..."
+                  placeholder="Seleccione equipo de la empresa..."
                 />
               )}
+
+              {/* Alimenta A (Cargas aguas abajo) */}
+              <div>
+                <SelectorAlimentadorJerarquico
+                  value={alimentaA}
+                  multiple={true}
+                  onChange={(formatted, primaryObj, ids) => {
+                    setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                    setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                  }}
+                  elementosList={companyElementos}
+                  label="Alimenta A (Cargas Aguas Abajo / Salidas)"
+                  placeholder="Seleccione equipos secundarios suministrados..."
+                />
+              </div>
 
               {/* CAMPOS ESPECÍFICOS SEGÚN EL ENUM */}
 

@@ -47,8 +47,12 @@ import {
   MapPin,
   Phone,
   Mail,
-  Activity
+  Activity,
+  GitBranch,
+  Maximize2,
+  Network
 } from 'lucide-react';
+import DiagramaUnifilarBlueprint from '../components/DiagramaUnifilarBlueprint';
 import HelpModal from '../components/HelpModal';
 import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
 import TensionNominalInput from '../components/TensionNominalInput';
@@ -56,6 +60,17 @@ import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 import { API_BASE_URL } from '../utils/api';
 import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
 import { TIPOS_CONEXION_TRAFO, calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador';
+import {
+  PRESET_MARCAS,
+  PRESET_VOLTAJES,
+  PRESET_KVA,
+  PRESET_KW,
+  PRESET_AMPERAJES,
+  PRESET_CONDUCTORES,
+  PRESET_BREAKER_TIPOS,
+  PRESET_UBICACIONES,
+  PRESET_CONEXIONES_TRAFO
+} from '../utils/electricalPresets';
 
 // Componente para renderizar Base64 / Blobs / URLs de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -110,6 +125,7 @@ export const ProyectoView = () => {
     updateProyecto,
     moverElemento,
     reordenarColeccion,
+    vincularJerarquia,
     showToast
   } = useStore();
 
@@ -189,23 +205,31 @@ export const ProyectoView = () => {
   const todosElementosJerarquia = useMemo(() => {
     const unifilares = (elementos || []).map(e => ({
       ...e,
+      nombre: (e.nombre || '').toUpperCase().trim(),
       tipoElemento: e.tipoElemento || 'TABLERO',
-      tipo: e.tipoElemento || 'TABLERO'
+      tipo: e.tipoElemento || 'TABLERO',
+      codigo: e.codigo || getElementCode(e, e.tipoElemento || 'TABLERO')
     }));
     const subs = (inspecciones || []).map(s => ({
       ...s,
+      nombre: (s.nombre || '').toUpperCase().trim(),
       tipoElemento: 'SUBESTACION',
-      tipo: 'SUBESTACION'
+      tipo: 'SUBESTACION',
+      codigo: s.codigo || getElementCode(s, 'SUBESTACION')
     }));
     const puntos = (puntosMedicion || []).map(p => ({
       ...p,
+      nombre: (p.nombre || '').toUpperCase().trim(),
       tipoElemento: 'PUNTO_MEDICION',
-      tipo: 'PUNTO_MEDICION'
+      tipo: 'PUNTO_MEDICION',
+      codigo: p.codigo || getElementCode(p, 'PUNTO_MEDICION')
     }));
     const ccms = (proyecto?.ccmList || []).map(c => ({
       ...c,
+      nombre: (c.nombre || '').toUpperCase().trim(),
       tipoElemento: 'CCM',
-      tipo: 'CCM'
+      tipo: 'CCM',
+      codigo: c.codigo || getElementCode(c, 'CCM')
     }));
     return [...unifilares, ...subs, ...puntos, ...ccms];
   }, [elementos, inspecciones, puntosMedicion, proyecto?.ccmList]);
@@ -361,10 +385,24 @@ export const ProyectoView = () => {
   // Efecto para rellenar campos en caso de edición
   useEffect(() => {
     if (editingElemento) {
-      setNombre(editingElemento.nombre || '');
-      setUbicacion(editingElemento.ubicacion || '');
-      setAlimentadoPor(editingElemento.alimentadoPor || '');
-      setObservacionesGenerales(editingElemento.observacionesGenerales || '');
+      setNombre(editingElemento.nombre ? String(editingElemento.nombre).toUpperCase() : '');
+      setUbicacion(editingElemento.ubicacion ? String(editingElemento.ubicacion).toUpperCase() : '');
+      setAlimentadoPor(editingElemento.alimentadoPor ? String(editingElemento.alimentadoPor).toUpperCase() : '');
+      setAlimentadoPorId(editingElemento.alimentadoPorId || null);
+
+      // Cargas alimentadas aguas abajo ("ALIMENTA A")
+      const downstreamChildren = (todosElementosJerarquia || []).filter(el => el.alimentadoPorId === editingElemento.id);
+      const initialAlimentaAIds = downstreamChildren.length > 0 
+        ? downstreamChildren.map(c => c.id) 
+        : (editingElemento.datosTecnicos?.alimentaAIds || []);
+      const initialAlimentaANombres = downstreamChildren.length > 0
+        ? downstreamChildren.map(c => c.nombre).join(', ')
+        : (editingElemento.datosTecnicos?.alimentaA || '');
+
+      setAlimentaA(initialAlimentaANombres ? String(initialAlimentaANombres).toUpperCase() : '');
+      setAlimentaAIds(Array.isArray(initialAlimentaAIds) ? initialAlimentaAIds : []);
+
+      setObservacionesGenerales(editingElemento.observacionesGenerales ? String(editingElemento.observacionesGenerales).toUpperCase() : '');
       setTipoElemento(editingElemento.tipoElemento || 'TABLERO');
       
       const tech = editingElemento.datosTecnicos || {};
@@ -443,6 +481,9 @@ export const ProyectoView = () => {
       setNombre('');
       setUbicacion('');
       setAlimentadoPor('');
+      setAlimentadoPorId(null);
+      setAlimentaA('');
+      setAlimentaAIds([]);
       setObservacionesGenerales('');
       setTipoElemento('TABLERO');
       setMaxPoles(24);
@@ -515,6 +556,9 @@ export const ProyectoView = () => {
   const [nombre, setNombre] = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [alimentadoPor, setAlimentadoPor] = useState('');
+  const [alimentadoPorId, setAlimentadoPorId] = useState(null);
+  const [alimentaA, setAlimentaA] = useState('');
+  const [alimentaAIds, setAlimentaAIds] = useState([]);
   const [observacionesGenerales, setObservacionesGenerales] = useState('');
   const [fotoBlob, setFotoBlob] = useState(null);
   const [foto, setFoto] = useState(null);
@@ -887,21 +931,34 @@ export const ProyectoView = () => {
       };
     }
 
+    // Bidireccionalidad: enriquecer datosTecnicos con destinos aguas abajo
+    datosTecnicos = {
+      ...datosTecnicos,
+      alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
+      alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : []
+    };
+
     if (editingElemento) {
       updateElementoUnifilar(proyectoId, editingElemento.id, {
-        nombre: nombre.trim(),
+        nombre: nombre.trim().toUpperCase(),
         tipoElemento,
         tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : (editingElemento.tension || ''),
-        ubicacion: ubicacion.trim() || 'Sin ubicación',
-        alimentadoPor: alimentadoPor.trim() || 'No definido',
+        ubicacion: ubicacion.trim().toUpperCase() || 'SIN UBICACIÓN',
+        alimentadoPor: alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO',
+        alimentadoPorId: alimentadoPorId || null,
+        alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
+        alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
         foto: eliminarFoto ? null : (foto !== undefined ? foto : editingElemento.foto),
         fotoBlob: eliminarFoto ? null : (fotoBlob || null),
         eliminarFoto: Boolean(eliminarFoto),
-        observacionesGenerales: observacionesGenerales.trim(),
+        observacionesGenerales: observacionesGenerales.trim().toUpperCase(),
         datosTecnicos
       });
       showToast?.("Elemento actualizado correctamente.", "success");
       setEditingElemento(null);
+      setAlimentadoPorId(null);
+      setAlimentaA('');
+      setAlimentaAIds([]);
       setFoto(null);
       setFotoBlob(null);
       setEliminarFoto(false);
@@ -909,15 +966,18 @@ export const ProyectoView = () => {
     } else {
       const assignedCode = getNextElementId(tipoElemento, proyectoId);
       const result = addElementoUnifilar(proyectoId, {
-        codigo: assignedCode,
-        nombre: nombre.trim(),
+        codigo: assignedCode.toUpperCase(),
+        nombre: nombre.trim().toUpperCase(),
         tipoElemento,
         tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : '',
-        ubicacion: ubicacion.trim() || 'Sin ubicación',
-        alimentadoPor: alimentadoPor.trim() || 'No definido',
+        ubicacion: ubicacion.trim().toUpperCase() || 'SIN UBICACIÓN',
+        alimentadoPor: alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO',
+        alimentadoPorId: alimentadoPorId || null,
+        alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
+        alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
         foto,
         fotoBlob,
-        observacionesGenerales: observacionesGenerales.trim(),
+        observacionesGenerales: observacionesGenerales.trim().toUpperCase(),
         datosTecnicos
       });
 
@@ -925,6 +985,9 @@ export const ProyectoView = () => {
         setNombre('');
         setUbicacion('');
         setAlimentadoPor('');
+        setAlimentadoPorId(null);
+        setAlimentaA('');
+        setAlimentaAIds([]);
         setObservacionesGenerales('');
         setFoto(null);
         setFotoBlob(null);
@@ -1241,6 +1304,16 @@ export const ProyectoView = () => {
               <Zap className="w-4 h-4" /> Diagrama Unifilar
             </button>
             <button
+              onClick={() => setActiveTab('JERARQUIA')}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'JERARQUIA' 
+                  ? 'bg-amber-500 text-slate-950 shadow-md' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <GitBranch className="w-4 h-4" /> Jerarquía y Topología
+            </button>
+            <button
               onClick={() => setActiveTab('ESTRUCTURAL')}
               className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'ESTRUCTURAL' 
@@ -1291,22 +1364,34 @@ export const ProyectoView = () => {
               {/* Grupo 2: Controles específicos según Pestaña Activa */}
               {user?.role !== 'CLIENT' && (
                 <div className="flex items-center gap-2">
-                  {/* Controles para Diagrama Unifilar */}
-                  {activeTab === 'UNIFILAR' && (
+                  {/* Controles para Diagrama Unifilar y Jerarquía */}
+                  {(activeTab === 'UNIFILAR' || activeTab === 'JERARQUIA') && (
                     <>
-                      <button
-                        onClick={() => {
-                          setIsMultiSelectMode(!isMultiSelectMode);
-                          setSelectedIds(new Set());
-                        }}
-                        className={`border font-semibold transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs ${
-                          isMultiSelectMode 
-                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' 
-                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850'
-                        }`}
-                      >
-                        <CheckSquare className="w-4 h-4" /> {isMultiSelectMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
-                      </button>
+                      {activeTab === 'JERARQUIA' && (
+                        <button
+                          onClick={() => setShowDiagramModal(true)}
+                          className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs shadow-md transition-all active:scale-95"
+                          title="Abrir diagrama unifilar en modal ampliado"
+                        >
+                          <Maximize2 className="w-4 h-4" /> Modo CAD Completo
+                        </button>
+                      )}
+
+                      {activeTab === 'UNIFILAR' && (
+                        <button
+                          onClick={() => {
+                            setIsMultiSelectMode(!isMultiSelectMode);
+                            setSelectedIds(new Set());
+                          }}
+                          className={`border font-semibold transition-all px-3.5 py-2 rounded-xl flex items-center justify-center gap-2 h-9 cursor-pointer text-xs ${
+                            isMultiSelectMode 
+                              ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' 
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850'
+                          }`}
+                        >
+                          <CheckSquare className="w-4 h-4" /> {isMultiSelectMode ? 'Cancelar Selección' : 'Seleccionar Varios'}
+                        </button>
+                      )}
 
                       <button
                         onClick={() => {
@@ -1373,6 +1458,193 @@ export const ProyectoView = () => {
               >
                 Cancelar
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* CONTENIDO DE PESTAÑA C: JERARQUÍA Y TOPOLOGÍA UNIFILAR */}
+        {activeTab === 'JERARQUIA' && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-md font-bold text-slate-200 flex items-center gap-2">
+                  <GitBranch className="w-5 h-5 text-amber-500" />
+                  Jerarquía y Topología Eléctrica (Diagrama Unifilar)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Estructura de distribución de potencia: relación directa entre acometidas, transformadores, generadores, transferencias, CCMs y tableros de distribución.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDiagramModal(true)}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4.5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs transition-all shadow-md active:scale-98 cursor-pointer"
+                >
+                  <Maximize2 className="w-4 h-4 fill-slate-950" /> Expandir Modo CAD
+                </button>
+              </div>
+            </div>
+
+            {/* Canvas Interactivo del Diagrama Unifilar */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative">
+              <div className="p-3 bg-slate-900/60 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-slate-300 font-semibold">
+                  <Network className="w-4 h-4 text-amber-400" />
+                  <span>Plano Unifilar Vectorial (Topología en Tiempo Real)</span>
+                  <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20 font-mono">
+                    {todosElementosJerarquia.length} Nodos
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 flex items-center gap-4">
+                  <span className="hidden sm:inline">💡 Haz clic sobre cualquier nodo para inspeccionar sus circuitos</span>
+                  <button
+                    onClick={() => setShowDiagramModal(true)}
+                    className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                  >
+                    Ver a pantalla completa
+                  </button>
+                </div>
+              </div>
+              
+              <div className="h-[520px] w-full bg-slate-950 relative">
+                {todosElementosJerarquia.length > 0 ? (
+                  <DiagramaUnifilarBlueprint
+                    elementos={todosElementosJerarquia}
+                    onSelectNode={(node) => {
+                      if (node?.id) {
+                        navigate(`/empresa/${companyId}/tablero/${node.id}`);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500 gap-3">
+                    <GitBranch className="w-12 h-12 text-slate-700" />
+                    <p className="text-sm font-semibold text-slate-400">No hay equipos registrados para construir la jerarquía</p>
+                    <button
+                      onClick={() => {
+                        setTipoElemento('TABLERO');
+                        setShowElementoModal(true);
+                      }}
+                      className="px-4 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold"
+                    >
+                      + Registrar Primer Equipo
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Matriz de Enlaces de Alimentación (Topological Feeding Matrix) */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-amber-500" /> Matriz de Enlaces de Alimentación
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Inspección y vinculación jerárquica de procedencia para cada tablero y carga eléctrica del proyecto.
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] uppercase font-bold text-slate-400 tracking-wider bg-slate-900/50">
+                      <th className="py-2.5 px-3">Código</th>
+                      <th className="py-2.5 px-3">Equipo / Elemento</th>
+                      <th className="py-2.5 px-3">Tipo</th>
+                      <th className="py-2.5 px-3">Ubicación</th>
+                      <th className="py-2.5 px-3">Alimentado Por (Procedencia)</th>
+                      <th className="py-2.5 px-3">Alimenta A (Cargas Destino)</th>
+                      <th className="py-2.5 px-3">Tensión / Capacidad</th>
+                      <th className="py-2.5 px-3 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-sans">
+                    {todosElementosJerarquia.map((elem) => {
+                      const isOrphan = !elem.alimentadoPor || elem.alimentadoPor === 'NO DEFINIDO' || elem.alimentadoPor === 'Sin alimentación';
+                      return (
+                        <tr key={elem.id} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="py-2.5 px-3 font-mono font-bold text-amber-400">
+                            {getElementCode(elem, elem.tipoElemento || elem.tipo || 'TABLERO')}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-200">
+                            {elem.nombre}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 rounded text-[9.5px] font-mono font-bold bg-slate-900 text-slate-300 border border-slate-800">
+                              {elem.tipoElemento || elem.tipo || 'TABLERO'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                            {elem.ubicacion || '—'}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10.5px] font-medium inline-flex items-center gap-1.5 ${
+                              isOrphan 
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                                : 'bg-slate-900 text-slate-200 border border-slate-800'
+                            }`}>
+                              <GitBranch className="w-3 h-3 text-amber-500" />
+                              {elem.alimentadoPor || 'RAÍZ / ACOMETIDA PRINCIPAL'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {(() => {
+                              const downstream = todosElementosJerarquia.filter(
+                                (c) => c.alimentadoPorId === elem.id ||
+                                (elem.datosTecnicos?.alimentaAIds && elem.datosTecnicos.alimentaAIds.includes(c.id)) ||
+                                (elem.alimentaAIds && elem.alimentaAIds.includes(c.id))
+                              );
+                              if (downstream.length === 0) {
+                                if (elem.alimentaA) {
+                                  return (
+                                    <span className="text-emerald-400 font-semibold text-[10.5px]">
+                                      {elem.alimentaA}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="text-slate-500 text-[10.5px] italic">
+                                    Terminal (Sin cargas)
+                                  </span>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-1 max-w-xs">
+                                  {downstream.map((d) => (
+                                    <span
+                                      key={d.id}
+                                      className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/50 flex items-center gap-1 shadow-sm"
+                                      title={d.nombre}
+                                    >
+                                      <Zap className="w-2.5 h-2.5 text-emerald-400" />
+                                      {getElementCode(d, d.tipoElemento || d.tipo || 'TABLERO')}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
+                            {elem.tension || elem.datosTecnicos?.nivelTension || elem.datosTecnicos?.kva || elem.datosTecnicos?.capacidadAmperios || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              onClick={() => navigate(`/empresa/${companyId}/tablero/${elem.id}`)}
+                              className="px-3 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-300 hover:text-amber-400 font-bold text-[11px] transition-colors cursor-pointer"
+                            >
+                              Inspeccionar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1959,14 +2231,16 @@ export const ProyectoView = () => {
                       </label>
                       <input
                         type="text"
+                        list="preset-ubicaciones-list"
                         value={ubicacion}
-                        onChange={(e) => setUbicacion(e.target.value)}
-                        placeholder="Ej. Sótano Sala Técnica o Piso 2"
+                        onChange={(e) => setUbicacion(e.target.value.toUpperCase())}
+                        placeholder="Ej. SÓTANO - SALA TÉCNICA PRINCIPAL"
                         className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-slate-100 h-9.5"
                       />
                     </div>
 
-                    {/* Procedencia / Alimentado Por (Excluido en Generadores por ser fuentes primarias independientes) */}
+                    {/* Jerarquía Bidireccional Topológica */}
+                    {/* 1. ALIMENTADO POR (Origen aguas arriba / Padre) */}
                     {tipoElemento === 'GENERADOR' ? (
                       <div className="p-3 bg-slate-950/80 border border-amber-500/30 rounded-xl space-y-1">
                         <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
@@ -1983,12 +2257,32 @@ export const ProyectoView = () => {
                           tableroActualId={editingElemento?.id}
                           elementosList={todosElementosJerarquia}
                           value={alimentadoPor}
-                          onChange={(val) => setAlimentadoPor(val)}
-                          label="Alimentado Por (Procedencia / Jerarquía)"
-                          placeholder="Seleccionar Subestación, Trafo, CCM o Tablero..."
+                          onChange={(val, primaryObj, ids) => {
+                            setAlimentadoPor(val ? val.toUpperCase() : '');
+                            setAlimentadoPorId(primaryObj?.id || ids?.[0] || null);
+                          }}
+                          label="ALIMENTADO POR (Origen Aguas Arriba / Padre)"
+                          placeholder="Seleccionar Subestación, Trafo, Generador, CCM o Tablero..."
                         />
                       </div>
                     )}
+
+                    {/* 2. ALIMENTA A (Destinos aguas abajo / Salidas) */}
+                    <div>
+                      <SelectorAlimentadorJerarquico
+                        proyectoId={proyectoId}
+                        tableroActualId={editingElemento?.id}
+                        elementosList={todosElementosJerarquia}
+                        value={alimentaA}
+                        multiple={true}
+                        onChange={(val, primaryObj, ids) => {
+                          setAlimentaA(val ? val.toUpperCase() : '');
+                          setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                        }}
+                        label="ALIMENTA A (Destinos Aguas Abajo / Salidas)"
+                        placeholder="Enlazar uno o varios equipos secundarios que reciben energía..."
+                      />
+                    </div>
                   </div>
 
                   {/* Nota informativa técnica */}
@@ -2115,11 +2409,11 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia KVA</label>
-                          <input type="text" value={kvaTrafo} onChange={(e) => setKvaTrafo(e.target.value)} placeholder="Ej. 500 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-kva-list" value={kvaTrafo} onChange={(e) => setKvaTrafo(e.target.value.toUpperCase())} placeholder="Ej. 500 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Marca</label>
-                          <input type="text" value={marcaTrafo} onChange={(e) => setMarcaTrafo(e.target.value)} placeholder="Ej. GE / ABB" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
+                          <input type="text" list="preset-marcas-list" value={marcaTrafo} onChange={(e) => setMarcaTrafo(e.target.value.toUpperCase())} placeholder="Ej. SCHNEIDER / SIEMENS" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -2206,11 +2500,11 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad kVA</label>
-                          <input type="text" value={kvaGen} onChange={(e) => setKvaGen(e.target.value)} placeholder="Ej. 500 kVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-kva-list" value={kvaGen} onChange={(e) => setKvaGen(e.target.value.toUpperCase())} placeholder="Ej. 500 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia kW</label>
-                          <input type="text" value={potenciaKwGen} onChange={(e) => setPotenciaKwGen(e.target.value)} placeholder="Ej. 400 kW" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-kw-list" value={potenciaKwGen} onChange={(e) => setPotenciaKwGen(e.target.value.toUpperCase())} placeholder="Ej. 400 KW" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -2220,7 +2514,7 @@ export const ProyectoView = () => {
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Amperaje Breaker</label>
-                          <input type="text" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-amperajes-list" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value.toUpperCase())} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -2233,7 +2527,7 @@ export const ProyectoView = () => {
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Velocidad (RPM)</label>
-                          <input type="text" value={rpmGen} onChange={(e) => setRpmGen(e.target.value)} placeholder="Ej. 1800 RPM" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" value={rpmGen} onChange={(e) => setRpmGen(e.target.value.toUpperCase())} placeholder="Ej. 1800 RPM" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                       <div>
@@ -2257,7 +2551,7 @@ export const ProyectoView = () => {
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Carga Contratada</label>
-                          <input type="text" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value)} placeholder="Ej. 1000 kVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-kva-list" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value.toUpperCase())} placeholder="Ej. 1000 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                       <div>
@@ -2271,11 +2565,11 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">NIC / Medidor</label>
-                          <input type="text" value={suministroNic} onChange={(e) => setSuministroNic(e.target.value)} placeholder="Ej. NIC 49210" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" value={suministroNic} onChange={(e) => setSuministroNic(e.target.value.toUpperCase())} placeholder="Ej. NIC 49210" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. Contrato</label>
-                          <input type="text" value={suministroNumeroContrato} onChange={(e) => setSuministroNumeroContrato(e.target.value)} placeholder="Ej. C-84920" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" value={suministroNumeroContrato} onChange={(e) => setSuministroNumeroContrato(e.target.value.toUpperCase())} placeholder="Ej. C-84920" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                     </div>
@@ -2287,7 +2581,7 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
-                          <input type="text" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value)} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-amperajes-list" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value.toUpperCase())} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Modo Operación</label>
@@ -2310,7 +2604,7 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Barra (A)</label>
-                          <input type="text" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value)} placeholder="Ej. 1200 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-amperajes-list" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value.toUpperCase())} placeholder="Ej. 1200 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
@@ -2320,7 +2614,7 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Breaker Principal</label>
-                          <input type="text" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value)} placeholder="Ej. 1200A 3P" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" list="preset-amperajes-list" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value.toUpperCase())} placeholder="Ej. 1200 A 3P" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. de Gavetas</label>
@@ -2336,11 +2630,11 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (kVAR)</label>
-                          <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value)} placeholder="Ej. 150 kVAR" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value.toUpperCase())} placeholder="Ej. 150 KVAR" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pasos / Escalones</label>
-                          <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value)} placeholder="Ej. 6 pasos" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value.toUpperCase())} placeholder="Ej. 6 PASOS" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -2365,20 +2659,20 @@ export const ProyectoView = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Resistencia (Ω)</label>
-                          <input type="text" value={resistenciaOhmios} onChange={(e) => setResistenciaOhmios(e.target.value)} placeholder="Ej. 0.5 Ω" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                          <input type="text" value={resistenciaOhmios} onChange={(e) => setResistenciaOhmios(e.target.value.toUpperCase())} placeholder="Ej. 0.5 Ω" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Corriente Fuga (A)</label>
-                          <input type="text" value={corrienteFuga} onChange={(e) => setCorrienteFuga(e.target.value)} placeholder="Ej. 4.2 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono text-amber-400" />
+                          <input type="text" value={corrienteFuga} onChange={(e) => setCorrienteFuga(e.target.value.toUpperCase())} placeholder="Ej. 4.2 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono text-amber-400" />
                         </div>
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Malla / Ubicación</label>
-                        <input type="text" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value)} placeholder="Ej. Malla debajo de losa / Sala Eléctrica" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
+                        <input type="text" list="preset-ubicaciones-list" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value.toUpperCase())} placeholder="Ej. MALLA DEBAJO DE LOSA / SALA ELÉCTRICA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
                       </div>
                       <div>
                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cable Acometida Tierra</label>
-                        <input type="text" value={cableAcometidaTierra} onChange={(e) => setCableAcometidaTierra(e.target.value)} placeholder="Ej. #2/0 AWG Cu Desnudo" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
+                        <input type="text" list="preset-conductores-list" value={cableAcometidaTierra} onChange={(e) => setCableAcometidaTierra(e.target.value.toUpperCase())} placeholder="Ej. #2/0 AWG (Cu)" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
                       </div>
                     </div>
                   )}
@@ -2387,7 +2681,7 @@ export const ProyectoView = () => {
                   {tipoElemento === 'OTRO' && (
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Especificaciones Técnicas</label>
-                      <textarea value={descripcionOtro} onChange={(e) => setDescripcionOtro(e.target.value)} rows={3} placeholder="Detalles técnicos específicos..." className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none resize-none" />
+                      <textarea value={descripcionOtro} onChange={(e) => setDescripcionOtro(e.target.value.toUpperCase())} rows={3} placeholder="DETALLES TÉCNICOS ESPECÍFICOS..." className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none resize-none" />
                     </div>
                   )}
                 </div>
@@ -2439,43 +2733,34 @@ export const ProyectoView = () => {
                                 <label className="block text-[9px] text-slate-400 uppercase">Marca</label>
                                 <input
                                   type="text"
-                                  list="breaker-marcas"
+                                  list="preset-marcas-list"
                                   value={breakerMarca}
-                                  onChange={(e) => setBreakerMarca(e.target.value)}
-                                  placeholder="Ej. GE"
+                                  onChange={(e) => setBreakerMarca(e.target.value.toUpperCase())}
+                                  placeholder="Ej. SCHNEIDER"
                                   className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-bold h-8 text-center"
                                 />
-                                <datalist id="breaker-marcas">
-                                  {MARCA_OPTIONS.map(m => <option key={m} value={m} />)}
-                                </datalist>
                               </div>
                               <div>
                                 <label className="block text-[9px] text-slate-400 uppercase">Tipo</label>
                                 <input
                                   type="text"
-                                  list="breaker-tipos"
+                                  list="preset-breaker-tipos-list"
                                   value={breakerTipo}
-                                  onChange={(e) => setBreakerTipo(e.target.value)}
-                                  placeholder="Ej. THQC"
+                                  onChange={(e) => setBreakerTipo(e.target.value.toUpperCase())}
+                                  placeholder="Ej. CAJA MOLDEADA (MCCB)"
                                   className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 h-8 text-center"
                                 />
-                                <datalist id="breaker-tipos">
-                                  {TIPO_OPTIONS.map(t => <option key={t} value={t} />)}
-                                </datalist>
                               </div>
                               <div>
                                 <label className="block text-[9px] text-slate-400 uppercase">Amperaje</label>
                                 <input
                                   type="text"
-                                  list="breaker-amps"
+                                  list="preset-amperajes-list"
                                   value={breakerAmp}
-                                  onChange={(e) => setBreakerAmp(e.target.value)}
-                                  placeholder="Ej: 225A"
+                                  onChange={(e) => setBreakerAmp(e.target.value.toUpperCase())}
+                                  placeholder="Ej: 225 A"
                                   className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold h-8 text-center"
                                 />
-                                <datalist id="breaker-amps">
-                                  {AMP_OPTIONS.map(a => <option key={a} value={a} />)}
-                                </datalist>
                               </div>
                             </div>
                           </div>
@@ -2602,9 +2887,10 @@ export const ProyectoView = () => {
                             </label>
                             <input
                               type="text"
+                              list="preset-conductores-list"
                               value={acometidaConductor}
-                              onChange={(e) => setAcometidaConductor(e.target.value)}
-                              placeholder="Ej. 3x 3/0 AWG + 1x 1/0 N (Cu)"
+                              onChange={(e) => setAcometidaConductor(e.target.value.toUpperCase())}
+                              placeholder="Ej. 3x #4/0 AWG + 1x #2/0 N (Cu)"
                               className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-blue-400 font-mono h-8.5"
                             />
                           </div>
@@ -2665,9 +2951,9 @@ export const ProyectoView = () => {
                     </label>
                     <textarea
                       value={observacionesGenerales}
-                      onChange={(e) => setObservacionesGenerales(e.target.value)}
+                      onChange={(e) => setObservacionesGenerales(e.target.value.toUpperCase())}
                       rows={2}
-                      placeholder="Estado de mantenimiento, accesibilidad o recomendaciones..."
+                      placeholder="ESTADO DE MANTENIMIENTO, ACCESIBILIDAD O RECOMENDACIONES..."
                       className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 transition-all resize-none h-14"
                     />
                   </div>
@@ -2676,6 +2962,34 @@ export const ProyectoView = () => {
 
               </div>
 
+              {/* Datalists de Presets Eléctricos Estandarizados */}
+              <datalist id="preset-marcas-list">
+                {PRESET_MARCAS.map(m => <option key={m} value={m} />)}
+              </datalist>
+              <datalist id="preset-voltajes-list">
+                {PRESET_VOLTAJES.map(v => <option key={v} value={v} />)}
+              </datalist>
+              <datalist id="preset-kva-list">
+                {PRESET_KVA.map(k => <option key={k} value={k} />)}
+              </datalist>
+              <datalist id="preset-kw-list">
+                {PRESET_KW.map(w => <option key={w} value={w} />)}
+              </datalist>
+              <datalist id="preset-amperajes-list">
+                {PRESET_AMPERAJES.map(a => <option key={a} value={a} />)}
+              </datalist>
+              <datalist id="preset-conductores-list">
+                {PRESET_CONDUCTORES.map(c => <option key={c} value={c} />)}
+              </datalist>
+              <datalist id="preset-breaker-tipos-list">
+                {PRESET_BREAKER_TIPOS.map(b => <option key={b} value={b} />)}
+              </datalist>
+              <datalist id="preset-ubicaciones-list">
+                {PRESET_UBICACIONES.map(u => <option key={u} value={u} />)}
+              </datalist>
+              <datalist id="preset-conexiones-trafo-list">
+                {PRESET_CONEXIONES_TRAFO.map(c => <option key={c} value={c} />)}
+              </datalist>
             </form>
 
             {/* PIE DE ACCIONES FIJO (STICKY BOTTOM ACTION BAR) */}
@@ -3403,7 +3717,7 @@ export const ProyectoView = () => {
       <ModalDiagramaUnifilar
         isOpen={showDiagramModal}
         onClose={() => setShowDiagramModal(false)}
-        elementos={elementos}
+        elementos={todosElementosJerarquia}
         companyName={company?.nombre}
         proyectoId={proyectoId}
         companyId={companyId}

@@ -39,6 +39,8 @@ export default function ModalDiagramaUnifilar({
   const [editTipo, setEditTipo] = useState('');
   const [editUbicacion, setEditUbicacion] = useState('');
   const [editAlimentadoPor, setEditAlimentadoPor] = useState('');
+  const [editAlimentaA, setEditAlimentaA] = useState('');
+  const [editAlimentaAIds, setEditAlimentaAIds] = useState([]);
   const [editKva, setEditKva] = useState('');
   const [editFases, setEditFases] = useState('');
   const [editObservaciones, setEditObservaciones] = useState('');
@@ -54,13 +56,24 @@ export default function ModalDiagramaUnifilar({
       setEditTipo(selectedNode.tipoElemento || 'TABLERO');
       setEditUbicacion(selectedNode.ubicacion || '');
       setEditAlimentadoPor(selectedNode.alimentadoPor || '');
+      const downstream = (elementos || []).filter(el => el.alimentadoPorId === selectedNode.id);
+      const initialAlimentaAIds = downstream.length > 0 
+        ? downstream.map(c => c.id) 
+        : (selectedNode.datosTecnicos?.alimentaAIds || []);
+      const initialAlimentaA = downstream.length > 0 
+        ? downstream.map(c => c.nombre).join(', ') 
+        : (selectedNode.datosTecnicos?.alimentaA || selectedNode.alimentaA || '');
+      setEditAlimentaA(initialAlimentaA);
+      setEditAlimentaAIds(initialAlimentaAIds);
       setEditKva(selectedNode.datosTecnicos?.kva || selectedNode.datosTecnicos?.potenciaKva || '');
       setEditFases(selectedNode.datosTecnicos?.fases || selectedNode.maxPoles || '');
       setEditObservaciones(selectedNode.observacionesGenerales || '');
     } else {
+      setEditAlimentaA('');
+      setEditAlimentaAIds([]);
       resetEditForm();
     }
-  }, [selectedNode]);
+  }, [selectedNode, elementos]);
 
   // Actualizar la referencia del nodo seleccionado si los elementos cambian (reactividad)
   useEffect(() => {
@@ -200,13 +213,17 @@ export default function ModalDiagramaUnifilar({
     if (!selectedNode) return;
 
     const updated = {
-      nombre: editNombre.trim(),
+      nombre: editNombre.trim().toUpperCase(),
       tipoElemento: editTipo,
-      ubicacion: editUbicacion.trim(),
-      alimentadoPor: editAlimentadoPor,
-      observacionesGenerales: editObservaciones.trim(),
+      ubicacion: editUbicacion.trim().toUpperCase(),
+      alimentadoPor: editAlimentadoPor ? editAlimentadoPor.trim().toUpperCase() : '',
+      alimentaA: editAlimentaA ? editAlimentaA.trim().toUpperCase() : '',
+      alimentaAIds: editAlimentaAIds,
+      observacionesGenerales: editObservaciones.trim().toUpperCase(),
       datosTecnicos: {
         ...selectedNode.datosTecnicos,
+        alimentaA: editAlimentaA ? editAlimentaA.trim().toUpperCase() : '',
+        alimentaAIds: editAlimentaAIds,
         kva: editKva.trim(),
         fases: editFases.trim(),
         positionX: selectedNode.datosTecnicos?.positionX || 300,
@@ -524,16 +541,34 @@ export default function ModalDiagramaUnifilar({
                         />
                       </div>
 
-                      {/* Dropdown de Alimentación Jerárquico */}
+                      {/* Dropdown de Alimentación Jerárquico (Padre) */}
                       <div>
                         <SelectorAlimentadorJerarquico
                           proyectoId={proyectoId || selectedNode?.proyectoId}
                           tableroActualId={selectedNode?.id}
                           elementosList={elementos}
                           value={editAlimentadoPor}
-                          onChange={(val) => setEditAlimentadoPor(val)}
+                          multiple={false}
+                          onChange={(val) => setEditAlimentadoPor(val ? val.toUpperCase() : '')}
                           label="Alimentado por (Origen de Flujo)"
                           placeholder="Ninguno (Origen del Sistema)..."
+                        />
+                      </div>
+
+                      {/* Dropdown de Cargas Aguas Abajo (Alimenta A) */}
+                      <div>
+                        <SelectorAlimentadorJerarquico
+                          proyectoId={proyectoId || selectedNode?.proyectoId}
+                          tableroActualId={selectedNode?.id}
+                          elementosList={elementos}
+                          value={editAlimentaA}
+                          multiple={true}
+                          onChange={(formatted, primaryObj, ids) => {
+                            setEditAlimentaA(formatted ? formatted.toUpperCase() : '');
+                            setEditAlimentaAIds(Array.isArray(ids) ? ids : []);
+                          }}
+                          label="Alimenta A (Cargas Aguas Abajo / Salidas)"
+                          placeholder="Ninguno (Elemento terminal)..."
                         />
                       </div>
 

@@ -63,39 +63,52 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
   const allFeeders = React.useMemo(() => {
     const list = [];
+    const extractFromProject = (p) => {
+      if (!p) return;
+      if (Array.isArray(p.elementosUnifilares)) list.push(...p.elementosUnifilares);
+      if (Array.isArray(p.tableros)) list.push(...p.tableros);
+      if (Array.isArray(p.subestaciones)) list.push(...p.subestaciones);
+      if (Array.isArray(p.inspeccionesSubestacion)) list.push(...p.inspeccionesSubestacion);
+      if (Array.isArray(p.puntosMedicion)) list.push(...p.puntosMedicion);
+      if (Array.isArray(p.ccmList)) list.push(...p.ccmList);
+    };
+
     const compId = elementoData?.empresaId || elementoData?.companyId;
+    const projId = elementoData?.proyectoId || elementoData?.projectId;
     const company = companies.find(c => c.id === compId);
-    if (!company) {
+
+    if (projId) {
+      for (const c of companies) {
+        const targetP = (c.proyectos || []).find(p => String(p.id) === String(projId));
+        if (targetP) {
+          extractFromProject(targetP);
+          break;
+        }
+      }
+    } else if (company) {
+      if (Array.isArray(company.elementosUnifilares)) list.push(...company.elementosUnifilares);
+      (company.proyectos || []).forEach(extractFromProject);
+    } else {
       companies.forEach(c => {
-        if (c.elementosUnifilares) {
-          list.push(...c.elementosUnifilares);
-        }
-        if (c.proyectos) {
-          c.proyectos.forEach(p => {
-            const elList = p.elementosUnifilares || p.tableros || [];
-            list.push(...elList);
-          });
-        }
+        if (Array.isArray(c.elementosUnifilares)) list.push(...c.elementosUnifilares);
+        (c.proyectos || []).forEach(extractFromProject);
       });
-      return list.filter(e => e.id !== elementoData?.id);
     }
 
-    if (company.elementosUnifilares) {
-      list.push(...company.elementosUnifilares);
-    }
-    if (company.proyectos) {
-      company.proyectos.forEach(p => {
-        const elList = p.elementosUnifilares || p.tableros || [];
-        list.push(...elList);
-      });
-    }
-    return list.filter(e => e.id !== elementoData?.id);
+    const seen = new Set();
+    return list.filter(e => {
+      if (!e || !e.id || String(e.id) === String(elementoData?.id) || seen.has(String(e.id))) return false;
+      seen.add(String(e.id));
+      return true;
+    });
   }, [companies, elementoData]);
 
   // Campos principales
   const [nombre, setNombre] = useState(elementoData?.nombre || '');
   const [ubicacion, setUbicacion] = useState(elementoData?.ubicacion || '');
   const [alimentadoPor, setAlimentadoPor] = useState(elementoData?.alimentadoPor || '');
+  const [alimentaA, setAlimentaA] = useState(elementoData?.alimentaA || elementoData?.datosTecnicos?.alimentaA || '');
+  const [alimentaAIds, setAlimentaAIds] = useState(elementoData?.alimentaAIds || elementoData?.datosTecnicos?.alimentaAIds || []);
   const [observacionesGenerales, setObservacionesGenerales] = useState(elementoData?.observacionesGenerales || '');
   const [fotoBlob, setFotoBlob] = useState(elementoData?.fotoBlob || null);
   const [fotoSrc, setFotoSrc] = useState(elementoData?.foto || null);
@@ -110,6 +123,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       setNombre(elementoData.nombre || '');
       setUbicacion(elementoData.ubicacion || '');
       setAlimentadoPor(elementoData.alimentadoPor || '');
+      setAlimentaA(elementoData.alimentaA || elementoData.datosTecnicos?.alimentaA || '');
+      setAlimentaAIds(elementoData.alimentaAIds || elementoData.datosTecnicos?.alimentaAIds || []);
       setObservacionesGenerales(elementoData.observacionesGenerales || '');
       setFotoBlob(elementoData.fotoBlob || null);
       setFotoSrc(elementoData.foto || null);
@@ -277,12 +292,16 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       finalDt.fases = dt.fases || '3';
       finalDt.fp = dt.fp || '0.8';
     }
+    finalDt.alimentaA = alimentaA ? String(alimentaA).trim().toUpperCase() : '';
+    finalDt.alimentaAIds = Array.isArray(alimentaAIds) ? alimentaAIds : [];
     if (onUpdate) {
       onUpdate({
         ...elementoData,
         nombre,
         ubicacion,
         alimentadoPor,
+        alimentaA,
+        alimentaAIds,
         observacionesGenerales,
         fotoBlob,
         foto: fotoSrc,
@@ -528,6 +547,38 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             )}
           </div>
 
+          {/* Fila 2b: Alimenta A (Cargas Aguas Abajo) */}
+          <div className="border-b border-slate-700 p-3 bg-slate-900/30 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black flex items-center justify-between">
+            <div>
+              <span className="font-bold uppercase text-slate-400 print:text-black mr-2">EQUIPO ALIMENTA A (CARGAS AGUAS ABAJO):</span>
+            </div>
+            {isEditing ? (
+              <div className="w-full sm:w-2/3">
+                <SelectorAlimentadorJerarquico
+                  proyectoId={elementoData?.proyectoId}
+                  tableroActualId={elementoData?.id}
+                  elementosList={allFeeders}
+                  value={alimentaA}
+                  multiple={true}
+                  onChange={(formatted, primaryObj, ids) => {
+                    setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                    setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                  }}
+                  label=""
+                  placeholder="Seleccionar uno o varios equipos secundarios suministrados..."
+                />
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {alimentaA ? (
+                  <span className="font-semibold text-emerald-400 print:text-black">{alimentaA}</span>
+                ) : (
+                  <span className="text-slate-500 italic print:text-gray-600">Terminal (Sin cargas secundarias enlazadas)</span>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Fila 3: Tipo de Tablero & Barras / Breaker Principal */}
           <table className="w-full text-xs text-center border-collapse border-b-2 border-slate-700 font-mono print:border-black">
             <thead>
@@ -695,10 +746,38 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       value={ubicacion}
                       onChange={(e) => setUbicacion(e.target.value)}
                       placeholder="Ej. Caseta de Generación / Estacionamiento"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 placeholder-slate-600 uppercase"
                     />
                   ) : (
                     ubicacion || '—'
+                  )}
+                </td>
+              </tr>
+              <tr className="border-t border-slate-800 print:border-gray-300">
+                <td className="bg-slate-900/90 font-bold p-3 text-slate-300 uppercase border-r border-slate-800 print:bg-gray-100 print:text-black print:border-gray-300">
+                  ALIMENTA A (CARGAS / ATS):
+                </td>
+                <td className="p-3 text-slate-100 font-semibold print:text-black">
+                  {isEditing ? (
+                    <SelectorAlimentadorJerarquico
+                      proyectoId={elementoData?.proyectoId}
+                      tableroActualId={elementoData?.id}
+                      elementosList={allFeeders}
+                      value={alimentaA}
+                      multiple={true}
+                      onChange={(formatted, primaryObj, ids) => {
+                        setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                        setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                      }}
+                      label=""
+                      placeholder="Seleccionar Transferencias (ATS), Tableros o Cargas de Emergencia..."
+                    />
+                  ) : (
+                    alimentaA ? (
+                      <span className="font-semibold text-emerald-400 print:text-black">{alimentaA}</span>
+                    ) : (
+                      <span className="text-slate-500 italic print:text-gray-600">Sin cargas secundarias vinculadas</span>
+                    )
                   )}
                 </td>
               </tr>
@@ -1153,7 +1232,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </h2>
           </div>
 
-          {/* Fila 1: ID Elemento, Alimentado Por y Ubicación */}
+          {/* Fila 1: ID Elemento y Ubicación */}
           <div className="border-b border-slate-700 p-3 bg-slate-900/60 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
               <div>
@@ -1161,20 +1240,6 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 print:text-black print:border-black">
                   {elementoData.id || '—'}
                 </span>
-              </div>
-              <div>
-                <span className="font-bold uppercase text-slate-400 print:text-black mr-1.5">ALIMENTADO POR:</span>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={alimentadoPor}
-                    onChange={(e) => setAlimentadoPor(e.target.value)}
-                    className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
-                    placeholder="Ej. PCC / Acometida 1"
-                  />
-                ) : (
-                  <span className="font-semibold">{alimentadoPor || '—'}</span>
-                )}
               </div>
             </div>
             <div>
@@ -1184,12 +1249,67 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   type="text"
                   value={ubicacion}
                   onChange={(e) => setUbicacion(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500"
+                  className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-violet-500 uppercase"
                 />
               ) : (
                 <span className="font-semibold">{ubicacion || '—'}</span>
               )}
             </div>
+          </div>
+
+          {/* Fila 1b: Jerarquía Topológica - Alimentado Por */}
+          <div className="border-b border-slate-700 p-3 bg-slate-900/40 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="font-bold uppercase text-slate-400 print:text-black mr-2">TRANSFORMADOR ALIMENTADO POR:</span>
+            </div>
+            {isEditing ? (
+              <div className="w-full sm:w-2/3">
+                <SelectorAlimentadorJerarquico
+                  proyectoId={elementoData?.proyectoId}
+                  tableroActualId={elementoData?.id}
+                  elementosList={allFeeders}
+                  value={alimentadoPor}
+                  multiple={false}
+                  onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
+                  label=""
+                  placeholder="Seleccionar Subestación, Red Eléctrica o Acometida..."
+                />
+              </div>
+            ) : (
+              <span className="font-semibold text-amber-400 print:text-black">{alimentadoPor || '—'}</span>
+            )}
+          </div>
+
+          {/* Fila 1c: Jerarquía Topológica - Alimenta A */}
+          <div className="border-b border-slate-700 p-3 bg-slate-900/30 font-mono text-xs text-slate-100 print:bg-white print:text-black print:border-black flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="font-bold uppercase text-slate-400 print:text-black mr-2">TRANSFORMADOR ALIMENTA A (CARGAS SECUNDARIAS):</span>
+            </div>
+            {isEditing ? (
+              <div className="w-full sm:w-2/3">
+                <SelectorAlimentadorJerarquico
+                  proyectoId={elementoData?.proyectoId}
+                  tableroActualId={elementoData?.id}
+                  elementosList={allFeeders}
+                  value={alimentaA}
+                  multiple={true}
+                  onChange={(formatted, primaryObj, ids) => {
+                    setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                    setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                  }}
+                  label=""
+                  placeholder="Seleccionar Tableros, ATS o CCMs que reciben energía..."
+                />
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {alimentaA ? (
+                  <span className="font-semibold text-emerald-400 print:text-black">{alimentaA}</span>
+                ) : (
+                  <span className="text-slate-500 italic print:text-gray-600">Sin cargas secundarias enlazadas</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Tabla de Especificaciones */}

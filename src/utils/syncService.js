@@ -268,9 +268,9 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
 
   // 2. Auto-Healing Específico por Entidad
   if (entityName === 'ElementoUnifilar' || entityName === 'Tablero' || entityName === 'Elemento') {
-    // Nombre e Identidad seguros
-    data.nombre = String(data.nombre || data.codigo || data.tag || 'Elemento Unifilar').trim();
-    if (!data.nombre) data.nombre = 'Elemento Unifilar';
+    // Nombre e Identidad seguros en MAYÚSCULAS
+    const rawNombre = String(data.nombre || data.codigo || data.tag || 'Elemento Unifilar').trim();
+    data.nombre = (rawNombre || 'ELEMENTO UNIFILAR').toUpperCase();
 
     // Tipo de elemento normalizado mediante cleanTipoElemento
     data.tipoElemento = cleanTipoElemento(data.tipoElemento);
@@ -287,9 +287,16 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
       dt = { ...data.datosTecnicos };
     }
 
+    // Normalizar a mayúsculas textos en datosTecnicos
+    if (dt.marca && typeof dt.marca === 'string') dt.marca = dt.marca.trim().toUpperCase();
+    if (dt.modelo && typeof dt.modelo === 'string') dt.modelo = dt.modelo.trim().toUpperCase();
+    if (dt.conexion && typeof dt.conexion === 'string') dt.conexion = dt.conexion.trim().toUpperCase();
+    if (dt.tipoConexion && typeof dt.tipoConexion === 'string') dt.tipoConexion = dt.tipoConexion.trim().toUpperCase();
+    if (dt.fabricante && typeof dt.fabricante === 'string') dt.fabricante = dt.fabricante.trim().toUpperCase();
+
     // Rescatar campos legados u obsoletos hacia datosTecnicos
-    if (data.codigo && !dt.codigo) dt.codigo = data.codigo;
-    if (data.tag && !dt.tag) dt.tag = data.tag;
+    if (data.codigo && !dt.codigo) dt.codigo = String(data.codigo).trim().toUpperCase();
+    if (data.tag && !dt.tag) dt.tag = String(data.tag).trim().toUpperCase();
     if (data.orden !== undefined && dt.orden === undefined) dt.orden = data.orden;
     if (data.tension && !dt.tension) dt.tension = data.tension;
     if (data.voltaje && !dt.tension) dt.tension = data.voltaje;
@@ -306,14 +313,17 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
     }
     data.datosTecnicos = dt;
 
-    // Valores por defecto seguros para campos de texto
-    data.ubicacion = typeof data.ubicacion === 'string' ? data.ubicacion : '';
-    data.alimentadoPor = typeof data.alimentadoPor === 'string' ? data.alimentadoPor : '';
-    data.observacionesGenerales = typeof data.observacionesGenerales === 'string' ? data.observacionesGenerales : '';
-    data.circuitoOrigen = typeof data.circuitoOrigen === 'string' ? data.circuitoOrigen : '';
-    data.calibreConductor = typeof data.calibreConductor === 'string' ? data.calibreConductor : '';
-    data.breakerMarca = typeof data.breakerMarca === 'string' ? data.breakerMarca : '';
-    data.breakerTipo = typeof data.breakerTipo === 'string' ? data.breakerTipo : '';
+    // Valores por defecto seguros para campos de texto normalizados en MAYÚSCULAS
+    data.ubicacion = typeof data.ubicacion === 'string' ? data.ubicacion.trim().toUpperCase() : 'SIN UBICACIÓN';
+    data.alimentadoPor = typeof data.alimentadoPor === 'string' ? data.alimentadoPor.trim().toUpperCase() : '';
+    data.alimentadoPorId = data.alimentadoPorId || null;
+    data.alimentaA = typeof data.alimentaA === 'string' ? data.alimentaA.trim().toUpperCase() : (typeof dt.alimentaA === 'string' ? dt.alimentaA.trim().toUpperCase() : '');
+    data.alimentaAIds = Array.isArray(data.alimentaAIds) ? data.alimentaAIds : (Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []);
+    data.observacionesGenerales = typeof data.observacionesGenerales === 'string' ? data.observacionesGenerales.trim().toUpperCase() : '';
+    data.circuitoOrigen = typeof data.circuitoOrigen === 'string' ? data.circuitoOrigen.trim().toUpperCase() : '';
+    data.calibreConductor = typeof data.calibreConductor === 'string' ? data.calibreConductor.trim().toUpperCase() : '';
+    data.breakerMarca = typeof data.breakerMarca === 'string' ? data.breakerMarca.trim().toUpperCase() : '';
+    data.breakerTipo = typeof data.breakerTipo === 'string' ? data.breakerTipo.trim().toUpperCase() : '';
 
     // Valores por defecto seguros para campos numéricos y float
     if (data.breakerAmperaje !== undefined && data.breakerAmperaje !== null && data.breakerAmperaje !== '') {
@@ -324,7 +334,7 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
     }
 
     if (data.potenciaEstimada !== undefined && data.potenciaEstimada !== null && data.potenciaEstimada !== '') {
-      data.potenciaEstimada = String(data.potenciaEstimada);
+      data.potenciaEstimada = String(data.potenciaEstimada).trim().toUpperCase();
     } else {
       data.potenciaEstimada = '';
     }
@@ -342,34 +352,34 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
       }
     }
   } else if (entityName === 'Subestacion') {
-    data.nombre = String(data.nombre || 'Subestación Principal').trim();
-    data.ubicacion = String(data.ubicacion || 'Sede Principal').trim();
+    data.nombre = String(data.nombre || 'Subestación Principal').trim().toUpperCase();
+    data.ubicacion = String(data.ubicacion || 'Sede Principal').trim().toUpperCase();
     data.fecha = String(data.fecha || new Date().toISOString().split('T')[0]);
     data.hora = String(data.hora || '08:00');
-    data.inspector = String(data.inspector || 'Inspector Certificado');
-    data.nivelTension = String(data.nivelTension || '13.8 kV');
+    data.inspector = String(data.inspector || 'Inspector Certificado').trim().toUpperCase();
+    data.nivelTension = String(data.nivelTension || '13.8 kV').trim().toUpperCase();
     data.estadoEntorno = typeof data.estadoEntorno === 'object' && data.estadoEntorno !== null ? data.estadoEntorno : {};
     data.obrasCiviles = typeof data.obrasCiviles === 'object' && data.obrasCiviles !== null ? data.obrasCiviles : {};
     data.equiposPrincipales = typeof data.equiposPrincipales === 'object' && data.equiposPrincipales !== null ? data.equiposPrincipales : {};
     data.puestaTierra = typeof data.puestaTierra === 'object' && data.puestaTierra !== null ? data.puestaTierra : {};
     data.edificioControl = typeof data.edificioControl === 'object' && data.edificioControl !== null ? data.edificioControl : {};
   } else if (entityName === 'Proyecto') {
-    data.nombre = String(data.nombre || 'Proyecto Principal').trim();
-    data.direccion = String(data.direccion || data.ubicacion || 'Sede de Operaciones').trim();
-    data.descripcion = typeof data.descripcion === 'string' ? data.descripcion : '';
+    data.nombre = String(data.nombre || 'Proyecto Principal').trim().toUpperCase();
+    data.direccion = String(data.direccion || data.ubicacion || 'Sede de Operaciones').trim().toUpperCase();
+    data.descripcion = typeof data.descripcion === 'string' ? data.descripcion.trim().toUpperCase() : '';
     if (data.responsable && typeof data.responsable === 'object') {
-      data.responsableNombre = data.responsableNombre || data.responsable.nombre || '';
+      data.responsableNombre = data.responsableNombre || (data.responsable.nombre ? String(data.responsable.nombre).trim().toUpperCase() : '');
       data.responsableTelefono = data.responsableTelefono || data.responsable.telefono || '';
       data.responsableEmail = data.responsableEmail || data.responsable.email || '';
     }
   } else if (entityName === 'PuntoMedicion') {
-    data.nombre = String(data.nombre || 'Punto de Medición').trim();
-    data.inspector = String(data.inspector || 'Inspector Certificado').trim();
-    data.tensionNominal = String(data.tensionNominal || '208Y/120 V');
+    data.nombre = String(data.nombre || 'Punto de Medición').trim().toUpperCase();
+    data.inspector = String(data.inspector || 'Inspector Certificado').trim().toUpperCase();
+    data.tensionNominal = String(data.tensionNominal || '208Y/120 V').trim().toUpperCase();
     data.fecha = String(data.fecha || new Date().toISOString().split('T')[0]);
     data.hora = String(data.hora || '08:00');
   } else if (entityName === 'Ccm') {
-    data.nombre = String(data.nombre || 'CCM Principal').trim();
+    data.nombre = String(data.nombre || 'CCM Principal').trim().toUpperCase();
     data.parametrosElectricos = typeof data.parametrosElectricos === 'object' && data.parametrosElectricos !== null ? data.parametrosElectricos : { tension: '480▲ (3Φ - 3 hilos Delta)', frecuencia: '60 Hz' };
     data.gavetasBucketLog = Array.isArray(data.gavetasBucketLog) ? data.gavetasBucketLog : [];
   }
@@ -459,6 +469,8 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     formData.append('ubicacion', healed.ubicacion);
     formData.append('alimentadoPor', healed.alimentadoPor);
     if (healed.alimentadoPorId) formData.append('alimentadoPorId', healed.alimentadoPorId);
+    if (healed.alimentaA) formData.append('alimentaA', healed.alimentaA);
+    if (healed.alimentaAIds && healed.alimentaAIds.length > 0) formData.append('alimentaAIds', JSON.stringify(healed.alimentaAIds));
     formData.append('observacionesGenerales', healed.observacionesGenerales);
     formData.append('proyectoId', elemento.proyectoId || '');
     formData.append('circuitoOrigen', healed.circuitoOrigen);

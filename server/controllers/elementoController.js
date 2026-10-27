@@ -73,9 +73,31 @@ export const crearElementoUnifilar = async (req, res, next) => {
       fotoUrl
     } = req.body;
 
-    // 1. Auto-Healing de campos obligatorios para tolerar estructuras antiguas
-    const cleanNombre = String(nombre || req.body.codigo || req.body.tag || 'Elemento Unifilar').trim() || 'Elemento Unifilar';
+    // 1. Auto-Healing y normalización estricta a MAYÚSCULAS
+    const cleanNombre = String(nombre || req.body.codigo || req.body.tag || 'Elemento Unifilar').trim().toUpperCase() || 'ELEMENTO UNIFILAR';
     const cleanTipo = cleanTipoElemento(tipoElemento);
+    const cleanUbicacion = ubicacion ? String(ubicacion).trim().toUpperCase() : 'SIN UBICACIÓN';
+    let cleanAlimentadoPor = alimentadoPor ? String(alimentadoPor).trim().toUpperCase() : '';
+    let cleanAlimentadoPorId = req.body.alimentadoPorId || null;
+    const cleanAlimentaA = req.body.alimentaA ? String(req.body.alimentaA).trim().toUpperCase() : '';
+    let cleanAlimentaAIds = [];
+    if (req.body.alimentaAIds) {
+      if (Array.isArray(req.body.alimentaAIds)) {
+        cleanAlimentaAIds = req.body.alimentaAIds;
+      } else if (typeof req.body.alimentaAIds === 'string') {
+        try {
+          const parsed = JSON.parse(req.body.alimentaAIds);
+          if (Array.isArray(parsed)) cleanAlimentaAIds = parsed;
+        } catch {
+          cleanAlimentaAIds = req.body.alimentaAIds.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+    }
+    const cleanBreakerMarca = req.body.breakerMarca ? String(req.body.breakerMarca).trim().toUpperCase() : '';
+    const cleanBreakerTipo = req.body.breakerTipo ? String(req.body.breakerTipo).trim().toUpperCase() : '';
+    const cleanCalibre = req.body.calibreConductor ? String(req.body.calibreConductor).trim().toUpperCase() : '';
+    const cleanCircuitoOrigen = req.body.circuitoOrigen ? String(req.body.circuitoOrigen).trim().toUpperCase() : '';
+    const cleanObservaciones = observacionesGenerales ? String(observacionesGenerales).trim().toUpperCase() : '';
 
     let targetProyectoId = proyectoId;
     if (!targetProyectoId) {
@@ -324,6 +346,39 @@ export const crearElementoUnifilar = async (req, res, next) => {
         updateFotoData.foto = null;
       }
 
+      // Validación topológica defensiva contra bucles y auto-referencias
+      if (cleanAlimentadoPorId) {
+        if (cleanAlimentadoPorId === finalElementId) {
+          cleanAlimentadoPorId = null;
+          cleanAlimentadoPor = '';
+        } else {
+          let currAncestor = cleanAlimentadoPorId;
+          let depth = 0;
+          let hasCycle = false;
+          while (currAncestor && depth < 32) {
+            if (currAncestor === finalElementId) {
+              hasCycle = true;
+              break;
+            }
+            const anc = await tx.elementoUnifilar.findUnique({
+              where: { id: currAncestor },
+              select: { alimentadoPorId: true, nombre: true }
+            });
+            if (!anc) break;
+            if (!cleanAlimentadoPor && depth === 0) {
+              cleanAlimentadoPor = anc.nombre;
+            }
+            currAncestor = anc.alimentadoPorId;
+            depth++;
+          }
+          if (hasCycle) {
+            console.warn(`[AF TOPO] Ciclo jerárquico evitado: ${finalElementId} no puede tener como alimentador a su descendiente ${cleanAlimentadoPorId}.`);
+            cleanAlimentadoPorId = null;
+            cleanAlimentadoPor = '';
+          }
+        }
+      }
+
       const safeBreakerAmp = req.body.breakerAmperaje !== undefined && req.body.breakerAmperaje !== null && req.body.breakerAmperaje !== ''
         ? (parseFloat(req.body.breakerAmperaje) || 0)
         : 0;
@@ -331,21 +386,25 @@ export const crearElementoUnifilar = async (req, res, next) => {
         ? String(req.body.potenciaEstimada)
         : '';
 
-      return await tx.elementoUnifilar.upsert({
+      if (cleanAlimentaA) parsedDatosTecnicos.alimentaA = cleanAlimentaA;
+      if (cleanAlimentaAIds.length > 0) parsedDatosTecnicos.alimentaAIds = cleanAlimentaAIds;
+
+      const elementoPersistido = await tx.elementoUnifilar.upsert({
         where: { id: finalElementId },
         update: {
           nombre: cleanNombre,
           tipoElemento: cleanTipo,
-          ubicacion: ubicacion || '',
-          alimentadoPor: alimentadoPor || '',
+          ubicacion: cleanUbicacion,
+          alimentadoPor: cleanAlimentadoPor,
+          alimentadoPorId: cleanAlimentadoPorId,
           ...updateFotoData,
-          observacionesGenerales: observacionesGenerales || '',
+          observacionesGenerales: cleanObservaciones,
           datosTecnicos: parsedDatosTecnicos,
-          circuitoOrigen: req.body.circuitoOrigen || '',
-          calibreConductor: req.body.calibreConductor || '',
+          circuitoOrigen: cleanCircuitoOrigen,
+          calibreConductor: cleanCalibre,
           breakerAmperaje: safeBreakerAmp,
-          breakerMarca: req.body.breakerMarca || '',
-          breakerTipo: req.body.breakerTipo || '',
+          breakerMarca: cleanBreakerMarca,
+          breakerTipo: cleanBreakerTipo,
           potenciaEstimada: safePotencia,
           estadoVinculo: ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'].includes(req.body.estadoVinculo) ? req.body.estadoVinculo : 'ACTIVO',
           version: { increment: 1 },
@@ -358,16 +417,17 @@ export const crearElementoUnifilar = async (req, res, next) => {
           id: finalElementId,
           nombre: cleanNombre,
           tipoElemento: cleanTipo,
-          ubicacion: ubicacion || '',
-          alimentadoPor: alimentadoPor || '',
+          ubicacion: cleanUbicacion,
+          alimentadoPor: cleanAlimentadoPor,
+          alimentadoPorId: cleanAlimentadoPorId,
           foto: isDeletePhoto ? null : (finalFoto || null),
-          observacionesGenerales: observacionesGenerales || '',
+          observacionesGenerales: cleanObservaciones,
           datosTecnicos: parsedDatosTecnicos,
-          circuitoOrigen: req.body.circuitoOrigen || '',
-          calibreConductor: req.body.calibreConductor || '',
+          circuitoOrigen: cleanCircuitoOrigen,
+          calibreConductor: cleanCalibre,
           breakerAmperaje: safeBreakerAmp,
-          breakerMarca: req.body.breakerMarca || '',
-          breakerTipo: req.body.breakerTipo || '',
+          breakerMarca: cleanBreakerMarca,
+          breakerTipo: cleanBreakerTipo,
           potenciaEstimada: safePotencia,
           estadoVinculo: ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'].includes(req.body.estadoVinculo) ? req.body.estadoVinculo : 'ACTIVO',
           version: 1,
@@ -377,6 +437,45 @@ export const crearElementoUnifilar = async (req, res, next) => {
           ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
         }
       });
+
+      // BIDIRECCIONALIDAD TOPOLÓGICA: Sincronizar cargas aguas abajo ("ALIMENTA A")
+      const safeAlimentaAIds = cleanAlimentaAIds.filter(cid => cid && cid !== finalElementId);
+      const isAlimentaSpecified = req.body.alimentaAIds !== undefined || parsedDatosTecnicos.alimentaAIds !== undefined;
+
+      if (isAlimentaSpecified) {
+        // Desvincular equipos que antes eran alimentados por finalElementId pero ya no están en safeAlimentaAIds
+        await tx.elementoUnifilar.updateMany({
+          where: {
+            alimentadoPorId: finalElementId,
+            id: { notIn: safeAlimentaAIds }
+          },
+          data: {
+            alimentadoPorId: null,
+            alimentadoPor: ''
+          }
+        });
+
+        // Vincular los nuevos equipos aguas abajo
+        if (safeAlimentaAIds.length > 0) {
+          await tx.elementoUnifilar.updateMany({
+            where: {
+              id: { in: safeAlimentaAIds }
+            },
+            data: {
+              alimentadoPorId: finalElementId,
+              alimentadoPor: cleanNombre
+            }
+          });
+        }
+      } else {
+        // Actualizar el nombre descriptivo de alimentación en las cargas existentes si el equipo cambió de nombre
+        await tx.elementoUnifilar.updateMany({
+          where: { alimentadoPorId: finalElementId },
+          data: { alimentadoPor: cleanNombre }
+        });
+      }
+
+      return elementoPersistido;
     });
 
     return res.status(200).json({

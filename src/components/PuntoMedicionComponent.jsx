@@ -19,6 +19,7 @@ import {
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
+import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import { TENSIONES_COVENIN_TODAS } from '../utils/constants';
 import TensionNominalInput from './TensionNominalInput';
 import useStore, { getElementCode } from '../store/useStore';
@@ -38,6 +39,9 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
   const {
     id,
     nombre = '',
+    alimentadoPor = '',
+    alimentaA = '',
+    alimentaAIds = [],
     fecha = '',
     hora = '',
     inspector = '',
@@ -336,8 +340,47 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
               disabled={readOnly}
               value={codigoElementoPrincipal ?? ''}
               onChange={(e) => updateField('codigoElementoPrincipal', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 uppercase"
               placeholder="Ej. ELEM-MED-01"
+            />
+          </div>
+        </div>
+
+        {/* Topología y Jerarquía Eléctrica del Punto de Medición */}
+        <div className="pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* ALIMENTADO POR */}
+          <div>
+            <SelectorAlimentadorJerarquico
+              proyectoId={puntoData?.proyectoId}
+              tableroActualId={puntoData?.id}
+              value={alimentadoPor}
+              disabled={readOnly}
+              multiple={false}
+              onChange={(val, selectedObj) => {
+                const upperVal = val ? val.toUpperCase() : '';
+                updateField('alimentadoPor', upperVal);
+                updateField('alimentadoPorId', selectedObj?.id || null);
+              }}
+              label="ALIMENTADO POR (Origen / Red Eléctrica Aguas Arriba)"
+              placeholder="Seleccionar Red CORPOELEC, Acometida Primaria..."
+            />
+          </div>
+
+          {/* ALIMENTA A */}
+          <div>
+            <SelectorAlimentadorJerarquico
+              proyectoId={puntoData?.proyectoId}
+              tableroActualId={puntoData?.id}
+              value={alimentaA}
+              disabled={readOnly}
+              multiple={true}
+              onChange={(formatted, primaryObj, ids) => {
+                const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                updateField('alimentaA', upperFormatted);
+                updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
+              }}
+              label="ALIMENTA A (Equipos Suministrados Aguas Abajo)"
+              placeholder="Seleccionar Subestación, Tableros Principales o Transformadores..."
             />
           </div>
         </div>

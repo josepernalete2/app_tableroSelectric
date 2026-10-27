@@ -1528,24 +1528,26 @@ export const useStore = create(
           : (existingElements.length > 0 ? Math.max(0, ...existingElements.map(e => Number(e.orden) || 0)) + 1 : 1);
 
         const nombreFinal = (elementoData.nombre && elementoData.nombre.trim())
-          ? elementoData.nombre.trim()
-          : `${codigo.toUpperCase()} - ${tipoElemento}`;
+          ? String(elementoData.nombre).trim().toUpperCase()
+          : `${codigo.toUpperCase()} - ${tipoElemento.toUpperCase()}`;
 
         const nuevoElemento = {
           id: uuidId,
-          codigo: codigo,
+          codigo: codigo.toUpperCase(),
           nombre: nombreFinal,
           tipoElemento,
           orden: nextOrden,
-          ubicacion: elementoData.ubicacion || 'Sin ubicación',
-          alimentadoPor: elementoData.alimentadoPor || '',
+          ubicacion: elementoData.ubicacion ? String(elementoData.ubicacion).trim().toUpperCase() : 'SIN UBICACIÓN',
+          alimentadoPor: elementoData.alimentadoPor ? String(elementoData.alimentadoPor).trim().toUpperCase() : '',
           alimentadoPorId: elementoData.alimentadoPorId || null,
+          alimentaA: elementoData.alimentaA ? String(elementoData.alimentaA).trim().toUpperCase() : '',
+          alimentaAIds: Array.isArray(elementoData.alimentaAIds) ? elementoData.alimentaAIds : (Array.isArray(elementoData.datosTecnicos?.alimentaAIds) ? elementoData.datosTecnicos.alimentaAIds : []),
           foto: elementoData.foto || null,
           fotoBlob: elementoData.fotoBlob || null,
-          observacionesGenerales: elementoData.observacionesGenerales || '',
+          observacionesGenerales: elementoData.observacionesGenerales ? String(elementoData.observacionesGenerales).trim().toUpperCase() : '',
           datosTecnicos: {
             ...(elementoData.datosTecnicos || {}),
-            codigo: codigo
+            codigo: codigo.toUpperCase()
           },
           proyectoId: proyectoId || null,
           empresaId: parentCompanyId,
@@ -1555,6 +1557,7 @@ export const useStore = create(
         const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
         const { token } = get();
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+        const safeNewAlimentaAIds = (nuevoElemento.alimentaAIds || []).filter(cid => cid && cid !== uuidId);
 
         set((state) => ({
           companies: state.companies.map((c) => {
@@ -1564,7 +1567,12 @@ export const useStore = create(
                   ...c,
                   proyectos: c.proyectos.map((p) => {
                     if (p.id === proyectoId) {
-                      const elementos = p.elementosUnifilares || p.tableros || [];
+                      const elementos = (p.elementosUnifilares || p.tableros || []).map(e => {
+                        if (safeNewAlimentaAIds.includes(e.id)) {
+                          return { ...e, alimentadoPorId: uuidId, alimentadoPor: nombreFinal };
+                        }
+                        return e;
+                      });
                       return {
                         ...p,
                         elementosUnifilares: [...elementos, nuevoElemento]
@@ -1574,7 +1582,12 @@ export const useStore = create(
                   })
                 };
               } else {
-                const elementosComp = c.elementosUnifilares || [];
+                const elementosComp = (c.elementosUnifilares || []).map(e => {
+                  if (safeNewAlimentaAIds.includes(e.id)) {
+                    return { ...e, alimentadoPorId: uuidId, alimentadoPor: nombreFinal };
+                  }
+                  return e;
+                });
                 return {
                   ...c,
                   elementosUnifilares: [...elementosComp, nuevoElemento]
@@ -1583,7 +1596,15 @@ export const useStore = create(
             }
             return c;
           }),
-          elementosLocales: [...(state.elementosLocales || []), nuevoElemento],
+          elementosLocales: [
+            ...(state.elementosLocales || []).map(e => {
+              if (safeNewAlimentaAIds.includes(e.id)) {
+                return { ...e, alimentadoPorId: uuidId, alimentadoPor: nombreFinal };
+              }
+              return e;
+            }),
+            nuevoElemento
+          ],
           // REGLA ESTRICTA DE CONECTIVIDAD: La cola offline está reservada EXCLUSIVAMENTE para cuando navigator.onLine === false
           syncQueue: (!isOnline)
             ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
@@ -1630,18 +1651,49 @@ export const useStore = create(
         const { token } = get();
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
 
+        const cleanUpdatedData = { ...updatedData };
+        if (cleanUpdatedData.nombre) cleanUpdatedData.nombre = String(cleanUpdatedData.nombre).trim().toUpperCase();
+        if (cleanUpdatedData.ubicacion) cleanUpdatedData.ubicacion = String(cleanUpdatedData.ubicacion).trim().toUpperCase();
+        if (cleanUpdatedData.alimentadoPor) cleanUpdatedData.alimentadoPor = String(cleanUpdatedData.alimentadoPor).trim().toUpperCase();
+        if (cleanUpdatedData.breakerMarca) cleanUpdatedData.breakerMarca = String(cleanUpdatedData.breakerMarca).trim().toUpperCase();
+        if (cleanUpdatedData.breakerTipo) cleanUpdatedData.breakerTipo = String(cleanUpdatedData.breakerTipo).trim().toUpperCase();
+        if (cleanUpdatedData.calibreConductor) cleanUpdatedData.calibreConductor = String(cleanUpdatedData.calibreConductor).trim().toUpperCase();
+        if (cleanUpdatedData.circuitoOrigen) cleanUpdatedData.circuitoOrigen = String(cleanUpdatedData.circuitoOrigen).trim().toUpperCase();
+        if (cleanUpdatedData.observacionesGenerales) cleanUpdatedData.observacionesGenerales = String(cleanUpdatedData.observacionesGenerales).trim().toUpperCase();
+        if (cleanUpdatedData.codigo) cleanUpdatedData.codigo = String(cleanUpdatedData.codigo).trim().toUpperCase();
+        if (cleanUpdatedData.alimentaA) cleanUpdatedData.alimentaA = String(cleanUpdatedData.alimentaA).trim().toUpperCase();
+
+        const explicitAlimentaAIds = cleanUpdatedData.alimentaAIds !== undefined 
+          ? cleanUpdatedData.alimentaAIds 
+          : cleanUpdatedData.datosTecnicos?.alimentaAIds;
+        const hasExplicitAlimentaA = Array.isArray(explicitAlimentaAIds);
+        const safeAlimentaAIds = hasExplicitAlimentaA ? explicitAlimentaAIds.filter(cid => cid && cid !== elementoId) : [];
+        const effectiveParentName = cleanUpdatedData.nombre;
+
+        const syncElementBidirectional = (e) => {
+          if (e.id === elementoId) {
+            return { ...e, ...cleanUpdatedData };
+          }
+          if (hasExplicitAlimentaA) {
+            if (safeAlimentaAIds.includes(e.id)) {
+              return { ...e, alimentadoPorId: elementoId, alimentadoPor: effectiveParentName || e.alimentadoPor };
+            }
+            if (e.alimentadoPorId === elementoId && !safeAlimentaAIds.includes(e.id)) {
+              return { ...e, alimentadoPorId: null, alimentadoPor: '' };
+            }
+          } else if (e.alimentadoPorId === elementoId && effectiveParentName) {
+            return { ...e, alimentadoPor: effectiveParentName };
+          }
+          return e;
+        };
+
         set((state) => {
           const updatedCompanies = state.companies.map((c) => {
             if (!proyectoId) {
               const list = c.elementosUnifilares || [];
               return {
                 ...c,
-                elementosUnifilares: list.map((e) => {
-                  if (e.id === elementoId) {
-                    return { ...e, ...updatedData };
-                  }
-                  return e;
-                })
+                elementosUnifilares: list.map(syncElementBidirectional)
               };
             }
             return {
@@ -1651,12 +1703,7 @@ export const useStore = create(
                   const list = p.elementosUnifilares || p.tableros || [];
                   return {
                     ...p,
-                    elementosUnifilares: list.map((e) => {
-                      if (e.id === elementoId) {
-                        return { ...e, ...updatedData };
-                      }
-                      return e;
-                    })
+                    elementosUnifilares: list.map(syncElementBidirectional)
                   };
                 }
                 return p;
@@ -1664,12 +1711,7 @@ export const useStore = create(
             };
           });
 
-          const updatedElementosLocales = (state.elementosLocales || []).map((e) => {
-            if (e.id === elementoId) {
-              return { ...e, ...updatedData };
-            }
-            return e;
-          });
+          const updatedElementosLocales = (state.elementosLocales || []).map(syncElementBidirectional);
 
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let updatedSyncQueue = [...currentQueue];
@@ -3143,10 +3185,20 @@ export const useStore = create(
             proyectos: (c.proyectos || []).map((p) => {
               if (p.id !== proyectoId) return p;
 
-              // Buscar nombre del padre si existe
-              const list = p.elementosUnifilares || [];
-              const padre = list.find((e) => e.id === padreId);
-              if (padre) nombrePadre = padre.nombre;
+              // Buscar nombre del padre si existe en cualquier colección eléctrica
+              const allCandidates = [
+                ...(p.elementosUnifilares || p.tableros || []),
+                ...(p.inspeccionesSubestacion || p.subestaciones || []),
+                ...(p.puntosMedicion || []),
+                ...(p.ccmList || p.ccms || [])
+              ];
+              const padre = allCandidates.find((e) => e.id === padreId);
+              if (padre) nombrePadre = String(padre.nombre || '').trim().toUpperCase();
+
+              const cOrigen = datosEnlace.circuitoOrigen ? String(datosEnlace.circuitoOrigen).trim().toUpperCase() : 'SALIDA';
+              const cCalibre = datosEnlace.calibreConductor ? String(datosEnlace.calibreConductor).trim().toUpperCase() : '';
+              const cMarca = datosEnlace.breakerMarca ? String(datosEnlace.breakerMarca).trim().toUpperCase() : '';
+              const cTipo = datosEnlace.breakerTipo ? String(datosEnlace.breakerTipo).trim().toUpperCase() : '';
 
               return {
                 ...p,
@@ -3155,12 +3207,12 @@ export const useStore = create(
                     return {
                       ...e,
                       alimentadoPorId: padreId,
-                      alimentadoPor: nombrePadre ? `${nombrePadre} (${datosEnlace.circuitoOrigen || 'Salida'})` : e.alimentadoPor,
-                      circuitoOrigen: datosEnlace.circuitoOrigen || e.circuitoOrigen,
-                      calibreConductor: datosEnlace.calibreConductor || e.calibreConductor,
+                      alimentadoPor: nombrePadre ? `${nombrePadre} (${cOrigen})` : e.alimentadoPor,
+                      circuitoOrigen: cOrigen || e.circuitoOrigen,
+                      calibreConductor: cCalibre || e.calibreConductor,
                       breakerAmperaje: datosEnlace.breakerAmperaje || e.breakerAmperaje,
-                      breakerMarca: datosEnlace.breakerMarca || e.breakerMarca,
-                      breakerTipo: datosEnlace.breakerTipo || e.breakerTipo,
+                      breakerMarca: cMarca || e.breakerMarca,
+                      breakerTipo: cTipo || e.breakerTipo,
                       estadoVinculo: 'ACTIVO'
                     };
                   }
