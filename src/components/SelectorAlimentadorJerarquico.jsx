@@ -17,112 +17,16 @@ import {
   Radio,
   ArrowRightLeft,
   Flame,
-  Plus
+  Plus,
+  Edit3
 } from 'lucide-react';
 
 /**
- * Fuentes de Red Eléctrica Primaria y Acometidas Normalizadas
- * Permite a los inspectores conectar las cabeceras de jerarquía directamente a la red sin texto manual
+ * Compatibilidad de exportación: arrays vacíos para eliminar fuentes genéricas / SEN
+ * que saturaban la interfaz sin pertenecer a la base de datos real del proyecto.
  */
-export const FUENTES_RED_PRIMARIAS = [
-  {
-    id: 'GRID_CORPOELEC_138KV',
-    nombre: 'CORPOELEC RED PRIMARIA 13.8 KV',
-    codigo: 'RED-13.8K',
-    tipoElemento: 'RED_ELECTRICA',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: '13.8 kV',
-    ubicacion: 'Red de Distribución CORPOELEC',
-    detalles: 'Suministro Comercial Media Tensión'
-  },
-  {
-    id: 'GRID_CORPOELEC_24KV',
-    nombre: 'CORPOELEC RED PRIMARIA 24.0 KV',
-    codigo: 'RED-24K',
-    tipoElemento: 'RED_ELECTRICA',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: '24.0 kV',
-    ubicacion: 'Red de Distribución CORPOELEC',
-    detalles: 'Suministro Comercial Media Tensión'
-  },
-  {
-    id: 'GRID_CORPOELEC_345KV',
-    nombre: 'CORPOELEC RED SUBTRANSMISIÓN 34.5 KV',
-    codigo: 'RED-34.5K',
-    tipoElemento: 'RED_ELECTRICA',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: '34.5 kV',
-    ubicacion: 'Red de Subtransmisión CORPOELEC',
-    detalles: 'Suministro Alta Tensión'
-  },
-  {
-    id: 'GRID_CORPOELEC_BT_208V',
-    nombre: 'CORPOELEC ACOMETIDA DIRECTA BT 208Y/120V',
-    codigo: 'RED-208V',
-    tipoElemento: 'RED_ELECTRICA',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: '208Y / 120 V',
-    ubicacion: 'Acometida de Servicio Público',
-    detalles: 'Baja Tensión Comercial / Residencial'
-  },
-  {
-    id: 'GRID_CORPOELEC_BT_480V',
-    nombre: 'CORPOELEC ACOMETIDA DIRECTA BT 480Y/277V',
-    codigo: 'RED-480V',
-    tipoElemento: 'RED_ELECTRICA',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: '480Y / 277 V',
-    ubicacion: 'Acometida de Servicio Industrial',
-    detalles: 'Baja Tensión Industrial'
-  },
-  {
-    id: 'GRID_GEN_EXTERNO',
-    nombre: 'PLANTA / GENERADOR DE EMERGENCIA EXTERNO',
-    codigo: 'GEN-EXT',
-    tipoElemento: 'GENERADOR',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: '480 / 208 V',
-    ubicacion: 'Exterior / Caseta de Generación',
-    detalles: 'Fuente de Respaldo Auxiliar'
-  },
-  {
-    id: 'GRID_ACOMETIDA_EXTERNA',
-    nombre: 'ACOMETIDA EXTERNA GENERAL (PCC)',
-    codigo: 'ACOM-EXT',
-    tipoElemento: 'RED_ELECTRICA',
-    categoria: 'Acometidas y Red Eléctrica (SEN)',
-    nivelTension: 'Tensión de Red',
-    ubicacion: 'Punto de Conexión Comercial (PCC)',
-    detalles: 'Entrada Principal de Alimentación'
-  }
-];
-
-/**
- * Fuentes Autónomas Primarias (Generadores y Sistemas de Emergencia/Cogeneración)
- * Los generadores operan como fuentes primarias autónomas independientes de la red externa
- */
-export const FUENTES_AUTONOMAS_PRIMARIAS = [
-  {
-    id: 'ORIGEN_AUTONOMO_MECANICO',
-    nombre: 'GENERACIÓN AUTÓNOMA (SISTEMA PRIMARIO / MOTOGENERADOR)',
-    codigo: 'GEN-AUTO',
-    tipoElemento: 'GENERADOR',
-    categoria: 'Fuentes Autónomas / Generación',
-    nivelTension: 'Energía Mecánica / Combustible',
-    ubicacion: 'Caseta de Generación / Sala de Máquinas',
-    detalles: 'Fuente primaria independiente de la red eléctrica'
-  },
-  {
-    id: 'ORIGEN_COGENERACION_PARALELO',
-    nombre: 'SISTEMA DE COGENERACIÓN / SINCRONISMO EN PARALELO',
-    codigo: 'COGEN-PAR',
-    tipoElemento: 'GENERADOR',
-    categoria: 'Fuentes Autónomas / Generación',
-    nivelTension: 'Media / Baja Tensión Sincronizada',
-    ubicacion: 'Subestación / Sala de Sincronismo',
-    detalles: 'Operación en paralelo con la red o fuentes alternas'
-  }
-];
+export const FUENTES_RED_PRIMARIAS = [];
+export const FUENTES_AUTONOMAS_PRIMARIAS = [];
 
 /**
  * Retorna el icono temático y colores según el tipo de elemento eléctrico
@@ -145,8 +49,10 @@ const getIconAndColor = (tipo) => {
       return { icon: Zap, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
     case 'PUNTO_MEDICION':
       return { icon: Radio, color: 'text-blue-400 bg-blue-500/10 border-blue-500/30' };
-    case 'RED_ELECTRICA':
-      return { icon: Zap, color: 'text-orange-400 bg-orange-500/10 border-orange-500/30' };
+    case 'ALIMENTADOR':
+      return { icon: Zap, color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30' };
+    case 'MANUAL':
+      return { icon: Edit3, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
     default:
       return { icon: Zap, color: 'text-slate-400 bg-slate-500/10 border-slate-500/30' };
   }
@@ -154,11 +60,10 @@ const getIconAndColor = (tipo) => {
 
 /**
  * Extrae EXCLUSIVAMENTE los elementos pertenecientes al proyecto actual.
- * Aplica aislamiento estricto multitenant: nunca mezcla elementos de otras empresas o proyectos.
+ * Aplica aislamiento estricto: nunca mezcla elementos de otros proyectos o empresas.
  */
 const extractStoreProjectElements = (projId, currentId, companyId = null) => {
   const storeState = useStore.getState();
-  const companies = storeState.companies || [];
   const list = [];
   const seenIds = new Set();
 
@@ -181,8 +86,10 @@ const extractStoreProjectElements = (projId, currentId, companyId = null) => {
     });
   };
 
-  // 1. MODO PROYECTO ESTRICTO: Si hay proyectoId, extraer únicamente de dicho proyecto
+  // REGLA ESTRICTA DE AISLAMIENTO:
+  // Si hay proyectoId, extraer ÚNICA Y EXCLUSIVAMENTE los elementos del proyecto en curso.
   if (projId) {
+    const companies = storeState.companies || [];
     for (const c of companies) {
       if (Array.isArray(c.proyectos)) {
         const targetProj = c.proyectos.find(p => String(p.id) === String(projId));
@@ -192,14 +99,18 @@ const extractStoreProjectElements = (projId, currentId, companyId = null) => {
           (targetProj.subestaciones || targetProj.inspeccionesSubestacion || []).forEach(s => addIfNew(s, 'SUBESTACION'));
           (targetProj.puntosMedicion || []).forEach(pm => addIfNew(pm, 'PUNTO_MEDICION'));
           (targetProj.ccmList || targetProj.ccms || []).forEach(ccm => addIfNew(ccm, 'CCM'));
-          break; // Proyecto único encontrado; detener búsqueda para impedir fugas
+          (targetProj.alimentadores || []).forEach(a => addIfNew(a, 'ALIMENTADOR'));
+          break; // Detener búsqueda para impedir cualquier fuga entre proyectos
         }
       }
     }
 
-    // Elementos guardados en cola u offline que coincidan estrictamente con este proyectoId
+    // Elementos guardados localmente u offline que pertenezcan estrictamente a este proyectoId
     (storeState.elementosLocales || []).forEach(e => {
       if (String(e.proyectoId) === String(projId)) addIfNew(e, e.tipoElemento || 'TABLERO');
+    });
+    (storeState.tablerosLocales || []).forEach(t => {
+      if (String(t.proyectoId) === String(projId)) addIfNew(t, 'TABLERO');
     });
     (storeState.subestacionesLocales || []).forEach(s => {
       if (String(s.proyectoId) === String(projId)) addIfNew(s, 'SUBESTACION');
@@ -210,8 +121,16 @@ const extractStoreProjectElements = (projId, currentId, companyId = null) => {
     (storeState.ccmLocales || []).forEach(ccm => {
       if (String(ccm.proyectoId) === String(projId)) addIfNew(ccm, 'CCM');
     });
-  } else if (companyId) {
-    // 2. MODO EMPRESA ESTRICTO: Si no hay proyectoId pero sí companyId (equipos en la raíz de empresa)
+    (storeState.alimentadoresLocales || []).forEach(a => {
+      if (String(a.proyectoId) === String(projId)) addIfNew(a, 'ALIMENTADOR');
+    });
+
+    return list;
+  }
+
+  // Si no se suministra proyectoId (por ejemplo en vistas raíz de empresa), filtrar estrictamente por empresa sin mezclar otros proyectos
+  if (companyId) {
+    const companies = storeState.companies || [];
     const targetComp = companies.find(c => String(c.id) === String(companyId));
     if (targetComp && Array.isArray(targetComp.elementosUnifilares)) {
       targetComp.elementosUnifilares.forEach(e => {
@@ -225,7 +144,7 @@ const extractStoreProjectElements = (projId, currentId, companyId = null) => {
 
 /**
  * Componente Selector Dinámico e Inteligente de Jerarquía Eléctrica
- * Consulta exclusivamente los equipos registrados en el proyecto actual y previene entradas manuales por texto
+ * Permite seleccionar nodos registrados en el proyecto actual o ingresar nombres manuales libres.
  */
 export default function SelectorAlimentadorJerarquico({
   value = '',
@@ -233,7 +152,7 @@ export default function SelectorAlimentadorJerarquico({
   proyectoId,
   tableroActualId,
   elementosList = null,
-  placeholder = 'Seleccionar equipo de la base de datos...',
+  placeholder = 'Seleccionar equipo del proyecto o escribir manual...',
   disabled = false,
   label = 'Alimentado Por (Procedencia / Jerarquía)',
   className = '',
@@ -249,8 +168,13 @@ export default function SelectorAlimentadorJerarquico({
   const [remoteItems, setRemoteItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Modo de Entrada Manual
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [manualInput, setManualInput] = useState('');
+
   const containerRef = useRef(null);
   const searchInputRef = useRef(null);
+  const manualInputRef = useRef(null);
 
   // Determinar dirección de relación (ALIMENTADO_POR o ALIMENTA_A)
   const isAlimentaA = useMemo(() => {
@@ -263,7 +187,6 @@ export default function SelectorAlimentadorJerarquico({
   // Normalizador de categorías para agrupación visual
   const resolverCategoria = (tipo) => {
     switch (tipo) {
-      case 'RED_ELECTRICA': return 'Acometidas y Red Eléctrica (SEN)';
       case 'SUBESTACION': return 'Subestaciones';
       case 'TRANSFORMADOR': return 'Transformadores';
       case 'CCM': return 'Celdas y CCM';
@@ -273,6 +196,7 @@ export default function SelectorAlimentadorJerarquico({
       case 'TRANSFER': return 'Sistemas de Transferencia (ATS/MTS)';
       case 'PUNTO_MEDICION': return 'Puntos de Medición / Suministro';
       case 'ALIMENTADOR': return 'Alimentadores Dedicados';
+      case 'MANUAL': return 'Entrada Manual';
       default: return 'Otros Equipos';
     }
   };
@@ -343,23 +267,12 @@ export default function SelectorAlimentadorJerarquico({
     return () => { isMounted = false; };
   }, [proyectoId, tableroActualId]);
 
-  // Consolidar lista completa aplicando reglas topológicas por tipo de elemento:
-  // - GENERADORES: fuentes primarias autónomas en ALIMENTADO_POR
-  // - SUBESTACIONES / TRAFOS: Red CORPOELEC en ALIMENTADO_POR
-  // - ALIMENTA_A: nunca inyecta a la Red Pública Nacional; solo enlaza cargas del proyecto
+  // Consolidar lista completa aplicando aislamiento estricto por proyecto
+  // y limpiando todas las fuentes genéricas o acometidas externas no registradas.
   const items = useMemo(() => {
     const combinedMap = new Map();
 
-    // 1. Fuentes Primarias de Entrada (Solo para relación aguas arriba / ALIMENTADO_POR)
-    if (!isAlimentaA) {
-      if (tipoElementoActual === 'GENERADOR') {
-        FUENTES_AUTONOMAS_PRIMARIAS.forEach(f => combinedMap.set(f.id, f));
-      } else {
-        FUENTES_RED_PRIMARIAS.forEach(f => combinedMap.set(f.id, f));
-      }
-    }
-
-    // 2. Extraer del Zustand store filtrando EXCLUSIVAMENTE por el proyecto actual
+    // 1. Extraer del Zustand store filtrando EXCLUSIVAMENTE por el proyecto actual
     const storeItems = extractStoreProjectElements(proyectoId, tableroActualId, companyId);
     storeItems.forEach(el => {
       combinedMap.set(el.id, {
@@ -374,7 +287,7 @@ export default function SelectorAlimentadorJerarquico({
       });
     });
 
-    // 3. Incorporar lista externa si se pasó por props (verificando coincidencia de proyectoId)
+    // 2. Incorporar lista externa si se pasó por props (verificando coincidencia estricta de proyectoId)
     if (Array.isArray(elementosList) && elementosList.length > 0) {
       elementosList
         .filter(el => {
@@ -403,12 +316,15 @@ export default function SelectorAlimentadorJerarquico({
         });
     }
 
-    // 4. Incorporar resultados del backend (ya filtrados por proyectoId)
+    // 3. Incorporar resultados del backend (ya filtrados por proyectoId)
     if (Array.isArray(remoteItems) && remoteItems.length > 0) {
       remoteItems
         .filter(el => {
           if (!el || !el.id) return false;
           if (tableroActualId && (String(el.id) === String(tableroActualId) || String(el.nombre || '').toUpperCase() === String(tableroActualId).toUpperCase())) {
+            return false;
+          }
+          if (proyectoId && el.proyectoId && String(el.proyectoId) !== String(proyectoId)) {
             return false;
           }
           return true;
@@ -431,25 +347,18 @@ export default function SelectorAlimentadorJerarquico({
     return Array.from(combinedMap.values());
   }, [elementosList, remoteItems, proyectoId, tableroActualId, companyId, tipoElementoActual, isAlimentaA]);
 
-  // Cerrar dropdown al hacer clic fuera
+  // Enfocar input correspondiente al abrir o al cambiar de modo
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
+    if (isOpen) {
+      if (isManualMode && manualInputRef.current) {
+        setTimeout(() => manualInputRef.current?.focus(), 60);
+      } else if (!isManualMode && searchInputRef.current) {
+        setTimeout(() => searchInputRef.current?.focus(), 60);
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Enfocar input de búsqueda al abrir
-  useEffect(() => {
-    if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
     }
-  }, [isOpen]);
+  }, [isOpen, isManualMode]);
 
-  // Desglosar y asociar `value` con elementos registrados o históricos
+  // Desglosar y asociar `value` con elementos registrados o asignaciones manuales
   const selectedItems = useMemo(() => {
     if (!value) return [];
 
@@ -488,16 +397,16 @@ export default function SelectorAlimentadorJerarquico({
           result.push(found);
         }
       } else if (token) {
-        // Objeto histórico para preservar compatibilidad con registros antiguos
+        // Elemento manual / personalizado no registrado en base de datos
         result.push({
-          id: `legacy_${token.replace(/\s+/g, '_')}`,
+          id: `manual_${token.replace(/\s+/g, '_')}`,
           nombre: token.toUpperCase(),
-          codigo: 'REG-HIST',
-          tipoElemento: 'OTRO',
-          categoria: 'Registros Previos',
-          nivelTension: 'Topología Guardada',
-          ubicacion: 'Registro Existente en Base de Datos',
-          isLegacy: true
+          codigo: 'MANUAL',
+          tipoElemento: 'MANUAL',
+          categoria: 'Entrada Manual',
+          nivelTension: 'Personalizado',
+          ubicacion: 'Definido manualmente',
+          isManual: true
         });
       }
     });
@@ -529,29 +438,28 @@ export default function SelectorAlimentadorJerarquico({
       rawGroups[cat].push(item);
     });
 
-    // Orden de prioridad sugerido por tipo de elemento
     const priorityCategories = (() => {
       if (tipoElementoActual === 'GENERADOR') {
-        return ['Fuentes Autónomas / Generación', 'Acometidas y Red Eléctrica (SEN)', 'Sistemas de Transferencia (ATS/MTS)'];
+        return ['Sistemas de Transferencia (ATS/MTS)', 'Subestaciones', 'Transformadores'];
       }
       if (tipoElementoActual === 'SUBESTACION') {
-        return ['Acometidas y Red Eléctrica (SEN)', 'Subestaciones', 'Transformadores'];
+        return ['Subestaciones', 'Transformadores', 'Puntos de Medición / Suministro'];
       }
       if (tipoElementoActual === 'TRANSFORMADOR') {
-        return ['Subestaciones', 'Puntos de Medición / Suministro', 'Acometidas y Red Eléctrica (SEN)', 'Generadores y Plantas Eléctricas'];
+        return ['Subestaciones', 'Puntos de Medición / Suministro', 'Generadores y Plantas Eléctricas'];
       }
       if (isAlimentaA) {
         return ['Tableros de Distribución', 'Celdas y CCM', 'Sistemas de Transferencia (ATS/MTS)', 'Bancos de Condensadores'];
       }
       return [
         'Transformadores',
+        'Subestaciones',
         'Sistemas de Transferencia (ATS/MTS)',
         'Celdas y CCM',
         'Tableros de Distribución',
         'Generadores y Plantas Eléctricas',
-        'Subestaciones',
-        'Acometidas y Red Eléctrica (SEN)',
-        'Puntos de Medición / Suministro'
+        'Puntos de Medición / Suministro',
+        'Alimentadores Dedicados'
       ];
     })();
 
@@ -582,7 +490,8 @@ export default function SelectorAlimentadorJerarquico({
   const handleToggleItem = (item) => {
     if (!multiple) {
       emitChange([item]);
-      setIsOpen(false);
+      // En selección simple el cambio viaja de inmediato, pero el cuadro permanece abierto
+      // hasta que el inspector decida cerrarlo explícitamente con (X) o Listo / Confirmar
       return;
     }
 
@@ -607,6 +516,36 @@ export default function SelectorAlimentadorJerarquico({
     emitChange([]);
   };
 
+  // Manejador de Entrada Manual Libre
+  const handleApplyManual = (customText = null) => {
+    const raw = typeof customText === 'string' ? customText : manualInput;
+    const clean = (raw || '').toUpperCase().trim();
+    if (!clean) return;
+
+    const manualItem = {
+      id: `manual_${Date.now()}`,
+      nombre: clean,
+      codigo: 'MANUAL',
+      tipoElemento: 'MANUAL',
+      categoria: 'Entrada Manual',
+      nivelTension: 'Personalizado',
+      ubicacion: 'Definido manualmente',
+      isManual: true
+    };
+
+    if (multiple) {
+      const exists = selectedItems.some(i => i.nombre.toUpperCase().trim() === clean);
+      if (!exists) {
+        emitChange([...selectedItems, manualItem]);
+      }
+    } else {
+      emitChange([manualItem]);
+    }
+
+    setManualInput('');
+    setIsManualMode(false);
+  };
+
   return (
     <div className={`w-full space-y-1.5 ${className}`} ref={containerRef}>
       {label && (
@@ -623,7 +562,7 @@ export default function SelectorAlimentadorJerarquico({
         </div>
       )}
 
-      {/* DISPARADOR DEL SELECTOR DINÁMICO (NO PERMITE ESCRITURA LIBRE) */}
+      {/* DISPARADOR DEL SELECTOR DINÁMICO */}
       <div className="relative">
         <div
           onClick={() => {
@@ -652,15 +591,16 @@ export default function SelectorAlimentadorJerarquico({
                     <span className="font-bold text-xs truncate max-w-[180px] sm:max-w-[260px] uppercase">
                       {sel.nombre}
                     </span>
-                    {sel.codigo && (
-                      <span className="font-mono text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
-                        {sel.codigo}
+                    {sel.isManual ? (
+                      <span className="text-[8.5px] font-bold uppercase text-amber-300 bg-amber-500/15 px-1.5 py-0.2 rounded border border-amber-500/30">
+                        Manual
                       </span>
-                    )}
-                    {sel.isLegacy && (
-                      <span className="text-[8.5px] font-bold uppercase text-orange-400 bg-orange-500/10 px-1 py-0.2 rounded border border-orange-500/20">
-                        Previo
-                      </span>
+                    ) : (
+                      sel.codigo && (
+                        <span className="font-mono text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
+                          {sel.codigo}
+                        </span>
+                      )
                     )}
                     {!disabled && (
                       <button
@@ -701,159 +641,387 @@ export default function SelectorAlimentadorJerarquico({
           </div>
         </div>
 
-        {/* MENÚ DESPLEGABLE CON BUSCADOR INTELIGENTE Y LISTA DE NODOS REGISTRADOS */}
+        {/* MODAL FLOTANTE SUPERPUESTO (Z-[100]) CON BLOQUEO DE CIERRE EXTERNO Y BOTÓN EXPLÍCITO (X) */}
         {isOpen && (
-          <div className="absolute z-50 left-0 right-0 sm:left-0 sm:right-auto w-full sm:w-[520px] md:w-[620px] max-w-[96vw] mt-2 bg-slate-900/98 border border-slate-700/90 rounded-2xl shadow-2xl backdrop-blur-2xl overflow-hidden ring-1 ring-amber-500/20 animate-in fade-in zoom-in-95 duration-150">
-            
-            {/* Barra superior de búsqueda reactiva */}
-            <div className="p-3.5 sm:p-4 border-b border-slate-800 bg-slate-950/80 space-y-2.5">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar equipo por nombre, ID (tab-1, tra-1), tipo o tensión..."
-                  className="w-full pl-10 pr-9 py-2.5 sm:py-3 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono shadow-inner uppercase"
-                />
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch('')}
-                    className="absolute right-3 top-3.5 text-slate-400 hover:text-white cursor-pointer p-0.5 rounded"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-xs select-none">
+            {/* Contenedor Flotante Estático: clic fuera NO lo cierra */}
+            <div
+              className="relative w-full max-w-2xl max-h-[88vh] bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl flex flex-col overflow-hidden ring-1 ring-amber-500/30 animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* 1. Cabecera con Título, Tipo y Botón Explícito de Cierre (X) */}
+              <div className="px-4 py-3 sm:px-5 sm:py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-mono font-bold text-amber-500 uppercase tracking-widest block">
+                    {isAlimentaA ? 'TOPOLOGÍA AGUAS ABAJO • SALIDAS' : 'TOPOLOGÍA AGUAS ARRIBA • PROCEDENCIA'}
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-100 truncate flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{label || (isAlimentaA ? 'Seleccionar Equipos Alimentados (Alimenta A)' : 'Seleccionar Origen Eléctrico (Alimentado Por)')}</span>
+                  </h3>
+                </div>
+
+                {/* Botón Explícito de Cierre (X) - Única forma autorizada de cerrar */}
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
+                  title="Cerrar cuadro de selección (X)"
+                >
+                  <X className="w-5 h-5 text-amber-400 hover:text-white" />
+                </button>
               </div>
 
-              <div className="flex items-center justify-between text-xs px-0.5">
-                <span className="text-slate-400 font-medium">
-                  {selectedItems.length > 0 ? (
-                    <>Enlazados: <strong className="text-amber-400 font-bold">{selectedItems.length}</strong> equipo(s)</>
-                  ) : (
-                    <span className="text-slate-500">
-                      {multiple ? 'Marca uno o varios equipos de la lista' : 'Selecciona un equipo de la base de datos'}
-                    </span>
-                  )}
+              {/* 2. Selector de Modo: [📋 Equipos del Proyecto] vs [📝 Escribir Nombre / Manual] */}
+              <div className="px-4 py-2.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0 flex-wrap">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsManualMode(false)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      !isManualMode
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Equipos del Proyecto ({items.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsManualMode(true);
+                      if (!manualInput) {
+                        if (typeof value === 'string' && value.trim()) {
+                          setManualInput(value.trim().toUpperCase());
+                        } else if (search.trim()) {
+                          setManualInput(search.trim().toUpperCase());
+                        }
+                      }
+                    }}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      isManualMode
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-amber-400 hover:bg-slate-850'
+                    }`}
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>📝 Escribir Nombre / Manual</span>
+                  </button>
+                </div>
+
+                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline-block">
+                  Aislamiento Activo • Proyecto Actual
                 </span>
-                {selectedItems.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-rose-500/10"
-                  >
-                    Deseleccionar Todo
-                  </button>
-                )}
               </div>
-            </div>
 
-            {/* Lista de equipos agrupados con área táctil cómoda */}
-            <div className="max-h-64 sm:max-h-72 overflow-y-auto divide-y divide-slate-800/60 p-2.5 overscroll-contain custom-scrollbar scroll-smooth">
-              {loading ? (
-                <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2.5">
-                  <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                  <span>Cargando equipos registrados en la base de datos...</span>
-                </div>
-              ) : Object.keys(groupedItems).length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-400 space-y-1.5">
-                  <AlertCircle className="w-6 h-6 mx-auto text-slate-500 mb-1" />
-                  <p className="font-bold text-slate-300 text-sm">No se encontraron equipos registrados</p>
-                  <p className="text-xs text-slate-500">Verifica el término de búsqueda o crea un elemento en el proyecto.</p>
-                </div>
-              ) : (
-                Object.entries(groupedItems).map(([categoria, group]) => (
-                  <div key={categoria} className="py-2 first:pt-0 last:pb-0">
-                    {/* Cabecera de Categoría */}
-                    <div className="px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between bg-slate-950/40 rounded-lg mb-1">
-                      <span>{categoria}</span>
-                      <span className="text-slate-400 font-mono text-[10px] bg-slate-800 px-2 py-0.5 rounded-full border border-slate-750 font-bold">
-                        {group.length}
-                      </span>
+              {/* 3. Contenido del Modal según el Modo Activo */}
+              {isManualMode ? (
+                /* VISTA DE ENTRADA MANUAL LIBRE */
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-900/60 custom-scrollbar">
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-2xl flex items-start gap-3">
+                    <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl shrink-0 mt-0.5">
+                      <Edit3 className="w-4 h-4" />
                     </div>
-
-                    {/* Items del Grupo */}
-                    <div className="space-y-1.5">
-                      {group.map((item) => {
-                        const isSelected = selectedItems.some((sel) => sel.id === item.id);
-                        const { icon: ItemIcon, color } = getIconAndColor(item.tipoElemento);
-
-                        return (
-                          <div
-                            key={item.id}
-                            onClick={() => handleToggleItem(item)}
-                            className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer select-none min-h-[50px] active:scale-[0.99] ${
-                              isSelected
-                                ? 'bg-amber-500/15 text-amber-200 border border-amber-500/40 shadow-sm'
-                                : 'hover:bg-slate-800/90 active:bg-slate-800 text-slate-200 border border-transparent'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="shrink-0 text-amber-400 p-0.5">
-                                {multiple ? (
-                                  isSelected ? (
-                                    <CheckSquare className="w-5 h-5 fill-amber-500/20 text-amber-400" />
-                                  ) : (
-                                    <Square className="w-5 h-5 text-slate-600" />
-                                  )
-                                ) : (
-                                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                                    isSelected ? 'border-amber-400 bg-amber-400' : 'border-slate-600'
-                                  }`}>
-                                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-                                  </div>
-                                )}
-                              </div>
-                              <div className={`p-2 rounded-xl border shrink-0 ${color}`}>
-                                <ItemIcon className="w-4 h-4" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-xs sm:text-sm text-slate-100 uppercase">
-                                    {item.nombre}
-                                  </span>
-                                  {item.codigo && (
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
-                                      ID: {item.codigo}
-                                    </span>
-                                  )}
-                                  {item.nivelTension && (
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-amber-300 border border-slate-700/60 shrink-0">
-                                      ⚡ {item.nivelTension}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-xs text-slate-400 truncate mt-1 flex items-center gap-1.5">
-                                  <span>📍 {item.ubicacion}</span>
-                                  {item.detalles && <span className="text-slate-500 font-medium">• {item.detalles}</span>}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <div className="text-xs space-y-1">
+                      <h4 className="font-bold text-amber-300">Modo de Entrada Manual de Texto Libre</h4>
+                      <p className="text-slate-300 leading-relaxed">
+                        Permite registrar el nombre de un alimentador, acometida o equipo cuando aún no ha sido dado de alta formalmente en este proyecto o proviene de una fuente no modelada.
+                      </p>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
 
-            {/* Footer con botón de Listo / Aplicar */}
-            <div className="p-3 border-t border-slate-800 bg-slate-950/90 flex items-center justify-between gap-2.5">
-              <span className="text-[11px] text-slate-400 font-medium">
-                {selectedItems.length > 0
-                  ? `${selectedItems.length} equipo(s) seleccionado(s)`
-                  : 'Sin selección activa'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer shadow-md min-h-[40px]"
-              >
-                Listo / Confirmar
-              </button>
+                  <div className="space-y-3 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 shadow-inner">
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
+                      Nombre o Descripción del Alimentador / Procedencia:
+                    </label>
+                    <div className="relative">
+                      <input
+                        ref={manualInputRef}
+                        type="text"
+                        value={manualInput}
+                        onChange={(e) => setManualInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyManual();
+                          }
+                        }}
+                        placeholder="Ej: ACOMETIDA GENERAL EDIFICIO B, TRANSFORMADOR DE POSTE..."
+                        className="w-full pl-4 pr-10 py-3 bg-slate-900 border border-slate-700 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono shadow-inner uppercase"
+                        autoFocus
+                      />
+                      {manualInput && (
+                        <button
+                          type="button"
+                          onClick={() => setManualInput('')}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer p-1 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sugerencias Rápidas de Nomenclatura */}
+                    <div className="space-y-1.5 pt-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                        Sugerencias Rápidas de Nomenclatura:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          'ACOMETIDA GENERAL DE RED',
+                          'TRANSFORMADOR DE POSTE',
+                          'PLANTA ELÉCTRICA DE EMERGENCIA',
+                          'SUBESTACIÓN PRINCIPAL',
+                          'ACOMETIDA EXTERNA BT',
+                          'GENERADOR DE RESPALDO'
+                        ].map((sug) => (
+                          <button
+                            key={sug}
+                            type="button"
+                            onClick={() => setManualInput(sug)}
+                            className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 transition-colors cursor-pointer"
+                          >
+                            + {sug}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Botones de Acción dentro del Formulario */}
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-850">
+                      <button
+                        type="button"
+                        onClick={() => setIsManualMode(false)}
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Layers className="w-4 h-4" />
+                        <span>Volver a la Lista de Equipos</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!manualInput.trim()}
+                        onClick={() => handleApplyManual()}
+                        className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs rounded-xl shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Aplicar Nombre Manual</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* VISTA DE LISTA DE EQUIPOS REGISTRADOS EN EL PROYECTO */
+                <>
+                  {/* Barra Superior de Búsqueda Reactiva con Botón a Modo Manual */}
+                  <div className="p-3.5 sm:p-4 border-b border-slate-800 bg-slate-950/80 space-y-2.5 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          placeholder="Buscar equipo por nombre, ID (tab-1, tra-1), tipo o tensión..."
+                          className="w-full pl-10 pr-9 py-2.5 sm:py-3 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono shadow-inner uppercase"
+                        />
+                        {search && (
+                          <button
+                            type="button"
+                            onClick={() => setSearch('')}
+                            className="absolute right-3 top-3.5 text-slate-400 hover:text-white cursor-pointer p-0.5 rounded"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsManualMode(true);
+                          if (search.trim()) setManualInput(search.trim().toUpperCase());
+                        }}
+                        className="px-3 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-850 text-amber-400 border border-amber-500/30 hover:border-amber-500/60 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm"
+                        title="Cambiar a entrada manual libre de texto"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span className="hidden sm:inline">📝 Manual</span>
+                      </button>
+                    </div>
+
+                    {/* Opción rápida si el término buscado no está en la base de datos */}
+                    {search.trim() && (
+                      <div className="p-2.5 bg-slate-900/90 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2">
+                        <div className="text-xs text-slate-300 truncate">
+                          ¿No registrado? Usar <strong className="text-amber-400 font-mono">"{search.toUpperCase()}"</strong> como manual
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyManual(search)}
+                          className="px-3 py-1 bg-amber-500 text-slate-950 rounded-lg text-xs font-bold hover:bg-amber-400 cursor-pointer shrink-0 shadow-sm"
+                        >
+                          📝 Asignar
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs px-0.5">
+                      <span className="text-slate-400 font-medium">
+                        {selectedItems.length > 0 ? (
+                          <>Enlazados: <strong className="text-amber-400 font-bold">{selectedItems.length}</strong> equipo(s)</>
+                        ) : (
+                          <span className="text-slate-500">
+                            {multiple ? 'Marca uno o varios equipos del proyecto' : 'Selecciona un equipo registrado en el proyecto'}
+                          </span>
+                        )}
+                      </span>
+                      {selectedItems.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClear}
+                          className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer transition-colors px-2 py-0.5 rounded hover:bg-rose-500/10"
+                        >
+                          Deseleccionar Todo
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lista Agrupada de Equipos con Scroll Cómodo */}
+                  <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-3 sm:p-4 custom-scrollbar">
+                    {loading ? (
+                      <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2.5">
+                        <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                        <span>Consultando equipos del proyecto en la base de datos...</span>
+                      </div>
+                    ) : Object.keys(groupedItems).length === 0 ? (
+                      <div className="p-10 text-center text-xs text-slate-400 space-y-3">
+                        <AlertCircle className="w-8 h-8 mx-auto text-amber-500/70 mb-1" />
+                        <p className="font-bold text-slate-200 text-sm">
+                          {search ? 'Sin coincidencias para la búsqueda' : 'No hay otros equipos registrados en este proyecto'}
+                        </p>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                          Puedes registrar equipos en el diagrama unifilar del proyecto o ingresar el nombre del alimentador directamente.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsManualMode(true);
+                            if (search.trim()) setManualInput(search.trim().toUpperCase());
+                          }}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>📝 Escribir Nombre / Manual</span>
+                        </button>
+                      </div>
+                    ) : (
+                      Object.entries(groupedItems).map(([categoria, group]) => (
+                        <div key={categoria} className="py-2.5 first:pt-0 last:pb-0">
+                          {/* Cabecera de Categoría */}
+                          <div className="px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between bg-slate-950/60 rounded-lg mb-1.5">
+                            <span>{categoria}</span>
+                            <span className="text-slate-400 font-mono text-[10px] bg-slate-800 px-2 py-0.5 rounded-full border border-slate-750 font-bold">
+                              {group.length}
+                            </span>
+                          </div>
+
+                          {/* Items del Grupo */}
+                          <div className="space-y-1.5">
+                            {group.map((item) => {
+                              const isSelected = selectedItems.some((sel) => sel.id === item.id);
+                              const { icon: ItemIcon, color } = getIconAndColor(item.tipoElemento);
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  onClick={() => handleToggleItem(item)}
+                                  className={`w-full text-left px-3.5 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer select-none min-h-[52px] active:scale-[0.99] ${
+                                    isSelected
+                                      ? 'bg-amber-500/15 text-amber-200 border border-amber-500/40 shadow-sm'
+                                      : 'hover:bg-slate-800/90 active:bg-slate-800 text-slate-200 border border-slate-800/60 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                                    <div className="shrink-0 text-amber-400 p-0.5">
+                                      {multiple ? (
+                                        isSelected ? (
+                                          <CheckSquare className="w-5 h-5 fill-amber-500/20 text-amber-400" />
+                                        ) : (
+                                          <Square className="w-5 h-5 text-slate-600" />
+                                        )
+                                      ) : (
+                                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                          isSelected ? 'border-amber-400 bg-amber-400' : 'border-slate-600'
+                                        }`}>
+                                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className={`p-2 rounded-xl border shrink-0 ${color}`}>
+                                      <ItemIcon className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-bold text-xs sm:text-sm text-slate-100 uppercase">
+                                          {item.nombre}
+                                        </span>
+                                        {item.codigo && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
+                                            ID: {item.codigo}
+                                          </span>
+                                        )}
+                                        {item.nivelTension && (
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-amber-300 border border-slate-700/60 shrink-0">
+                                            ⚡ {item.nivelTension}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-slate-400 truncate mt-1 flex items-center gap-1.5">
+                                        <span>📍 {item.ubicacion}</span>
+                                        {item.detalles && <span className="text-slate-500 font-medium">• {item.detalles}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* 4. Footer con Resumen y Botones Explícitos de Cierre */}
+              <div className="p-3 sm:p-3.5 border-t border-slate-800 bg-slate-950 flex items-center justify-between gap-3 shrink-0">
+                <span className="text-xs text-slate-400 font-medium truncate">
+                  {selectedItems.length > 0
+                    ? `${selectedItems.length} equipo(s) seleccionado(s)`
+                    : 'Sin selección activa'}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer border border-slate-800"
+                  >
+                    Cerrar (X)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="px-6 py-2 bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer shadow-md"
+                  >
+                    Listo / Confirmar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -866,7 +1034,9 @@ export default function SelectorAlimentadorJerarquico({
           {selectedItems.map((item, idx) => (
             <span key={item.id} className="inline-flex items-center gap-1 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 px-2 py-0.5 rounded-md">
               <span className="font-semibold text-slate-200 uppercase">{item.nombre}</span>
-              <span className="text-amber-400 font-mono text-[9.5px]">({item.codigo || getElementCode(item)})</span>
+              <span className="text-amber-400 font-mono text-[9.5px]">
+                {item.isManual ? '(MANUAL)' : `(${item.codigo || getElementCode(item)})`}
+              </span>
               {idx < selectedItems.length - 1 && <span className="text-slate-600 font-bold">,</span>}
             </span>
           ))}

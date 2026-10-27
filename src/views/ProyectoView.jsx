@@ -1303,6 +1303,8 @@ export const ProyectoView = () => {
             >
               <Zap className="w-4 h-4" /> Diagrama Unifilar
             </button>
+            {/* Pestaña temporalmente inactiva a solicitud del usuario */}
+            {/*
             <button
               onClick={() => setActiveTab('JERARQUIA')}
               className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
@@ -1313,6 +1315,7 @@ export const ProyectoView = () => {
             >
               <GitBranch className="w-4 h-4" /> Jerarquía y Topología
             </button>
+            */}
             <button
               onClick={() => setActiveTab('ESTRUCTURAL')}
               className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
