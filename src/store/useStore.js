@@ -1752,7 +1752,16 @@ export const useStore = create(
               const list = c.elementosUnifilares || [];
               return {
                 ...c,
-                elementosUnifilares: list.map(syncElementBidirectional)
+                elementosUnifilares: list.map(syncElementBidirectional),
+                proyectos: (c.proyectos || []).map((p) => {
+                  const pList = p.elementosUnifilares || p.tableros || [];
+                  const updatedPList = pList.map(syncElementBidirectional);
+                  return {
+                    ...p,
+                    elementosUnifilares: updatedPList,
+                    ...(p.tableros ? { tableros: (p.tableros || []).map(syncElementBidirectional) } : {})
+                  };
+                })
               };
             }
             return {
@@ -1760,9 +1769,11 @@ export const useStore = create(
               proyectos: (c.proyectos || []).map((p) => {
                 if (p.id === proyectoId) {
                   const list = p.elementosUnifilares || p.tableros || [];
+                  const updatedList = list.map(syncElementBidirectional);
                   return {
                     ...p,
-                    elementosUnifilares: list.map(syncElementBidirectional)
+                    elementosUnifilares: updatedList,
+                    ...(p.tableros ? { tableros: (p.tableros || []).map(syncElementBidirectional) } : {})
                   };
                 }
                 return p;

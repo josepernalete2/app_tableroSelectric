@@ -525,7 +525,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     onUpdateTablero(newData);
   };
 
-  const saveCircuitFromModal = (circuitId, updatedFields) => {
+  const saveCircuitFromModal = (circuitId, updatedFields, circuitPoles) => {
     if (effectivelyReadOnly) return;
     const newData = { ...tableroData };
     const projId = project?.id || tableroData?.proyectoId;
@@ -575,14 +575,38 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
     let currentCircuits = [...(tableroData.circuits || [])];
 
-    const targetPoles = Array.isArray(updatedFields?.poles) && updatedFields.poles.length > 0
-      ? updatedFields.poles
-      : [updatedFields?.posicionPolo || 1];
-
     if (updatedFields === null) {
-      // Remove from custom circuits list so it falls back to auto-generated RESERVA
-      currentCircuits = currentCircuits.filter(c => c.id !== circuitId && !c.poles?.some(p => targetPoles.includes(p)));
+      // CIRUGÍA EXACTA: Eliminar ÚNICAMENTE el circuito o polos seleccionados
+      const targetInNormalized = normalizedCircuits.find(c => c.id === circuitId);
+      const targetInCurrent = currentCircuits.find(c => c.id === circuitId);
+      
+      const targetPoleList = Array.isArray(circuitPoles) && circuitPoles.length > 0
+        ? circuitPoles
+        : (targetInNormalized?.poles || targetInCurrent?.poles || (String(circuitId).startsWith('auto_') ? [parseInt(String(circuitId).replace('auto_', ''), 10)] : []));
+
+      // Filtrar estrictamente solo el circuito que coincida por ID o por sus polos específicos
+      currentCircuits = currentCircuits.filter(c => {
+        // Coincidencia exacta de ID
+        if (c.id === circuitId) return false;
+        // Si el circuito coincide con los polos del objetivo a eliminar
+        if (targetPoleList.length > 0 && Array.isArray(c.poles) && c.poles.some(p => targetPoleList.includes(p))) {
+          return false;
+        }
+        return true;
+      });
+
+      // Limpiar de elementosPorCrear si este circuito tenía algún pendiente
+      if (newData.elementosPorCrear) {
+        newData.elementosPorCrear = newData.elementosPorCrear.filter(item => item.circuitoId !== circuitId);
+      }
+      setElementosPorCrear(prev => (prev || []).filter(item => item.circuitoId !== circuitId));
+
+      newData.circuits = currentCircuits;
     } else {
+      const targetPoles = Array.isArray(updatedFields?.poles) && updatedFields.poles.length > 0
+        ? updatedFields.poles
+        : [updatedFields?.posicionPolo || 1];
+
       // Find existing circuit if any (by circuitId or by pole overlap)
       const existingCircuit = currentCircuits.find(c => c.id === circuitId || c.poles?.some(p => targetPoles.includes(p)));
       
@@ -603,19 +627,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       };
 
       currentCircuits = [...otherCircuits, savedCircuit];
+      newData.circuits = currentCircuits;
     }
-
-    // Filter out completely empty default circuits to prevent database bloat
-    newData.circuits = currentCircuits.filter(c => {
-      const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
-      const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
-      const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
-      const hasFicha = c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts);
-      const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
-      const hasPoleLabel = !!(c.codigoPolo || c.polo_label || c.poloLabel);
-      const hasDestino = !!(c.elementoDestinoId || c.vinculadoId || c.tipoElementoDestino || c.tipoDestino);
-      return hasBreaker || hasConductor || hasEquipo || c.fotografia || hasDestino || hasFicha || isMultiPole || hasPoleLabel;
-    });
 
     onUpdateTablero(newData);
   };
@@ -754,7 +767,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     });
 
     if (isConfirmed) {
-      saveCircuitFromModal(circuitId, null);
+      saveCircuitFromModal(circuitId, null, circuit.poles);
       showToast(`Circuito en polo(s) [${polesStr}] eliminado y restablecido a reserva`, 'success');
     }
   };

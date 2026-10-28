@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom';
-import useStore, { formatElementTitleWithId } from './store/useStore';
+import useStore, { formatElementTitleWithId, cleanElementName, getElementCode } from './store/useStore';
 
 // Vistas
 import LoginView from './views/LoginView';
@@ -182,9 +182,14 @@ const TableroWrapper = () => {
               <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
                 Subestación en: {company.nombre}
               </span>
-              <h1 className="text-base font-bold text-slate-100 animate-fade-in">
-                {subestacion.nombre}
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base font-bold text-slate-100 animate-fade-in">
+                  {cleanElementName(subestacion.nombre, subestacion.id, subestacion.codigo)}
+                </h1>
+                <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                  {subestacion.codigo || getElementCode(subestacion, 'SUBESTACION')}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -241,9 +246,14 @@ const TableroWrapper = () => {
               <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
                 Punto de Medición en: {company.nombre}
               </span>
-              <h1 className="text-base font-bold text-slate-100 animate-fade-in">
-                {puntoMedicion.nombre}
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base font-bold text-slate-100 animate-fade-in">
+                  {cleanElementName(puntoMedicion.nombre, puntoMedicion.id, puntoMedicion.codigo)}
+                </h1>
+                <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                  {puntoMedicion.codigo || getElementCode(puntoMedicion, 'PUNTO_MEDICION')}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -300,9 +310,14 @@ const TableroWrapper = () => {
               <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
                 Levantamiento de CCM
               </span>
-              <h1 className="text-base font-bold text-slate-100 animate-fade-in">
-                {ccmItem.nombre}
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base font-bold text-slate-100 animate-fade-in">
+                  {cleanElementName(ccmItem.nombre, ccmItem.id, ccmItem.codigo)}
+                </h1>
+                <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                  {ccmItem.codigo || getElementCode(ccmItem, 'CCM')}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -359,9 +374,14 @@ const TableroWrapper = () => {
               <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
                 Unidad de Transferencia (ATS / MTS)
               </span>
-              <h1 className="text-base font-bold text-slate-100 animate-fade-in">
-                {element.nombre}
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base font-bold text-slate-100 animate-fade-in">
+                  {cleanElementName(element.nombre, element.id, element.codigo)}
+                </h1>
+                <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                  {element.codigo || getElementCode(element, 'TRANSFER')}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -418,9 +438,14 @@ const TableroWrapper = () => {
               <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">
                 Ficha Técnica en: {company.nombre}
               </span>
-              <h1 className="text-base font-bold text-slate-100">
-                {element.nombre}
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base font-bold text-slate-100">
+                  {cleanElementName(element.nombre, element.id, element.codigo)}
+                </h1>
+                <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
+                  {element.codigo || getElementCode(element, element.tipoElemento || 'TABLERO')}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -485,7 +510,7 @@ const TableroWrapper = () => {
       nombreEmpresa, ...datosTecnicos 
     } = updatedData;
 
-    updateElementoUnifilar(targetProyecto?.id || null, tableroId, {
+    updateElementoUnifilar(targetProyecto?.id || element?.proyectoId || null, tableroId, {
       nombre,
       ubicacion,
       alimentadoPor,
@@ -515,10 +540,10 @@ const TableroWrapper = () => {
             </span>
             <div className="flex items-center gap-2.5">
               <h1 className="text-base font-bold text-slate-100">
-                {formatElementTitleWithId(element.nombre, element.id)}
+                {cleanElementName(element.nombre, element.id, element.codigo)}
               </h1>
               <span className="font-mono font-black text-amber-400 bg-slate-900 border border-amber-500/30 px-2.5 py-0.5 rounded-lg text-xs shadow-sm">
-                ID: {element.id}
+                {element.codigo || getElementCode(element, 'TABLERO')}
               </span>
             </div>
           </div>

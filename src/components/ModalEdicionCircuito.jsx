@@ -65,7 +65,13 @@ export const ModalEdicionCircuito = ({
   const [conductor, setConductor] = useState('');
   const [nombreArtefacto, setNombreArtefacto] = useState('');
   const [descArtefacto, setDescArtefacto] = useState('');
+  const [initialDesc, setInitialDesc] = useState('');
   const [potenciaWatts, setPotenciaWatts] = useState('');
+
+  // Extracción segura a nivel de componente para evitar ReferenceError bajo cualquier circunstancia
+  const safeCircuitDesc = circuitData?.ficha?.descripcion || circuitData?.observaciones || circuitData?.descripcion || '';
+  const safeCircuitPotencia = circuitData?.ficha?.potenciaWatts || circuitData?.potenciaWatts || circuitData?.watts || '';
+  const safeCircuitFoto = circuitData?.fotografia || circuitData?.foto || null;
 
   // Parámetros Físicos Tablero
   const [numPolos, setNumPolos] = useState(1);
@@ -249,7 +255,7 @@ export const ModalEdicionCircuito = ({
       setAlimentaOtro(false);
       setIsCreatingNewProvisional(false);
       setProvisionalCustomName('');
-      onSave(circuitData.id, null);
+      onSave(circuitData.id, null, requiredList);
       showToast(`Circuito en polo(s) [${polesStr}] eliminado y restablecido a reserva`, 'info');
       onClose();
     }
@@ -281,8 +287,10 @@ export const ModalEdicionCircuito = ({
       setRotulo(isReservaPlaceholder ? '' : rawEquipo);
 
       // 3. Ficha Técnica / Observaciones / Potencia: Precargar siempre
-      const initialDesc = circuitData.ficha?.descripcion || circuitData.observaciones || circuitData.descripcion || '';
-      const initialPotencia = circuitData.ficha?.potenciaWatts || circuitData.potenciaWatts || circuitData.watts || '';
+      const currentDesc = circuitData.ficha?.descripcion || circuitData.observaciones || circuitData.descripcion || safeCircuitDesc || '';
+      const initialDesc = currentDesc;
+      const initialPotencia = circuitData.ficha?.potenciaWatts || circuitData.potenciaWatts || circuitData.watts || safeCircuitPotencia || '';
+      setInitialDesc(initialDesc);
       setDescArtefacto(initialDesc);
       setPotenciaWatts(initialPotencia);
 
@@ -371,10 +379,15 @@ export const ModalEdicionCircuito = ({
         );
         const hasCustomName = !isReservaPlaceholder && Boolean(cleanName && cleanName.trim());
         const hasFichaData = Boolean(
-          (initialDesc && initialDesc.trim()) || 
+          (initialDesc && String(initialDesc).trim()) || 
+          (safeCircuitDesc && String(safeCircuitDesc).trim()) ||
+          (descArtefacto && String(descArtefacto).trim()) ||
           (initialPotencia && String(initialPotencia).trim() !== '' && String(initialPotencia) !== '0')
         );
-        const hasFotoData = Boolean(initialFoto && String(initialFoto).trim() !== '');
+        const hasFotoData = Boolean(
+          (initialFoto && String(initialFoto).trim() !== '') || 
+          (safeCircuitFoto && String(safeCircuitFoto).trim() !== '')
+        );
         const hasDestinoVinculado = Boolean(
           prevDestinoId || 
           (circuitData.tipoDestino && circuitData.tipoDestino !== 'RESERVA' && circuitData.tipoDestino !== 'DISPONIBLE')
@@ -394,22 +407,43 @@ export const ModalEdicionCircuito = ({
                              isMultiPole || 
                              isExplicitActive;
 
-        if (circuitData.tipoDestino === 'SUB_TABLERO_PENDIENTE' || circuitData.tipoDestino === 'ELEMENTO_PENDIENTE') {
+        if (!hasSavedData) {
+          // 1. Circuito totalmente virgen (reserva vacía sin configurar):
+          // Mostrar la vista inicial de decisión ("¿El circuito alimenta a un equipo o artefacto final?")
+          setAlimentaOtro(false);
+          setIsCreatingNewProvisional(false);
+          setStep('PREGUNTA_ES_ARTEFACTO');
+        } else if (circuitData.tipoDestino === 'SUB_TABLERO_PENDIENTE' || circuitData.tipoDestino === 'ELEMENTO_PENDIENTE') {
+          // 2. No es artefacto -> Elemento pendiente por crear
           setAlimentaOtro(true);
           setIsCreatingNewProvisional(true);
           setProvisionalCustomName(circuitData.nombreProvisional || circuitData.equipo || '');
           setProvisionalTipo(circuitData.tipoElementoProvisional || 'TABLERO');
           setStep('ALIMENTAR_POR_CREAR');
-        } else if (hasSavedData) {
-          // El circuito ya tiene información o datos guardados (artefacto, cargas/conductores/breaker/etc.):
-          // Se abre DIRECTAMENTE mostrando toda la información ya registrada de golpe
+        } else if (
+          circuitData.tipoDestino === 'SUB_TABLERO' || 
+          circuitData.tipoDestino === 'ELEMENTO_VINCULADO' || 
+          Boolean(prevDestinoId)
+        ) {
+          // 3. No es artefacto -> Vinculado a equipo existente
+          setAlimentaOtro(true);
+          setIsCreatingNewProvisional(false);
+          setStep('VINCULAR_EXISTENTE');
+        } else if (
+          circuitData.tipoDestino === 'CARGA_DIRECTA' || 
+          circuitData.tipoDestino === 'ROTULAR_Y_FOTO' || 
+          circuitData.tipoDestino === 'MANUAL' || 
+          circuitData.tipoDestino === 'NO_ARTEFACTO'
+        ) {
+          // 4. No es artefacto -> Manual / Rotular y Foto (Carga directa no artefacto o reserva rotulada)
           setAlimentaOtro(false);
-          setStep('FORMULARIO_ARTEFACTO');
+          setIsCreatingNewProvisional(false);
+          setStep('ROTULAR_Y_FOTO');
         } else {
-          // El circuito está en blanco o es nuevo (ej. estado Reserva sin configurar):
-          // Mostrar la vista inicial de decisión ("¿El circuito alimenta a un equipo o artefacto final?")
+          // 5. Artefacto (o circuito configurado con ficha/breaker/conductor de artefacto)
           setAlimentaOtro(false);
-          setStep('PREGUNTA_ES_ARTEFACTO');
+          setIsCreatingNewProvisional(false);
+          setStep('FORMULARIO_ARTEFACTO');
         }
       } else {
         if (tipoOrigen === 'TRANSFORMADOR') {
@@ -534,7 +568,7 @@ export const ModalEdicionCircuito = ({
 
     onSave(circuitData.id, {
       equipo: finalEquipo,
-      tipoDestino: finalTipoDestino,
+      tipoDestino: extra.tipoDestino || finalTipoDestino,
       vinculadoId: finalDestinoId,
       elementoDestinoId: finalDestinoId,
       tipoElementoDestino: isCreatingNewProvisional ? provisionalTipo : (selectedTipoElementoDestino || finalTipoDestino),
@@ -589,7 +623,9 @@ export const ModalEdicionCircuito = ({
 
   const handleSaveArtefacto = () => {
     const finalName = (nombreArtefacto || '').trim() || (estado === 'RESERVA' ? 'RESERVA' : 'CARGA DIRECTA');
-    handleSaveEquipment(finalName, estado === 'RESERVA' ? 'RESERVA' : 'ARTEFACTO');
+    handleSaveEquipment(finalName, estado === 'RESERVA' ? 'RESERVA' : 'ARTEFACTO', {
+      tipoDestino: estado === 'RESERVA' ? 'RESERVA' : 'ARTEFACTO'
+    });
   };
 
   const handleSaveVinculo = (linkElement) => {
@@ -631,6 +667,7 @@ export const ModalEdicionCircuito = ({
     const finalRotulo = rotulo?.trim() || (isReserve ? 'RESERVA' : 'CARGA DIRECTA');
     handleSaveEquipment(finalRotulo, isReserve ? 'RESERVA' : 'CARGA_DIRECTA', {
       estado: isReserve ? 'RESERVA' : 'ACTIVO',
+      tipoDestino: isReserve ? 'RESERVA' : 'CARGA_DIRECTA',
       vinculadoId: null,
       elementoDestinoId: null,
       tipoElementoDestino: null,
@@ -837,7 +874,7 @@ export const ModalEdicionCircuito = ({
               <p className="text-xs text-slate-400">
                 Identificador: <span className="font-mono font-bold text-amber-400">
                   {isTablero
-                    ? (circuitData.codigoPolo || circuitData.polo_label || (Array.isArray(circuitData.poles) && circuitData.poles.length > 1 ? `Polos [${circuitData.poles.join(', ')}]` : `Polo ${circuitData.posicionPolo || circuitData.poles?.[0] || String(circuitData.id || '').replace('auto_', '') || 1}`))
+                    ? (circuitData?.codigoPolo || circuitData?.polo_label || (Array.isArray(circuitData?.poles) && circuitData.poles.length > 1 ? `Polos [${circuitData.poles.join(', ')}]` : `Polo ${circuitData?.posicionPolo || circuitData?.poles?.[0] || (String(circuitData?.id || '').startsWith('auto_') ? String(circuitData.id).replace('auto_', '') : 1)}`))
                     : getElementCode(circuitData, tipoOrigen)
                   }
                 </span>
