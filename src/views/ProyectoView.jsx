@@ -944,8 +944,8 @@ export const ProyectoView = () => {
         tipoElemento,
         tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : (editingElemento.tension || ''),
         ubicacion: ubicacion.trim().toUpperCase() || 'SIN UBICACIÓN',
-        alimentadoPor: alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO',
-        alimentadoPorId: alimentadoPorId || null,
+        alimentadoPor: tipoElemento === 'GENERADOR' ? 'FUENTE PRIMARIA INDEPENDIENTE' : (alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO'),
+        alimentadoPorId: tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null),
         alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
         alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
         foto: eliminarFoto ? null : (foto !== undefined ? foto : editingElemento.foto),
@@ -971,8 +971,8 @@ export const ProyectoView = () => {
         tipoElemento,
         tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : '',
         ubicacion: ubicacion.trim().toUpperCase() || 'SIN UBICACIÓN',
-        alimentadoPor: alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO',
-        alimentadoPorId: alimentadoPorId || null,
+        alimentadoPor: tipoElemento === 'GENERADOR' ? 'FUENTE PRIMARIA INDEPENDIENTE' : (alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO'),
+        alimentadoPorId: tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null),
         alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
         alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
         foto,
@@ -2243,33 +2243,35 @@ export const ProyectoView = () => {
                     </div>
 
                     {/* Jerarquía Bidireccional Topológica */}
-                    {/* 1. ALIMENTADO POR (Origen aguas arriba / Padre) */}
-                    <div>
-                      {tipoElemento === 'GENERADOR' && (
-                        <div className="mb-2 p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-1">
-                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
-                            <Zap className="w-3.5 h-3.5 text-emerald-400" /> Fuente de Energía Primaria Autónoma
-                          </span>
-                          <p className="text-[10.5px] text-slate-300 leading-relaxed">
-                            Los generadores operan como fuentes primarias autónomas independientes de la red externa o en sincronismo.
-                          </p>
-                        </div>
-                      )}
-                      <SelectorAlimentadorJerarquico
-                        proyectoId={proyectoId}
-                        tableroActualId={editingElemento?.id}
-                        elementosList={todosElementosJerarquia}
-                        value={alimentadoPor}
-                        onChange={(val, primaryObj, ids) => {
-                          setAlimentadoPor(val ? val.toUpperCase() : '');
-                          setAlimentadoPorId(primaryObj?.id || ids?.[0] || null);
-                        }}
-                        tipoElementoActual={tipoElemento}
-                        direccionRelacion="ALIMENTADO_POR"
-                        label="ALIMENTADO POR (Origen Aguas Arriba / Padre)"
-                        placeholder={tipoElemento === 'GENERADOR' ? 'Seleccionar Generación Autónoma o Cogeneración...' : 'Seleccionar Subestación, Trafo, Generador, CCM o Tablero...'}
-                      />
-                    </div>
+                    {tipoElemento === 'GENERADOR' ? (
+                      /* Generador es una fuente primaria autónoma independiente: no requiere alimentador aguas arriba */
+                      <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-1">
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
+                          <Zap className="w-3.5 h-3.5 text-emerald-400" /> Fuente de Energía Primaria Autónoma
+                        </span>
+                        <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+                          Los motogeneradores operan como fuentes primarias autónomas independientes. No poseen ni requieren alimentación aguas arriba.
+                        </p>
+                      </div>
+                    ) : (
+                      /* 1. ALIMENTADO POR (Origen aguas arriba / Padre) */
+                      <div>
+                        <SelectorAlimentadorJerarquico
+                          proyectoId={proyectoId}
+                          tableroActualId={editingElemento?.id}
+                          elementosList={todosElementosJerarquia}
+                          value={alimentadoPor}
+                          onChange={(val, primaryObj, ids) => {
+                            setAlimentadoPor(val ? val.toUpperCase() : '');
+                            setAlimentadoPorId(primaryObj?.id || ids?.[0] || null);
+                          }}
+                          tipoElementoActual={tipoElemento}
+                          direccionRelacion="ALIMENTADO_POR"
+                          label="ALIMENTADO POR (Origen Aguas Arriba / Padre)"
+                          placeholder="Seleccionar Subestación, Trafo, Generador, CCM o Tablero..."
+                        />
+                      </div>
+                    )}
 
                     {/* 2. ALIMENTA A (Destinos aguas abajo / Salidas) */}
                     <div>
@@ -2285,8 +2287,8 @@ export const ProyectoView = () => {
                         }}
                         tipoElementoActual={tipoElemento}
                         direccionRelacion="ALIMENTA_A"
-                        label="ALIMENTA A (Destinos Aguas Abajo / Salidas)"
-                        placeholder="Enlazar uno o varios equipos secundarios que reciben energía..."
+                        label={tipoElemento === 'GENERADOR' ? "ALIMENTA A (Transferencias ATS / Tableros / Cargas de Emergencia)" : "ALIMENTA A (Destinos Aguas Abajo / Salidas)"}
+                        placeholder={tipoElemento === 'GENERADOR' ? "Enlazar Transferencias ATS, Tableros de Emergencia o Cargas Suministradas..." : "Enlazar uno o varios equipos secundarios que reciben energía..."}
                       />
                     </div>
                   </div>

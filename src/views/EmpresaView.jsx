@@ -1510,8 +1510,8 @@ export const EmpresaView = () => {
                     setAlimentaAIds(Array.isArray(ids) ? ids : []);
                   }}
                   elementosList={companyElementos}
-                  label="Alimenta A (Cargas Aguas Abajo / Salidas)"
-                  placeholder="Seleccione equipos secundarios suministrados..."
+                  label={tipoElemento === 'GENERADOR' ? "Alimenta A (Transferencias ATS / Tableros / Cargas de Emergencia)" : "Alimenta A (Cargas Aguas Abajo / Salidas)"}
+                  placeholder={tipoElemento === 'GENERADOR' ? "Seleccione Transferencias ATS, Tableros o Cargas suministradas..." : "Seleccione equipos secundarios suministrados..."}
                 />
               </div>
 

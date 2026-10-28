@@ -546,6 +546,21 @@ export default function SelectorAlimentadorJerarquico({
     setIsManualMode(false);
   };
 
+  // Si el elemento actual es un GENERADOR y la dirección es ALIMENTADO_POR,
+  // se omite el selector ya que el generador es una fuente primaria autónoma independiente.
+  if (tipoElementoActual === 'GENERADOR' && !isAlimentaA) {
+    return (
+      <div className={`w-full p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-1 ${className}`}>
+        <span className="text-[10.5px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1.5 font-mono">
+          <Zap className="w-3.5 h-3.5 text-emerald-400" /> Fuente de Energía Primaria Autónoma
+        </span>
+        <p className="text-[11px] text-slate-300 leading-relaxed font-sans">
+          Los motogeneradores operan como fuentes primarias autónomas independientes. No requieren ni reciben alimentación aguas arriba.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className={`w-full space-y-1.5 ${className}`} ref={containerRef}>
       {label && (
