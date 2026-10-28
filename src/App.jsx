@@ -510,6 +510,10 @@ const TableroWrapper = () => {
       nombreEmpresa, ...datosTecnicos 
     } = updatedData;
 
+    const nextCircuits = updatedData.circuits !== undefined 
+      ? updatedData.circuits 
+      : (datosTecnicos.circuits !== undefined ? datosTecnicos.circuits : (element?.circuits || []));
+
     updateElementoUnifilar(targetProyecto?.id || element?.proyectoId || null, tableroId, {
       nombre,
       ubicacion,
@@ -518,7 +522,11 @@ const TableroWrapper = () => {
       fotoBlob: eliminarFoto ? null : (fotoBlob !== undefined ? fotoBlob : (element?.fotoBlob || null)),
       eliminarFoto: Boolean(eliminarFoto),
       observacionesGenerales,
-      datosTecnicos
+      circuits: nextCircuits,
+      datosTecnicos: {
+        ...datosTecnicos,
+        circuits: nextCircuits
+      }
     });
   };
 

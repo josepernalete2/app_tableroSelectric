@@ -462,6 +462,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     }
 
     newData.circuits = currentCircuits.filter(c => {
+      const isCustom = Boolean(c.id && !String(c.id).startsWith('auto_'));
       const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
       const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
       const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
@@ -469,7 +470,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
       const hasPoleLabel = !!(c.codigoPolo || c.polo_label || c.poloLabel);
       const hasDestino = !!(c.elementoDestinoId || c.vinculadoId || c.tipoElementoDestino || c.tipoDestino);
-      return hasBreaker || hasConductor || hasEquipo || c.fotografia || hasDestino || hasFicha || isMultiPole || hasPoleLabel;
+      return isCustom || hasBreaker || hasConductor || hasEquipo || c.fotografia || hasDestino || hasFicha || isMultiPole || hasPoleLabel;
     });
 
     onUpdateTablero(newData);
@@ -513,13 +514,14 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     }
 
     newData.circuits = currentCircuits.filter(c => {
+      const isCustom = Boolean(c.id && !String(c.id).startsWith('auto_'));
       const hasBreaker = c.breaker && (c.breaker.marca || c.breaker.tipo || c.breaker.amp);
       const hasConductor = c.conductor && c.conductor !== 'N/A' && c.conductor !== 'N/D' && c.conductor !== '';
       const hasEquipo = c.equipo && c.equipo !== 'RESERVA' && c.equipo !== 'DISPONIBLE';
       const hasFicha = c.ficha && (c.ficha.descripcion || c.ficha.potenciaWatts);
       const isMultiPole = Array.isArray(c.poles) && c.poles.length > 1;
       const hasPoleLabel = !!(c.codigoPolo || c.polo_label || c.poloLabel);
-      return hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino || c.vinculadoId || hasFicha || isMultiPole || hasPoleLabel;
+      return isCustom || hasBreaker || hasConductor || hasEquipo || c.fotografia || c.tipoDestino || c.vinculadoId || hasFicha || isMultiPole || hasPoleLabel;
     });
 
     onUpdateTablero(newData);
@@ -584,12 +586,18 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         ? circuitPoles
         : (targetInNormalized?.poles || targetInCurrent?.poles || (String(circuitId).startsWith('auto_') ? [parseInt(String(circuitId).replace('auto_', ''), 10)] : []));
 
+      const isAuto = !circuitId || String(circuitId).startsWith('auto_');
+
       // Filtrar estrictamente solo el circuito que coincida por ID o por sus polos específicos
       currentCircuits = currentCircuits.filter(c => {
         // Coincidencia exacta de ID
-        if (c.id === circuitId) return false;
-        // Si el circuito coincide con los polos del objetivo a eliminar
-        if (targetPoleList.length > 0 && Array.isArray(c.poles) && c.poles.some(p => targetPoleList.includes(p))) {
+        if (circuitId && c.id === circuitId) return false;
+        // Si era un auto pole, eliminar el que coincida con los polos del objetivo
+        if (isAuto && targetPoleList.length > 0 && Array.isArray(c.poles) && c.poles.some(p => targetPoleList.includes(p))) {
+          return false;
+        }
+        // Si no es auto y tiene coincidencia exacta de polos
+        if (!isAuto && targetPoleList.length > 0 && Array.isArray(c.poles) && c.poles.length === targetPoleList.length && c.poles.every(p => targetPoleList.includes(p))) {
           return false;
         }
         return true;
@@ -1981,6 +1989,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
       {/* Modal interactivo de Edición Condicional de Circuitos */}
       <ModalEdicionCircuito
+        key={editingCircuit ? (editingCircuit.id || `pole_${editingCircuit.posicionPolo || editingCircuit.poles?.[0] || '1'}`) : 'closed'}
         isOpen={!!editingCircuit}
         onClose={() => setEditingCircuit(null)}
         circuitData={editingCircuit}

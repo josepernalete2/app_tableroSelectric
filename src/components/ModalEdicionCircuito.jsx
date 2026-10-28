@@ -39,6 +39,100 @@ const MOCK_ELEMENTOS_CREADOS = [
   { id: 'CCM-1', nombre: 'CCM BOMBAS DE AGUA', tipo: 'CCM' }
 ];
 
+export const isCircuitEmptyReserve = (circuitData) => {
+  if (!circuitData) return true;
+  const isAutoPole = !circuitData.id || String(circuitData.id).startsWith('auto_');
+  const rawEquipo = (circuitData.equipo || circuitData.nombre || '').trim();
+  const isReservaPlaceholder = !rawEquipo || rawEquipo === 'RESERVA' || rawEquipo === 'DISPONIBLE';
+
+  const hasBreaker = Boolean(
+    circuitData.breaker && (circuitData.breaker.amp || circuitData.breaker.marca || circuitData.breaker.tipo)
+  );
+  const hasConductor = Boolean(
+    circuitData.conductor && 
+    circuitData.conductor !== 'N/A' && 
+    circuitData.conductor !== 'N/D' && 
+    circuitData.conductor !== '-- Sin especificar --' &&
+    circuitData.conductor !== 'null' &&
+    circuitData.conductor !== 'undefined' &&
+    circuitData.conductor.trim() !== ''
+  );
+  const hasCustomName = !isReservaPlaceholder && rawEquipo !== '';
+  const hasFicha = Boolean(
+    (circuitData.ficha?.descripcion && String(circuitData.ficha.descripcion).trim()) ||
+    (circuitData.observaciones && String(circuitData.observaciones).trim()) ||
+    (circuitData.descripcion && String(circuitData.descripcion).trim()) ||
+    (circuitData.ficha?.potenciaWatts && String(circuitData.ficha.potenciaWatts).trim() !== '' && String(circuitData.ficha.potenciaWatts) !== '0') ||
+    (circuitData.potenciaWatts && String(circuitData.potenciaWatts).trim() !== '' && String(circuitData.potenciaWatts) !== '0') ||
+    (circuitData.watts && String(circuitData.watts).trim() !== '' && String(circuitData.watts) !== '0')
+  );
+  const hasFoto = Boolean(circuitData.fotografia || circuitData.foto);
+  const prevDestinoId = circuitData.elementoDestinoId || circuitData.vinculadoId || '';
+  const hasDestino = Boolean(
+    prevDestinoId || 
+    (circuitData.tipoDestino && circuitData.tipoDestino !== 'RESERVA' && circuitData.tipoDestino !== 'DISPONIBLE') ||
+    circuitData.tipoElementoDestino ||
+    circuitData.tipoElementoProvisional ||
+    circuitData.nombreProvisional
+  );
+  const isMultiPole = Boolean(
+    (Array.isArray(circuitData.poles) && circuitData.poles.length > 1) || 
+    (circuitData.numPolos && circuitData.numPolos > 1)
+  );
+  const isCustomActive = Boolean(!isAutoPole && circuitData.estado === 'ACTIVO');
+
+  const hasData = hasBreaker || hasConductor || hasCustomName || hasFicha || hasFoto || hasDestino || isMultiPole || isCustomActive;
+  return !hasData;
+};
+
+export const getCircuitInitialStep = (circuitData, isTablero, tipoOrigen, modo) => {
+  if (!isTablero) {
+    if (tipoOrigen === 'TRANSFORMADOR') {
+      if (modo === 'ENTRADA' || modo === 'PRIMARIA') return 'PREGUNTA_ORIGEN_MT';
+      return 'VINCULAR_EXISTENTE';
+    } else if (tipoOrigen === 'GENERADOR') {
+      return 'PREGUNTA_DESTINO_GEN';
+    } else if (tipoOrigen === 'TRANSFER') {
+      if (modo === 'ENTRADA_1' || modo === 'ENTRADA') return 'PREGUNTA_FUENTE_ATS1';
+      if (modo === 'ENTRADA_2') return 'PREGUNTA_FUENTE_ATS2';
+      return 'PREGUNTA_DESTINO_ATS';
+    } else if (tipoOrigen === 'CCM') {
+      return 'PREGUNTA_CARGA_CCM';
+    } else if (tipoOrigen === 'PUNTO_MEDICION') {
+      return 'PREGUNTA_ORIGEN_MEDICION';
+    } else if (tipoOrigen === 'PUESTA_TIERRA') {
+      return 'PREGUNTA_CONEXION_TIERRA';
+    }
+    return 'VINCULAR_EXISTENTE';
+  }
+
+  // 1. Si está virgen / reserva sin configurar: vista inicial de decisión
+  if (isCircuitEmptyReserve(circuitData)) {
+    return 'PREGUNTA_ES_ARTEFACTO';
+  }
+
+  const prevDestinoId = circuitData?.elementoDestinoId || circuitData?.vinculadoId || '';
+  const t = circuitData?.tipoDestino;
+
+  // 2. Elemento pendiente por crear
+  if (t === 'SUB_TABLERO_PENDIENTE' || t === 'ELEMENTO_PENDIENTE' || Boolean(circuitData?.tipoElementoProvisional) || Boolean(circuitData?.nombreProvisional)) {
+    return 'ALIMENTAR_POR_CREAR';
+  }
+
+  // 3. Elemento existente vinculado
+  if (t === 'SUB_TABLERO' || t === 'ELEMENTO_VINCULADO' || Boolean(prevDestinoId)) {
+    return 'VINCULAR_EXISTENTE';
+  }
+
+  // 4. No es artefacto (Carga directa / Rotulado / Manual)
+  if (t === 'CARGA_DIRECTA' || t === 'ROTULAR_Y_FOTO' || t === 'MANUAL' || t === 'NO_ARTEFACTO') {
+    return 'ROTULAR_Y_FOTO';
+  }
+
+  // 5. Artefacto por defecto si ya tiene datos
+  return 'FORMULARIO_ARTEFACTO';
+};
+
 export const ModalEdicionCircuito = ({
   isOpen,
   onClose,
@@ -55,18 +149,25 @@ export const ModalEdicionCircuito = ({
   const { registrarConflictoCircuito, showToast, setPanelConflictosOpen } = useStore();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
-  const [step, setStep] = useState('PREGUNTA_ES_ARTEFACTO');
-  const [alimentaOtro, setAlimentaOtro] = useState(false);
+  const [step, setStep] = useState(() => getCircuitInitialStep(circuitData, isTablero, tipoOrigen, modo));
+  const [alimentaOtro, setAlimentaOtro] = useState(() => {
+    const t = circuitData?.tipoDestino;
+    return t === 'SUB_TABLERO' || t === 'ELEMENTO_VINCULADO' || t === 'SUB_TABLERO_PENDIENTE' || t === 'ELEMENTO_PENDIENTE' || Boolean(circuitData?.elementoDestinoId || circuitData?.vinculadoId);
+  });
 
   // Campos Tablero / Artefacto
-  const [breakerAmp, setBreakerAmp] = useState('');
-  const [breakerMarca, setBreakerMarca] = useState('');
-  const [breakerTipo, setBreakerTipo] = useState('');
-  const [conductor, setConductor] = useState('');
-  const [nombreArtefacto, setNombreArtefacto] = useState('');
-  const [descArtefacto, setDescArtefacto] = useState('');
-  const [initialDesc, setInitialDesc] = useState('');
-  const [potenciaWatts, setPotenciaWatts] = useState('');
+  const [breakerAmp, setBreakerAmp] = useState(() => circuitData?.breaker?.amp || '');
+  const [breakerMarca, setBreakerMarca] = useState(() => circuitData?.breaker?.marca || '');
+  const [breakerTipo, setBreakerTipo] = useState(() => circuitData?.breaker?.tipo || '');
+  const [conductor, setConductor] = useState(() => circuitData?.conductor || '');
+  const [nombreArtefacto, setNombreArtefacto] = useState(() => {
+    const raw = circuitData?.equipo || circuitData?.nombre || '';
+    if (!raw || raw === 'RESERVA' || raw === 'DISPONIBLE') return '';
+    return cleanElementName(raw, circuitData?.elementoDestinoId || circuitData?.vinculadoId);
+  });
+  const [descArtefacto, setDescArtefacto] = useState(() => circuitData?.ficha?.descripcion || circuitData?.observaciones || circuitData?.descripcion || '');
+  const [initialDesc, setInitialDesc] = useState(() => circuitData?.ficha?.descripcion || circuitData?.observaciones || circuitData?.descripcion || '');
+  const [potenciaWatts, setPotenciaWatts] = useState(() => circuitData?.ficha?.potenciaWatts || circuitData?.potenciaWatts || circuitData?.watts || '');
 
   // Extracción segura a nivel de componente para evitar ReferenceError bajo cualquier circunstancia
   const safeCircuitDesc = circuitData?.ficha?.descripcion || circuitData?.observaciones || circuitData?.descripcion || '';
@@ -74,26 +175,59 @@ export const ModalEdicionCircuito = ({
   const safeCircuitFoto = circuitData?.fotografia || circuitData?.foto || null;
 
   // Parámetros Físicos Tablero
-  const [numPolos, setNumPolos] = useState(1);
-  const [posicionPolo, setPosicionPolo] = useState(1);
-  const [estado, setEstado] = useState('ACTIVO');
+  const [numPolos, setNumPolos] = useState(() => {
+    const n = circuitData?.numPolos !== undefined ? circuitData.numPolos : (circuitData?.poles?.length || 1);
+    return parseInt(n, 10) || 1;
+  });
+  const [posicionPolo, setPosicionPolo] = useState(() => {
+    const p = circuitData?.posicionPolo !== undefined ? circuitData.posicionPolo : (circuitData?.poles?.[0] || 1);
+    return parseInt(p, 10) || 1;
+  });
+  const [estado, setEstado] = useState(() => {
+    if (circuitData?.estado === 'RESERVA') return 'RESERVA';
+    if (circuitData?.estado === 'ACTIVO') return 'ACTIVO';
+    const raw = circuitData?.equipo || circuitData?.nombre || '';
+    const hasBreaker = circuitData?.breaker?.amp || circuitData?.breaker?.marca;
+    const hasCond = circuitData?.conductor;
+    if (raw === 'RESERVA' && !hasBreaker && !hasCond) return 'RESERVA';
+    return 'ACTIVO';
+  });
 
   // Búsqueda y vinculación
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLink, setSelectedLink] = useState(null);
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const prevId = circuitData?.elementoDestinoId || circuitData?.vinculadoId;
+    if (prevId && elementosCreados) {
+      const found = elementosCreados.find(el => String(el.id) === String(prevId));
+      if (found) return found.nombre;
+    }
+    return '';
+  });
+  const [selectedLink, setSelectedLink] = useState(() => {
+    const prevId = circuitData?.elementoDestinoId || circuitData?.vinculadoId;
+    if (prevId && elementosCreados) {
+      return elementosCreados.find(el => String(el.id) === String(prevId)) || null;
+    }
+    return null;
+  });
   const [selectedLinks, setSelectedLinks] = useState([]);
-  const [selectedElementoDestinoId, setSelectedElementoDestinoId] = useState('');
-  const [selectedTipoElementoDestino, setSelectedTipoElementoDestino] = useState('');
-  const [selectorValue, setSelectorValue] = useState('');
-  const [isCreatingNewProvisional, setIsCreatingNewProvisional] = useState(false);
-  const [provisionalCustomName, setProvisionalCustomName] = useState('');
-  const [provisionalTipo, setProvisionalTipo] = useState('TABLERO');
+  const [selectedElementoDestinoId, setSelectedElementoDestinoId] = useState(() => circuitData?.elementoDestinoId || circuitData?.vinculadoId || '');
+  const [selectedTipoElementoDestino, setSelectedTipoElementoDestino] = useState(() => circuitData?.tipoElementoDestino || circuitData?.tipoDestino || '');
+  const [selectorValue, setSelectorValue] = useState(() => circuitData?.elementoDestinoId || circuitData?.vinculadoId || '');
+  const [isCreatingNewProvisional, setIsCreatingNewProvisional] = useState(() => {
+    const t = circuitData?.tipoDestino;
+    return t === 'SUB_TABLERO_PENDIENTE' || t === 'ELEMENTO_PENDIENTE';
+  });
+  const [provisionalCustomName, setProvisionalCustomName] = useState(() => circuitData?.nombreProvisional || '');
+  const [provisionalTipo, setProvisionalTipo] = useState(() => circuitData?.tipoElementoProvisional || 'TABLERO');
 
   const isMultiSelect = tipoOrigen === 'TRANSFORMADOR' && (modo === 'SECUNDARIA' || modo === 'SALIDA');
 
   // Rótulo y foto
-  const [rotulo, setRotulo] = useState('');
-  const [fotoUrl, setFotoUrl] = useState(null);
+  const [rotulo, setRotulo] = useState(() => {
+    const raw = circuitData?.equipo || circuitData?.nombre || '';
+    return (raw === 'RESERVA' || raw === 'DISPONIBLE') ? '' : raw;
+  });
+  const [fotoUrl, setFotoUrl] = useState(() => circuitData?.fotografia || circuitData?.foto || null);
 
   // Agrupación universal de elementos creados
   const groupedElements = useMemo(() => {
@@ -239,8 +373,11 @@ export const ModalEdicionCircuito = ({
 
   // Eliminación / Reversión explícita a Reserva
   const handleEliminarCircuito = async () => {
-    const requiredList = validation?.requiredPoles || circuitData.poles || [posicionPolo];
-    const polesStr = requiredList.join(', ');
+    if (!circuitData) return;
+    const targetPoles = (Array.isArray(circuitData?.poles) && circuitData.poles.length > 0)
+      ? circuitData.poles
+      : (circuitData?.posicionPolo ? [circuitData.posicionPolo] : (validation?.requiredPoles || [posicionPolo || 1]));
+    const polesStr = targetPoles.join(', ');
     const circuitName = circuitData.equipo && circuitData.equipo !== 'RESERVA' ? `"${circuitData.equipo}"` : `en polo(s) [${polesStr}]`;
 
     const isConfirmed = await confirm({
@@ -255,7 +392,7 @@ export const ModalEdicionCircuito = ({
       setAlimentaOtro(false);
       setIsCreatingNewProvisional(false);
       setProvisionalCustomName('');
-      onSave(circuitData.id, null, requiredList);
+      onSave(circuitData.id, null, targetPoles);
       showToast(`Circuito en polo(s) [${polesStr}] eliminado y restablecido a reserva`, 'info');
       onClose();
     }
@@ -299,7 +436,6 @@ export const ModalEdicionCircuito = ({
       setFotoUrl(initialFoto);
 
       setSelectedLinks([]);
-      setIsCreatingNewProvisional(false);
       setProvisionalCustomName(circuitData.nombreProvisional || '');
       setProvisionalTipo(circuitData.tipoElementoProvisional || 'TABLERO');
 
@@ -367,83 +503,13 @@ export const ModalEdicionCircuito = ({
 
       // Selección de paso según tipoOrigen y modo
       if (isTablero) {
-        // Determinación inteligente: ¿el circuito ya tiene información/datos guardados o está en blanco/nuevo (reserva sin configurar)?
-        const hasBreakerData = Boolean(initialAmp || initialMarca || initialTipo);
-        const hasConductorData = Boolean(
-          initialConductor && 
-          initialConductor !== 'N/A' && 
-          initialConductor !== 'N/D' && 
-          initialConductor !== '-- Sin especificar --' &&
-          initialConductor !== 'null' &&
-          initialConductor !== 'undefined'
-        );
-        const hasCustomName = !isReservaPlaceholder && Boolean(cleanName && cleanName.trim());
-        const hasFichaData = Boolean(
-          (initialDesc && String(initialDesc).trim()) || 
-          (safeCircuitDesc && String(safeCircuitDesc).trim()) ||
-          (descArtefacto && String(descArtefacto).trim()) ||
-          (initialPotencia && String(initialPotencia).trim() !== '' && String(initialPotencia) !== '0')
-        );
-        const hasFotoData = Boolean(
-          (initialFoto && String(initialFoto).trim() !== '') || 
-          (safeCircuitFoto && String(safeCircuitFoto).trim() !== '')
-        );
-        const hasDestinoVinculado = Boolean(
-          prevDestinoId || 
-          (circuitData.tipoDestino && circuitData.tipoDestino !== 'RESERVA' && circuitData.tipoDestino !== 'DISPONIBLE')
-        );
-        const isMultiPole = Boolean(
-          (Array.isArray(circuitData.poles) && circuitData.poles.length > 1) || 
-          (circuitData.numPolos && circuitData.numPolos > 1)
-        );
-        const isExplicitActive = Boolean(!isAutoPole && circuitData.estado === 'ACTIVO');
-
-        const hasSavedData = hasBreakerData || 
-                             hasConductorData || 
-                             hasCustomName || 
-                             hasFichaData || 
-                             hasFotoData || 
-                             hasDestinoVinculado || 
-                             isMultiPole || 
-                             isExplicitActive;
-
-        if (!hasSavedData) {
-          // 1. Circuito totalmente virgen (reserva vacía sin configurar):
-          // Mostrar la vista inicial de decisión ("¿El circuito alimenta a un equipo o artefacto final?")
-          setAlimentaOtro(false);
-          setIsCreatingNewProvisional(false);
-          setStep('PREGUNTA_ES_ARTEFACTO');
-        } else if (circuitData.tipoDestino === 'SUB_TABLERO_PENDIENTE' || circuitData.tipoDestino === 'ELEMENTO_PENDIENTE') {
-          // 2. No es artefacto -> Elemento pendiente por crear
-          setAlimentaOtro(true);
-          setIsCreatingNewProvisional(true);
+        const nextStep = getCircuitInitialStep(circuitData, isTablero, tipoOrigen, modo);
+        setStep(nextStep);
+        setAlimentaOtro(nextStep === 'VINCULAR_EXISTENTE' || nextStep === 'ALIMENTAR_POR_CREAR');
+        setIsCreatingNewProvisional(nextStep === 'ALIMENTAR_POR_CREAR');
+        if (nextStep === 'ALIMENTAR_POR_CREAR') {
           setProvisionalCustomName(circuitData.nombreProvisional || circuitData.equipo || '');
           setProvisionalTipo(circuitData.tipoElementoProvisional || 'TABLERO');
-          setStep('ALIMENTAR_POR_CREAR');
-        } else if (
-          circuitData.tipoDestino === 'SUB_TABLERO' || 
-          circuitData.tipoDestino === 'ELEMENTO_VINCULADO' || 
-          Boolean(prevDestinoId)
-        ) {
-          // 3. No es artefacto -> Vinculado a equipo existente
-          setAlimentaOtro(true);
-          setIsCreatingNewProvisional(false);
-          setStep('VINCULAR_EXISTENTE');
-        } else if (
-          circuitData.tipoDestino === 'CARGA_DIRECTA' || 
-          circuitData.tipoDestino === 'ROTULAR_Y_FOTO' || 
-          circuitData.tipoDestino === 'MANUAL' || 
-          circuitData.tipoDestino === 'NO_ARTEFACTO'
-        ) {
-          // 4. No es artefacto -> Manual / Rotular y Foto (Carga directa no artefacto o reserva rotulada)
-          setAlimentaOtro(false);
-          setIsCreatingNewProvisional(false);
-          setStep('ROTULAR_Y_FOTO');
-        } else {
-          // 5. Artefacto (o circuito configurado con ficha/breaker/conductor de artefacto)
-          setAlimentaOtro(false);
-          setIsCreatingNewProvisional(false);
-          setStep('FORMULARIO_ARTEFACTO');
         }
       } else {
         if (tipoOrigen === 'TRANSFORMADOR') {
@@ -466,7 +532,7 @@ export const ModalEdicionCircuito = ({
         }
       }
     }
-  }, [circuitData, isOpen]);
+  }, [circuitData, isOpen, isTablero, tipoOrigen, modo, elementosCreados]);
 
   // Validación de colisión y ocupación de polos en tiempo real
   const validation = useMemo(() => {

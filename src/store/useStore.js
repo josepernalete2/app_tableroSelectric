@@ -1731,7 +1731,20 @@ export const useStore = create(
 
         const syncElementBidirectional = (e) => {
           if (e.id === elementoId) {
-            return { ...e, ...cleanUpdatedData };
+            const nextCircuits = cleanUpdatedData.circuits !== undefined 
+              ? cleanUpdatedData.circuits 
+              : (cleanUpdatedData.datosTecnicos?.circuits !== undefined 
+                  ? cleanUpdatedData.datosTecnicos.circuits 
+                  : e.circuits);
+            const mergedDatosTecnicos = cleanUpdatedData.datosTecnicos !== undefined 
+              ? { ...(e.datosTecnicos || {}), ...cleanUpdatedData.datosTecnicos, ...(nextCircuits !== undefined ? { circuits: nextCircuits } : {}) }
+              : (e.datosTecnicos || {});
+            return { 
+              ...e, 
+              ...cleanUpdatedData,
+              ...(nextCircuits !== undefined ? { circuits: nextCircuits } : {}),
+              datosTecnicos: mergedDatosTecnicos
+            };
           }
           if (hasExplicitAlimentaA) {
             if (safeAlimentaAIds.includes(e.id)) {
