@@ -11,7 +11,11 @@ import {
   Check, 
   Cpu, 
   ShieldAlert, 
-  FolderOpen 
+  FolderOpen,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DiagramaUnifilarBlueprint from './DiagramaUnifilarBlueprint';
@@ -29,8 +33,12 @@ export default function ModalDiagramaUnifilar({
   companyId = null
 }) {
   const navigate = useNavigate();
-  const { addElementoUnifilar, updateElementoUnifilar, deleteElementoUnifilar, showToast } = useStore();
-  const { confirm } = useConfirm();
+  const { user, addElementoUnifilar, updateElementoUnifilar, deleteElementoUnifilar, showToast } = useStore();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [selectedNode, setSelectedNode] = useState(null);
   
@@ -247,29 +255,34 @@ export default function ModalDiagramaUnifilar({
     });
   };
 
-  // Eliminar elemento del diagrama con advertencia de huérfanos
-  const handleDeleteElement = async () => {
-    if (!selectedNode) return;
+  // Abrir modal de eliminación con contraseña de Admin
+  const handleDeleteElement = () => {
+    if (!selectedNode || user?.role !== 'ADMIN') return;
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setDeleteError('');
+    setShowDeleteModal(true);
+  };
 
-    const orphans = getDownstreamOrphans(selectedNode);
-    let confirmMsg = `¿Estás seguro de que deseas eliminar permanentemente el equipo "${selectedNode.nombre}" (${selectedNode.id})?`;
-
-    if (orphans.length > 0) {
-      const orphanList = orphans.map(o => `• ${o.nombre} (${o.tipoElemento || 'EQUIPO'})`).join('\n');
-      confirmMsg += `\n\n⚠️ ADVERTENCIA DE DEPENDENCIAS AGUAS ABAJO:\nLos siguientes ${orphans.length} equipo(s) quedarán huérfanos (sin alimentación directa):\n${orphanList}\n\nSe desvincularán automáticamente de forma segura.`;
+  const handleConfirmDeleteElement = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!selectedNode || isDeleting || user?.role !== 'ADMIN') return;
+    if (!deletePassword) {
+      setDeleteError('Ingresa tu contraseña de administrador.');
+      return;
     }
-
-    const ok = await confirm({
-      title: 'Eliminar Equipo del Diagrama',
-      message: confirmMsg,
-      type: 'danger',
-      confirmText: 'Eliminar Equipo'
-    });
-
-    if (ok) {
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
       const idToDelete = selectedNode.id;
-      
-      // Desconectar huérfanos antes de eliminar para mantener coherencia en cascada
+      const res = await deleteElementoUnifilar(proyectoId || selectedNode.proyectoId, idToDelete, deletePassword);
+      if (!res?.ok) {
+        setDeleteError(res?.error || 'Contraseña de administrador incorrecta');
+        setIsDeleting(false);
+        return;
+      }
+
+      // Desconectar huérfanos en memoria tras eliminación exitosa
       for (const el of elementos) {
         if (
           el.alimentadoPor === selectedNode.nombre || 
@@ -284,15 +297,21 @@ export default function ModalDiagramaUnifilar({
         }
       }
 
+      const deletedName = selectedNode.nombre;
       setSelectedNode(null);
-      await deleteElementoUnifilar(proyectoId || selectedNode.proyectoId, idToDelete);
-      showToast(`Equipo "${selectedNode.nombre}" eliminado del diagrama.`, 'info');
+      setShowDeleteModal(false);
+      setDeletePassword('');
+      showToast(`Equipo "${deletedName}" eliminado del diagrama.`, 'info');
+    } catch (err) {
+      setDeleteError(err?.message || 'Error inesperado al eliminar el equipo.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  // Atajo de teclado: Tecla Delete / Backspace para borrar nodo seleccionado
+  // Atajo de teclado: Tecla Delete / Backspace para borrar nodo seleccionado (Solo ADMIN)
   useEffect(() => {
-    if (!isOpen || !selectedNode) return;
+    if (!isOpen || !selectedNode || user?.role !== 'ADMIN' || showDeleteModal) return;
 
     const handleKeyDown = (e) => {
       const activeTag = document.activeElement?.tagName?.toLowerCase();
@@ -306,7 +325,7 @@ export default function ModalDiagramaUnifilar({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedNode, elementos]);
+  }, [isOpen, selectedNode, elementos, user?.role, showDeleteModal]);
 
   // Desconectar elemento seleccionado
   const handleDisconnectElement = async () => {
@@ -629,13 +648,15 @@ export default function ModalDiagramaUnifilar({
                       </button>
                     )}
                     
-                    <button
-                      onClick={handleDeleteElement}
-                      className="w-full bg-red-950/20 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold transition-all px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs cursor-pointer shadow-sm"
-                      title="Eliminar equipo (Atajo: Tecla Supr / Delete)"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Eliminar Equipo (Supr)
-                    </button>
+                    {user?.role === 'ADMIN' && (
+                      <button
+                        onClick={handleDeleteElement}
+                        className="w-full bg-red-950/20 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold transition-all px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs cursor-pointer shadow-sm"
+                        title="Eliminar equipo (Atajo: Tecla Supr / Delete)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Eliminar Equipo (Supr)
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -652,6 +673,64 @@ export default function ModalDiagramaUnifilar({
 
         </div>
       </div>
+
+      {showDeleteModal && selectedNode && user?.role === 'ADMIN' && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 print:hidden">
+          <div onClick={() => !isDeleting && setShowDeleteModal(false)} className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
+          <form
+            onSubmit={handleConfirmDeleteElement}
+            className="relative w-full max-w-md bg-slate-950 border border-red-900/60 rounded-2xl shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center gap-2 text-red-400">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-bold uppercase tracking-wider">Eliminación de Equipo</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Esta acción eliminará de forma irreversible el equipo <strong>{selectedNode.nombre}</strong> y sus circuitos asociados. Ingresa tu contraseña de administrador para confirmar:
+            </p>
+            <div className="relative">
+              <input
+                type={showDeletePassword ? 'text' : 'password'}
+                autoFocus
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                placeholder="Contraseña de administrador"
+                disabled={isDeleting}
+                className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-700 focus:border-red-500 rounded-lg text-xs text-slate-100 focus:outline-none h-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowDeletePassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-400 p-1 cursor-pointer"
+                title={showDeletePassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                tabIndex={-1}
+              >
+                {showDeletePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            {deleteError && (
+              <p className="text-[11px] text-rose-400 font-medium">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 cursor-pointer h-9 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs h-9 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isDeleting ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Eliminando...</span></>) : 'Eliminar Equipo'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Versión invisible para imprimir que se activa con el print CSS */}
       <div className="hidden print:block fixed inset-0 bg-white z-50 w-screen h-screen p-0 m-0">

@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import prisma from '../db.js';
 import { calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador.js';
 
@@ -492,34 +493,73 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
 /**
  * DELETE /api/elementos-unifilares/:id
- * Elimina un elemento unifilar (y su tablero/circuitos si es de tipo TABLERO) de forma atómica.
+ * DELETE /api/elementos/:id
+ * Elimina un elemento unifilar (y su tablero/circuitos si es de tipo TABLERO) de forma atómica,
+ * validando rol ADMIN y contraseña de administrador.
  */
 export const eliminarElementoUnifilar = async (req, res, next) => {
   try {
     const { id } = req.params;
 
+    if (!req.user || req.user.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    }
+
+    const adminPassword = typeof req.body?.adminPassword === 'string'
+      ? req.body.adminPassword
+      : (typeof req.headers['x-admin-password'] === 'string'
+          ? req.headers['x-admin-password']
+          : (typeof req.query?.adminPassword === 'string' ? req.query.adminPassword : ''));
+
+    if (!adminPassword) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
+
+    const adminUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const passwordOk = adminUser && adminUser.role === 'ADMIN'
+      ? await bcrypt.compare(adminPassword, adminUser.password).catch(() => false)
+      : false;
+
+    if (!passwordOk) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
+
     await prisma.$transaction(async (tx) => {
-      // Verificar si existe
       const elemento = await tx.elementoUnifilar.findUnique({
         where: { id }
       });
+      const tableroExiste = await tx.tablero.findUnique({ where: { id } });
 
-      if (!elemento) {
+      if (!elemento && !tableroExiste) {
         throw new Error('NOT_FOUND');
       }
 
-      // Si es tablero, eliminarlo de la tabla de tableros (se eliminan sus circuitos en cascada)
-      if (elemento.tipoElemento === 'TABLERO') {
-        const tableroExiste = await tx.tablero.findUnique({ where: { id } });
-        if (tableroExiste) {
-          await tx.tablero.delete({ where: { id } });
-        }
+      // Desvincular equipos aguas abajo que dependían de este elemento
+      await tx.elementoUnifilar.updateMany({
+        where: { alimentadoPorId: id },
+        data: { alimentadoPorId: null, alimentadoPor: '' }
+      });
+
+      // Eliminar circuitos y alarmas asociadas al tablero si existen
+      await tx.circuito.deleteMany({
+        where: { tableroId: id }
+      });
+
+      await tx.alarma.deleteMany({
+        where: { tableroId: id }
+      });
+
+      // Si existe registro en tabla tableros, eliminarlo
+      if (tableroExiste) {
+        await tx.tablero.delete({ where: { id } });
       }
 
-      // Eliminar el elemento unifilar
-      await tx.elementoUnifilar.delete({
-        where: { id }
-      });
+      // Eliminar el elemento unifilar si existe
+      if (elemento) {
+        await tx.elementoUnifilar.delete({
+          where: { id }
+        });
+      }
     });
 
     return res.status(200).json({ ok: true, message: 'Elemento unifilar eliminado con éxito.' });

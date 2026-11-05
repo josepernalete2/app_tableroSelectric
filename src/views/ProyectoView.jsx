@@ -50,7 +50,11 @@ import {
   Activity,
   GitBranch,
   Maximize2,
-  Network
+  Network,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Loader2
 } from 'lucide-react';
 import DiagramaUnifilarBlueprint from '../components/DiagramaUnifilarBlueprint';
 import HelpModal from '../components/HelpModal';
@@ -133,6 +137,83 @@ export const ProyectoView = () => {
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
 
   const { confirm, alert: customAlert } = useConfirm();
+
+  // Estado del modal de eliminación permanente de Elemento / Inspección (solo ADMIN)
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const closeDeleteElementoModal = () => {
+    if (isDeleting) return;
+    setDeleteTarget(null);
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setDeleteError('');
+  };
+
+  const handleOpenDeleteElementoModal = (item, category = 'UNIFILAR') => {
+    if (user?.role !== 'ADMIN') return;
+    setDeleteTarget({
+      id: item.id,
+      ids: [item.id],
+      nombre: item.nombre || item.codigo || 'Elemento',
+      category,
+      isBulk: false
+    });
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setDeleteError('');
+  };
+
+  const handleConfirmDeleteElemento = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!deleteTarget || isDeleting) return;
+    if (!deletePassword) {
+      setDeleteError('Ingresa tu contraseña de administrador.');
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const targetIds = Array.isArray(deleteTarget.ids) ? deleteTarget.ids : [deleteTarget.id];
+      for (const eid of targetIds) {
+        const res = deleteTarget.category === 'INSPECCION'
+          ? await deleteSubestacion(proyectoId, eid, deletePassword)
+          : await deleteElementoUnifilar(proyectoId, eid, deletePassword);
+        if (!res?.ok) {
+          setDeleteError(res?.error || 'Contraseña de administrador incorrecta');
+          setIsDeleting(false);
+          return;
+        }
+      }
+      setDeleteTarget(null);
+      setDeletePassword('');
+      setShowDeletePassword(false);
+      if (deleteTarget.isBulk) {
+        showToast?.(
+          deleteTarget.category === 'INSPECCION'
+            ? `Se eliminaron ${targetIds.length} fichas de inspección correctamente`
+            : `Se eliminaron ${targetIds.length} elementos correctamente`,
+          'success'
+        );
+        setSelectedIds(new Set());
+        setIsMultiSelectMode(false);
+      } else {
+        showToast?.(
+          deleteTarget.category === 'INSPECCION'
+            ? 'Inspección eliminada correctamente'
+            : 'Elemento eliminado correctamente',
+          'success'
+        );
+      }
+    } catch (err) {
+      setDeleteError(err?.message || 'Error inesperado al eliminar el elemento.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Estados para Edición de Proyecto
   const [showEditProyectoModal, setShowEditProyectoModal] = useState(false);
@@ -297,36 +378,20 @@ export const ProyectoView = () => {
     setSelectedIds(new Set());
   };
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
+    if (user?.role !== 'ADMIN') return;
     const selectedCount = selectedIds.size;
     if (selectedCount === 0) return;
 
-    const confirmMsg = activeTab === 'UNIFILAR'
-      ? `¿Estás seguro de que deseas eliminar los ${selectedCount} elementos seleccionados del Diagrama Unifilar?`
-      : `¿Estás seguro de que deseas eliminar las ${selectedCount} fichas de inspección seleccionadas?`;
-
-    const ok = await confirm({
-      title: 'Eliminar elementos seleccionados',
-      message: confirmMsg,
-      type: 'danger',
-      confirmText: 'Eliminar seleccionados'
+    setDeleteTarget({
+      ids: Array.from(selectedIds),
+      nombre: `${selectedCount} ${selectedCount === 1 ? 'elemento seleccionado' : 'elementos seleccionados'}`,
+      category: activeTab === 'UNIFILAR' ? 'UNIFILAR' : 'INSPECCION',
+      isBulk: true
     });
-
-    if (ok) {
-      if (activeTab === 'UNIFILAR') {
-        selectedIds.forEach((id) => {
-          deleteElementoUnifilar(proyectoId, id);
-        });
-        showToast?.(`Se eliminaron ${selectedCount} elementos correctamente`, 'success');
-      } else {
-        selectedIds.forEach((id) => {
-          deleteSubestacion(proyectoId, id);
-        });
-        showToast?.(`Se eliminaron ${selectedCount} fichas de inspección correctamente`, 'success');
-      }
-      setSelectedIds(new Set());
-      setIsMultiSelectMode(false);
-    }
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setDeleteError('');
   };
 
   // Modales
@@ -1380,7 +1445,7 @@ export const ProyectoView = () => {
                         </button>
                       )}
 
-                      {activeTab === 'UNIFILAR' && (
+                      {activeTab === 'UNIFILAR' && user?.role === 'ADMIN' && (
                         <button
                           onClick={() => {
                             setIsMultiSelectMode(!isMultiSelectMode);
@@ -1444,7 +1509,7 @@ export const ProyectoView = () => {
               >
                 Deseleccionar Todo
               </button>
-              {selectedIds.size > 0 && user?.role !== 'CLIENT' && (
+              {selectedIds.size > 0 && user?.role === 'ADMIN' && (
                 <button
                   onClick={handleDeleteSelected}
                   className="px-3.5 py-2 bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 rounded-xl text-[11px] font-bold text-red-400 hover:text-red-300 flex items-center gap-1.5 transition-all cursor-pointer"
@@ -1775,17 +1840,8 @@ export const ProyectoView = () => {
                           }}
                           canMoveUp={index > 0}
                           canMoveDown={index < filteredInspecciones.length - 1}
-                          onDelete={async () => {
-                            const ok = await confirm({
-                              title: 'Eliminar Inspección',
-                              message: `¿Estás seguro de que deseas eliminar la inspección "${item.nombre}"?`,
-                              type: 'danger',
-                              confirmText: 'Eliminar'
-                            });
-                            if (ok) {
-                              deleteSubestacion(proyectoId, item.id);
-                            }
-                          }}
+                          onDelete={user?.role === 'ADMIN' ? () => handleOpenDeleteElementoModal(item, 'INSPECCION') : undefined}
+                          userRole={user?.role}
                           readOnly={user?.role === 'CLIENT'}
                         />
                       </div>
@@ -2074,17 +2130,8 @@ export const ProyectoView = () => {
                             }}
                             canMoveUp={index > 0}
                             canMoveDown={index < filteredElementos.length - 1}
-                            onDelete={async () => {
-                              const ok = await confirm({
-                                title: 'Eliminar Elemento',
-                                message: `¿Estás seguro de que deseas eliminar el elemento "${item.nombre}"?`,
-                                type: 'danger',
-                                confirmText: 'Eliminar'
-                              });
-                              if (ok) {
-                                deleteElementoUnifilar(proyectoId, item.id);
-                              }
-                            }}
+                            onDelete={user?.role === 'ADMIN' ? () => handleOpenDeleteElementoModal(item, 'UNIFILAR') : undefined}
+                            userRole={user?.role}
                             readOnly={user?.role === 'CLIENT'}
                           />
                         </div>
@@ -3745,6 +3792,67 @@ export const ProyectoView = () => {
         tipoElemento={editIdModalData.tipoElemento}
         proyectoId={proyectoId}
       />
+
+      {/* Modal Eliminación Permanente de Elemento / Equipo (solo ADMIN) */}
+      {deleteTarget && user?.role === 'ADMIN' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={closeDeleteElementoModal} className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
+          <form
+            onSubmit={handleConfirmDeleteElemento}
+            className="relative w-full max-w-md bg-slate-950 border border-red-900/60 rounded-2xl shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center gap-2 text-red-400">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-bold uppercase tracking-wider">
+                {deleteTarget.category === 'INSPECCION' ? 'Eliminación de Inspección' : 'Eliminación de Elemento / Equipo'}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Esta acción eliminará de forma irreversible {deleteTarget.category === 'INSPECCION' ? 'la inspección' : 'el elemento/tablero'} <strong>{deleteTarget.nombre}</strong> y todos sus datos o circuitos asociados. Ingresa tu contraseña de administrador para confirmar:
+            </p>
+            <div className="relative">
+              <input
+                type={showDeletePassword ? 'text' : 'password'}
+                autoFocus
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                placeholder="Contraseña de administrador"
+                disabled={isDeleting}
+                className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-700 focus:border-red-500 rounded-lg text-xs text-slate-100 focus:outline-none h-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowDeletePassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-400 p-1 cursor-pointer"
+                title={showDeletePassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                tabIndex={-1}
+              >
+                {showDeletePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            {deleteError && (
+              <p className="text-[11px] text-rose-400 font-medium">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={closeDeleteElementoModal}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 cursor-pointer h-9 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs h-9 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isDeleting ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Eliminando...</span></>) : 'Eliminar Definitivamente'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
     </div>
   );

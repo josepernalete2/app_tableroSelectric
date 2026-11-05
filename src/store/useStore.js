@@ -1422,34 +1422,68 @@ export const useStore = create(
         }
       },
 
-      deleteProyecto: async (companyId, proyectoId) => {
-        set((state) => ({
-          companies: (state.companies || []).map((c) => {
-            if (c.id === companyId) {
-              return {
-                ...c,
-                proyectos: (c.proyectos || []).filter((p) => p.id !== proyectoId)
-              };
-            }
-            return c;
-          }),
-          proyectosLocales: (state.proyectosLocales || []).filter((p) => p.id !== proyectoId),
-          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== proyectoId)
-        }));
-
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/proyectos/${proyectoId}`, {
-              method: 'DELETE',
-              headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-            });
-          } catch (e) {
-            console.error('Error al eliminar proyecto del servidor:', e);
-          }
+      deleteProyecto: async (companyId, proyectoId, adminPassword) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { ok: false, error: 'Acción permitida únicamente para administradores.' };
         }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return { ok: false, error: 'Se requiere conexión al servidor para eliminar un proyecto de forma permanente.' };
+        }
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (!activeToken || activeToken === 'mock-offline-token') {
+          return { ok: false, error: 'Se requiere una sesión activa con el servidor para eliminar un proyecto.' };
+        }
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/proyectos/${proyectoId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeToken}`
+            },
+            body: JSON.stringify({ adminPassword })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!(res.ok && data.ok) && res.status !== 404) {
+            return { ok: false, error: data.error || `Error al eliminar el proyecto (${res.status}).` };
+          }
+        } catch (e) {
+          console.error('Error al eliminar proyecto del servidor:', e);
+          return { ok: false, error: 'No se pudo contactar con el servidor para eliminar el proyecto.' };
+        }
+
+        get().purgeProyectoLocal(companyId, proyectoId);
+        return { ok: true };
+      },
+
+      purgeProyectoLocal: (companyId, proyectoId) => {
+        set((state) => {
+          const belongsToProject = (item) =>
+            item && (
+              item.id === proyectoId ||
+              item.proyectoId === proyectoId ||
+              item.payload?.proyectoId === proyectoId ||
+              item.payload?.id === proyectoId
+            );
+          return {
+            companies: (state.companies || []).map((c) => {
+              if (!companyId || c.id === companyId) {
+                return {
+                  ...c,
+                  proyectos: (c.proyectos || []).filter((p) => p.id !== proyectoId)
+                };
+              }
+              return c;
+            }),
+            proyectosLocales: (state.proyectosLocales || []).filter((p) => !belongsToProject(p)),
+            elementosLocales: (state.elementosLocales || []).filter((e) => !belongsToProject(e)),
+            subestacionesLocales: (state.subestacionesLocales || []).filter((s) => !belongsToProject(s)),
+            puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((p) => !belongsToProject(p)),
+            ccmLocales: (state.ccmLocales || []).filter((c) => !belongsToProject(c)),
+            syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => !belongsToProject(item))
+          };
+        });
       },
 
       importCompanies: (companiesList) => {
@@ -2033,7 +2067,37 @@ export const useStore = create(
         };
       },
 
-      deleteElementoUnifilar: async (proyectoId, elementoId) => {
+      deleteElementoUnifilar: async (proyectoId, elementoId, adminPassword) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { ok: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return { ok: false, error: 'Se requiere conexión al servidor para eliminar un elemento de forma permanente.' };
+        }
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (!activeToken || activeToken === 'mock-offline-token') {
+          return { ok: false, error: 'Se requiere una sesión activa con el servidor para eliminar un elemento.' };
+        }
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/elementos-unifilares/${elementoId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeToken}`
+            },
+            body: JSON.stringify({ adminPassword })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!(res.ok && data.ok) && res.status !== 404) {
+            return { ok: false, error: data.error || `Error al eliminar el elemento (${res.status}).` };
+          }
+        } catch (e) {
+          console.error('Error al eliminar elemento unifilar del servidor:', e);
+          return { ok: false, error: 'No se pudo contactar con el servidor para eliminar el elemento.' };
+        }
+
         set((state) => ({
           companies: state.companies.map((c) => {
             if (!proyectoId) {
@@ -2050,7 +2114,8 @@ export const useStore = create(
                   const list = p.elementosUnifilares || p.tableros || [];
                   return {
                     ...p,
-                    elementosUnifilares: list.filter((e) => e.id !== elementoId)
+                    elementosUnifilares: list.filter((e) => e.id !== elementoId),
+                    ...(p.tableros ? { tableros: (p.tableros || []).filter((t) => t.id !== elementoId) } : {})
                   };
                 }
                 return p;
@@ -2061,19 +2126,7 @@ export const useStore = create(
           syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== elementoId)
         }));
 
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/elementos-unifilares/${elementoId}`, {
-              method: 'DELETE',
-              headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-            });
-          } catch (e) {
-            console.error('Error al eliminar elemento unifilar del servidor:', e);
-          }
-        }
+        return { ok: true };
       },
 
       addTablero: (proyectoId, tableroData) => {
@@ -2097,8 +2150,8 @@ export const useStore = create(
         get().updateElementoUnifilar(proyectoId, tableroId, updatedData);
       },
 
-      deleteTablero: (proyectoId, tableroId) => {
-        get().deleteElementoUnifilar(proyectoId, tableroId);
+      deleteTablero: (proyectoId, tableroId, adminPassword) => {
+        return get().deleteElementoUnifilar(proyectoId, tableroId, adminPassword);
       },
 
       addInspeccionSubestacion: (proyectoId, payload) => {
@@ -2247,7 +2300,37 @@ export const useStore = create(
         });
       },
 
-      deleteSubestacion: async (proyectoId, subestacionId) => {
+      deleteSubestacion: async (proyectoId, subestacionId, adminPassword) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { ok: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return { ok: false, error: 'Se requiere conexión al servidor para eliminar una inspección de forma permanente.' };
+        }
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (!activeToken || activeToken === 'mock-offline-token') {
+          return { ok: false, error: 'Se requiere una sesión activa con el servidor para eliminar una inspección.' };
+        }
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/subestaciones/${subestacionId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeToken}`
+            },
+            body: JSON.stringify({ adminPassword })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!(res.ok && data.ok) && res.status !== 404) {
+            return { ok: false, error: data.error || `Error al eliminar la inspección (${res.status}).` };
+          }
+        } catch (e) {
+          console.error('Error al eliminar inspección de subestación del servidor:', e);
+          return { ok: false, error: 'No se pudo contactar con el servidor para eliminar la inspección.' };
+        }
+
         set((state) => ({
           companies: state.companies.map((c) => ({
             ...c,
@@ -2266,19 +2349,7 @@ export const useStore = create(
           syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== subestacionId)
         }));
 
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/subestaciones/${subestacionId}`, {
-              method: 'DELETE',
-              headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-            });
-          } catch (e) {
-            console.error('Error al eliminar inspección de subestación del servidor:', e);
-          }
-        }
+        return { ok: true };
       },
 
       addPuntoMedicion: (proyectoId, payload) => {
@@ -2436,7 +2507,37 @@ export const useStore = create(
         });
       },
 
-      deletePuntoMedicion: async (proyectoId, puntoId) => {
+      deletePuntoMedicion: async (proyectoId, puntoId, adminPassword) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { ok: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return { ok: false, error: 'Se requiere conexión al servidor para eliminar el punto de medición.' };
+        }
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (!activeToken || activeToken === 'mock-offline-token') {
+          return { ok: false, error: 'Se requiere una sesión activa con el servidor.' };
+        }
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/puntos-medicion/${puntoId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeToken}`
+            },
+            body: JSON.stringify({ adminPassword })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!(res.ok && data.ok) && res.status !== 404) {
+            return { ok: false, error: data.error || `Error al eliminar el punto de medición (${res.status}).` };
+          }
+        } catch (e) {
+          console.error('Error al eliminar punto de medición del servidor:', e);
+          return { ok: false, error: 'No se pudo contactar con el servidor.' };
+        }
+
         set((state) => ({
           companies: state.companies.map((c) => ({
             ...c,
@@ -2455,19 +2556,7 @@ export const useStore = create(
           syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== puntoId)
         }));
 
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/puntos-medicion/${puntoId}`, {
-              method: 'DELETE',
-              headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-            });
-          } catch (e) {
-            console.error('Error al eliminar punto de medición del servidor:', e);
-          }
-        }
+        return { ok: true };
       },
 
       addCcm: (proyectoId, payload) => {
@@ -2612,7 +2701,37 @@ export const useStore = create(
         });
       },
 
-      deleteCcm: async (proyectoId, ccmId) => {
+      deleteCcm: async (proyectoId, ccmId, adminPassword) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { ok: false, error: 'Acción permitida únicamente para administradores.' };
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return { ok: false, error: 'Se requiere conexión al servidor para eliminar el CCM.' };
+        }
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (!activeToken || activeToken === 'mock-offline-token') {
+          return { ok: false, error: 'Se requiere una sesión activa con el servidor.' };
+        }
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/ccm/${ccmId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeToken}`
+            },
+            body: JSON.stringify({ adminPassword })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!(res.ok && data.ok) && res.status !== 404) {
+            return { ok: false, error: data.error || `Error al eliminar el CCM (${res.status}).` };
+          }
+        } catch (e) {
+          console.error('Error al eliminar CCM del servidor:', e);
+          return { ok: false, error: 'No se pudo contactar con el servidor.' };
+        }
+
         set((state) => ({
           companies: state.companies.map((c) => ({
             ...c,
@@ -2631,19 +2750,7 @@ export const useStore = create(
           syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== ccmId)
         }));
 
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/ccm/${ccmId}`, {
-              method: 'DELETE',
-              headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-            });
-          } catch (e) {
-            console.error('Error al eliminar CCM del servidor:', e);
-          }
-        }
+        return { ok: true };
       },
 
       updateElementoCodigo: async (elementoId, nuevoCodigo, tipoElemento = null, proyectoId = null) => {

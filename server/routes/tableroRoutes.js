@@ -96,6 +96,7 @@ router.delete('/circuitos/:id', requireRoles('ADMIN', 'WORKER'), eliminarCircuit
 // Rutas de Elementos Genéricos, Subestaciones, Puntos de Medición y CCM
 router.post('/elementos-unifilares', requireRoles('ADMIN', 'WORKER'), uploadFotoInspeccion.single('foto'), crearElementoUnifilar);
 router.delete('/elementos-unifilares/:id', requireRoles('ADMIN'), eliminarElementoUnifilar);
+router.delete('/elementos/:id', requireRoles('ADMIN'), eliminarElementoUnifilar);
 router.post('/subestaciones', requireRoles('ADMIN', 'WORKER'), crearInspeccionSubestacion);
 router.delete('/subestaciones/:id', requireRoles('ADMIN'), eliminarInspeccionSubestacion);
 router.post('/puntos-medicion', requireRoles('ADMIN', 'WORKER'), crearPuntoMedicion);

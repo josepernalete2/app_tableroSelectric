@@ -99,8 +99,8 @@ export const ElementoCardActions = ({
         </button>
       )}
 
-      {/* 4. Eliminar Elemento */}
-      {onDelete && (
+      {/* 4. Eliminar Elemento (Exclusivo para ADMIN) */}
+      {onDelete && userRole === 'ADMIN' && (
         <button
           type="button"
           onClick={(e) => {

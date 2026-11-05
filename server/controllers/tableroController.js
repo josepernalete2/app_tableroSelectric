@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import prisma from '../db.js';
 import { computeBalance } from '../utils/electricalMath.js';
 import { generateTableroDXF } from '../services/dxfService.js';
@@ -273,11 +274,34 @@ export const actualizarTablero = async (req, res, next) => {
 
 /**
  * DELETE /api/tableros/:id
- * Elimina un tablero y sus circuitos en cascada.
+ * Elimina un tablero y sus circuitos en cascada, validando rol ADMIN y contraseña.
  */
 export const eliminarTablero = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    if (!req.user || req.user.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    }
+
+    const adminPassword = typeof req.body?.adminPassword === 'string'
+      ? req.body.adminPassword
+      : (typeof req.headers['x-admin-password'] === 'string'
+          ? req.headers['x-admin-password']
+          : (typeof req.query?.adminPassword === 'string' ? req.query.adminPassword : ''));
+
+    if (!adminPassword) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
+
+    const adminUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const passwordOk = adminUser && adminUser.role === 'ADMIN'
+      ? await bcrypt.compare(adminPassword, adminUser.password).catch(() => false)
+      : false;
+
+    if (!passwordOk) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
 
     const tableroActual = await prisma.tablero.findUnique({
       where: { id },
@@ -288,14 +312,17 @@ export const eliminarTablero = async (req, res, next) => {
       return res.status(404).json({ ok: false, error: 'Tablero no encontrado.' });
     }
 
-    if (req.user && req.user.role === 'CLIENT') {
-      const empresaDuena = tableroActual.empresaId || (tableroActual.proyecto && tableroActual.proyecto.empresaId);
-      if (empresaDuena && req.user.companyId !== empresaDuena) {
-        return res.status(403).json({ ok: false, error: 'Acceso denegado: no tiene permisos para eliminar este tablero.' });
-      }
-    }
+    await prisma.$transaction(async (tx) => {
+      await tx.circuito.deleteMany({ where: { tableroId: id } });
+      await tx.alarma.deleteMany({ where: { tableroId: id } });
+      await tx.elementoUnifilar.updateMany({
+        where: { alimentadoPorId: id },
+        data: { alimentadoPorId: null, alimentadoPor: '' }
+      });
+      await tx.elementoUnifilar.deleteMany({ where: { id } });
+      await tx.tablero.delete({ where: { id } });
+    });
 
-    await prisma.tablero.delete({ where: { id } });
     return res.status(200).json({ ok: true, message: 'Tablero eliminado con éxito.' });
   } catch (error) {
     console.error('Error en eliminarTablero:', error);

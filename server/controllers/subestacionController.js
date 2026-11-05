@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import prisma from '../db.js';
 
 /**
@@ -99,11 +100,34 @@ export const crearInspeccionSubestacion = async (req, res, next) => {
 
 /**
  * DELETE /api/subestaciones/:id
- * Elimina una inspección de subestación de la base de datos.
+ * Elimina una inspección de subestación de la base de datos validando contraseña de ADMIN.
  */
 export const eliminarInspeccionSubestacion = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    if (!req.user || req.user.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    }
+
+    const adminPassword = typeof req.body?.adminPassword === 'string'
+      ? req.body.adminPassword
+      : (typeof req.headers['x-admin-password'] === 'string'
+          ? req.headers['x-admin-password']
+          : (typeof req.query?.adminPassword === 'string' ? req.query.adminPassword : ''));
+
+    if (!adminPassword) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
+
+    const adminUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const passwordOk = adminUser && adminUser.role === 'ADMIN'
+      ? await bcrypt.compare(adminPassword, adminUser.password).catch(() => false)
+      : false;
+
+    if (!passwordOk) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
 
     // Verificar si existe
     const subestacion = await prisma.subestacion.findUnique({

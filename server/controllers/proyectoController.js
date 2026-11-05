@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import prisma from '../db.js';
 
 // Sanitizar un proyecto
@@ -242,11 +243,35 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
 
 /**
  * DELETE /api/proyectos/:id
- * Elimina un proyecto de la base de datos (con cascada para dependencias).
+ * Elimina un proyecto de la base de datos (con cascada para dependencias),
+ * validando rol ADMIN y contraseña de administrador.
  */
 export const eliminarProyecto = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    if (!req.user || req.user.role !== 'ADMIN') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    }
+
+    const adminPassword = typeof req.body?.adminPassword === 'string'
+      ? req.body.adminPassword
+      : (typeof req.headers['x-admin-password'] === 'string'
+          ? req.headers['x-admin-password']
+          : (typeof req.query?.adminPassword === 'string' ? req.query.adminPassword : ''));
+
+    if (!adminPassword) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
+
+    const adminUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const passwordOk = adminUser && adminUser.role === 'ADMIN'
+      ? await bcrypt.compare(adminPassword, adminUser.password).catch(() => false)
+      : false;
+
+    if (!passwordOk) {
+      return res.status(401).json({ ok: false, error: 'Contraseña de administrador incorrecta' });
+    }
 
     const proyecto = await prisma.proyecto.findUnique({
       where: { id }
@@ -256,11 +281,89 @@ export const eliminarProyecto = async (req, res, next) => {
       return res.status(404).json({ ok: false, error: 'Proyecto no encontrado.' });
     }
 
-    await prisma.proyecto.delete({
-      where: { id }
+    await prisma.$transaction(async (tx) => {
+      // 1. Obtener tableros del proyecto
+      const tableros = await tx.tablero.findMany({
+        where: { proyectoId: id },
+        select: { id: true }
+      });
+      const tableroIds = tableros.map((t) => t.id);
+
+      // 2. Eliminar circuitos de los tableros
+      if (tableroIds.length > 0) {
+        await tx.circuito.deleteMany({
+          where: { tableroId: { in: tableroIds } }
+        });
+      }
+
+      // 3. Eliminar alarmas asociadas
+      await tx.alarma.deleteMany({
+        where: {
+          OR: [
+            { proyectoId: id },
+            ...(tableroIds.length > 0 ? [{ tableroId: { in: tableroIds } }] : [])
+          ]
+        }
+      });
+
+      // 4. Eliminar tableros
+      if (tableroIds.length > 0) {
+        await tx.tablero.deleteMany({
+          where: { id: { in: tableroIds } }
+        });
+      }
+
+      // 5. Eliminar alimentadores
+      await tx.alimentador.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      // 6. Desvincular jerarquías unifilares autorreferenciales
+      await tx.elementoUnifilar.updateMany({
+        where: {
+          proyectoId: id,
+          alimentadoPorId: { not: null }
+        },
+        data: { alimentadoPorId: null }
+      });
+
+      // 7. Eliminar elementos unifilares
+      await tx.elementoUnifilar.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      // 8. Eliminar subestaciones, puntos de medición, CCM e inspecciones técnicas
+      await tx.subestacion.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      await tx.puntoMedicion.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      await tx.ccm.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      await tx.inspeccionTermografica.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      await tx.inspeccionAterramiento.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      await tx.inspeccionTanqueCombustible.deleteMany({
+        where: { proyectoId: id }
+      });
+
+      // 9. Eliminar proyecto
+      await tx.proyecto.delete({
+        where: { id }
+      });
     });
 
-    return res.status(200).json({ ok: true, message: 'Proyecto eliminado con éxito.' });
+    return res.status(200).json({ ok: true, message: 'Proyecto y todos sus equipos eliminados con éxito en cascada.' });
   } catch (error) {
     console.error('Error en eliminarProyecto:', error);
     next(error);
