@@ -505,6 +505,7 @@ export const useStore = create(
       elementosLocales: [],
       subestacionesLocales: [],
       syncQueue: [],
+      deletedCompanyIds: [],
       isSyncing: false,
       syncProgress: null,
       socket: null,
@@ -642,9 +643,18 @@ export const useStore = create(
 
           if (res.ok) {
             const data = await res.json().catch(() => ({}));
-            if (data?.ok && Array.isArray(data.data) && data.data.length > 0) {
-              get().importCompanies(data.data);
-              return { success: true, count: data.data.length };
+            if (data?.ok && Array.isArray(data.data)) {
+              // El servidor es la fuente de verdad: purgar empresas locales que ya no existen en PostgreSQL
+              const serverIds = new Set(data.data.map((c) => c.id));
+              const queueNow = Array.isArray(get().syncQueue) ? get().syncQueue : [];
+              if (queueNow.length === 0) {
+                const stale = (get().companies || []).filter((c) => !serverIds.has(c.id));
+                stale.forEach((c) => get().purgeCompanyLocal(c.id));
+              }
+              if (data.data.length > 0) {
+                get().importCompanies(data.data);
+                return { success: true, count: data.data.length };
+              }
             }
           }
 
@@ -1253,28 +1263,73 @@ export const useStore = create(
         }
       },
 
-      deleteCompany: async (companyId) => {
-        set((state) => ({
-          companies: state.companies.filter((c) => c.id !== companyId),
-          elementosLocales: (state.elementosLocales || []).filter((e) => e.companyId !== companyId && e.empresaId !== companyId),
-          subestacionesLocales: (state.subestacionesLocales || []).filter((s) => s.empresaId !== companyId),
-          puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((p) => p.empresaId !== companyId),
-          ccmLocales: (state.ccmLocales || []).filter((c) => c.empresaId !== companyId)
-        }));
-
-        if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetch(`${API_BASE_URL}/api/empresas/${companyId}`, {
-              method: 'DELETE',
-              headers: {
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              }
-            });
-          } catch (e) {
-            console.error('Error al eliminar empresa en el servidor:', e);
-          }
+      deleteCompany: async (companyId, adminPassword) => {
+        const currentUser = get().user;
+        if (!currentUser || currentUser.role !== 'ADMIN') {
+          return { ok: false, error: 'Acción permitida únicamente para administradores.' };
         }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return { ok: false, error: 'Se requiere conexión al servidor para eliminar una empresa de forma permanente.' };
+        }
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (!activeToken || activeToken === 'mock-offline-token') {
+          return { ok: false, error: 'Se requiere una sesión activa con el servidor para eliminar una empresa.' };
+        }
+
+        let data = {};
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/empresas/${companyId}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeToken}`
+            },
+            body: JSON.stringify({ adminPassword })
+          });
+          data = await res.json().catch(() => ({}));
+          // 404 = ya no existe en el servidor: purgar igualmente la copia local
+          if (!(res.ok && data.ok) && res.status !== 404) {
+            return { ok: false, error: data.error || `Error al eliminar la empresa (${res.status}).` };
+          }
+        } catch (e) {
+          console.error('Error al eliminar empresa en el servidor:', e);
+          return { ok: false, error: 'No se pudo contactar con el servidor para eliminar la empresa.' };
+        }
+
+        get().purgeCompanyLocal(companyId);
+        return { ok: true };
+      },
+
+      purgeCompanyLocal: (companyId) => {
+        set((state) => {
+          const belongsToCompany = (item) =>
+            item && (
+              item.id === companyId ||
+              item.companyId === companyId ||
+              item.empresaId === companyId ||
+              item.payload?.empresaId === companyId ||
+              item.payload?.companyId === companyId ||
+              item.payload?.id === companyId
+            );
+          const removedProjectIds = new Set(
+            ((state.companies || []).find((c) => c.id === companyId)?.proyectos || []).map((p) => p.id)
+          );
+          const belongsToProject = (item) =>
+            item && (removedProjectIds.has(item.proyectoId) || removedProjectIds.has(item.payload?.proyectoId) || removedProjectIds.has(item.id));
+          const tombstones = Array.isArray(state.deletedCompanyIds) ? state.deletedCompanyIds : [];
+          return {
+            companies: (state.companies || []).filter((c) => c.id !== companyId),
+            proyectosLocales: (state.proyectosLocales || []).filter((p) => !belongsToCompany(p)),
+            elementosLocales: (state.elementosLocales || []).filter((e) => !belongsToCompany(e) && !belongsToProject(e)),
+            subestacionesLocales: (state.subestacionesLocales || []).filter((s) => !belongsToCompany(s) && !belongsToProject(s)),
+            puntosMedicionLocales: (state.puntosMedicionLocales || []).filter((p) => !belongsToCompany(p) && !belongsToProject(p)),
+            ccmLocales: (state.ccmLocales || []).filter((c) => !belongsToCompany(c) && !belongsToProject(c)),
+            syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter(
+              (item) => !belongsToCompany(item) && !belongsToProject(item)
+            ),
+            deletedCompanyIds: tombstones.includes(companyId) ? tombstones : [...tombstones, companyId]
+          };
+        });
       },
 
       updateProyecto: async (companyId, proyectoId, updatedData) => {
@@ -1399,6 +1454,10 @@ export const useStore = create(
 
       importCompanies: (companiesList) => {
         if (!Array.isArray(companiesList) || companiesList.length === 0) return;
+
+        const deletedIds = new Set(Array.isArray(get().deletedCompanyIds) ? get().deletedCompanyIds : []);
+        companiesList = companiesList.filter((c) => c && !deletedIds.has(c.id));
+        if (companiesList.length === 0) return;
 
         const state = get();
         const currentCompanies = state.companies || [];
@@ -3476,7 +3535,8 @@ export const useStore = create(
         puntosMedicionLocales: state.puntosMedicionLocales || [],
         ccmLocales: state.ccmLocales || [],
         conflictosCircuitos: state.conflictosCircuitos || [],
-        syncQueue: Array.isArray(state.syncQueue) ? state.syncQueue : []
+        syncQueue: Array.isArray(state.syncQueue) ? state.syncQueue : [],
+        deletedCompanyIds: Array.isArray(state.deletedCompanyIds) ? state.deletedCompanyIds : []
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

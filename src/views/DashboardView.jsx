@@ -12,7 +12,9 @@ import {
   X, 
   Search,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { validarRifVenezolano, validarTelefono } from '../utils/syncService';
 
@@ -45,6 +47,46 @@ export const DashboardView = () => {
   const [formErrors, setFormErrors] = useState({});
   const [apiError, setApiError] = useState('');
 
+  // Estado del modal de eliminación permanente
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setDeleteTarget(null);
+    setDeletePassword('');
+    setShowDeletePassword(false);
+    setDeleteError('');
+  };
+
+  const handleConfirmDelete = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!deleteTarget || isDeleting) return;
+    if (!deletePassword) {
+      setDeleteError('Ingresa tu contraseña de administrador.');
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const res = await deleteCompany(deleteTarget.id, deletePassword);
+      if (res?.ok) {
+        setDeleteTarget(null);
+        setDeletePassword('');
+        setShowDeletePassword(false);
+        showToast?.('Empresa y todos sus equipos eliminados con éxito', 'success');
+      } else {
+        setDeleteError(res?.error || 'No se pudo eliminar la empresa.');
+      }
+    } catch (err) {
+      setDeleteError(err?.message || 'Error inesperado al eliminar la empresa.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
   const handleCreateCompany = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (isSubmitting) return;
@@ -216,20 +258,15 @@ export const DashboardView = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {user?.role !== 'CLIENT' && (
+                      {user?.role === 'ADMIN' && (
                         <button
                           type="button"
-                          onClick={async (e) => {
+                          onClick={(e) => {
                             e.stopPropagation();
-                            const ok = await confirm({
-                              title: 'Eliminar Empresa',
-                              message: `¿Estás seguro de que deseas eliminar la empresa "${company.nombre}" y todos sus tableros y proyectos en cascada?`,
-                              type: 'danger',
-                              confirmText: 'Eliminar Empresa'
-                            });
-                            if (ok) {
-                              deleteCompany(company.id);
-                            }
+                            setDeleteTarget(company);
+                            setDeletePassword('');
+                            setShowDeletePassword(false);
+                            setDeleteError('');
                           }}
                           className="p-2 bg-slate-900/90 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-900/60 rounded-xl transition-all cursor-pointer opacity-100 shadow-xs"
                           title="Eliminar Empresa"
@@ -270,6 +307,65 @@ export const DashboardView = () => {
           );
         })()}
       </main>
+
+      {/* Modal Eliminación Permanente de Empresa (solo ADMIN) */}
+      {deleteTarget && user?.role === 'ADMIN' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={closeDeleteModal} className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
+          <form
+            onSubmit={handleConfirmDelete}
+            className="relative w-full max-w-md bg-slate-950 border border-red-900/60 rounded-2xl shadow-2xl p-6 space-y-4"
+          >
+            <div className="flex items-center gap-2 text-red-400">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-bold uppercase tracking-wider">Eliminación Permanente de Empresa</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Esta acción eliminará de forma irreversible la empresa <strong>{deleteTarget.nombre}</strong> junto con todas sus subestaciones, tableros, circuitos y mediciones registradas. Para confirmar, ingresa tu contraseña de administrador:
+            </p>
+            <div className="relative">
+              <input
+                type={showDeletePassword ? 'text' : 'password'}
+                autoFocus
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                placeholder="Contraseña de administrador"
+                disabled={isDeleting}
+                className="w-full pl-3 pr-10 py-2 bg-slate-900 border border-slate-700 focus:border-red-500 rounded-lg text-xs text-slate-100 focus:outline-none h-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowDeletePassword((v) => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-400 p-1 cursor-pointer"
+                title={showDeletePassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                tabIndex={-1}
+              >
+                {showDeletePassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            {deleteError && (
+              <p className="text-[11px] text-rose-400 font-medium">{deleteError}</p>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-300 cursor-pointer h-9 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-xs h-9 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isDeleting ? (<><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Eliminando...</span></>) : 'Eliminar Definitivamente'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Modal Nueva Empresa */}
       {showModal && (
