@@ -1632,6 +1632,7 @@ export const useStore = create(
         const nuevoProyecto = {
           id: uuidId,
           nombre: finalNombre,
+          name: finalNombre,
           descripcion: finalDescripcion,
           direccion: dir,
           ubicacion: dir,
@@ -1644,6 +1645,7 @@ export const useStore = create(
             email: respMail
           },
           empresaId: companyId,
+          companyId: companyId,
           elementosUnifilares: [],
           inspeccionesSubestacion: [],
           subestaciones: [],
@@ -1651,6 +1653,32 @@ export const useStore = create(
           ccmList: [],
           createdAt: new Date().toISOString()
         };
+
+        if (isOnline && hasActiveSession) {
+          try {
+            const resp = await fetchWithTimeout(`${API_BASE_URL}/api/proyectos`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(nuevoProyecto)
+            }, DEFAULT_REQUEST_TIMEOUT_MS);
+            if (!resp.ok) {
+              const errPayload = await readResponsePayload(resp);
+              console.warn('[ONLINE REALTIME] ⚠️ Servidor devolvió error al registrar proyecto:', errPayload.error);
+              const errMsg = errPayload.error || `HTTP ${resp.status}`;
+              get().showToast?.(`Error en el servidor al registrar proyecto: ${errMsg}. Por favor reintenta.`, 'error');
+              return { success: false, error: errMsg };
+            } else {
+              get().removeFromQueue?.(uuidId);
+              console.log('[ONLINE REALTIME] ✅ Proyecto registrado exitosamente en el servidor.');
+            }
+          } catch (e) {
+            console.error('[ONLINE REALTIME] ⚠️ Error de red o timeout al registrar proyecto:', e);
+            get().showToast?.(`Error de conexión o tiempo de espera al registrar proyecto: ${e.message}. Por favor reintenta.`, 'error');
+          }
+        }
 
         set((state) => ({
           companies: state.companies.map((c) => {
@@ -1673,30 +1701,6 @@ export const useStore = create(
               }]
             : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
         }));
-
-        if (isOnline && hasActiveSession) {
-          try {
-            const resp = await fetchWithTimeout(`${API_BASE_URL}/api/proyectos`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify(nuevoProyecto)
-            }, DEFAULT_REQUEST_TIMEOUT_MS);
-            if (!resp.ok) {
-              const errPayload = await readResponsePayload(resp);
-              console.warn('[ONLINE REALTIME] ⚠️ Servidor devolvió error al registrar proyecto:', errPayload.error);
-              get().showToast?.(`Error en el servidor al registrar proyecto: ${errPayload.error || `HTTP ${resp.status}`}. Por favor reintenta.`, 'error');
-            } else {
-              get().removeFromQueue?.(uuidId);
-              console.log('[ONLINE REALTIME] ✅ Proyecto registrado exitosamente en el servidor.');
-            }
-          } catch (e) {
-            console.error('[ONLINE REALTIME] ⚠️ Error de red o timeout al registrar proyecto:', e);
-            get().showToast?.(`Error de conexión o tiempo de espera al registrar proyecto: ${e.message}. Por favor reintenta.`, 'error');
-          }
-        }
 
         return { success: true, proyecto: nuevoProyecto };
       },
