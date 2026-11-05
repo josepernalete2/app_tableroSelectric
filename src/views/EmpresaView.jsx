@@ -19,6 +19,7 @@ import {
   TABLERO_HERMETICIDAD_NEMA_IP
 } from '../utils/constants';
 import { TIPOS_CONEXION_TRAFO, calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador';
+import { validarRifVenezolano, validarTelefono } from '../utils/syncService';
 import { 
   ArrowLeft, 
   Plus, 
@@ -113,21 +114,50 @@ export const EmpresaView = () => {
   const [editGerente2Nombre, setEditGerente2Nombre] = useState('');
   const [editGerente2Telefono, setEditGerente2Telefono] = useState('');
   const [editGerente2Email, setEditGerente2Email] = useState('');
+  const [editErrors, setEditErrors] = useState({});
 
   const handleUpdateEmpresaSubmit = async (e) => {
     e.preventDefault();
+    const newErrors = {};
+
+    const cleanNombre = editNombre.trim();
+    if (!cleanNombre) {
+      newErrors.nombre = "El nombre de la empresa es obligatorio";
+    }
+
+    const cleanRif = editRif.trim().toUpperCase();
+    if (!cleanRif) {
+      newErrors.rif = "El RIF de la empresa es obligatorio";
+    } else if (!validarRifVenezolano(cleanRif)) {
+      newErrors.rif = "Formato de RIF inválido (ej. J-12345678-9, V-12345678, G-...)";
+    }
+
+    if (editGerente1Telefono.trim() && !validarTelefono(editGerente1Telefono.trim())) {
+      newErrors.gerente1Telefono = "El teléfono solo admite números, guiones o '+'";
+    }
+
+    if (editGerente2Telefono.trim() && !validarTelefono(editGerente2Telefono.trim())) {
+      newErrors.gerente2Telefono = "El teléfono solo admite números, guiones o '+'";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setEditErrors(newErrors);
+      return;
+    }
+
+    setEditErrors({});
     await updateEmpresa(companyId, {
-      nombre: editNombre,
-      rif: editRif,
-      direccionFiscal: editDireccionFiscal,
-      gerente1Nombre: editGerente1Nombre || null,
-      gerente1Telefono: editGerente1Telefono || null,
-      gerente1Email: editGerente1Email || null,
-      gerente2Nombre: editGerente2Nombre || null,
-      gerente2Telefono: editGerente2Telefono || null,
-      gerente2Email: editGerente2Email || null
+      nombre: cleanNombre,
+      rif: cleanRif,
+      direccionFiscal: editDireccionFiscal.trim() || 'No especificada',
+      gerente1Nombre: editGerente1Nombre.trim() || null,
+      gerente1Telefono: editGerente1Telefono.trim() || null,
+      gerente1Email: editGerente1Email.trim() || null,
+      gerente2Nombre: editGerente2Nombre.trim() || null,
+      gerente2Telefono: editGerente2Telefono.trim() || null,
+      gerente2Email: editGerente2Email.trim() || null
     });
-    showToast("Datos de la empresa actualizados correctamente.", "success");
+    showToast?.("Datos de la empresa actualizados correctamente.", "success");
     setShowEditEmpresaModal(false);
   };
 
@@ -2097,14 +2127,21 @@ export const EmpresaView = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-400 font-semibold mb-1">RIF</label>
+                  <label className="block text-slate-400 font-semibold mb-1">RIF <span className="text-rose-400">*</span></label>
                   <input 
                     type="text" 
                     value={editRif} 
-                    onChange={(e) => setEditRif(e.target.value)} 
-                    required 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-amber-500"
+                    onChange={(e) => {
+                      setEditRif(e.target.value);
+                      if (editErrors.rif) setEditErrors((prev) => ({ ...prev, rif: null }));
+                    }} 
+                    className={`w-full bg-slate-950 border rounded-lg px-3 py-2 text-slate-100 focus:outline-none uppercase ${
+                      editErrors.rif ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-500'
+                    }`}
                   />
+                  {editErrors.rif && (
+                    <p className="text-[10px] text-rose-400 mt-1 font-medium">{editErrors.rif}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-slate-400 font-semibold mb-1">Dirección Fiscal</label>
@@ -2135,9 +2172,18 @@ export const EmpresaView = () => {
                     <input 
                       type="text" 
                       value={editGerente1Telefono} 
-                      onChange={(e) => setEditGerente1Telefono(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                      onChange={(e) => {
+                        setEditGerente1Telefono(e.target.value);
+                        if (editErrors.gerente1Telefono) setEditErrors((prev) => ({ ...prev, gerente1Telefono: null }));
+                      }} 
+                      placeholder="Ej. +58-412-1234567"
+                      className={`w-full bg-slate-950 border rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none transition-colors ${
+                        editErrors.gerente1Telefono ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-500'
+                      }`}
                     />
+                    {editErrors.gerente1Telefono && (
+                      <p className="text-[9px] text-rose-400 mt-0.5 font-medium">{editErrors.gerente1Telefono}</p>
+                    )}
                   </div>
                   <div className="col-span-1">
                     <label className="block text-slate-500 font-medium mb-1">Email</label>
@@ -2168,9 +2214,18 @@ export const EmpresaView = () => {
                     <input 
                       type="text" 
                       value={editGerente2Telefono} 
-                      onChange={(e) => setEditGerente2Telefono(e.target.value)} 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                      onChange={(e) => {
+                        setEditGerente2Telefono(e.target.value);
+                        if (editErrors.gerente2Telefono) setEditErrors((prev) => ({ ...prev, gerente2Telefono: null }));
+                      }} 
+                      placeholder="Ej. +58-412-1234567"
+                      className={`w-full bg-slate-950 border rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none transition-colors ${
+                        editErrors.gerente2Telefono ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-500'
+                      }`}
                     />
+                    {editErrors.gerente2Telefono && (
+                      <p className="text-[9px] text-rose-400 mt-0.5 font-medium">{editErrors.gerente2Telefono}</p>
+                    )}
                   </div>
                   <div className="col-span-1">
                     <label className="block text-slate-500 font-medium mb-1">Email</label>

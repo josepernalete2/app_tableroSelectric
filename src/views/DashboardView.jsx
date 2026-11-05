@@ -10,12 +10,15 @@ import {
   Briefcase, 
   ChevronRight, 
   X, 
-  Search 
+  Search,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
+import { validarRifVenezolano, validarTelefono } from '../utils/syncService';
 
 
 export const DashboardView = () => {
-  const { user, companies, addCompany, deleteCompany, cargarDatosServidor } = useStore();
+  const { user, companies, addCompany, deleteCompany, cargarDatosServidor, showToast } = useStore();
   const { confirm } = useConfirm();
 
   useEffect(() => {
@@ -23,6 +26,7 @@ export const DashboardView = () => {
       cargarDatosServidor();
     }
   }, [cargarDatosServidor]);
+
   const [showModal, setShowModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [rif, setRif] = useState('');
@@ -36,32 +40,104 @@ export const DashboardView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
+  // Estados de validación y envío de formulario
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
+  const [apiError, setApiError] = useState('');
+
   const handleCreateCompany = async (e) => {
-    e.preventDefault();
-    if (!newCompanyName.trim() || !rif.trim() || !direccionFiscal.trim()) return;
+    if (e && e.preventDefault) e.preventDefault();
+    if (isSubmitting) return;
 
-    await addCompany({
-      nombre: newCompanyName.trim(),
-      rif: rif.trim(),
-      direccionFiscal: direccionFiscal.trim(),
-      gerente1Nombre: gerente1Nombre.trim() || null,
-      gerente1Telefono: gerente1Telefono.trim() || null,
-      gerente1Email: gerente1Email.trim() || null,
-      gerente2Nombre: gerente2Nombre.trim() || null,
-      gerente2Telefono: gerente2Telefono.trim() || null,
-      gerente2Email: gerente2Email.trim() || null
-    });
+    setApiError('');
+    const newErrors = {};
 
-    setNewCompanyName('');
-    setRif('');
-    setDireccionFiscal('');
-    setGerente1Nombre('');
-    setGerente1Telefono('');
-    setGerente1Email('');
-    setGerente2Nombre('');
-    setGerente2Telefono('');
-    setGerente2Email('');
-    setShowModal(false);
+    // 1. Validar nombre no vacío ni con solo espacios en blanco
+    const cleanNombre = newCompanyName.trim();
+    if (!cleanNombre) {
+      newErrors.nombre = "El nombre de la empresa es obligatorio";
+    }
+
+    // 2. Validar formato RIF venezolano
+    const cleanRif = rif.trim().toUpperCase();
+    if (!cleanRif) {
+      newErrors.rif = "El RIF de la empresa es obligatorio";
+    } else if (!validarRifVenezolano(cleanRif)) {
+      newErrors.rif = "Formato de RIF inválido (ej. J-12345678-9, V-12345678, G-...)";
+    }
+
+    // 3. Validar teléfonos (solo números, guiones o '+')
+    if (gerente1Telefono.trim() && !validarTelefono(gerente1Telefono.trim())) {
+      newErrors.gerente1Telefono = "El teléfono solo admite números, guiones o '+'";
+    }
+
+    if (gerente2Telefono.trim() && !validarTelefono(gerente2Telefono.trim())) {
+      newErrors.gerente2Telefono = "El teléfono solo admite números, guiones o '+'";
+    }
+
+    // Si hay errores de formato, no disparar la petición
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      return;
+    }
+
+    setFormErrors({});
+    setIsSubmitting(true);
+
+    try {
+      const res = await addCompany({
+        nombre: cleanNombre,
+        rif: cleanRif,
+        direccionFiscal: direccionFiscal.trim() || 'No especificada',
+        gerente1Nombre: gerente1Nombre.trim() || null,
+        gerente1Telefono: gerente1Telefono.trim() || null,
+        gerente1Email: gerente1Email.trim() || null,
+        gerente2Nombre: gerente2Nombre.trim() || null,
+        gerente2Telefono: gerente2Telefono.trim() || null,
+        gerente2Email: gerente2Email.trim() || null
+      });
+
+      if (!res?.ok) {
+        // En caso de error del backend (400, 409 o 500), mantener modal abierto y notificar
+        const errorMsg = res?.error || "Error al procesar el registro de la empresa.";
+        setApiError(errorMsg);
+        if (showToast) {
+          showToast(errorMsg, 'error');
+        } else {
+          alert(errorMsg);
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Respuesta exitosa (200/201): cerrar modal, limpiar formulario y notificar
+      if (showToast) {
+        showToast("Empresa registrada exitosamente", "success");
+      }
+      setNewCompanyName('');
+      setRif('');
+      setDireccionFiscal('');
+      setGerente1Nombre('');
+      setGerente1Telefono('');
+      setGerente1Email('');
+      setGerente2Nombre('');
+      setGerente2Telefono('');
+      setGerente2Email('');
+      setFormErrors({});
+      setApiError('');
+      setShowModal(false);
+    } catch (err) {
+      console.error("Error al registrar empresa:", err);
+      const errorMsg = err.message || "Error inesperado al registrar la empresa";
+      setApiError(errorMsg);
+      if (showToast) {
+        showToast(errorMsg, 'error');
+      } else {
+        alert(errorMsg);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -198,7 +274,16 @@ export const DashboardView = () => {
       {/* Modal Nueva Empresa */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" />
+          <div 
+            onClick={() => {
+              if (!isSubmitting) {
+                setFormErrors({});
+                setApiError('');
+                setShowModal(false);
+              }
+            }} 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" 
+          />
           
           <div className="relative w-full max-w-lg bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-6 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center pb-4 border-b border-slate-800">
@@ -206,54 +291,94 @@ export const DashboardView = () => {
                 Registrar Nueva Empresa
               </h3>
               <button 
-                onClick={() => setShowModal(false)}
-                className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 cursor-pointer"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setFormErrors({});
+                  setApiError('');
+                  setShowModal(false);
+                }}
+                className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 hover:text-slate-300 cursor-pointer disabled:opacity-50"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleCreateCompany} className="mt-4 space-y-4 max-h-[70vh] overflow-y-auto pr-1 text-xs">
+              {/* Alerta de Error de la API o Servidor */}
+              {apiError && (
+                <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{apiError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                  Nombre de la Empresa / Cliente
+                  Nombre de la Empresa / Cliente <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="text"
-                  required
                   value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
+                  onChange={(e) => {
+                    setNewCompanyName(e.target.value);
+                    if (formErrors.nombre) setFormErrors((prev) => ({ ...prev, nombre: null }));
+                  }}
                   placeholder="Ej. Farmatodo Sucursal Chacao"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9"
+                  className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9 transition-colors ${
+                    formErrors.nombre 
+                      ? 'border-rose-500 ring-1 ring-rose-500' 
+                      : 'border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'
+                  }`}
                 />
+                {formErrors.nombre && (
+                  <p className="text-[10px] text-rose-400 mt-1 font-medium">{formErrors.nombre}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                    RIF
+                    RIF <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="text"
-                    required
                     value={rif}
-                    onChange={(e) => setRif(e.target.value)}
+                    onChange={(e) => {
+                      setRif(e.target.value);
+                      if (formErrors.rif) setFormErrors((prev) => ({ ...prev, rif: null }));
+                    }}
                     placeholder="Ej. J-12345678-9"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9"
+                    className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9 transition-colors uppercase ${
+                      formErrors.rif 
+                        ? 'border-rose-500 ring-1 ring-rose-500' 
+                        : 'border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'
+                    }`}
                   />
+                  {formErrors.rif && (
+                    <p className="text-[10px] text-rose-400 mt-1 font-medium">{formErrors.rif}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                    Dirección Fiscal
+                    Dirección Fiscal <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="text"
-                    required
                     value={direccionFiscal}
-                    onChange={(e) => setDireccionFiscal(e.target.value)}
+                    onChange={(e) => {
+                      setDireccionFiscal(e.target.value);
+                      if (formErrors.direccionFiscal) setFormErrors((prev) => ({ ...prev, direccionFiscal: null }));
+                    }}
                     placeholder="Ej. Av. Araure, San Román..."
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9"
+                    className={`w-full px-3 py-2 bg-slate-900 border rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 h-9 transition-colors ${
+                      formErrors.direccionFiscal 
+                        ? 'border-rose-500 ring-1 ring-rose-500' 
+                        : 'border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500'
+                    }`}
                   />
+                  {formErrors.direccionFiscal && (
+                    <p className="text-[10px] text-rose-400 mt-1 font-medium">{formErrors.direccionFiscal}</p>
+                  )}
                 </div>
               </div>
 
@@ -275,10 +400,20 @@ export const DashboardView = () => {
                     <input
                       type="text"
                       value={gerente1Telefono}
-                      onChange={(e) => setGerente1Telefono(e.target.value)}
-                      placeholder="Teléfono"
-                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                      onChange={(e) => {
+                        setGerente1Telefono(e.target.value);
+                        if (formErrors.gerente1Telefono) setFormErrors((prev) => ({ ...prev, gerente1Telefono: null }));
+                      }}
+                      placeholder="Ej. +58-412-1234567"
+                      className={`w-full px-2 py-1 bg-slate-900 border rounded text-xs text-slate-100 focus:outline-none transition-colors ${
+                        formErrors.gerente1Telefono 
+                          ? 'border-rose-500 ring-1 ring-rose-500' 
+                          : 'border-slate-700 focus:border-amber-500'
+                      }`}
                     />
+                    {formErrors.gerente1Telefono && (
+                      <p className="text-[9px] text-rose-400 mt-0.5 font-medium">{formErrors.gerente1Telefono}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email</label>
@@ -311,10 +446,20 @@ export const DashboardView = () => {
                     <input
                       type="text"
                       value={gerente2Telefono}
-                      onChange={(e) => setGerente2Telefono(e.target.value)}
-                      placeholder="Teléfono"
-                      className="w-full px-2 py-1 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded text-xs text-slate-100 focus:outline-none"
+                      onChange={(e) => {
+                        setGerente2Telefono(e.target.value);
+                        if (formErrors.gerente2Telefono) setFormErrors((prev) => ({ ...prev, gerente2Telefono: null }));
+                      }}
+                      placeholder="Ej. +58-412-1234567"
+                      className={`w-full px-2 py-1 bg-slate-900 border rounded text-xs text-slate-100 focus:outline-none transition-colors ${
+                        formErrors.gerente2Telefono 
+                          ? 'border-rose-500 ring-1 ring-rose-500' 
+                          : 'border-slate-700 focus:border-amber-500'
+                      }`}
                     />
+                    {formErrors.gerente2Telefono && (
+                      <p className="text-[9px] text-rose-400 mt-0.5 font-medium">{formErrors.gerente2Telefono}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Email</label>
@@ -332,16 +477,31 @@ export const DashboardView = () => {
               <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-350 cursor-pointer h-9"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    setFormErrors({});
+                    setApiError('');
+                    setShowModal(false);
+                  }}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-bold rounded-lg text-slate-350 cursor-pointer h-9 disabled:opacity-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-md h-9"
+                  disabled={isSubmitting}
+                  className={`px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-lg text-xs shadow-md h-9 flex items-center justify-center gap-2 transition-all ${
+                    isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-amber-600 cursor-pointer active:scale-95'
+                  }`}
                 >
-                  Registrar
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Registrando...</span>
+                    </>
+                  ) : (
+                    'Registrar'
+                  )}
                 </button>
               </div>
             </form>

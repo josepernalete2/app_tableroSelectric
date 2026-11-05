@@ -85,32 +85,48 @@ export const actualizarEmpresa = async (req, res, next) => {
       nombre, rif, direccionFiscal, direccion,
       gerente1Nombre, gerente1Telefono, gerente1Email,
       gerente2Nombre, gerente2Telefono, gerente2Email
-    } = req.body;
+    } = req.body || {};
 
-    if (req.user.role !== 'ADMIN') {
-      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores.' });
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'WORKER') {
+      return res.status(403).json({ ok: false, error: 'Acción permitida únicamente para administradores o trabajadores.' });
+    }
+
+    const cleanRif = typeof rif === 'string' ? rif.trim() : undefined;
+    if (cleanRif) {
+      const conflicto = await prisma.empresa.findFirst({
+        where: {
+          rif: cleanRif,
+          id: { not: id }
+        }
+      });
+      if (conflicto) {
+        return res.status(409).json({ ok: false, error: "Ya existe una empresa registrada con ese RIF" });
+      }
     }
 
     const updated = await prisma.empresa.update({
       where: { id },
       data: {
-        nombre,
-        rif,
-        direccionFiscal,
-        direccion: direccion || null,
-        gerente1Nombre: gerente1Nombre || null,
-        gerente1Telefono: gerente1Telefono || null,
-        gerente1Email: gerente1Email || null,
-        gerente2Nombre: gerente2Nombre || null,
-        gerente2Telefono: gerente2Telefono || null,
-        gerente2Email: gerente2Email || null
+        ...(nombre ? { nombre: nombre.trim() } : {}),
+        ...(cleanRif ? { rif: cleanRif } : {}),
+        ...(direccionFiscal ? { direccionFiscal: direccionFiscal.trim() } : {}),
+        ...(direccion !== undefined ? { direccion: direccion?.trim() || null } : {}),
+        ...(gerente1Nombre !== undefined ? { gerente1Nombre: gerente1Nombre?.trim() || null } : {}),
+        ...(gerente1Telefono !== undefined ? { gerente1Telefono: gerente1Telefono?.trim() || null } : {}),
+        ...(gerente1Email !== undefined ? { gerente1Email: gerente1Email?.trim() || null } : {}),
+        ...(gerente2Nombre !== undefined ? { gerente2Nombre: gerente2Nombre?.trim() || null } : {}),
+        ...(gerente2Telefono !== undefined ? { gerente2Telefono: gerente2Telefono?.trim() || null } : {}),
+        ...(gerente2Email !== undefined ? { gerente2Email: gerente2Email?.trim() || null } : {})
       }
     });
 
     return res.status(200).json({ ok: true, data: updated });
   } catch (error) {
     console.error('Error en actualizarEmpresa:', error);
-    next(error);
+    if (error.code === 'P2002') {
+      return res.status(409).json({ ok: false, error: "Ya existe una empresa registrada con ese RIF" });
+    }
+    return res.status(500).json({ ok: false, error: error.message || 'Error al actualizar la empresa' });
   }
 };
 
@@ -120,32 +136,78 @@ export const crearEmpresa = async (req, res, next) => {
       id, nombre, rif, direccionFiscal, direccion,
       gerente1Nombre, gerente1Telefono, gerente1Email,
       gerente2Nombre, gerente2Telefono, gerente2Email
-    } = req.body;
+    } = req.body || {};
 
-    if (!nombre || !rif || !direccionFiscal) {
-      return res.status(400).json({ ok: false, error: 'Los campos nombre, rif y direccionFiscal son obligatorios.' });
+    // 1. Validar nombre no vacío ni con solo espacios en blanco
+    if (!nombre || typeof nombre !== 'string' || !nombre.trim()) {
+      return res.status(400).json({ ok: false, error: "El nombre de la empresa es obligatorio" });
     }
+    const cleanNombre = nombre.trim();
+
+    // 2. Sanitizar RIF y verificar si ya existe una empresa con ese mismo RIF
+    const cleanRif = typeof rif === 'string' ? rif.trim() : '';
+    if (cleanRif) {
+      const empresaExistente = await prisma.empresa.findUnique({
+        where: { rif: cleanRif }
+      });
+      if (empresaExistente) {
+        return res.status(409).json({ ok: false, error: "Ya existe una empresa registrada con ese RIF" });
+      }
+    }
+
+    const cleanDireccionFiscal = typeof direccionFiscal === 'string' && direccionFiscal.trim()
+      ? direccionFiscal.trim()
+      : (typeof direccion === 'string' && direccion.trim() ? direccion.trim() : 'No especificada');
+
+    const cleanDireccion = typeof direccion === 'string' && direccion.trim()
+      ? direccion.trim()
+      : cleanDireccionFiscal;
+
+    const sanitizeString = (val) => (typeof val === 'string' && val.trim() ? val.trim() : null);
 
     const nuevaEmpresa = await prisma.empresa.create({
       data: {
         id: id || undefined,
-        nombre,
-        rif,
-        direccionFiscal,
-        direccion: direccion || direccionFiscal,
-        gerente1Nombre: gerente1Nombre || null,
-        gerente1Telefono: gerente1Telefono || null,
-        gerente1Email: gerente1Email || null,
-        gerente2Nombre: gerente2Nombre || null,
-        gerente2Telefono: gerente2Telefono || null,
-        gerente2Email: gerente2Email || null
+        nombre: cleanNombre,
+        rif: cleanRif || `TEMP-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        direccionFiscal: cleanDireccionFiscal,
+        direccion: cleanDireccion,
+        gerente1Nombre: sanitizeString(gerente1Nombre),
+        gerente1Telefono: sanitizeString(gerente1Telefono),
+        gerente1Email: sanitizeString(gerente1Email),
+        gerente2Nombre: sanitizeString(gerente2Nombre),
+        gerente2Telefono: sanitizeString(gerente2Telefono),
+        gerente2Email: sanitizeString(gerente2Email)
       }
     });
 
     return res.status(201).json({ ok: true, data: nuevaEmpresa });
   } catch (error) {
     console.error('Error en crearEmpresa:', error);
-    next(error);
+
+    // Conflicto de unicidad en Prisma (P2002)
+    if (error.code === 'P2002') {
+      const target = error.meta?.target;
+      const isRif = Array.isArray(target) ? target.includes('rif') : (typeof target === 'string' && target.includes('rif'));
+      if (isRif || !target) {
+        return res.status(409).json({ ok: false, error: "Ya existe una empresa registrada con ese RIF" });
+      }
+      return res.status(409).json({ ok: false, error: `Ya existe un registro con ese valor único (${Array.isArray(target) ? target.join(', ') : target})` });
+    }
+
+    // Error de validación de esquema en Prisma
+    if (error.name === 'PrismaClientValidationError') {
+      return res.status(400).json({ 
+        ok: false, 
+        error: "Formato de datos no válido para la base de datos." 
+      });
+    }
+
+    // Error interno del servidor controlado
+    return res.status(500).json({ 
+      ok: false, 
+      error: error.message || "Error interno del servidor al crear la empresa" 
+    });
   }
 };
 

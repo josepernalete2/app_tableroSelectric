@@ -29,7 +29,9 @@ import {
   Trash2,
   RotateCcw,
   Plus,
-  HardDrive
+  HardDrive,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export const SidebarLayout = () => {
@@ -74,12 +76,14 @@ export const SidebarLayout = () => {
   // Estados de control de usuarios
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newUserRole, setNewUserRole] = useState('WORKER');
   const [newUserCompanyId, setNewUserCompanyId] = useState('');
 
   const [editingUserId, setEditingUserId] = useState(null);
   const [editingEmail, setEditingEmail] = useState('');
   const [editingPassword, setEditingPassword] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [editingRole, setEditingRole] = useState('WORKER');
   const [editingCompanyId, setEditingCompanyId] = useState('');
 
@@ -91,7 +95,9 @@ export const SidebarLayout = () => {
   // Inicialización de Sockets
   useEffect(() => {
     if (isChatEnabled && user && navigator.onLine) {
-      fetchUsersList();
+      if (user.role === 'ADMIN') {
+        fetchUsersList();
+      }
       fetchMessagesList(user.id);
 
       const socketInstance = io(API_BASE_URL);
@@ -114,9 +120,9 @@ export const SidebarLayout = () => {
     }
   }, [user]);
 
-  // Sincronizar la lista de usuarios con el servidor
+  // Sincronizar la lista de usuarios con el servidor (solo para ADMIN)
   useEffect(() => {
-    if (user && navigator.onLine) {
+    if (user && user.role === 'ADMIN' && navigator.onLine) {
       fetchUsersList();
     }
   }, [user]);
@@ -145,20 +151,31 @@ export const SidebarLayout = () => {
   // Agregar usuario
   const handleAddUser = async (e) => {
     e.preventDefault();
-    if (!newUserEmail.trim() || !newUserPassword.trim()) {
+    const cleanUsername = typeof newUserEmail === 'string' ? newUserEmail.trim() : '';
+    const rawPassword = typeof newUserPassword === 'string' ? newUserPassword : '';
+    const trimmedPassword = typeof newUserPassword === 'string' ? newUserPassword.trim() : '';
+
+    if (!cleanUsername || !trimmedPassword) {
       showToast("Por favor, rellene todos los campos.", "warning");
       return;
     }
+
+    if (rawPassword.length < 4) {
+      showToast("La contraseña debe tener al menos 4 caracteres.", "warning");
+      return;
+    }
+
     const result = await addUser({
-      username: newUserEmail.trim(),
-      email: newUserEmail.trim(),
-      password: newUserPassword.trim(),
+      username: cleanUsername,
+      email: cleanUsername,
+      password: rawPassword,
       role: newUserRole,
       companyId: newUserRole === 'CLIENT' ? newUserCompanyId : null
     });
     if (result.success) {
       setNewUserEmail('');
       setNewUserPassword('');
+      setShowNewPassword(false);
       setNewUserRole('WORKER');
       setNewUserCompanyId('');
       showToast("Usuario registrado con éxito.", "success");
@@ -169,19 +186,36 @@ export const SidebarLayout = () => {
 
   // Guardar edición
   const handleSaveUserEdit = async (userId) => {
-    if (!editingEmail.trim() || !editingPassword.trim()) {
-      showToast("Por favor, rellene todos los campos.", "warning");
+    const cleanUsername = typeof editingEmail === 'string' ? editingEmail.trim() : '';
+    const rawPassword = typeof editingPassword === 'string' ? editingPassword : '';
+    const trimmedPassword = typeof editingPassword === 'string' ? editingPassword.trim() : '';
+
+    if (!cleanUsername) {
+      showToast("El nombre de usuario no puede estar vacío.", "warning");
       return;
     }
-    const result = await updateUser(userId, {
-      username: editingEmail.trim(),
-      email: editingEmail.trim(),
-      password: editingPassword.trim(),
+
+    if (trimmedPassword.length > 0 && rawPassword.length < 4) {
+      showToast("La nueva contraseña debe tener al menos 4 caracteres.", "warning");
+      return;
+    }
+
+    const updatePayload = {
+      username: cleanUsername,
+      email: cleanUsername,
       role: editingRole,
       companyId: editingRole === 'CLIENT' ? editingCompanyId : null
-    });
+    };
+
+    if (trimmedPassword.length > 0) {
+      updatePayload.password = rawPassword;
+    }
+
+    const result = await updateUser(userId, updatePayload);
     if (result.success) {
       setEditingUserId(null);
+      setEditingPassword('');
+      setShowEditPassword(false);
       setEditingCompanyId('');
       showToast("Usuario actualizado con éxito.", "success");
     } else {
@@ -191,9 +225,11 @@ export const SidebarLayout = () => {
 
   const handleStartEditUser = (u) => {
     setEditingUserId(u.id);
-    setEditingEmail(u.username || u.email || '');
-    setEditingPassword(u.password);
-    setEditingRole(u.role);
+    const currentUsername = typeof u.username === 'string' ? u.username : (typeof u.email === 'string' ? u.email : '');
+    setEditingEmail(currentUsername);
+    setEditingPassword('');
+    setShowEditPassword(false);
+    setEditingRole(u.role || 'WORKER');
     setEditingCompanyId(u.companyId || '');
   };
 
@@ -230,8 +266,9 @@ export const SidebarLayout = () => {
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-    if (!chatMessageText.trim() || !activeContactId) return;
-    sendMessage(activeContactId, chatMessageText.trim());
+    const cleanText = typeof chatMessageText === 'string' ? chatMessageText.trim() : '';
+    if (!cleanText || !activeContactId) return;
+    sendMessage(activeContactId, cleanText);
     setChatMessageText('');
   };
 
@@ -252,7 +289,14 @@ export const SidebarLayout = () => {
   ];
 
   if (user?.role === 'ADMIN') {
-    navLinks.push({ name: 'Gestión de Usuarios', onClick: () => setShowUsersModal(true), icon: Users });
+    navLinks.push({
+      name: 'Gestión de Usuarios',
+      onClick: () => {
+        if (navigator.onLine) fetchUsersList();
+        setShowUsersModal(true);
+      },
+      icon: Users
+    });
   }
 
   navLinks.push(
@@ -368,7 +412,7 @@ export const SidebarLayout = () => {
                 <User className="w-4.5 h-4.5 text-amber-500" />
                 <div className="truncate min-w-0">
                   <p className="text-[10px] text-slate-500 uppercase font-mono font-bold">Usuario Activo</p>
-                  <p className="text-xs font-semibold text-slate-200 truncate">{user?.username || user?.email}</p>
+                  <p className="text-xs font-semibold text-slate-200 truncate">{user?.username}</p>
                 </div>
               </div>
               <button
@@ -493,7 +537,7 @@ export const SidebarLayout = () => {
                 <p className="text-[9px] text-slate-500 uppercase font-mono font-black">
                   {user?.role === 'ADMIN' ? '👑 Administrador' : '👷 Inspector'}
                 </p>
-                <p className="text-xs font-bold text-slate-250 truncate">{user?.username || user?.email}</p>
+                <p className="text-xs font-bold text-slate-250 truncate">{user?.username}</p>
               </div>
             )}
           </div>
@@ -641,14 +685,29 @@ export const SidebarLayout = () => {
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
                       Contraseña
                     </label>
-                    <input
-                      type="password"
-                      required
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
-                      placeholder="Mínimo 4 caracteres"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-650 h-9"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        required
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        placeholder="Mínimo 4 caracteres"
+                        className="w-full pl-3 pr-9 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-650 h-9"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((prev) => !prev)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-400 p-1 rounded transition-colors focus:outline-none cursor-pointer"
+                        title={showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        tabIndex={-1}
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="w-3.5 h-3.5" />
+                        ) : (
+                          <Eye className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   <div>
@@ -717,20 +776,56 @@ export const SidebarLayout = () => {
                           <tr key={u.id} className="hover:bg-slate-900/40 transition-colors">
                             {isEditing ? (
                               <>
-                                <td className="p-3">
-                                  <input
-                                    type="text"
-                                    value={editingEmail}
-                                    onChange={(e) => setEditingEmail(e.target.value)}
-                                    className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100"
-                                  />
+                                <td className="p-3 align-top space-y-2">
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                                      Nombre de Usuario
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editingEmail}
+                                      onChange={(e) => setEditingEmail(e.target.value)}
+                                      placeholder="Nombre de usuario"
+                                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                                      Nueva Contraseña (dejar en blanco para mantener la actual)
+                                    </label>
+                                    <div className="relative">
+                                      <input
+                                        type={showEditPassword ? 'text' : 'password'}
+                                        value={editingPassword}
+                                        onChange={(e) => setEditingPassword(e.target.value)}
+                                        placeholder="Dejar en blanco para mantener la actual"
+                                        className="w-full pl-2.5 pr-8 py-1.5 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-500"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowEditPassword((prev) => !prev)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-400 p-0.5 rounded transition-colors focus:outline-none cursor-pointer"
+                                        title={showEditPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                        tabIndex={-1}
+                                      >
+                                        {showEditPassword ? (
+                                          <EyeOff className="w-3.5 h-3.5" />
+                                        ) : (
+                                          <Eye className="w-3.5 h-3.5" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
                                 </td>
-                                <td className="p-3 space-y-1.5">
+                                <td className="p-3 align-top space-y-1.5">
+                                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                                    Rol Asignado
+                                  </label>
                                   <select
                                     value={editingRole}
                                     disabled={isSelf}
                                     onChange={(e) => setEditingRole(e.target.value)}
-                                    className="w-full px-2 py-1 bg-white text-slate-900 border border-slate-700 rounded text-xs font-semibold"
+                                    className="w-full px-2 py-1.5 bg-white text-slate-900 border border-slate-700 rounded-lg text-xs font-semibold"
                                   >
                                     <option value="WORKER" className="text-black">INSPECTOR</option>
                                     <option value="ADMIN" className="text-black">ADMIN</option>
@@ -741,7 +836,7 @@ export const SidebarLayout = () => {
                                     <select
                                       value={editingCompanyId}
                                       onChange={(e) => setEditingCompanyId(e.target.value)}
-                                      className="w-full px-2 py-1 bg-white text-slate-900 border border-slate-700 rounded text-xs font-semibold mt-1"
+                                      className="w-full px-2 py-1.5 bg-white text-slate-900 border border-slate-700 rounded-lg text-xs font-semibold mt-1"
                                     >
                                       <option value="" className="text-black">-- Seleccionar --</option>
                                       {companies.map((c) => (
@@ -750,19 +845,27 @@ export const SidebarLayout = () => {
                                     </select>
                                   )}
                                 </td>
-                                <td className="p-3 text-right space-y-1 sm:space-y-0 sm:space-x-1 flex flex-col sm:flex-row justify-end">
-                                  <button
-                                    onClick={() => handleSaveUserEdit(u.id)}
-                                    className="px-2 py-1 bg-emerald-500 text-slate-950 rounded font-bold hover:bg-emerald-400 text-[10px]"
-                                  >
-                                    Guardar
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingUserId(null)}
-                                    className="px-2 py-1 bg-slate-800 text-slate-400 rounded hover:bg-slate-700 text-[10px]"
-                                  >
-                                    Cancelar
-                                  </button>
+                                <td className="p-3 align-top text-right">
+                                  <div className="flex flex-col sm:flex-row justify-end gap-1.5 pt-4">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveUserEdit(u.id)}
+                                      className="px-2.5 py-1.5 bg-emerald-500 text-slate-950 rounded-lg font-bold hover:bg-emerald-400 text-[10px] cursor-pointer"
+                                    >
+                                      Guardar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingUserId(null);
+                                        setEditingPassword('');
+                                        setShowEditPassword(false);
+                                      }}
+                                      className="px-2.5 py-1.5 bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-700 text-[10px] cursor-pointer"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
                                 </td>
                               </>
                             ) : (

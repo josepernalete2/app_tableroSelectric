@@ -159,8 +159,8 @@ router.post('/backup/generar-pin/:empresaId', requireRoles('ADMIN', 'WORKER'), g
 router.post('/backup/empresa/:empresaId', requireRoles('ADMIN', 'WORKER'), ejecutarBackupEmpresaController);
 router.get('/backup/empresa/:empresaId/export', requireRoles('ADMIN', 'WORKER'), descargarBackupEmpresaController);
 
-// Rutas de Gestión de Usuarios (Solo ADMIN)
-router.get('/users', requireRoles('ADMIN'), obtenerUsuarios);
+// Rutas de Gestión de Usuarios (Lectura para usuarios autenticados; Escritura solo ADMIN)
+router.get('/users', obtenerUsuarios);
 router.post('/users', requireRoles('ADMIN'), crearUsuario);
 router.put('/users/:id', requireRoles('ADMIN'), actualizarUsuario);
 router.delete('/users/:id', requireRoles('ADMIN'), eliminarUsuario);

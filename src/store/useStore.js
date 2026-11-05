@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
 import { API_BASE_URL } from '../utils/api.js';
-import { cleanTipoElemento, enviarElementoDirectoAlServidor, fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS, readResponsePayload } from '../utils/syncService.js';
+import { cleanTipoElemento, enviarElementoDirectoAlServidor, fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS, readResponsePayload, registrarEmpresaApi } from '../utils/syncService.js';
 import { initialTablerosData } from '../data/mockTableros.js';
 
 // Configurar localforage
@@ -543,13 +543,14 @@ export const useStore = create(
       limpiarConflictosCircuitos: () => set({ conflictosCircuitos: [] }),
 
       handleAuthError: (status, errorMsg = '') => {
-        if (
-          status === 401 || 
-          status === 403 || 
-          errorMsg?.toLowerCase().includes('expirado') || 
-          errorMsg?.toLowerCase().includes('inválido') || 
-          errorMsg?.toLowerCase().includes('token')
-        ) {
+        const lowerMsg = typeof errorMsg === 'string' ? errorMsg.toLowerCase() : '';
+        const isTokenError =
+          lowerMsg.includes('expirado') ||
+          lowerMsg.includes('inválido') ||
+          lowerMsg.includes('token') ||
+          lowerMsg.includes('no autenticado');
+
+        if (status === 401 || isTokenError) {
           try {
             if (typeof window !== 'undefined') {
               localStorage.removeItem('token');
@@ -568,41 +569,40 @@ export const useStore = create(
       },
 
       fetchUsersList: async () => {
+        const { user } = get();
+        if (!user || user.role !== 'ADMIN') return;
         try {
-          const { token } = get();
-          if (!token || token === 'mock-offline-token') return;
+          const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+          if (!activeToken || activeToken === 'mock-offline-token') return;
           const res = await fetch(`${API_BASE_URL}/api/users`, {
             headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              'Authorization': `Bearer ${activeToken}`
             }
           });
-          if (res.status === 401 || res.status === 403) {
-            get().handleAuthError(res.status);
-            return;
-          }
-          const data = await res.json();
-          if (data.ok) {
+          if (!res.ok) return;
+          const data = await res.json().catch(() => ({}));
+          if (data.ok && Array.isArray(data.data)) {
             set({ usersList: data.data });
           }
-        } catch (e) {
-          console.error('Error al cargar lista de usuarios:', e);
+        } catch (err) {
+          // Ignorar silenciosamente si no tiene permisos
         }
       },
 
       fetchMessagesList: async (userId) => {
         try {
-          const { token } = get();
-          if (!token || token === 'mock-offline-token') return;
+          const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+          if (!activeToken || activeToken === 'mock-offline-token') return;
           const res = await fetch(`${API_BASE_URL}/api/messages/${userId}`, {
             headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+              'Authorization': `Bearer ${activeToken}`
             }
           });
+          const data = await res.json().catch(() => ({}));
           if (res.status === 401 || res.status === 403) {
-            get().handleAuthError(res.status);
+            get().handleAuthError(res.status, data?.error);
             return;
           }
-          const data = await res.json();
           if (data.ok) {
             set({ messages: data.data });
           }
@@ -675,7 +675,7 @@ export const useStore = create(
       },
 
       login: async (username, password) => {
-        const cleanUsername = (username || '').trim();
+        const cleanUsername = typeof username === 'string' ? username.trim() : '';
         let networkFailed = false;
 
         if (typeof navigator === 'undefined' || navigator.onLine) {
@@ -723,7 +723,9 @@ export const useStore = create(
               });
 
               get().fetchMessagesList(data.user.id);
-              get().fetchUsersList();
+              if (data.user?.role === 'ADMIN') {
+                get().fetchUsersList();
+              }
               get().pullInitialData();
               return { success: true, user: data.user };
             }
@@ -755,7 +757,8 @@ export const useStore = create(
           const list = get().usersList || [];
           const inputKey = cleanUsername.toLowerCase();
           const found = list.find((u) => {
-            const userKey = (u.username || u.email || '').toLowerCase().trim();
+            const rawUserKey = u.username || u.email || '';
+            const userKey = (typeof rawUserKey === 'string' ? rawUserKey.trim() : '').toLowerCase();
             return userKey === inputKey ||
                    (userKey === 'admin1' && inputKey === 'admin1@selectric.com') ||
                    (userKey === 'admin1@selectric.com' && inputKey === 'admin1');
@@ -801,43 +804,71 @@ export const useStore = create(
           return { success: false, error: 'Acción permitida únicamente para administradores.' };
         }
 
-        const usernameLower = userObj.username.toLowerCase().trim();
-        const exists = (get().usersList || []).some(
-          (u) => (u.username || u.email || '').toLowerCase().trim() === usernameLower
-        );
+        const cleanUsername = typeof userObj?.username === 'string' ? userObj.username.trim() : '';
+        const rawPassword = typeof userObj?.password === 'string' ? userObj.password : '';
+        const trimmedPassword = typeof userObj?.password === 'string' ? userObj.password.trim() : '';
+
+        if (!cleanUsername || !trimmedPassword) {
+          return { success: false, error: 'Usuario y contraseña son requeridos.' };
+        }
+
+        if (rawPassword.length < 4) {
+          return { success: false, error: 'La contraseña debe tener al menos 4 caracteres.' };
+        }
+
+        const usernameLower = cleanUsername.toLowerCase();
+        const exists = (get().usersList || []).some((u) => {
+          const rawKey = u.username || u.email || '';
+          const uKey = typeof rawKey === 'string' ? rawKey.trim().toLowerCase() : '';
+          return uKey === usernameLower;
+        });
         if (exists) {
           return { success: false, error: 'Ya existe un usuario con este nombre de usuario.' };
         }
 
         const newUser = {
           id: `user-${Date.now()}`,
-          username: userObj.username.trim(),
-          password: userObj.password,
+          username: cleanUsername,
+          password: rawPassword,
           role: userObj.role || 'WORKER',
           companyId: userObj.role === 'CLIENT' ? userObj.companyId : null
         };
 
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (activeToken && activeToken !== 'mock-offline-token' && (typeof navigator === 'undefined' || navigator.onLine)) {
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/users`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${activeToken}`
+              },
+              body: JSON.stringify(newUser)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) {
+              return { success: false, error: data.error || 'Error al registrar usuario.' };
+            }
+            const createdUser = data.data || newUser;
+            set((state) => {
+              const list = state.usersList || [];
+              const existsInList = list.some((u) => u.id === createdUser.id);
+              return {
+                usersList: existsInList
+                  ? list.map((u) => (u.id === createdUser.id ? createdUser : u))
+                  : [...list, createdUser]
+              };
+            });
+            await get().fetchUsersList();
+            return { success: true, user: createdUser };
+          } catch (e) {
+            console.error('Error sincronizando nuevo usuario:', e);
+          }
+        }
+
         set((state) => ({
           usersList: [...(state.usersList || []), newUser]
         }));
-
-        try {
-          const { token } = get();
-          const res = await fetch(`${API_BASE_URL}/api/users`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            },
-            body: JSON.stringify(newUser)
-          });
-          const data = await res.json();
-          if (data.ok) {
-            get().fetchUsersList();
-          }
-        } catch (e) {
-          console.error('Error sincronizando nuevo usuario:', e);
-        }
 
         return { success: true, user: newUser };
       },
@@ -848,18 +879,77 @@ export const useStore = create(
           return { success: false, error: 'Acción permitida únicamente para administradores.' };
         }
 
-        const usernameLower = updatedData.username?.toLowerCase().trim();
-        const existsOther = (get().usersList || []).some(
-          (u) => u.id !== userId && (u.username || u.email || '').toLowerCase().trim() === usernameLower
-        );
+        const cleanUsername = typeof updatedData?.username === 'string' ? updatedData.username.trim() : '';
+        if (!cleanUsername) {
+          return { success: false, error: 'El nombre de usuario es requerido.' };
+        }
+
+        const usernameLower = cleanUsername.toLowerCase();
+        const existsOther = (get().usersList || []).some((u) => {
+          const rawKey = u.username || u.email || '';
+          const uKey = typeof rawKey === 'string' ? rawKey.trim().toLowerCase() : '';
+          return u.id !== userId && uKey === usernameLower;
+        });
         if (existsOther) {
           return { success: false, error: 'Ya existe otro usuario con este nombre de usuario.' };
         }
 
+        const rawPassword = typeof updatedData?.password === 'string' ? updatedData.password : '';
+        const trimmedPassword = typeof updatedData?.password === 'string' ? updatedData.password.trim() : '';
+
+        if (trimmedPassword.length > 0 && rawPassword.length < 4) {
+          return { success: false, error: 'La nueva contraseña debe tener al menos 4 caracteres.' };
+        }
+
         const mergedData = {
-          ...updatedData,
-          companyId: updatedData.role === 'CLIENT' ? updatedData.companyId : null
+          username: cleanUsername,
+          role: updatedData.role,
+          companyId: updatedData.role === 'CLIENT' ? updatedData.companyId : null,
+          ...(trimmedPassword.length > 0 ? { password: rawPassword } : {})
         };
+
+        const activeToken = get().token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        if (activeToken && activeToken !== 'mock-offline-token' && (typeof navigator === 'undefined' || navigator.onLine)) {
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${activeToken}`
+              },
+              body: JSON.stringify(mergedData)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) {
+              return { success: false, error: data.error || 'Error al actualizar usuario.' };
+            }
+            const serverUpdatedUser = data.data || { id: userId, ...mergedData };
+            set((state) => {
+              const updatedList = (state.usersList || []).map((u) => {
+                if (u.id === userId) {
+                  return { ...u, ...serverUpdatedUser };
+                }
+                return u;
+              });
+
+              const currentLoggedUser = updatedList.find((u) => u.id === state.user?.id);
+              if (currentLoggedUser && typeof localStorage !== 'undefined') {
+                try {
+                  localStorage.setItem('user', JSON.stringify(currentLoggedUser));
+                } catch (e) {}
+              }
+
+              return {
+                usersList: updatedList,
+                user: currentLoggedUser || state.user
+              };
+            });
+            await get().fetchUsersList();
+            return { success: true, user: serverUpdatedUser };
+          } catch (e) {
+            console.error('Error actualizando usuario en base de datos:', e);
+          }
+        }
 
         set((state) => {
           const updatedList = (state.usersList || []).map((u) => {
@@ -877,24 +967,6 @@ export const useStore = create(
           };
         });
 
-        try {
-          const { token } = get();
-          const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            },
-            body: JSON.stringify(mergedData)
-          });
-          const data = await res.json();
-          if (data.ok) {
-            get().fetchUsersList();
-          }
-        } catch (e) {
-          console.error('Error actualizando usuario en base de datos:', e);
-        }
-
         return { success: true };
       },
 
@@ -905,7 +977,8 @@ export const useStore = create(
         }
 
         const userToDelete = (get().usersList || []).find((u) => u.id === userId);
-        if (userToDelete && (userToDelete.username || '').toLowerCase() === 'admin1') {
+        const targetUsername = typeof userToDelete?.username === 'string' ? userToDelete.username.trim().toLowerCase() : '';
+        if (userToDelete && targetUsername === 'admin1') {
           return { success: false, error: 'El usuario administrador principal (admin1) está protegido y no se puede eliminar.' };
         }
 
@@ -913,25 +986,32 @@ export const useStore = create(
           return { success: false, error: 'No puedes eliminar tu propia cuenta de usuario activo.' };
         }
 
+        const { token } = get();
+        if (token && token !== 'mock-offline-token' && (typeof navigator === 'undefined' || navigator.onLine)) {
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) {
+              return { success: false, error: data.error || 'Error al eliminar usuario.' };
+            }
+            set((state) => ({
+              usersList: (state.usersList || []).filter((u) => u.id !== userId)
+            }));
+            await get().fetchUsersList();
+            return { success: true };
+          } catch (e) {
+            console.error('Error eliminando usuario en base de datos:', e);
+          }
+        }
+
         set((state) => ({
           usersList: (state.usersList || []).filter((u) => u.id !== userId)
         }));
-
-        try {
-          const { token } = get();
-          const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
-            method: 'DELETE',
-            headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
-          });
-          const data = await res.json();
-          if (data.ok) {
-            get().fetchUsersList();
-          }
-        } catch (e) {
-          console.error('Error eliminando usuario en base de datos:', e);
-        }
 
         return { success: true };
       },
@@ -1118,39 +1198,58 @@ export const useStore = create(
       },
 
       addCompany: async (companyData) => {
-        const newCompany = {
-          id: companyData.id || `company-${Date.now()}`,
-          nombre: companyData.nombre,
-          rif: companyData.rif,
-          direccionFiscal: companyData.direccionFiscal,
-          direccion: companyData.direccion || companyData.direccionFiscal || '',
-          gerente1Nombre: companyData.gerente1Nombre || null,
-          gerente1Telefono: companyData.gerente1Telefono || null,
-          gerente1Email: companyData.gerente1Email || null,
-          gerente2Nombre: companyData.gerente2Nombre || null,
-          gerente2Telefono: companyData.gerente2Telefono || null,
-          gerente2Email: companyData.gerente2Email || null,
-          proyectos: []
-        };
-
-        set((state) => ({
-          companies: [...state.companies, newCompany]
-        }));
+        const { token } = get();
 
         if (navigator.onLine) {
-          try {
-            const { token } = get();
-            await fetchWithTimeout(`${API_BASE_URL}/api/empresas`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-              },
-              body: JSON.stringify(newCompany)
-            }, DEFAULT_REQUEST_TIMEOUT_MS);
-          } catch (e) {
-            console.error('Error al registrar empresa en el servidor:', e);
+          const result = await registrarEmpresaApi(companyData, token);
+          if (!result.ok) {
+            return result;
           }
+
+          const confirmed = {
+            id: result.data?.id || companyData.id || `company-${Date.now()}`,
+            nombre: result.data?.nombre || companyData.nombre,
+            rif: result.data?.rif || companyData.rif,
+            direccionFiscal: result.data?.direccionFiscal || companyData.direccionFiscal,
+            direccion: result.data?.direccion || companyData.direccion || companyData.direccionFiscal || '',
+            gerente1Nombre: result.data?.gerente1Nombre ?? (companyData.gerente1Nombre || null),
+            gerente1Telefono: result.data?.gerente1Telefono ?? (companyData.gerente1Telefono || null),
+            gerente1Email: result.data?.gerente1Email ?? (companyData.gerente1Email || null),
+            gerente2Nombre: result.data?.gerente2Nombre ?? (companyData.gerente2Nombre || null),
+            gerente2Telefono: result.data?.gerente2Telefono ?? (companyData.gerente2Telefono || null),
+            gerente2Email: result.data?.gerente2Email ?? (companyData.gerente2Email || null),
+            proyectos: result.data?.proyectos || []
+          };
+
+          set((state) => {
+            const filtered = (state.companies || []).filter((c) => c.id !== confirmed.id);
+            return {
+              companies: [...filtered, confirmed]
+            };
+          });
+
+          return { ok: true, data: confirmed };
+        } else {
+          const newCompany = {
+            id: companyData.id || `company-${Date.now()}`,
+            nombre: companyData.nombre,
+            rif: companyData.rif,
+            direccionFiscal: companyData.direccionFiscal,
+            direccion: companyData.direccion || companyData.direccionFiscal || '',
+            gerente1Nombre: companyData.gerente1Nombre || null,
+            gerente1Telefono: companyData.gerente1Telefono || null,
+            gerente1Email: companyData.gerente1Email || null,
+            gerente2Nombre: companyData.gerente2Nombre || null,
+            gerente2Telefono: companyData.gerente2Telefono || null,
+            gerente2Email: companyData.gerente2Email || null,
+            proyectos: []
+          };
+
+          set((state) => ({
+            companies: [...(state.companies || []), newCompany]
+          }));
+
+          return { ok: true, data: newCompany };
         }
       },
 

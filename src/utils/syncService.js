@@ -546,3 +546,83 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     return { ok: false, status: 'NETWORK_ERROR', error: err.message || 'Error de conexión' };
   }
 }
+
+/**
+ * Valida el formato de un RIF venezolano (ej. J-12345678-9, V-12345678, G-20000000-1, etc.).
+ * @param {string} rif
+ * @returns {boolean}
+ */
+export function validarRifVenezolano(rif) {
+  if (!rif || typeof rif !== 'string') return false;
+  const clean = rif.trim();
+  // Admite iniciales: J, V, G, E, P, C con o sin guion, seguidas de 5 a 9 dígitos, y opcionalmente un guion y dígito verificador
+  const regex = /^[JVGEPC]-?\d{5,9}(-?\d)?$/i;
+  return regex.test(clean);
+}
+
+/**
+ * Valida que un número telefónico contenga únicamente números, guiones, espacios o el prefijo '+'.
+ * @param {string} telefono
+ * @returns {boolean}
+ */
+export function validarTelefono(telefono) {
+  if (!telefono || typeof telefono !== 'string' || !telefono.trim()) return true;
+  const clean = telefono.trim();
+  const regex = /^\+?[\d\s-]+$/;
+  const digits = clean.replace(/\D/g, '');
+  return regex.test(clean) && digits.length >= 7;
+}
+
+/**
+ * Registra una empresa en el backend llamando a POST /api/empresas.
+ * Maneja timeouts de red y procesa respuestas 200/201, 400, 409, 500 de forma controlada.
+ * 
+ * @param {Object} companyData 
+ * @param {string} token 
+ * @returns {Promise<{ ok: boolean, status: number|string, data?: any, error?: string }>}
+ */
+export async function registrarEmpresaApi(companyData, token) {
+  try {
+    const authHeaders = (token && token !== 'mock-offline-token') 
+      ? { 'Authorization': `Bearer ${token}` } 
+      : {};
+
+    const response = await fetchWithTimeout(`${API_BASE_URL}/api/empresas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify(companyData)
+    }, DEFAULT_REQUEST_TIMEOUT_MS);
+
+    const parsed = await readResponsePayload(response);
+
+    if (!response.ok) {
+      const errorMsg = parsed.error || (parsed.data && parsed.data.error) || `Error del servidor (HTTP ${response.status})`;
+      return {
+        ok: false,
+        status: response.status,
+        error: errorMsg,
+        data: parsed.data
+      };
+    }
+
+    const resJson = parsed.data || {};
+    const created = resJson.data || resJson;
+
+    return {
+      ok: true,
+      status: response.status,
+      data: created
+    };
+  } catch (err) {
+    console.error('Error de red al registrar empresa:', err);
+    return {
+      ok: false,
+      status: 'NETWORK_ERROR',
+      error: err.message || 'Error de conexión con el servidor'
+    };
+  }
+}
+

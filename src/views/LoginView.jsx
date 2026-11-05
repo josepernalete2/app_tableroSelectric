@@ -18,28 +18,32 @@ export const LoginView = () => {
     setError('');
     setIsNetworkError(false);
 
-    if (!username || !password) {
+    const cleanUsername = typeof username === 'string' ? username.trim() : '';
+    const rawPassword = typeof password === 'string' ? password : '';
+
+    if (!cleanUsername || !rawPassword) {
       setError('Por favor, ingresa tus credenciales.');
       return;
     }
-    
-    if (username.trim().length >= 3 && password.length >= 4) {
-      setIsLoading(true);
-      try {
-        const result = await login(username.trim(), password);
-        if (result.success) {
-          navigate('/');
-        } else {
-          setError(result.error);
-          setIsNetworkError(Boolean(result.isNetworkError));
-        }
-      } catch (err) {
-        setError(err.message || 'Error inesperado al iniciar sesión.');
-      } finally {
-        setIsLoading(false);
+
+    if (rawPassword.length < 4) {
+      setError('La contraseña debe tener al menos 4 caracteres.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await login(cleanUsername, rawPassword);
+      if (result.success) {
+        navigate('/', { replace: true });
+      } else {
+        setError(result.error || 'Usuario o contraseña incorrectos.');
+        setIsNetworkError(Boolean(result.isNetworkError));
       }
-    } else {
-      setError('El usuario debe tener al menos 3 caracteres y la contraseña al menos 4 caracteres.');
+    } catch (err) {
+      setError(err.message || 'Error inesperado al iniciar sesión.');
+    } finally {
+      setIsLoading(false);
     }
   };
 

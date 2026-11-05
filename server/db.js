@@ -37,7 +37,7 @@ const adapter = new PrismaPg(pool);
 const EXCLUDED_FIELDS = new Set([
   'id', 'userId', 'empresaId', 'proyectoId', 'tableroId', 'subestacionId', 'ccmId', 'puntoMedicionId',
   'alimentadoPorId', 'origenId', 'vinculadoId', 'elementoDestinoId', 'parentId', 'circuitoId',
-  'email', 'correo', 'password', 'hash', 'passwordHash', 'token', 'refreshToken', 'tokenPush',
+  'username', 'senderUsername', 'email', 'correo', 'password', 'hash', 'passwordHash', 'token', 'refreshToken', 'tokenPush',
   'foto', 'fotoUrl', 'fotoBlob', 'avatar', 'url', 'firmaSupervisor', 'firmaInspector', 'firmaAuditor',
   'firmaResponsable', 'secret', 'key'
 ]);
@@ -107,7 +107,7 @@ const extendedPrisma = basePrisma.$extends({
   query: {
     $allModels: {
       async $allOperations({ model, operation, args, query }) {
-        if (args) {
+        if (args && model !== 'User') {
           if (['create', 'update', 'updateMany'].includes(operation) && args.data) {
             args.data = normalizeObjectToUpper(args.data);
           } else if (operation === 'createMany' && args.data) {
@@ -125,7 +125,7 @@ const extendedPrisma = basePrisma.$extends({
   }
 });
 
-export const prisma = globalForPrisma.prisma || extendedPrisma;
+export const prisma = extendedPrisma;
 globalForPrisma.prisma = prisma;
 
 export default prisma;
