@@ -580,13 +580,15 @@ export const useStore = create(
               'Authorization': `Bearer ${activeToken}`
             }
           });
-          if (!res.ok) return;
+          if (res.status === 403 || !res.ok) return;
           const data = await res.json().catch(() => ({}));
-          if (data.ok && Array.isArray(data.data)) {
+          if (data?.ok && Array.isArray(data.data)) {
             set({ usersList: data.data });
           }
         } catch (err) {
-          // Ignorar silenciosamente si no tiene permisos
+          if (err?.response?.status !== 403 && err?.status !== 403) {
+            console.warn('No se pudo cargar la lista de usuarios:', err.message);
+          }
         }
       },
 
@@ -616,9 +618,15 @@ export const useStore = create(
         return get().pullInitialData();
       },
 
+      syncPull: async () => {
+        return get().pullInitialData();
+      },
+
       pullInitialData: async () => {
         const { token, user, syncQueue } = get();
-        if (!token || !navigator.onLine || token === 'mock-offline-token') return;
+        if (!token || !navigator.onLine || token === 'mock-offline-token') {
+          return { success: true, cached: true, count: (get().companies || []).length };
+        }
 
         // PRIORIDAD LOCAL-FIRST:
         // Si existen mutaciones locales pendientes en la cola, NO descargar del servidor
@@ -636,9 +644,21 @@ export const useStore = create(
             }
           });
 
-          if (res.status === 401 || res.status === 403) {
-            get().handleAuthError(res.status);
+          if (res.status === 401) {
+            const errData = await res.json().catch(() => ({}));
+            get().handleAuthError(res.status, errData?.error || 'Token inválido o expirado');
             return { success: false, error: 'Token expirado' };
+          }
+
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            const lowerMsg = String(errData?.error || '').toLowerCase();
+            if (lowerMsg.includes('token') || lowerMsg.includes('expirado') || lowerMsg.includes('inválido')) {
+              get().handleAuthError(res.status, errData?.error);
+              return { success: false, error: 'Token expirado' };
+            }
+            // Si es un 403 de permisos en un backend antiguo, mantener la caché local sin romper el flujo
+            return { success: true, cached: true, count: (get().companies || []).length };
           }
 
           if (res.ok) {
@@ -660,27 +680,32 @@ export const useStore = create(
 
           // 2. Fallback: Si es ADMIN y pull no devolvió empresas, intentar export de base de datos
           if (user && user.role === 'ADMIN') {
-            const resBackup = await fetch(`${API_BASE_URL}/api/backup/export`, {
-              headers: {
-                'Authorization': `Bearer ${token}`
+            try {
+              const resBackup = await fetch(`${API_BASE_URL}/api/backup/export`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              if (resBackup.status === 401) {
+                const errBackup = await resBackup.json().catch(() => ({}));
+                get().handleAuthError(resBackup.status, errBackup?.error || 'Token expirado');
+                return { success: false, error: 'Token expirado' };
               }
-            });
-            if (resBackup.status === 401 || resBackup.status === 403) {
-              get().handleAuthError(resBackup.status);
-              return { success: false, error: 'Token expirado' };
-            }
-            if (resBackup.ok) {
-              const dataBackup = await resBackup.json().catch(() => ({}));
-              if (dataBackup?.ok && Array.isArray(dataBackup.data) && dataBackup.data.length > 0) {
-                get().importCompanies(dataBackup.data);
-                return { success: true, count: dataBackup.data.length };
+              if (resBackup.ok) {
+                const dataBackup = await resBackup.json().catch(() => ({}));
+                if (dataBackup?.ok && Array.isArray(dataBackup.data) && dataBackup.data.length > 0) {
+                  get().importCompanies(dataBackup.data);
+                  return { success: true, count: dataBackup.data.length };
+                }
               }
+            } catch {
+              // Ignorar fallo en fallback y mantener datos locales
             }
           }
-          return { success: true, count: 0 };
-        } catch (e) {
-          console.warn('Advertencia no fatal al sincronizar /api/sync/pull:', e);
-          return { success: false, error: e?.message || 'Error de conexión' };
+          return { success: true, count: (get().companies || []).length };
+        } catch {
+          // Usar datos locales en caché silenciosamente sin interrumpir el renderizado
+          return { success: true, cached: true, count: (get().companies || []).length };
         }
       },
 
@@ -3654,12 +3679,21 @@ export const useStore = create(
           if (!Array.isArray(state.syncQueue)) state.syncQueue = [];
           if (!Array.isArray(state.companies)) state.companies = [];
           if (!Array.isArray(state.elementosLocales)) state.elementosLocales = [];
+
+          // Sincronizar token y usuario con localStorage para evitar tokens antiguos rehidratados de IndexedDB
+          const currentLocalToken = getInitialToken();
+          const currentLocalUser = getInitialUser();
+          if (currentLocalToken) state.token = currentLocalToken;
+          if (currentLocalUser) state.user = currentLocalUser;
+
           if (state.token && state.token !== 'mock-offline-token' && typeof navigator !== 'undefined' && navigator.onLine) {
             // Prioridad Local-First: Solo descargar datos del servidor tras rehidratar si NO hay mutaciones pendientes locales en la cola
             if (state.syncQueue.length === 0) {
-              state.pullInitialData?.();
+              Promise.resolve(state.pullInitialData?.()).catch(() => {});
             }
-            state.fetchUsersList?.();
+            if (state.user && state.user.role === 'ADMIN') {
+              Promise.resolve(state.fetchUsersList?.()).catch(() => {});
+            }
           }
         }
       }

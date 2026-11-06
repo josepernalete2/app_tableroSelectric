@@ -31,7 +31,7 @@ export const verificarToken = (req, res, next) => {
     next();
   } catch (error) {
     console.error('❌ Error al verificar JWT:', error.message);
-    return res.status(403).json({ ok: false, error: 'Token inválido o expirado.' });
+    return res.status(401).json({ ok: false, error: 'Token inválido o expirado.' });
   }
 };
 
@@ -41,7 +41,16 @@ export const requireRoles = (...rolesPermitidos) => {
       return res.status(401).json({ ok: false, error: 'No autenticado.' });
     }
 
-    if (!rolesPermitidos.includes(req.user.role)) {
+    const userRole = String(req.user.role || '').trim().toUpperCase();
+    const allowedRoles = new Set(rolesPermitidos.map((r) => String(r || '').trim().toUpperCase()));
+
+    // Soportar indistintamente INSPECTOR y WORKER como roles operativos de campo
+    if (allowedRoles.has('WORKER') || allowedRoles.has('INSPECTOR')) {
+      allowedRoles.add('WORKER');
+      allowedRoles.add('INSPECTOR');
+    }
+
+    if (!allowedRoles.has(userRole)) {
       return res.status(403).json({
         ok: false,
         error: `Acceso denegado. Se requiere uno de los siguientes roles: ${rolesPermitidos.join(', ')}.`

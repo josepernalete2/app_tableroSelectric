@@ -1,6 +1,6 @@
 // Service Worker para TableroSelectric PWA
-// Versión: 2.3.1 - Resiliencia Multidispositivo, Manifest y Cache Invalidation
-const CACHE_NAME = 'tablero-selectric-v2.3.1';
+// Versión: celectrik-v2 - Resiliencia Multidispositivo, Manifest y Cache Invalidation
+const CACHE_NAME = 'celectrik-v2';
 
 // Inyección de manifiesto de precache de Workbox (VitePWA injectManifest)
 const wbManifest = self.__WB_MANIFEST || [];

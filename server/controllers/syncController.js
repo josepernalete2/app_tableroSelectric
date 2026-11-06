@@ -659,21 +659,23 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
 // Filtrado por lastSyncTimestamp para obtener solo cambios desde última sincronización
 export const pullData = async (req, res) => {
   try {
-    const user = req.user;
-    const { empresaId } = user;
+    const user = req.user || {};
+    const tenantCompanyId = user.empresaId || user.companyId;
     const { lastSyncTimestamp } = req.query;
 
     const where = {};
 
-    // Multitenancy: usuarios CLIENT solo ven su empresa
-    if (user.role === 'CLIENT' && empresaId) {
-      where.id = empresaId;
+    // Multitenancy: usuarios CLIENT solo ven su empresa; ADMIN, INSPECTOR y WORKER ven todas las empresas activas
+    if (String(user.role || '').toUpperCase() === 'CLIENT' && tenantCompanyId) {
+      where.id = tenantCompanyId;
     }
 
     // Filtrar por última fecha de sincronización si viene del cliente
     if (lastSyncTimestamp) {
       const ts = new Date(lastSyncTimestamp);
-      where.updatedAt = { gte: ts };
+      if (!isNaN(ts.getTime())) {
+        where.updatedAt = { gte: ts };
+      }
     }
 
     // Traer empresas con todas sus relaciones anidadas válidas de schema.prisma
@@ -684,7 +686,11 @@ export const pullData = async (req, res) => {
           include: {
             tableros: {
               include: {
-                circuitos: true
+                circuitos: {
+                  orderBy: {
+                    posicionPolo: 'asc'
+                  }
+                }
               }
             },
             elementosUnifilares: true,
