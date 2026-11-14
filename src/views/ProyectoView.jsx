@@ -371,7 +371,10 @@ export const ProyectoView = () => {
   };
 
   const handleSelectAll = (items) => {
-    setSelectedIds(new Set(items.map((i) => i.id)));
+    const targetList = Array.isArray(items)
+      ? items
+      : (activeTab === 'UNIFILAR' ? filteredElementos : filteredInspecciones);
+    setSelectedIds(new Set((targetList || []).map((i) => i.id)));
   };
 
   const handleDeselectAll = () => {

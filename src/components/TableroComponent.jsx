@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EditableCell from './EditableCell';
+import EditablePoleCell from './EditablePoleCell';
 import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3, Trash2, Loader2, Shield, Layers, Box } from 'lucide-react';
 import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
@@ -54,7 +55,7 @@ import {
 import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 
 export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => {
-  const [isEditable, setIsEditable] = useState(false);
+  const [isEditable, setIsEditable] = useState(!readOnly);
   const effectivelyReadOnly = Boolean(readOnly || !isEditable);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [editingCircuit, setEditingCircuit] = useState(null);
@@ -1655,11 +1656,17 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   {/* Número de Polo Impar (Barra Colectora Física Fija) */}
                   <td className="border-r-2 border-slate-800 dark:border-slate-700 p-0 text-center font-mono font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 align-middle select-none relative group/pole cursor-default">
                     <div className="flex items-center justify-center min-h-[1.75rem] px-1 relative">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{oddPole}</span>
+                      <EditablePoleCell
+                        poleNumber={oddPole}
+                        value={cLeft?.codigoPolo || cLeft?.polo_label || (tableroData.poleLabels && tableroData.poleLabels[oddPole]) || ''}
+                        onSave={(val) => handleUpdatePoleLabel(oddPole, val)}
+                        disabled={effectivelyReadOnly}
+                        className="text-xs font-bold text-slate-700 dark:text-slate-300"
+                      />
                       
                       {/* Botones de acción en cada polo seleccionado */}
                       {!effectivelyReadOnly && (
-                        <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole:opacity-100 transition-opacity z-10 px-0.5">
+                        <div className="no-print absolute right-0.5 top-0.5 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole:opacity-100 transition-opacity z-10 px-0.5 rounded">
                           {oddPole < maxPoles - 1 && isFirstLeft && rowSpanLeft === 1 && (
                             <button
                               type="button"
@@ -1695,11 +1702,17 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   {/* Número de Polo Par (Barra Colectora Física Fija) */}
                   <td className="border-r border-slate-800 dark:border-slate-700 p-0 text-center font-mono font-bold bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 align-middle select-none relative group/pole-right cursor-default">
                     <div className="flex items-center justify-center min-h-[1.75rem] px-1 relative">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 select-none">{evenPole}</span>
+                      <EditablePoleCell
+                        poleNumber={evenPole}
+                        value={cRight?.codigoPolo || cRight?.polo_label || (tableroData.poleLabels && tableroData.poleLabels[evenPole]) || ''}
+                        onSave={(val) => handleUpdatePoleLabel(evenPole, val)}
+                        disabled={effectivelyReadOnly}
+                        className="text-xs font-bold text-slate-700 dark:text-slate-300"
+                      />
                       
                       {/* Botones de acción en cada polo seleccionado */}
                       {!effectivelyReadOnly && (
-                        <div className="no-print absolute inset-0 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole-right:opacity-100 transition-opacity z-10 px-0.5">
+                        <div className="no-print absolute right-0.5 top-0.5 flex items-center justify-center gap-0.5 bg-slate-900/90 backdrop-blur-xs opacity-0 group-hover/pole-right:opacity-100 transition-opacity z-10 px-0.5 rounded">
                           {evenPole < maxPoles && isFirstRight && rowSpanRight === 1 && (
                             <button
                               type="button"

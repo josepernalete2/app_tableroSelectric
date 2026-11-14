@@ -46,8 +46,10 @@ export const calcularPotenciaEstimadaTablero = (tablero) => {
   if (typeof voltRaw === 'string') {
     const match = voltRaw.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
     if (match) {
-      vLL = parseFloat(match[1]);
-      vLN = parseFloat(match[2]);
+      const v1 = parseFloat(match[1]);
+      const v2 = parseFloat(match[2]);
+      vLL = Math.max(v1, v2);
+      vLN = Math.min(v1, v2);
     } else {
       const singleMatch = voltRaw.match(/(\d+(?:\.\d+)?)/);
       if (singleMatch) {
@@ -98,10 +100,9 @@ export const calcularPotenciaEstimadaTablero = (tablero) => {
   const ic = parseFloat(barras.ic || 0);
 
   if (ia > 0 || ib > 0 || ic > 0) {
-    const currents = [ia, ib, ic].filter(i => i > 0);
-    const iAvg = currents.reduce((acc, i) => acc + i, 0) / currents.length;
-    // Potencia trifásica: S = √3 * V_LL * I_prom
-    const kvaCalculado = (Math.sqrt(3) * vLL * iAvg) / 1000;
+    // Potencia aparente real por suma de fases activas: S = (I_A + I_B + I_C) * V_LN / 1000
+    const effectiveVln = vLN > 0 ? vLN : (vLL / Math.sqrt(3));
+    const kvaCalculado = ((ia + ib + ic) * effectiveVln) / 1000;
     const kwCalculado = kvaCalculado * 0.9;
 
     return {

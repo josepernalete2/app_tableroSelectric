@@ -254,12 +254,11 @@ export function useSync() {
       if (fileBlob) {
         const fileExt = fileBlob.type ? (fileBlob.type.split('/')[1] || 'jpg') : 'jpg';
         formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
-      } else if (validFoto && !validFoto.startsWith('data:image')) {
+      } else if (validFoto && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
         formData.append('fotoUrl', validFoto);
-      } else {
-        // Foto corrupta o ausente: rescatamos el elemento con foto null sin romper Prisma
+      } else if (healed.eliminarFoto === true || elemento?.eliminarFoto === true || elemento?.foto === '__DELETE__') {
         formData.append('eliminarFoto', 'true');
-        formData.append('foto', '');
+        formData.append('foto', '__DELETE__');
       }
 
       const token = getFreshToken();
@@ -306,7 +305,7 @@ export function useSync() {
           foto: normalizedFoto,
           fotoBlob: null,
           version: record.version || 1
-        });
+        }, { skipNetworkSync: true });
       }
 
       return { success: true, data: record };
@@ -364,22 +363,23 @@ export function useSync() {
 
   /**
    * Aplica la actualización de registros en el store local tras confirmación del backend
+   * de forma silenciosa (skipNetworkSync: true) para evitar bucles de re-envío.
    */
   const actualizarRegistroEnStore = (appItem) => {
     if (!appItem || !appItem.record) return;
     const rec = appItem.record;
     if (appItem.entity === 'ElementoUnifilar' || appItem.entity === 'Tablero') {
       useStore.getState().updateElementoUnifilar(rec.proyectoId, appItem.id, {
-        foto: rec.foto || null,
+        ...(rec.foto !== undefined ? { foto: rec.foto || null } : {}),
         fotoBlob: null,
         version: rec.version
-      });
+      }, { skipNetworkSync: true });
     } else if (appItem.entity === 'Subestacion') {
-      useStore.getState().updateSubestacion?.(rec.proyectoId, appItem.id, { version: rec.version });
+      useStore.getState().updateSubestacion?.(rec.proyectoId, appItem.id, { version: rec.version }, { skipNetworkSync: true });
     } else if (appItem.entity === 'PuntoMedicion') {
-      useStore.getState().updatePuntoMedicion?.(rec.proyectoId, appItem.id, { version: rec.version });
+      useStore.getState().updatePuntoMedicion?.(rec.proyectoId, appItem.id, { version: rec.version }, { skipNetworkSync: true });
     } else if (appItem.entity === 'Ccm') {
-      useStore.getState().updateCcm?.(rec.proyectoId, appItem.id, { version: rec.version });
+      useStore.getState().updateCcm?.(rec.proyectoId, appItem.id, { version: rec.version }, { skipNetworkSync: true });
     }
   };
 
@@ -612,6 +612,34 @@ export function useSync() {
 
         if (item?.tipo === 'PROYECTO') {
           res = await sincronizarProyecto(item?.companyId, item?.payload);
+        } else if (
+          item?.tipo === 'SUBESTACION' ||
+          item?.tipo === 'CCM' ||
+          item?.tipo === 'PUNTO_MEDICION' ||
+          item?.tipo === 'EMPRESA' ||
+          item?.tipo === 'COMPANY' ||
+          item?.tipo === 'ALIMENTADOR' ||
+          item?.tipo === 'INSPECCION_TERMOGRAFICA' ||
+          item?.tipo === 'INSPECCION_ATERRAMIENTO' ||
+          item?.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE'
+        ) {
+          const singleMutation = await prepareMutation(item);
+          if (singleMutation) {
+            const batchSingle = await sincronizarLote([singleMutation], MULTIPART_REQUEST_TIMEOUT_MS);
+            const singleApplied = Array.isArray(batchSingle.data?.applied) ? batchSingle.data.applied : [];
+            if (batchSingle.success && singleApplied.length > 0) {
+              actualizarRegistroEnStore(singleApplied[0]);
+              res = { success: true, status: batchSingle.status, data: singleApplied[0] };
+            } else {
+              res = {
+                success: false,
+                status: batchSingle.status,
+                error: batchSingle.error || batchSingle.data?.conflicts?.[0]?.error || 'Error en lote individual'
+              };
+            }
+          } else {
+            res = { success: false, error: 'Mutación inválida' };
+          }
         } else {
           res = await sincronizarElementoUnifilar(item?.companyId, item?.payload, item?.id);
         }

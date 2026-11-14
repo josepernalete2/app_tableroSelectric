@@ -207,7 +207,8 @@ const MODEL_ALLOWED_FIELDS = {
   ]),
   inspeccionTanqueCombustible: new Set([
     'id', 'nombre', 'ubicacion', 'fecha', 'hora', 'inspector', 'supervisor',
-    'capacidadLitros', 'nivelCombustible', 'estadoTanque', 'diqueContencion110',
+    'tipoCombustible', 'capacidadTotalLitros', 'nivelActualPorcentaje',
+    'consumoGeneradorLh', 'diqueContencion110',
     'version', 'deletedAt', 'proyectoId', 'empresaId'
   ])
 };
@@ -240,6 +241,7 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
 
     const applied = [];
     const conflicts = [];
+    const pendingHierarchyLinks = [];
 
     // Procesar cada mutación asegurando que los fallos individuales no aborten el lote completo
     for (const item of sortedMutations) {
@@ -282,6 +284,14 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
         }
 
         if (operation === 'DELETE') {
+          const adminOnlyDeleteModels = new Set([
+            'empresa', 'proyecto', 'tablero', 'elementoUnifilar', 'subestacion', 'puntoMedicion', 'ccm'
+          ]);
+          if (adminOnlyDeleteModels.has(modelName) && String(req.user?.role || '').toUpperCase() !== 'ADMIN') {
+            conflicts.push({ id, entity, error: 'Permisos insuficientes: solo un Administrador puede eliminar este registro.' });
+            continue;
+          }
+
           if (existingRecord) {
             if ('deletedAt' in existingRecord) {
               const updated = await delegate.update({
@@ -466,20 +476,39 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
             rawData.direccion = rawData.ubicacion;
           }
           if (!rawData.direccion) rawData.direccion = 'Sin dirección registrada';
+        } else if (modelName === 'inspeccionTanqueCombustible') {
+          if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
+          if (!rawData.nombre) rawData.nombre = 'Inspección Tanque de Combustible';
+          if (rawData.capacidadLitros !== undefined && rawData.capacidadTotalLitros === undefined) {
+            rawData.capacidadTotalLitros = String(rawData.capacidadLitros);
+          }
+          if (rawData.nivelCombustible !== undefined && rawData.nivelActualPorcentaje === undefined) {
+            rawData.nivelActualPorcentaje = String(rawData.nivelCombustible);
+          }
+          if (rawData.nivelPorcentaje !== undefined && rawData.nivelActualPorcentaje === undefined) {
+            rawData.nivelActualPorcentaje = String(rawData.nivelPorcentaje);
+          }
+          if (rawData.consumoLh !== undefined && rawData.consumoGeneradorLh === undefined) {
+            rawData.consumoGeneradorLh = String(rawData.consumoLh);
+          }
+          if (rawData.diqueContencion !== undefined && rawData.diqueContencion110 === undefined) {
+            rawData.diqueContencion110 = String(rawData.diqueContencion);
+          }
         }
 
-        // Manejo de eliminación de fotos
+        // Manejo seguro de eliminación de fotos (solo borrar si viene explícitamente eliminarFoto o __DELETE__)
         const isPhotoRemoval = (
-          rawData.foto === null ||
-          rawData.foto === '' ||
-          rawData.foto === 'null' ||
-          rawData.fotoUrl === null ||
-          rawData.fotoUrl === '' ||
+          rawData.foto === '__DELETE__' ||
+          rawData.fotoUrl === '__DELETE__' ||
           rawData.deletePhoto === true ||
-          rawData.eliminarFoto === true
+          rawData.deletePhoto === 'true' ||
+          rawData.eliminarFoto === true ||
+          rawData.eliminarFoto === 'true'
         );
         if (isPhotoRemoval) {
           rawData.foto = null;
+        } else if (!rawData.foto) {
+          delete rawData.foto;
         }
         delete rawData.fotoUrl;
         delete rawData.deletePhoto;
@@ -557,10 +586,26 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
             }
           }
 
-          // Para alimentadoPorId autorreferencial, verificar existencia para evitar error de FK
-          if (modelName === 'elementoUnifilar' && rawData.alimentadoPorId) {
-            const parentElementCheck = await prisma.elementoUnifilar.findUnique({ where: { id: rawData.alimentadoPorId } });
-            if (!parentElementCheck) {
+          // Para alimentadoPorId autorreferencial, resolución en dos fases para no perder jerarquía si el padre viene en el mismo lote o en el paso multipart
+          if (modelName === 'elementoUnifilar') {
+            const desiredParentId = rawData.alimentadoPorId || rawData.datosTecnicos?.alimentadoPorId || null;
+            if (desiredParentId && desiredParentId !== id) {
+              rawData.datosTecnicos = {
+                ...(rawData.datosTecnicos || {}),
+                alimentadoPorId: desiredParentId
+              };
+              const parentElementCheck = await prisma.elementoUnifilar.findUnique({ where: { id: desiredParentId } });
+              if (!parentElementCheck) {
+                pendingHierarchyLinks.push({
+                  childId: id,
+                  parentId: desiredParentId,
+                  alimentadoPor: rawData.alimentadoPor || ''
+                });
+                rawData.alimentadoPorId = null;
+              } else {
+                rawData.alimentadoPorId = desiredParentId;
+              }
+            } else if (rawData.alimentadoPorId === id) {
               rawData.alimentadoPorId = null;
             }
           }
@@ -637,6 +682,65 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
       }
     }
 
+    // SEGUNDA PASADA: Resolver vínculos padre-hijo (alimentadoPorId) cuyos padres fueron creados dentro del mismo lote
+    if (pendingHierarchyLinks.length > 0) {
+      for (const link of pendingHierarchyLinks) {
+        try {
+          const parentExists = await prisma.elementoUnifilar.findUnique({
+            where: { id: link.parentId },
+            select: { id: true, nombre: true }
+          });
+          if (parentExists) {
+            const updatedChild = await prisma.elementoUnifilar.update({
+              where: { id: link.childId },
+              data: {
+                alimentadoPorId: link.parentId,
+                ...(link.alimentadoPor ? { alimentadoPor: link.alimentadoPor } : { alimentadoPor: parentExists.nombre })
+              }
+            });
+            const appliedEntry = applied.find((a) => a.id === link.childId);
+            if (appliedEntry) {
+              appliedEntry.record = updatedChild;
+            }
+            console.log(`[SYNC SERVER] 🔗 Jerarquía diferida vinculada: ${link.childId} -> padre ${link.parentId}`);
+          }
+        } catch (linkErr) {
+          console.warn(`[SYNC SERVER] ⚠️ No se pudo vincular jerarquía diferida (${link.childId} -> ${link.parentId}):`, linkErr.message);
+        }
+      }
+    }
+
+    // Re-vincular hijos que hayan llegado antes y guardado su alimentadoPorId pendiente en datosTecnicos
+    const upsertedElementIds = applied
+      .filter((a) => mapEntityToPrismaModel(a.entity) === 'elementoUnifilar')
+      .map((a) => a.id);
+    if (upsertedElementIds.length > 0) {
+      try {
+        const orphanChildren = await prisma.elementoUnifilar.findMany({
+          where: {
+            alimentadoPorId: null,
+            deletedAt: null
+          },
+          select: { id: true, datosTecnicos: true, alimentadoPor: true }
+        });
+        const parentSet = new Set(upsertedElementIds);
+        for (const child of orphanChildren) {
+          const dtParentId = child.datosTecnicos && typeof child.datosTecnicos === 'object'
+            ? child.datosTecnicos.alimentadoPorId
+            : null;
+          if (dtParentId && parentSet.has(dtParentId) && dtParentId !== child.id) {
+            await prisma.elementoUnifilar.update({
+              where: { id: child.id },
+              data: { alimentadoPorId: dtParentId }
+            });
+            console.log(`[SYNC SERVER] 🔗 Hijo previo re-vinculado automáticamente: ${child.id} -> padre ${dtParentId}`);
+          }
+        }
+      } catch (relinkErr) {
+        console.warn('[SYNC SERVER] ⚠️ Aviso en re-vinculación automática de hijos:', relinkErr.message);
+      }
+    }
+
     console.log(`[SYNC SERVER] 🏁 Lote completado: ${applied.length} aplicados, ${conflicts.length} conflictos.`);
 
     return res.status(200).json({
@@ -670,37 +774,58 @@ export const pullData = async (req, res) => {
       where.id = tenantCompanyId;
     }
 
-    // Filtrar por última fecha de sincronización si viene del cliente
+    // Filtrar por última fecha de sincronización de forma inclusiva (si la empresa o cualquiera de sus proyectos/elementos hijos cambió después de ts)
     if (lastSyncTimestamp) {
       const ts = new Date(lastSyncTimestamp);
       if (!isNaN(ts.getTime())) {
-        where.updatedAt = { gte: ts };
+        where.OR = [
+          { updatedAt: { gte: ts } },
+          {
+            proyectos: {
+              some: {
+                OR: [
+                  { updatedAt: { gte: ts } },
+                  { elementosUnifilares: { some: { updatedAt: { gte: ts } } } },
+                  { tableros: { some: { updatedAt: { gte: ts } } } },
+                  { subestaciones: { some: { updatedAt: { gte: ts } } } },
+                  { puntosMedicion: { some: { updatedAt: { gte: ts } } } },
+                  { ccmList: { some: { updatedAt: { gte: ts } } } },
+                  { inspeccionesTermograficas: { some: { updatedAt: { gte: ts } } } },
+                  { inspeccionesAterramiento: { some: { updatedAt: { gte: ts } } } },
+                  { inspeccionesTanquesCombustible: { some: { updatedAt: { gte: ts } } } }
+                ]
+              }
+            }
+          }
+        ];
       }
     }
 
-    // Traer empresas con todas sus relaciones anidadas válidas de schema.prisma
+    // Traer empresas con todas sus relaciones anidadas activas (deletedAt: null) de schema.prisma
     const companies = await prisma.empresa.findMany({
       where,
       include: {
         proyectos: {
           include: {
             tableros: {
+              where: { deletedAt: null },
               include: {
                 circuitos: {
+                  where: { deletedAt: null },
                   orderBy: {
                     posicionPolo: 'asc'
                   }
                 }
               }
             },
-            elementosUnifilares: true,
-            subestaciones: true,
-            puntosMedicion: true,
-            ccmList: true,
+            elementosUnifilares: { where: { deletedAt: null } },
+            subestaciones: { where: { deletedAt: null } },
+            puntosMedicion: { where: { deletedAt: null } },
+            ccmList: { where: { deletedAt: null } },
             alimentadores: true,
-            inspeccionesTermograficas: true,
-            inspeccionesAterramiento: true,
-            inspeccionesTanquesCombustible: true
+            inspeccionesTermograficas: { where: { deletedAt: null } },
+            inspeccionesAterramiento: { where: { deletedAt: null } },
+            inspeccionesTanquesCombustible: { where: { deletedAt: null } }
           }
         }
       }
@@ -795,9 +920,8 @@ export const sincronizarElementoMultipart = async (req, res) => {
       eliminarFoto === true ||
       req.body.deletePhoto === 'true' ||
       req.body.deletePhoto === true ||
-      req.body.foto === '' ||
-      req.body.foto === 'null' ||
-      req.body.foto === null
+      req.body.foto === '__DELETE__' ||
+      req.body.fotoUrl === '__DELETE__'
     );
 
     if (isPhotoRemoval) {
@@ -929,9 +1053,11 @@ export const sincronizarElementoMultipart = async (req, res) => {
       }
     }
 
-    // 4. Verificar alimentadoPorId para evitar fallo de FK autorreferencial
-    let validAlimentadoPorId = alimentadoPorId || null;
+    // 4. Verificar alimentadoPorId para evitar fallo de FK autorreferencial, conservando la referencia en datosTecnicos si el padre aún no se ha sincronizado
+    const requestedParentId = alimentadoPorId || parsedDatosTecnicos.alimentadoPorId || null;
+    let validAlimentadoPorId = requestedParentId && requestedParentId !== elementId ? requestedParentId : null;
     if (validAlimentadoPorId) {
+      parsedDatosTecnicos.alimentadoPorId = validAlimentadoPorId;
       const parentElCheck = await prisma.elementoUnifilar.findUnique({ where: { id: validAlimentadoPorId } });
       if (!parentElCheck) {
         validAlimentadoPorId = null;
@@ -965,10 +1091,14 @@ export const sincronizarElementoMultipart = async (req, res) => {
     let savedElement;
 
     if (existingElement) {
+      const updateElementData = { ...elementData };
+      if (!isPhotoRemoval && !finalFoto) {
+        delete updateElementData.foto;
+      }
       savedElement = await prisma.elementoUnifilar.update({
         where: { id: elementId },
         data: {
-          ...elementData,
+          ...updateElementData,
           version: (existingElement.version || 1) + 1
         }
       });
@@ -982,6 +1112,35 @@ export const sincronizarElementoMultipart = async (req, res) => {
         }
       });
       console.log(`[SYNC MULTIPART] 🆕 Elemento creado exitosamente con foto: ${elementId}`);
+    }
+
+    // 6.b Re-vincular automáticamente cualquier elemento hijo que haya llegado en el lote JSON antes que este padre con foto
+    try {
+      const waitingChildren = await prisma.elementoUnifilar.findMany({
+        where: {
+          proyectoId: resolvedProyectoId,
+          alimentadoPorId: null,
+          deletedAt: null
+        },
+        select: { id: true, datosTecnicos: true, alimentadoPor: true }
+      });
+      for (const child of waitingChildren) {
+        const dtParentId = child.datosTecnicos && typeof child.datosTecnicos === 'object'
+          ? child.datosTecnicos.alimentadoPorId
+          : null;
+        if (dtParentId === elementId && child.id !== elementId) {
+          await prisma.elementoUnifilar.update({
+            where: { id: child.id },
+            data: {
+              alimentadoPorId: elementId,
+              alimentadoPor: child.alimentadoPor || cleanNombre
+            }
+          });
+          console.log(`[SYNC MULTIPART] 🔗 Hijo re-vinculado tras subida de padre multipart: ${child.id} -> ${elementId}`);
+        }
+      }
+    } catch (relinkMultipartErr) {
+      console.warn('[SYNC MULTIPART] ⚠️ Aviso al re-vincular hijos tras multipart:', relinkMultipartErr.message);
     }
 
     // 7. Si es tipo TABLERO, sincronizar también la tabla Tablero de forma no-bloqueante

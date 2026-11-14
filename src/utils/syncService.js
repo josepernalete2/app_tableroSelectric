@@ -230,16 +230,19 @@ export function tieneImagenAdjunta(item) {
  * Prioridad de sincronización relacional (Parents First -> Children Next)
  */
 export const ENTITY_SYNC_PRIORITY = {
+  'EMPRESA': 0,
+  'COMPANY': 0,
   'PROYECTO': 1,
-  'SUBESTACION': 2,
-  'ELEMENTO_UNIFILAR': 3,
-  'TABLERO': 3,
-  'ELEMENTO': 3,
-  'CCM': 4,
-  'PUNTO_MEDICION': 5,
-  'INSPECCION_TERMOGRAFICA': 6,
-  'INSPECCION_ATERRAMIENTO': 7,
-  'INSPECCION_TANQUE_COMBUSTIBLE': 8
+  'ALIMENTADOR': 2,
+  'SUBESTACION': 3,
+  'ELEMENTO_UNIFILAR': 4,
+  'TABLERO': 4,
+  'ELEMENTO': 4,
+  'CCM': 5,
+  'PUNTO_MEDICION': 6,
+  'INSPECCION_TERMOGRAFICA': 7,
+  'INSPECCION_ATERRAMIENTO': 8,
+  'INSPECCION_TANQUE_COMBUSTIBLE': 9
 };
 
 /**
@@ -254,16 +257,28 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
   delete data.fotoBlob;
   delete data.previewUrl;
 
-  // 1. Auto-Healing de Fotos
+  // 1. Auto-Healing de Fotos (proteger foto existente salvo bandera explícita de borrado)
+  const explicitDeletePhoto = (
+    rawData.eliminarFoto === true ||
+    rawData.eliminarFoto === 'true' ||
+    rawData.deletePhoto === true ||
+    rawData.deletePhoto === 'true' ||
+    rawData.foto === '__DELETE__' ||
+    rawData.fotoUrl === '__DELETE__'
+  );
   const rawFoto = data.foto || data.fotoUrl;
-  const validFoto = validateAndSanitizeFoto(rawFoto);
+  const validFoto = !explicitDeletePhoto ? validateAndSanitizeFoto(rawFoto) : null;
   if (validFoto) {
     data.foto = validFoto;
     delete data.fotoUrl;
-  } else {
-    data.foto = null;
+  } else if (explicitDeletePhoto) {
+    data.foto = '__DELETE__';
     data.eliminarFoto = true;
     delete data.fotoUrl;
+  } else {
+    delete data.foto;
+    delete data.fotoUrl;
+    delete data.eliminarFoto;
   }
 
   // 2. Auto-Healing Específico por Entidad
@@ -382,6 +397,12 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
     data.nombre = String(data.nombre || 'CCM Principal').trim().toUpperCase();
     data.parametrosElectricos = typeof data.parametrosElectricos === 'object' && data.parametrosElectricos !== null ? data.parametrosElectricos : { tension: '480▲ (3Φ - 3 hilos Delta)', frecuencia: '60 Hz' };
     data.gavetasBucketLog = Array.isArray(data.gavetasBucketLog) ? data.gavetasBucketLog : [];
+  } else if (entityName === 'Empresa') {
+    data.nombre = String(data.nombre || 'Empresa Principal').trim().toUpperCase();
+    data.rif = String(data.rif || `J-${Date.now()}`).trim().toUpperCase();
+    data.direccionFiscal = String(data.direccionFiscal || data.direccion || 'Sede Principal').trim().toUpperCase();
+  } else if (entityName === 'Alimentador') {
+    data.nombre = String(data.nombre || 'Alimentador Principal').trim().toUpperCase();
   }
 
   if (item.companyId && !data.empresaId) {
@@ -423,7 +444,9 @@ export async function autoHealMutationDataAsync(entityName, rawData = {}, item =
 export async function prepareMutation(item) {
   if (!item) return null;
   let entityName = 'ElementoUnifilar';
-  if (item.tipo === 'PROYECTO') entityName = 'Proyecto';
+  if (item.tipo === 'EMPRESA' || item.tipo === 'COMPANY') entityName = 'Empresa';
+  else if (item.tipo === 'PROYECTO') entityName = 'Proyecto';
+  else if (item.tipo === 'ALIMENTADOR') entityName = 'Alimentador';
   else if (item.tipo === 'ELEMENTO_UNIFILAR' || item.tipo === 'TABLERO' || item.tipo === 'ELEMENTO') entityName = 'ElementoUnifilar';
   else if (item.tipo === 'SUBESTACION') entityName = 'Subestacion';
   else if (item.tipo === 'PUNTO_MEDICION') entityName = 'PuntoMedicion';
@@ -509,11 +532,11 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     if (fileBlob) {
       const fileExt = fileBlob.type ? (fileBlob.type.split('/')[1] || 'jpg') : 'jpg';
       formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
-    } else if (validFoto && !validFoto.startsWith('data:image')) {
+    } else if (validFoto && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
       formData.append('fotoUrl', validFoto);
-    } else {
+    } else if (healed.eliminarFoto === true || elemento.eliminarFoto === true || elemento.foto === '__DELETE__') {
       formData.append('eliminarFoto', 'true');
-      formData.append('foto', '');
+      formData.append('foto', '__DELETE__');
     }
 
     const authHeaders = (token && token !== 'mock-offline-token') ? { 'Authorization': `Bearer ${token}` } : {};

@@ -65,17 +65,24 @@ export const calcularPorcentajeAvance = (elemento, tipoElemento) => {
 
     case 'SUBESTACION':
     case 'INSPECCION_SUBESTACION': {
-      const tieneSecciones = elemento.seccionesEvaluadas || dt.evaluacionSecciones || dt.secciones || dt.obrasCiviles;
+      const hasObjData = (obj) => obj && typeof obj === 'object' && Object.values(obj).some(v => v !== '' && v !== null && v !== undefined && (typeof v !== 'object' || Object.keys(v).length > 0));
+      const tieneObras = hasObjData(elemento.obrasCiviles) || hasObjData(dt.obrasCiviles);
+      const tieneEntorno = hasObjData(elemento.estadoEntorno) || hasObjData(dt.estadoEntorno);
+      const tieneEquipos = hasObjData(elemento.equiposPrincipales) || hasObjData(dt.equiposPrincipales);
+      const tienePat = hasObjData(elemento.puestaTierra) || hasObjData(dt.puestaTierra);
+      const tieneControl = hasObjData(elemento.edificioControl) || hasObjData(dt.edificioControl);
+      const tieneSecciones = elemento.seccionesEvaluadas || dt.evaluacionSecciones || dt.secciones || tieneObras || tieneEntorno || tieneEquipos;
+
       camposRelevantes = [
         elemento.nombre,
         elemento.ubicacion,
         elemento.nivelTension || dt.nivelTension,
         elemento.inspector,
         elemento.fecha,
-        elemento.capacidadKva || dt.capacidadKva || dt.potenciaKva,
-        dt.tensionPrimaria || dt.voltajePrimario,
-        dt.tensionSecundaria || dt.voltajeSecundario,
-        dt.resistenciaPuestaTierra || dt.resistenciaMalla || dt.resistenciaOhmios,
+        elemento.capacidadKva || dt.capacidadKva || dt.potenciaKva || (tieneEquipos ? 'SI' : ''),
+        dt.tensionPrimaria || dt.voltajePrimario || (tieneEntorno ? 'SI' : ''),
+        dt.tensionSecundaria || dt.voltajeSecundario || (tieneControl ? 'SI' : ''),
+        dt.resistenciaPuestaTierra || dt.resistenciaMalla || dt.resistenciaOhmios || elemento.puestaTierra?.resistenciaOhms || (tienePat ? 'SI' : ''),
         tieneSecciones ? 'SI' : '',
         elemento.foto || elemento.fotoBlob || dt.fotografia
       ];
@@ -205,27 +212,30 @@ export const calcularPorcentajeAvance = (elemento, tipoElemento) => {
     }
 
     case 'TANQUE_COMBUSTIBLE': {
+      const ent = elemento.estadoEntorno || dt.estadoEntorno || {};
       camposRelevantes = [
         elemento.nombre,
         elemento.ubicacion,
-        elemento.tipoCombustible || dt.tipoCombustible,
-        elemento.capacidadLitros || dt.capacidadLitros,
-        elemento.nivelPorcentaje || dt.nivelPorcentaje,
-        elemento.consumoLh || dt.consumoLh,
-        elemento.diqueContencion || dt.diqueContencion,
+        elemento.tipoCombustible || dt.tipoCombustible || ent.tipoCombustible,
+        elemento.capacidadTotalLitros || elemento.capacidadLitros || dt.capacidadTotalLitros || dt.capacidadLitros || ent.capacidadTotalLitros || ent.capacidadLitros,
+        elemento.nivelActualPorcentaje || elemento.nivelPorcentaje || dt.nivelActualPorcentaje || dt.nivelPorcentaje || ent.nivelActualPorcentaje || ent.nivelPorcentaje,
+        elemento.consumoGeneradorLh || elemento.consumoLh || dt.consumoGeneradorLh || dt.consumoLh || ent.consumoGeneradorLh || ent.consumoLh,
+        elemento.diqueContencion110 ?? elemento.diqueContencion ?? dt.diqueContencion110 ?? dt.diqueContencion ?? ent.diqueContencion110 ?? ent.diqueContencion,
         elemento.foto || elemento.fotoBlob || dt.fotografia
       ];
       break;
     }
 
     case 'TERMOGRAFICA': {
+      const ent = elemento.estadoEntorno || dt.estadoEntorno || {};
       const tienePuntos = (Array.isArray(elemento.puntosCalientes) && elemento.puntosCalientes.length > 0) ||
-                          (Array.isArray(dt.puntosCalientes) && dt.puntosCalientes.length > 0);
+                          (Array.isArray(dt.puntosCalientes) && dt.puntosCalientes.length > 0) ||
+                          Boolean(elemento.tempMaxC || ent.tempMax || dt.tempMaxC);
       camposRelevantes = [
         elemento.nombre,
         elemento.ubicacion,
-        elemento.temperaturaAmbiente || dt.temperaturaAmbiente,
-        elemento.camaraTermografica || dt.camaraTermografica,
+        elemento.tempAmbiente || elemento.temperaturaAmbiente || dt.tempAmbiente || dt.temperaturaAmbiente || ent.tempAmbiente || ent.temperaturaAmbiente,
+        elemento.cameraModel || elemento.camaraTermografica || dt.cameraModel || dt.camaraTermografica || ent.cameraModel || ent.camaraTermografica || ent.camaraModelo,
         tienePuntos ? 'SI' : '',
         elemento.foto || elemento.fotoBlob || dt.fotografia
       ];

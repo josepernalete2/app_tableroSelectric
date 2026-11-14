@@ -144,6 +144,34 @@ const TableroWrapper = () => {
     }
   }
 
+  // 3.5. Si el elemento encontrado en elementosUnifilares es un CCM o un Punto de Suministro/Medición, enrutarlo a su componente especializado
+  const isUnifilarCcm = Boolean(element && (element.tipoElemento === 'CCM' || element.tipo === 'CCM'));
+  const isUnifilarPuntoMedicion = Boolean(element && (element.tipoElemento === 'PUNTO_SUMINISTRO' || element.tipoElemento === 'PUNTO_MEDICION'));
+
+  if (isUnifilarCcm && !ccmItem) {
+    ccmItem = {
+      ...(element.datosTecnicos || {}),
+      ...element,
+      proyectoId: element.proyectoId || targetProyecto?.id
+    };
+  }
+  if (isUnifilarPuntoMedicion && !puntoMedicion) {
+    puntoMedicion = {
+      ...(element.datosTecnicos || {}),
+      ...element,
+      proyectoId: element.proyectoId || targetProyecto?.id
+    };
+  }
+
+  const projectElementosList = targetProyecto
+    ? [
+        ...(targetProyecto.elementosUnifilares || targetProyecto.tableros || []),
+        ...(targetProyecto.inspeccionesSubestacion || targetProyecto.subestaciones || []),
+        ...(targetProyecto.puntosMedicion || []),
+        ...(targetProyecto.ccmList || [])
+      ]
+    : [];
+
   const backPath = targetProyecto
     ? `/empresa/${companyId}/proyecto/${targetProyecto.id}`
     : `/empresa/${companyId}`;
@@ -220,7 +248,7 @@ const TableroWrapper = () => {
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
           <SubestacionComponent
             subestacionData={subestacion}
-            onUpdate={(updatedData) => updateSubestacion(targetProyecto.id, tableroId, updatedData)}
+            onUpdate={(updatedData) => updateSubestacion(targetProyecto?.id || subestacion?.proyectoId, tableroId, updatedData)}
             readOnly={user?.role === 'CLIENT'}
           />
         </main>
@@ -284,7 +312,21 @@ const TableroWrapper = () => {
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
           <PuntoMedicionComponent
             puntoData={puntoMedicion}
-            onUpdate={(updatedData) => updatePuntoMedicion(targetProyecto?.id || puntoMedicion?.proyectoId, tableroId, updatedData)}
+            elementosCreados={projectElementosList}
+            onUpdate={(updatedData) => {
+              const projId = targetProyecto?.id || puntoMedicion?.proyectoId || null;
+              if (isUnifilarPuntoMedicion) {
+                updateElementoUnifilar(projId, tableroId, {
+                  ...updatedData,
+                  datosTecnicos: {
+                    ...(element?.datosTecnicos || {}),
+                    ...updatedData
+                  }
+                });
+              } else {
+                updatePuntoMedicion(projId, tableroId, updatedData);
+              }
+            }}
             readOnly={user?.role === 'CLIENT'}
           />
         </main>
@@ -348,7 +390,21 @@ const TableroWrapper = () => {
         <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
           <CcmComponent
             ccmData={ccmItem}
-            onUpdate={(updatedData) => updateCcm(targetProyecto?.id || ccmItem?.proyectoId, tableroId, updatedData)}
+            elementosCreados={projectElementosList}
+            onUpdate={(updatedData) => {
+              const projId = targetProyecto?.id || ccmItem?.proyectoId || null;
+              if (isUnifilarCcm) {
+                updateElementoUnifilar(projId, tableroId, {
+                  ...updatedData,
+                  datosTecnicos: {
+                    ...(element?.datosTecnicos || {}),
+                    ...updatedData
+                  }
+                });
+              } else {
+                updateCcm(projId, tableroId, updatedData);
+              }
+            }}
             readOnly={user?.role === 'CLIENT'}
           />
         </main>

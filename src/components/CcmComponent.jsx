@@ -24,8 +24,26 @@ import ModalEditarIdElemento from './ModalEditarIdElemento';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 
-export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
+export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCreados = [] }) {
   const { companies, crearElementoProvisional } = useStore();
+  const resolvedElementosCreados = React.useMemo(() => {
+    if (Array.isArray(elementosCreados) && elementosCreados.length > 0) {
+      return elementosCreados.filter(e => e.id !== ccmData?.id);
+    }
+    if (!ccmData?.proyectoId) return [];
+    for (const c of (companies || [])) {
+      const p = (c.proyectos || []).find(pr => pr.id === ccmData.proyectoId);
+      if (p) {
+        return [
+          ...(p.elementosUnifilares || p.tableros || []),
+          ...(p.inspeccionesSubestacion || p.subestaciones || []),
+          ...(p.puntosMedicion || []),
+          ...(p.ccmList || [])
+        ].filter(e => e.id !== ccmData.id);
+      }
+    }
+    return [];
+  }, [elementosCreados, companies, ccmData?.proyectoId, ccmData?.id]);
   const user = useStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
@@ -197,22 +215,14 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
     });
   };
 
-  // Valores predeterminados de gavetas si está vacío
-  const defaultGavetas = (ccmData.gavetasBucketLog && ccmData.gavetasBucketLog.length > 0) 
-    ? ccmData.gavetasBucketLog 
-    : [
-        { id: 'g-1', gaveta: 'G-01', tagEquipo: 'Bomba Agua Potable 1', hpKw: '25 HP', tipoArranque: 'Directo (DOL)', proteccion: 'Guardamotor 32A', marcaModeloVfd: 'N/A (Contactor)', redComms: 'Modbus RTU', estadoObs: 'Operativo' },
-        { id: 'g-2', gaveta: 'G-02', tagEquipo: 'Ventilador Tiro Forzado', hpKw: '50 HP', tipoArranque: 'VFD', proteccion: 'Breaker C63A', marcaModeloVfd: 'PowerFlex 525', redComms: 'EtherNet/IP', estadoObs: 'Operativo' },
-        { id: 'g-3', gaveta: 'G-03', tagEquipo: 'Agitador Tanque A', hpKw: '15 HP', tipoArranque: 'Estrella-Triáng.', proteccion: 'Contactor + Térmico', marcaModeloVfd: 'N/A', redComms: 'Discreta', estadoObs: 'Mantenim.' },
-        { id: 'g-4', gaveta: 'G-04', tagEquipo: 'RESERVA DISPONIBLE', hpKw: '-', tipoArranque: '-', proteccion: '-', marcaModeloVfd: '-', redComms: '-', estadoObs: 'Disponible' }
-      ];
+  // Listas de gavetas y hallazgos sin datos ficticios de ejemplo
+  const defaultGavetas = Array.isArray(ccmData.gavetasBucketLog)
+    ? ccmData.gavetasBucketLog
+    : [];
 
-  const defaultHallazgos = (ccmData.hallazgosCriticos && ccmData.hallazgosCriticos.length > 0)
+  const defaultHallazgos = Array.isArray(ccmData.hallazgosCriticos)
     ? ccmData.hallazgosCriticos
-    : [
-        { id: 'h-1', itemNum: '01', descripcion: 'Sustitución recomendada de filtros de polvo obstruidos en gabinete superior.' },
-        { id: 'h-2', itemNum: '02', descripcion: 'Se sugiere actualización del diagrama unifilar en puerta de acceso.' }
-      ];
+    : [];
 
   return (
     <div className={`w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl mx-auto space-y-8 print-card print:bg-white print:text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
@@ -504,7 +514,13 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 print:divide-gray-200">
-              {defaultGavetas.map((g) => (
+              {defaultGavetas.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-6 px-4 text-center text-xs text-slate-500 italic print:text-slate-600">
+                    Sin gavetas registradas. Haz clic en "+ Agregar Gaveta" para registrar las salidas del CCM.
+                  </td>
+                </tr>
+              ) : defaultGavetas.map((g) => (
                 <tr key={g.id} className="hover:bg-slate-900/30 print:hover:bg-transparent">
                   <td className="py-2 px-2">
                     <input
@@ -764,7 +780,11 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
         </div>
 
         <div className="space-y-2.5">
-          {defaultHallazgos.map((h) => (
+          {defaultHallazgos.length === 0 ? (
+            <p className="text-xs text-slate-500 italic py-2 print:text-slate-600">
+              Sin hallazgos críticos registrados.
+            </p>
+          ) : defaultHallazgos.map((h) => (
             <div key={h.id} className="flex items-center gap-3">
               <span className="px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono font-bold text-amber-500 print:bg-gray-100 print:text-slate-900 print:border-gray-300">
                 {h.itemNum}
@@ -836,7 +856,7 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly }) {
         circuitData={circuitDataWizard}
         modo={wizardModo}
         tipoOrigen="CCM"
-        elementosCreados={[]}
+        elementosCreados={resolvedElementosCreados}
         onSave={(circuitId, updated) => {
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && ccmData.proyectoId) {
             const existingProvId = updated.elementoDestinoId || updated.vinculadoId;

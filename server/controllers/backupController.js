@@ -311,7 +311,8 @@ export const restaurarDesdeDatos = async (dataInput) => {
           });
         }
 
-        // Insertar elementos unifilares
+        // Insertar elementos unifilares (Fase 1: creación base sin FK autorreferencial para evitar errores de orden)
+        const elementosConPadre = [];
         for (const elem of (proy.elementosUnifilares || [])) {
           await tx.elementoUnifilar.create({
             data: {
@@ -336,6 +337,24 @@ export const restaurarDesdeDatos = async (dataInput) => {
               createdAt: elem.createdAt ? new Date(elem.createdAt) : undefined
             }
           });
+          const pendingParentId = elem.alimentadoPorId || elem.datosTecnicos?.alimentadoPorId;
+          if (pendingParentId && pendingParentId !== elem.id) {
+            elementosConPadre.push({ id: elem.id, alimentadoPorId: pendingParentId });
+          }
+        }
+
+        // Segunda pasada (Fase 2): restaurar jerarquía padre-hijo (alimentadoPorId) una vez que todos los nodos existen
+        for (const link of elementosConPadre) {
+          const parentExists = await tx.elementoUnifilar.findUnique({
+            where: { id: link.alimentadoPorId },
+            select: { id: true }
+          });
+          if (parentExists) {
+            await tx.elementoUnifilar.update({
+              where: { id: link.id },
+              data: { alimentadoPorId: link.alimentadoPorId }
+            });
+          }
         }
 
         // Insertar subestaciones

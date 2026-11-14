@@ -45,14 +45,18 @@ export const buildPolesOccupancyMap = (circuits = [], excludeCircuitId = null) =
     }
 
     // Ignorar circuitos automáticos sin personalizar o vacíos si no tienen carga o configuración
-    const isAutoEmpty = circ.id?.startsWith?.('auto_') && (!circ.breaker?.amp && !circ.equipo && circ.equipo !== 'RESERVA_MANUAL');
+    const rawDesc = String(circ.equipo || circ.descripcion || circ.nombre || '').trim().toUpperCase();
+    const isEmptyKeyword = !rawDesc || rawDesc === 'RESERVA' || rawDesc === 'DISPONIBLE' || rawDesc === 'VACÍO' || rawDesc === 'VACIO' || rawDesc === 'ESPACIO' || rawDesc.startsWith('RESERVA');
+    const hasAmp = Boolean(circ.amperaje || circ.breaker?.amp);
+
+    const isAutoEmpty = circ.id?.startsWith?.('auto_') && (!hasAmp && isEmptyKeyword && circ.equipo !== 'RESERVA_MANUAL');
     if (isAutoEmpty) {
       return;
     }
 
-    // Ignorar circuitos que son puramente RESERVA o DISPONIBLE sin equipo real asignado
-    const isReserva = !circ.equipo || circ.equipo === 'RESERVA' || circ.equipo === 'DISPONIBLE' || circ.tipoDestino === 'RESERVA';
-    const hasRealLoad = circ.equipo && circ.equipo !== 'RESERVA' && circ.equipo !== 'DISPONIBLE' && !circ.equipo.startsWith('RESERVA');
+    // Ignorar circuitos que son puramente RESERVA o DISPONIBLE sin equipo real ni amperaje asignado
+    const isReserva = isEmptyKeyword || circ.tipoDestino === 'RESERVA';
+    const hasRealLoad = !isEmptyKeyword || hasAmp;
     if (isReserva && !hasRealLoad && !circ.vinculadoId && !circ.elementoDestinoId) {
       return;
     }

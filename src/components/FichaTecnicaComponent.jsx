@@ -488,7 +488,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-amber-500 text-slate-100 font-bold"
                 />
               ) : (
-                `INFORMACIÓN GENERAL DE TABLERO ${nombre ? 'No. ' + nombre : 'No. 20'}`
+                `INFORMACIÓN GENERAL DE TABLERO ${nombre ? 'No. ' + nombre : '—'}`
               )}
             </h2>
           </div>
@@ -504,7 +504,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 w-3/4"
               />
             ) : (
-              <span className="font-semibold">{ubicacion || 'SOTANO SALA DE TABLEROS'}</span>
+              <span className="font-semibold">{ubicacion || '—'}</span>
             )}
           </div>
 
@@ -546,7 +546,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 />
               </div>
             ) : (
-              renderElementWithId(alimentadoPor || 'ATS SOTANO (ID: ATS-1)', elementoData?.alimentadoPorId)
+              alimentadoPor ? renderElementWithId(alimentadoPor, elementoData?.alimentadoPorId) : <span className="text-slate-500 italic">—</span>
             )}
           </div>
 
@@ -613,22 +613,22 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   {dt.breakerPrincipal?.marca || 'SIN BREAKER'}
                 </td>
                 <td className="p-2 font-bold text-slate-100 border-r border-slate-800 print:text-black print:border-gray-300">
-                  {dt.breakerPrincipal?.tipo || '-'}
+                  {dt.breakerPrincipal?.tipo || '—'}
                 </td>
                 <td className="p-2 font-bold text-amber-400 border-r border-slate-800 print:text-black print:border-gray-300">
-                  {dt.breakerPrincipal?.amp || '-'}
+                  {dt.breakerPrincipal?.amp || '—'}
                 </td>
                 <td className="p-2 font-bold text-slate-100 border-r border-slate-800 print:text-black print:border-gray-300">
                   {typeof dt.voltaje === 'string' && dt.voltaje ? dt.voltaje : (
                     <>
-                      VA: {dt.voltaje?.va || dt.barrasPrincipales?.va || '211,5 V'}<br/>
-                      VB: {dt.voltaje?.vb || dt.barrasPrincipales?.vb || '207,4 V'}<br/>
-                      VC: {dt.voltaje?.vc || dt.barrasPrincipales?.vc || '208,6 V'}
+                      VA: {dt.voltaje?.va || dt.barrasPrincipales?.va || '—'}<br/>
+                      VB: {dt.voltaje?.vb || dt.barrasPrincipales?.vb || '—'}<br/>
+                      VC: {dt.voltaje?.vc || dt.barrasPrincipales?.vc || '—'}
                     </>
                   )}
                 </td>
                 <td className="p-2 font-bold text-slate-100 print:text-black">
-                  {dt.acometida || '3X500 MCM'}
+                  {dt.acometida || '—'}
                 </td>
               </tr>
             </tbody>
@@ -643,11 +643,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
                 <td className="w-1/4 p-2.5 border-r border-slate-800 print:border-black">
                   <span className="text-[10px] text-slate-500 block font-bold">CALIB COND.</span>
-                  <span className="font-bold text-slate-100 print:text-black">{dt.neutroLlegada?.calibre || '1X500'}</span>
+                  <span className="font-bold text-slate-100 print:text-black">{dt.neutroLlegada?.calibre || '—'}</span>
                 </td>
                 <td className="p-2.5">
                   <span className="text-[10px] text-slate-500 block font-bold">OBSERVACIONES:</span>
-                  <span className="text-slate-300 print:text-black">{dt.neutroLlegada?.observaciones || 'CABLE ROJO EN TABLERO'}</span>
+                  <span className="text-slate-300 print:text-black">{dt.neutroLlegada?.observaciones || '—'}</span>
                 </td>
               </tr>
               <tr>
@@ -656,11 +656,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
                 <td className="p-2.5 border-r border-slate-800 print:border-black">
                   <span className="text-[10px] text-slate-500 block font-bold">CALIB COND.</span>
-                  <span className="font-bold text-slate-100 print:text-black">{dt.puestaTierra?.calibre || 'SOLIDO #4'}</span>
+                  <span className="font-bold text-slate-100 print:text-black">{dt.puestaTierra?.calibre || '—'}</span>
                 </td>
                 <td className="p-2.5">
                   <span className="text-[10px] text-slate-500 block font-bold">OBSERVACIONES:</span>
-                  <span className="text-slate-300 print:text-black">{dt.puestaTierra?.observaciones || 'LLEGA SOLIDO #4. BUSCAR TANQUILLA DE MALLA A TIERRA'}</span>
+                  <span className="text-slate-300 print:text-black">{dt.puestaTierra?.observaciones || '—'}</span>
                 </td>
               </tr>
             </tbody>
@@ -678,7 +678,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               />
             ) : (
               <p className="leading-relaxed font-medium">
-                {observacionesGenerales || 'SALEN ACOMETIDAS 1 X 500 Y 1X250 MCM DE LA BARRA PARTE INFERIOR. LA ACOMETIDA 250 MCM VA A CAJA CON UN BREAKER AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR EATON, Ki400, 350 A. SALEN UNA ACOMETIDA 4/0 QUE ALIMENTA TRANSFERENCIA 160. LA ACOMETIDA 500 MCM VA A UNA CAJA AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR ABB, TIPO 6520, 400 A, SALEN 2X500 Y ALIMENTAN TABLERO EN PRIMER PISO.'}
+                {observacionesGenerales || '—'}
               </p>
             )}
           </div>

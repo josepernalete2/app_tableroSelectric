@@ -82,8 +82,33 @@ export default function InformeCompiladoView() {
 
   const elementos = sortElementsByOrder(proyecto.elementosUnifilares || proyecto.tableros || []);
   const subestaciones = sortElementsByOrder(proyecto.inspeccionesSubestacion || proyecto.subestaciones || []);
-  const puntosMedicion = sortElementsByOrder(proyecto.puntosMedicion || []);
-  const ccmList = sortElementsByOrder(proyecto.ccmList || []);
+  const puntosMedicionRaw = [
+    ...(proyecto.puntosMedicion || []),
+    ...elementos.filter(e => e.tipoElemento === 'PUNTO_SUMINISTRO' || e.tipoElemento === 'PUNTO_MEDICION').map(e => ({
+      ...e,
+      ...(e.datosTecnicos || {})
+    }))
+  ];
+  const seenPuntosIds = new Set();
+  const puntosMedicion = sortElementsByOrder(puntosMedicionRaw.filter(p => {
+    if (!p?.id || seenPuntosIds.has(p.id)) return false;
+    seenPuntosIds.add(p.id);
+    return true;
+  }));
+
+  const ccmListRaw = [
+    ...(proyecto.ccmList || []),
+    ...elementos.filter(e => e.tipoElemento === 'CCM').map(e => ({
+      ...e,
+      ...(e.datosTecnicos || {})
+    }))
+  ];
+  const seenCcmIds = new Set();
+  const ccmList = sortElementsByOrder(ccmListRaw.filter(c => {
+    if (!c?.id || seenCcmIds.has(c.id)) return false;
+    seenCcmIds.add(c.id);
+    return true;
+  }));
 
   const transformadores = elementos.filter(e => e.tipoElemento === 'TRANSFORMADOR');
   const generadores = elementos.filter(e => e.tipoElemento === 'GENERADOR');
@@ -113,10 +138,14 @@ export default function InformeCompiladoView() {
       nombre,
       ubicacion,
       alimentadoPor,
-      foto: eliminarFoto ? null : (foto !== undefined ? foto : null),
-      fotoBlob: eliminarFoto ? null : (fotoBlob !== undefined ? fotoBlob : null),
-      eliminarFoto: Boolean(eliminarFoto),
+      ...(eliminarFoto
+        ? { foto: null, fotoBlob: null, eliminarFoto: true }
+        : {
+            ...(foto !== undefined ? { foto } : {}),
+            ...(fotoBlob !== undefined ? { fotoBlob } : {})
+          }),
       observacionesGenerales,
+      ...(datosTecnicos?.circuits ? { circuits: datosTecnicos.circuits } : {}),
       datosTecnicos
     });
   };

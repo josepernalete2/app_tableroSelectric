@@ -36,10 +36,12 @@ const adapter = new PrismaPg(pool);
  */
 const EXCLUDED_FIELDS = new Set([
   'id', 'userId', 'empresaId', 'proyectoId', 'tableroId', 'subestacionId', 'ccmId', 'puntoMedicionId',
-  'alimentadoPorId', 'origenId', 'vinculadoId', 'elementoDestinoId', 'parentId', 'circuitoId',
+  'alimentadoPorId', 'alimentaAIds', 'origenId', 'vinculadoId', 'elementoDestinoId', 'parentId', 'circuitoId', 'localId',
   'username', 'senderUsername', 'email', 'correo', 'password', 'hash', 'passwordHash', 'token', 'refreshToken', 'tokenPush',
-  'foto', 'fotoUrl', 'fotoBlob', 'avatar', 'url', 'firmaSupervisor', 'firmaInspector', 'firmaAuditor',
-  'firmaResponsable', 'secret', 'key'
+  'foto', 'fotoUrl', 'imagenUrl', 'fotoBlob', 'avatar', 'url', 'firmaSupervisor', 'firmaInspector', 'firmaAuditor',
+  'firmaResponsable', 'secret', 'key',
+  'type', 'wiringType', 'phase', 'status', 'unidadPotencia', 'unidadTensionPrimaria', 'cameraModel', 'codigo',
+  'formulaI1', 'formulaI2'
 ]);
 
 /**
@@ -63,6 +65,14 @@ export function normalizeValueToUpper(val, key = '') {
     }
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
       return trimmed; // Identificador UUID
+    }
+    // Preservar IDs cortos o técnicos (c-1, c-2, auto_..., split_..., temp_..., company-..., elem-..., etc.)
+    if (
+      /^(?:c|u|p|tab|ats|gen|sub|ccm|pm)-\d+$/i.test(trimmed) ||
+      /^(?:auto_|split_|temp_|circ_|company-|empresa-|elem-|sub-|proj-|msg-|item-|backup-)/i.test(trimmed) ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_.+$/i.test(trimmed)
+    ) {
+      return trimmed;
     }
     // Si contiene formato JSON serializado
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {

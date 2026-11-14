@@ -90,7 +90,24 @@ export const BackupView = () => {
     try {
       const estado = useStore.getState();
       const listadoEmpresas = estado.companies || estado.empresas || [];
-      const listadoProyectos = estado.proyectos || estado.projects || [];
+      const listadoProyectos = (estado.proyectos && estado.proyectos.length > 0)
+        ? estado.proyectos
+        : listadoEmpresas.flatMap(emp => emp.proyectos || []);
+      const listadoSubestaciones = (estado.subestaciones && estado.subestaciones.length > 0)
+        ? estado.subestaciones
+        : listadoProyectos.flatMap(p => p.inspeccionesSubestacion || p.subestaciones || []);
+      const listadoTableros = (estado.tableros && estado.tableros.length > 0)
+        ? estado.tableros
+        : listadoProyectos.flatMap(p => p.elementosUnifilares || p.tableros || []);
+      const listadoCircuitos = (estado.circuitos && estado.circuitos.length > 0)
+        ? estado.circuitos
+        : listadoTableros.flatMap(t => t.circuits || t.circuitos || t.datosTecnicos?.circuits || []);
+      const listadoMediciones = (estado.mediciones && estado.mediciones.length > 0)
+        ? estado.mediciones
+        : listadoProyectos.flatMap(p => p.puntosMedicion || []);
+      const listadoCcm = (estado.ccm && estado.ccm.length > 0)
+        ? estado.ccm
+        : listadoProyectos.flatMap(p => p.ccmList || []);
       
       const backupData = {
         appName: 'App Tableros Eléctricos (Selectric)',
@@ -102,19 +119,19 @@ export const BackupView = () => {
           generadoEnCliente: true,
           totalEmpresas: listadoEmpresas.length,
           totalProyectos: listadoProyectos.length,
-          totalTableros: (estado.tableros || []).length,
-          totalCircuitos: (estado.circuitos || []).length,
+          totalTableros: listadoTableros.length,
+          totalCircuitos: listadoCircuitos.length,
           fechaLocal: new Date().toLocaleString('es-VE')
         },
         data: listadoEmpresas,
         datos: {
           empresas: listadoEmpresas,
           proyectos: listadoProyectos,
-          subestaciones: estado.subestaciones || [],
-          tableros: estado.tableros || [],
-          circuitos: estado.circuitos || [],
-          mediciones: estado.mediciones || estado.puntosMedicion || [],
-          ccm: estado.ccmList || estado.ccm || [],
+          subestaciones: listadoSubestaciones,
+          tableros: listadoTableros,
+          circuitos: listadoCircuitos,
+          mediciones: listadoMediciones,
+          ccm: listadoCcm,
           inspeccionesTermograficas: estado.inspeccionesTermograficas || [],
           inspeccionesAterramiento: estado.inspeccionesAterramiento || [],
           inspeccionesTanquesCombustible: estado.inspeccionesTanquesCombustible || [],
@@ -208,16 +225,37 @@ export const BackupView = () => {
       const token = getFreshToken();
       const state = useStore.getState();
       
+      const listadoEmpresas = state.companies || state.empresas || [];
+      const listadoProyectos = (state.proyectos && state.proyectos.length > 0)
+        ? state.proyectos
+        : listadoEmpresas.flatMap(emp => emp.proyectos || []);
+      const listadoSubestaciones = (state.subestaciones && state.subestaciones.length > 0)
+        ? state.subestaciones
+        : listadoProyectos.flatMap(p => p.inspeccionesSubestacion || p.subestaciones || []);
+      const listadoTableros = (state.tableros && state.tableros.length > 0)
+        ? state.tableros
+        : listadoProyectos.flatMap(p => p.elementosUnifilares || p.tableros || []);
+      const listadoCircuitos = (state.circuitos && state.circuitos.length > 0)
+        ? state.circuitos
+        : listadoTableros.flatMap(t => t.circuits || t.circuitos || t.datosTecnicos?.circuits || []);
+      const listadoMediciones = (state.mediciones && state.mediciones.length > 0)
+        ? state.mediciones
+        : listadoProyectos.flatMap(p => p.puntosMedicion || []);
+      const listadoCcm = (state.ccm && state.ccm.length > 0)
+        ? state.ccm
+        : listadoProyectos.flatMap(p => p.ccmList || []);
+
       const payload = {
         fecha: new Date().toISOString(),
         nombre: `Respaldo Servidor ${new Date().toLocaleDateString('es-VE')}`,
         descripcion: 'Respaldo maestro disparado desde el Centro de Control Web',
-        empresas: state.companies || state.empresas || [],
-        proyectos: state.proyectos || state.projects || [],
-        subestaciones: state.subestaciones || [],
-        tableros: state.tableros || [],
-        circuitos: state.circuitos || [],
-        mediciones: state.mediciones || state.puntosMedicion || []
+        empresas: listadoEmpresas,
+        proyectos: listadoProyectos,
+        subestaciones: listadoSubestaciones,
+        tableros: listadoTableros,
+        circuitos: listadoCircuitos,
+        mediciones: listadoMediciones,
+        ccm: listadoCcm
       };
 
       const response = await fetch(`${API_BASE_URL}/api/backup/cloud`, {
@@ -270,7 +308,7 @@ export const BackupView = () => {
     setExportStats(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/backups/export`, {
+      const response = await fetch(`${API_BASE_URL}/api/backup/export`, {
         headers: getAuthHeaders()
       });
 
@@ -450,7 +488,7 @@ export const BackupView = () => {
         throw new Error('El archivo no contiene registros válidos de empresas o proyectos.');
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/backups/import`, {
+      const response = await fetch(`${API_BASE_URL}/api/backup/import`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ data: payloadData })

@@ -264,6 +264,19 @@ export const crearElementoUnifilar = async (req, res, next) => {
     const finalElementId = id || req.body.localId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `elem-${Date.now()}`);
 
     // Inserción o actualización atómica defensiva en PostgreSQL
+    const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const resolveSafeCircuitPk = (tableroId, rawCircuitId, idx) => {
+      if (!rawCircuitId || typeof rawCircuitId !== 'string') return undefined;
+      const trimmed = rawCircuitId.trim();
+      if (!trimmed || trimmed.startsWith('auto_') || trimmed.startsWith('split_') || trimmed.startsWith('temp_')) {
+        return undefined;
+      }
+      if (UUID_V4_REGEX.test(trimmed)) {
+        return `${tableroId}_${trimmed}`;
+      }
+      return `${tableroId}_${trimmed}_${idx}`;
+    };
+
     const nuevoElemento = await prisma.$transaction(async (tx) => {
       // SI ES TABLERO, APLICAR UPSERT EN TABLA TABLERO
       if (cleanTipo === 'TABLERO') {
@@ -281,12 +294,12 @@ export const crearElementoUnifilar = async (req, res, next) => {
             fases,
             alimentadorId,
             proyectoId: targetProyectoId,
-            empresaId: empresaId || null,
+            empresaId: finalEmpresaId || null,
             version: { increment: 1 },
             circuitos: {
               deleteMany: {},
-              create: (parsedDatosTecnicos.circuits || []).map(c => ({
-                id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
+              create: (parsedDatosTecnicos.circuits || []).map((c, idx) => ({
+                id: resolveSafeCircuitPk(finalElementId, c.id, idx),
                 posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
                 numPolos: Math.min(Math.max(c.numPolos !== undefined ? parseInt(c.numPolos, 10) : 1, 1), 3),
                 amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : 0) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : 0),
@@ -307,11 +320,11 @@ export const crearElementoUnifilar = async (req, res, next) => {
             fases,
             alimentadorId,
             proyectoId: targetProyectoId,
-            empresaId: empresaId || null,
+            empresaId: finalEmpresaId || null,
             version: 1,
             circuitos: {
-              create: (parsedDatosTecnicos.circuits || []).map(c => ({
-                id: c.id && !c.id.startsWith('auto_') && !c.id.startsWith('split_') ? c.id : undefined,
+              create: (parsedDatosTecnicos.circuits || []).map((c, idx) => ({
+                id: resolveSafeCircuitPk(finalElementId, c.id, idx),
                 posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
                 numPolos: Math.min(Math.max(c.numPolos !== undefined ? parseInt(c.numPolos, 10) : 1, 1), 3),
                 amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : 0) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : 0),
@@ -331,13 +344,8 @@ export const crearElementoUnifilar = async (req, res, next) => {
         req.body.eliminarFoto === true ||
         req.body.deletePhoto === 'true' ||
         req.body.deletePhoto === true ||
-        req.body.foto === '' ||
-        req.body.foto === null ||
-        req.body.foto === 'null' ||
-        req.body.fotoUrl === '' ||
-        req.body.fotoUrl === null ||
-        ('foto' in req.body && !req.body.foto && !req.file) ||
-        ('fotoUrl' in req.body && !req.body.fotoUrl && !req.file)
+        req.body.foto === '__DELETE__' ||
+        req.body.fotoUrl === '__DELETE__'
       );
 
       const updateFotoData = {};
@@ -412,7 +420,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           proyecto: {
             connect: { id: targetProyectoId }
           },
-          ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
+          ...(empresaExiste && finalEmpresaId ? { empresa: { connect: { id: finalEmpresaId } } } : {})
         },
         create: {
           id: finalElementId,
@@ -435,7 +443,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           proyecto: {
             connect: { id: targetProyectoId }
           },
-          ...(empresaExiste ? { empresa: { connect: { id: empresaId } } } : {})
+          ...(empresaExiste && finalEmpresaId ? { empresa: { connect: { id: finalEmpresaId } } } : {})
         }
       });
 

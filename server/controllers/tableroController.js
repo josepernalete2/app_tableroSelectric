@@ -242,7 +242,7 @@ export const actualizarTablero = async (req, res, next) => {
 
     // Validar circuitos existentes contra el nuevo maxPolos
     for (const circ of tableroActual.circuitos) {
-      if (circ.posicionPolo + (circ.numPolos - 1) > finalMaxPolos) {
+      if (circ.posicionPolo + (circ.numPolos - 1) * 2 > finalMaxPolos) {
         return res.status(400).json({
           ok: false,
           error: `No se puede reducir la capacidad a ${finalMaxPolos} polos porque el circuito en la posición ${circ.posicionPolo} con ${circ.numPolos} polos excede esta capacidad.`
@@ -612,7 +612,7 @@ export const obtenerBalanceTablero = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const tablero = await prisma.tablero.findUnique({
+    let tablero = await prisma.tablero.findUnique({
       where: { id },
       include: {
         circuitos: {
@@ -627,6 +627,44 @@ export const obtenerBalanceTablero = async (req, res, next) => {
         proyecto: true
       }
     });
+
+    let elementoUnifilar = null;
+    if (!tablero) {
+      elementoUnifilar = await prisma.elementoUnifilar.findUnique({
+        where: { id },
+        include: { proyecto: true }
+      });
+      if (elementoUnifilar) {
+        const dt = typeof elementoUnifilar.datosTecnicos === 'object' && elementoUnifilar.datosTecnicos !== null
+          ? elementoUnifilar.datosTecnicos
+          : {};
+        const rawCircuits = Array.isArray(dt.circuits) ? dt.circuits : (Array.isArray(dt.circuitos) ? dt.circuitos : []);
+        tablero = {
+          id: elementoUnifilar.id,
+          nombre: elementoUnifilar.nombre,
+          ubicacion: elementoUnifilar.ubicacion,
+          proyectoId: elementoUnifilar.proyectoId,
+          empresaId: elementoUnifilar.empresaId,
+          proyecto: elementoUnifilar.proyecto,
+          maxPolos: parseInt(dt.maxPoles || dt.maxPolos || 42, 10) || 42,
+          fases: parseInt(dt.fases || 3, 10) || 3,
+          tension: dt.tension || dt.voltaje || '208/120V',
+          datosTecnicos: dt,
+          alimentador: null,
+          circuitos: rawCircuits.map((c, idx) => ({
+            id: c.id || `c_${idx}`,
+            descripcion: c.equipo || c.descripcion || '',
+            amperaje: parseFloat(c.amperaje || c.breaker?.amp || 0) || 0,
+            posicionPolo: Array.isArray(c.poles) && c.poles.length > 0 ? Math.min(...c.poles) : (parseInt(c.posicionPolo, 10) || (idx + 1)),
+            numPolos: Array.isArray(c.poles) && c.poles.length > 0 ? c.poles.length : (parseInt(c.numPolos, 10) || 1),
+            estado: c.estado || 'ACTIVO',
+            deletedAt: null
+          }))
+        };
+      }
+    } else {
+      elementoUnifilar = await prisma.elementoUnifilar.findUnique({ where: { id } }).catch(() => null);
+    }
 
     if (!tablero) {
       return res.status(404).json({ ok: false, error: 'Tablero no encontrado.' });
@@ -679,7 +717,19 @@ export const obtenerBalanceTablero = async (req, res, next) => {
       }
     }
 
-    const capacidadAmperios = Number(tablero.alimentador?.capacidadAmperios) || 0;
+    const dtTablero = (tablero.datosTecnicos || elementoUnifilar?.datosTecnicos || {});
+    const barras = dtTablero.barrasPrincipales || {};
+    const measuredIa = parseFloat(dtTablero.corrienteA ?? barras.ia ?? 0) || 0;
+    const measuredIb = parseFloat(dtTablero.corrienteB ?? barras.ib ?? 0) || 0;
+    const measuredIc = parseFloat(dtTablero.corrienteC ?? barras.ic ?? 0) || 0;
+    if (measuredIa > 0 || measuredIb > 0 || measuredIc > 0) {
+      faseAmps.A = measuredIa;
+      faseAmps.B = measuredIb;
+      faseAmps.C = measuredIc;
+    }
+
+    const bpAmp = parseFloat(dtTablero.breakerPrincipal?.amp || dtTablero.amperajePrincipal || 0) || 0;
+    const capacidadAmperios = Number(tablero.alimentador?.capacidadAmperios) || bpAmp || 0;
     const alimentadorKVA = Number(tablero.alimentador?.capacidadKVA) || 0;
 
     // Consultar transformador asociado si el alimentador tiene origen o en el proyecto

@@ -24,8 +24,26 @@ import { TENSIONES_COVENIN_TODAS } from '../utils/constants';
 import TensionNominalInput from './TensionNominalInput';
 import useStore, { getElementCode } from '../store/useStore';
 
-export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }) {
-  const { crearElementoProvisional } = useStore();
+export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, elementosCreados = [] }) {
+  const { companies, crearElementoProvisional } = useStore();
+  const resolvedElementosCreados = React.useMemo(() => {
+    if (Array.isArray(elementosCreados) && elementosCreados.length > 0) {
+      return elementosCreados.filter(e => e.id !== puntoData?.id);
+    }
+    if (!puntoData?.proyectoId) return [];
+    for (const c of (companies || [])) {
+      const p = (c.proyectos || []).find(pr => pr.id === puntoData.proyectoId);
+      if (p) {
+        return [
+          ...(p.elementosUnifilares || p.tableros || []),
+          ...(p.inspeccionesSubestacion || p.subestaciones || []),
+          ...(p.puntosMedicion || []),
+          ...(p.ccmList || [])
+        ].filter(e => e.id !== puntoData.id);
+      }
+    }
+    return [];
+  }, [elementosCreados, companies, puntoData?.proyectoId, puntoData?.id]);
   const user = useStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [modalJerarquiaOpen, setModalJerarquiaOpen] = useState(false);
@@ -783,7 +801,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly }
         circuitData={circuitDataWizard}
         modo={wizardModo}
         tipoOrigen="PUNTO_MEDICION"
-        elementosCreados={[]}
+        elementosCreados={resolvedElementosCreados}
         onSave={(circuitId, updated) => {
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && puntoData?.proyectoId) {
             const existingProvId = updated.elementoDestinoId || updated.vinculadoId;

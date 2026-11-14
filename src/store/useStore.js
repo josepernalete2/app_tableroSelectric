@@ -491,6 +491,89 @@ const getInitialToken = () => {
   }
 };
 
+const elementoDebounceTimers = new Map();
+
+const findElementoInStore = (state, elementoId, proyectoId = null) => {
+  if (!state || !elementoId) return null;
+  for (const c of (state.companies || [])) {
+    if (proyectoId) {
+      const proj = (c.proyectos || []).find((p) => p.id === proyectoId);
+      if (proj) {
+        const found = (proj.elementosUnifilares || proj.tableros || []).find((e) => e.id === elementoId);
+        if (found) {
+          return {
+            ...found,
+            empresaId: found.empresaId || found.companyId || c.id,
+            proyectoId: found.proyectoId || proj.id
+          };
+        }
+      }
+    }
+    for (const p of (c.proyectos || [])) {
+      const found = (p.elementosUnifilares || p.tableros || []).find((e) => e.id === elementoId);
+      if (found) {
+        return {
+          ...found,
+          empresaId: found.empresaId || found.companyId || c.id,
+          proyectoId: found.proyectoId || p.id
+        };
+      }
+    }
+    const compEl = (c.elementosUnifilares || []).find((e) => e.id === elementoId);
+    if (compEl) {
+      return {
+        ...compEl,
+        empresaId: compEl.empresaId || compEl.companyId || c.id
+      };
+    }
+  }
+  const localEl = (state.elementosLocales || []).find((e) => e.id === elementoId);
+  return localEl || null;
+};
+
+const mergePayloadDeep = (existingPayload = {}, incomingPayload = {}) => {
+  const merged = { ...(existingPayload || {}), ...(incomingPayload || {}) };
+  if (existingPayload?.datosTecnicos || incomingPayload?.datosTecnicos) {
+    merged.datosTecnicos = {
+      ...(existingPayload?.datosTecnicos || {}),
+      ...(incomingPayload?.datosTecnicos || {})
+    };
+  }
+  return merged;
+};
+
+const scheduleDebouncedElementoSync = (get, elementoId, proyectoId, fallbackEl) => {
+  const existing = elementoDebounceTimers.get(elementoId);
+  if (existing && existing.timerId) {
+    clearTimeout(existing.timerId);
+  }
+
+  return new Promise((resolve) => {
+    const prevResolvers = existing?.resolvers || [];
+    const resolvers = [...prevResolvers, resolve];
+
+    const timerId = setTimeout(async () => {
+      elementoDebounceTimers.delete(elementoId);
+      const latestEl = findElementoInStore(get(), elementoId, proyectoId) || fallbackEl;
+      if (!latestEl) {
+        resolvers.forEach((r) => r({ ok: false, error: 'Elemento no encontrado' }));
+        return;
+      }
+      try {
+        const res = await get().enviarElementoDirectoServidor?.(
+          latestEl.empresaId || latestEl.companyId,
+          latestEl
+        );
+        resolvers.forEach((r) => r(res || { ok: true }));
+      } catch (err) {
+        resolvers.forEach((r) => r({ ok: false, error: err?.message || 'Error en sincronización debounced' }));
+      }
+    }, 500);
+
+    elementoDebounceTimers.set(elementoId, { timerId, resolvers });
+  });
+};
+
 export const useStore = create(
   persist(
     (set, get) => ({
@@ -504,6 +587,8 @@ export const useStore = create(
       proyectosLocales: [],
       elementosLocales: [],
       subestacionesLocales: [],
+      puntosMedicionLocales: [],
+      ccmLocales: [],
       syncQueue: [],
       deletedCompanyIds: [],
       isSyncing: false,
@@ -664,11 +749,23 @@ export const useStore = create(
           if (res.ok) {
             const data = await res.json().catch(() => ({}));
             if (data?.ok && Array.isArray(data.data)) {
-              // El servidor es la fuente de verdad: purgar empresas locales que ya no existen en PostgreSQL
+              // El servidor es la fuente de verdad: purgar empresas locales que ya no existen en PostgreSQL,
+              // NUNCA purgando empresas con ID temporal (company-...) o con operaciones pendientes en syncQueue
               const serverIds = new Set(data.data.map((c) => c.id));
               const queueNow = Array.isArray(get().syncQueue) ? get().syncQueue : [];
+              const pendingCompanyIds = new Set(
+                queueNow
+                  .map((q) => q?.companyId || q?.payload?.empresaId || q?.payload?.companyId || (q?.tipo === 'EMPRESA' || q?.tipo === 'COMPANY' ? q?.id : null))
+                  .filter(Boolean)
+              );
               if (queueNow.length === 0) {
-                const stale = (get().companies || []).filter((c) => !serverIds.has(c.id));
+                const stale = (get().companies || []).filter((c) => {
+                  if (!c || !c.id) return false;
+                  if (serverIds.has(c.id)) return false;
+                  if (pendingCompanyIds.has(c.id)) return false;
+                  if (String(c.id).startsWith('company-') || String(c.id).startsWith('empresa-') || String(c.id).startsWith('temp_')) return false;
+                  return true;
+                });
                 stale.forEach((c) => get().purgeCompanyLocal(c.id));
               }
               if (data.data.length > 0) {
@@ -1052,29 +1149,40 @@ export const useStore = create(
       },
 
       updateEmpresa: async (companyId, updatedData) => {
+        let updatedCompanyObj = null;
         set((state) => ({
           companies: state.companies.map((c) => {
             if (c.id === companyId) {
-              return { ...c, ...updatedData };
+              updatedCompanyObj = { ...c, ...updatedData };
+              return updatedCompanyObj;
             }
             return c;
           })
         }));
 
-        if (navigator.onLine) {
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        if (isOnline) {
           try {
             const { token } = get();
-            await fetch(`${API_BASE_URL}/api/empresas/${companyId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/empresas/${companyId}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
               },
               body: JSON.stringify(updatedData)
             });
+            if (!res.ok && res.status >= 500 && updatedCompanyObj) {
+              get().enqueueOfflineItem?.('EMPRESA', companyId, updatedCompanyObj, `HTTP ${res.status}`);
+            }
           } catch (e) {
-            console.error('Error al actualizar empresa en el servidor:', e);
+            console.error('Error al actualizar empresa en el servidor, encolando en syncQueue:', e);
+            if (updatedCompanyObj) {
+              get().enqueueOfflineItem?.('EMPRESA', companyId, updatedCompanyObj, e.message);
+            }
           }
+        } else if (updatedCompanyObj) {
+          get().enqueueOfflineItem?.('EMPRESA', companyId, updatedCompanyObj);
         }
       },
 
@@ -1174,13 +1282,15 @@ export const useStore = create(
       },
 
       updateTableroAlimentador: (proyectoId, tableroId, alimentadorId) => {
+        let resolvedPayload = null;
+
         set((state) => {
           const updateElement = (e) => {
             if (e.id === tableroId) {
               return {
                 ...e,
                 datosTecnicos: {
-                  ...e.datosTecnicos,
+                  ...(e.datosTecnicos || {}),
                   alimentadorId
                 }
               };
@@ -1198,46 +1308,105 @@ export const useStore = create(
               proyectos: (c.proyectos || []).map((p) => {
                 if (p.id === proyectoId) {
                   const list = p.elementosUnifilares || p.tableros || [];
-                  return { ...p, elementosUnifilares: list.map(updateElement) };
+                  const updatedList = list.map(updateElement);
+                  return {
+                    ...p,
+                    elementosUnifilares: updatedList,
+                    ...(p.tableros ? { tableros: (p.tableros || []).map(updateElement) } : {})
+                  };
                 }
                 return p;
               })
             };
           });
 
-          // Obtener el elemento locales para encolar
-          const allElements = state.elementosLocales || [];
-          const updatedElement = allElements.find(e => e.id === tableroId);
+          const updatedElementosLocales = (state.elementosLocales || []).map(updateElement);
+
+          // Buscar primero en companies (proyectos[].elementosUnifilares y tableros), con fallback a elementosLocales
+          let updatedElement = findElementoInStore(
+            { companies: updatedCompanies, elementosLocales: updatedElementosLocales },
+            tableroId,
+            proyectoId
+          );
+
           let payload = null;
           if (updatedElement) {
             payload = {
               ...updatedElement,
               datosTecnicos: {
-                ...updatedElement.datosTecnicos,
+                ...(updatedElement.datosTecnicos || {}),
                 alimentadorId
               }
             };
+            resolvedPayload = payload;
+          }
+
+          const currentQueue = Array.isArray(state.syncQueue) ? [...state.syncQueue] : [];
+          let updatedSyncQueue = currentQueue;
+          if (payload) {
+            const existingIdx = currentQueue.findIndex(
+              (item) => item?.id === tableroId || item?.payload?.id === tableroId
+            );
+            const queueEntry = {
+              id: tableroId,
+              tipo: 'ELEMENTO_UNIFILAR',
+              companyId: payload.companyId || payload.empresaId || null,
+              payload: existingIdx >= 0 ? mergePayloadDeep(currentQueue[existingIdx].payload, payload) : payload
+            };
+            if (existingIdx >= 0) {
+              updatedSyncQueue[existingIdx] = { ...currentQueue[existingIdx], ...queueEntry };
+            } else {
+              updatedSyncQueue.push(queueEntry);
+            }
           }
 
           return {
             companies: updatedCompanies,
-            elementosLocales: (state.elementosLocales || []).map(updateElement),
-            syncQueue: payload ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
-              id: tableroId,
-              tipo: 'ELEMENTO_UNIFILAR',
-              companyId: updatedElement ? (updatedElement.companyId || updatedElement.empresaId) : null,
-              payload
-            }] : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
+            elementosLocales: updatedElementosLocales,
+            syncQueue: updatedSyncQueue
           };
         });
+
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        if (isOnline && resolvedPayload) {
+          scheduleDebouncedElementoSync(get, tableroId, proyectoId, resolvedPayload);
+        }
       },
 
       addCompany: async (companyData) => {
         const { token } = get();
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
-        if (navigator.onLine) {
+        const buildOfflineCompany = (customId = null) => ({
+          id: customId || companyData.id || `company-${Date.now()}`,
+          nombre: companyData.nombre,
+          rif: companyData.rif,
+          direccionFiscal: companyData.direccionFiscal,
+          direccion: companyData.direccion || companyData.direccionFiscal || '',
+          gerente1Nombre: companyData.gerente1Nombre || null,
+          gerente1Telefono: companyData.gerente1Telefono || null,
+          gerente1Email: companyData.gerente1Email || null,
+          gerente2Nombre: companyData.gerente2Nombre || null,
+          gerente2Telefono: companyData.gerente2Telefono || null,
+          gerente2Email: companyData.gerente2Email || null,
+          proyectos: []
+        });
+
+        if (isOnline) {
           const result = await registrarEmpresaApi(companyData, token);
           if (!result.ok) {
+            const isNetworkOrServerFailure =
+              result.status === 'NETWORK_ERROR' ||
+              result.status === 'TIMEOUT' ||
+              (typeof result.status === 'number' && result.status >= 500);
+            if (isNetworkOrServerFailure) {
+              const fallbackCompany = buildOfflineCompany();
+              set((state) => ({
+                companies: [...(state.companies || []).filter((c) => c.id !== fallbackCompany.id), fallbackCompany]
+              }));
+              get().enqueueOfflineItem?.('EMPRESA', fallbackCompany.id, fallbackCompany, result.error);
+              return { ok: true, data: fallbackCompany, queuedOffline: true };
+            }
             return result;
           }
 
@@ -1265,23 +1434,19 @@ export const useStore = create(
 
           return { ok: true, data: confirmed };
         } else {
-          const newCompany = {
-            id: companyData.id || `company-${Date.now()}`,
-            nombre: companyData.nombre,
-            rif: companyData.rif,
-            direccionFiscal: companyData.direccionFiscal,
-            direccion: companyData.direccion || companyData.direccionFiscal || '',
-            gerente1Nombre: companyData.gerente1Nombre || null,
-            gerente1Telefono: companyData.gerente1Telefono || null,
-            gerente1Email: companyData.gerente1Email || null,
-            gerente2Nombre: companyData.gerente2Nombre || null,
-            gerente2Telefono: companyData.gerente2Telefono || null,
-            gerente2Email: companyData.gerente2Email || null,
-            proyectos: []
-          };
+          const newCompany = buildOfflineCompany();
 
           set((state) => ({
-            companies: [...(state.companies || []), newCompany]
+            companies: [...(state.companies || []).filter((c) => c.id !== newCompany.id), newCompany],
+            syncQueue: [
+              ...(Array.isArray(state.syncQueue) ? state.syncQueue.filter((q) => q?.id !== newCompany.id) : []),
+              {
+                id: newCompany.id,
+                tipo: 'EMPRESA',
+                companyId: newCompany.id,
+                payload: newCompany
+              }
+            ]
           }));
 
           return { ok: true, data: newCompany };
@@ -1713,6 +1878,9 @@ export const useStore = create(
           createdAt: new Date().toISOString()
         };
 
+        let shouldEnqueue = !isOnline || !hasActiveSession;
+        let syncErrorMsg = null;
+
         if (isOnline && hasActiveSession) {
           try {
             const resp = await fetchWithTimeout(`${API_BASE_URL}/api/proyectos`, {
@@ -1725,17 +1893,25 @@ export const useStore = create(
             }, DEFAULT_REQUEST_TIMEOUT_MS);
             if (!resp.ok) {
               const errPayload = await readResponsePayload(resp);
-              console.warn('[ONLINE REALTIME] ⚠️ Servidor devolvió error al registrar proyecto:', errPayload.error);
               const errMsg = errPayload.error || `HTTP ${resp.status}`;
-              get().showToast?.(`Error en el servidor al registrar proyecto: ${errMsg}. Por favor reintenta.`, 'error');
-              return { success: false, error: errMsg };
+              console.warn('[ONLINE REALTIME] ⚠️ Servidor devolvió error al registrar proyecto:', errMsg);
+              if (resp.status >= 500) {
+                shouldEnqueue = true;
+                syncErrorMsg = errMsg;
+                get().showToast?.(`Servidor temporalmente ocupado (${errMsg}). Proyecto respaldado en cola local para sincronizar automáticamente.`, 'warning');
+              } else {
+                get().showToast?.(`Error en el servidor al registrar proyecto: ${errMsg}. Por favor reintenta.`, 'error');
+                return { success: false, error: errMsg };
+              }
             } else {
               get().removeFromQueue?.(uuidId);
               console.log('[ONLINE REALTIME] ✅ Proyecto registrado exitosamente en el servidor.');
             }
           } catch (e) {
-            console.error('[ONLINE REALTIME] ⚠️ Error de red o timeout al registrar proyecto:', e);
-            get().showToast?.(`Error de conexión o tiempo de espera al registrar proyecto: ${e.message}. Por favor reintenta.`, 'error');
+            console.error('[ONLINE REALTIME] ⚠️ Error de red o timeout al registrar proyecto, encolando en syncQueue:', e);
+            shouldEnqueue = true;
+            syncErrorMsg = e.message;
+            get().showToast?.(`Conexión inestable (${e.message}). Proyecto respaldado en cola local para sincronizar automáticamente.`, 'warning');
           }
         }
 
@@ -1750,13 +1926,13 @@ export const useStore = create(
             return c;
           }),
           proyectosLocales: [...(state.proyectosLocales || []), nuevoProyecto],
-          // REGLA ESTRICTA DE CONECTIVIDAD: La cola offline está reservada EXCLUSIVAMENTE para cuando navigator.onLine === false
-          syncQueue: (!isOnline)
-            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
+          syncQueue: shouldEnqueue
+            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue.filter((q) => q?.id !== uuidId) : []), {
                 id: uuidId,
                 tipo: 'PROYECTO',
                 companyId,
-                payload: nuevoProyecto
+                payload: nuevoProyecto,
+                ...(syncErrorMsg ? { syncError: syncErrorMsg, syncFailedAt: Date.now() } : {})
               }]
             : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
         }));
@@ -1885,9 +2061,8 @@ export const useStore = create(
             }),
             nuevoElemento
           ],
-          // REGLA ESTRICTA DE CONECTIVIDAD: La cola offline está reservada EXCLUSIVAMENTE para cuando navigator.onLine === false
-          syncQueue: (!isOnline)
-            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue : []), {
+          syncQueue: (!isOnline || !hasActiveSession)
+            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue.filter((q) => q?.id !== uuidId) : []), {
                 id: uuidId,
                 tipo: 'ELEMENTO_UNIFILAR',
                 companyId: parentCompanyId,
@@ -1897,8 +2072,8 @@ export const useStore = create(
         }));
 
         let directPromise = null;
-        // Si hay internet, enviar DIRECTAMENTE al servidor en tiempo real
-        if (isOnline) {
+        // Si hay internet y sesión activa, enviar DIRECTAMENTE al servidor en tiempo real (con fallback automático a syncQueue si falla)
+        if (isOnline && hasActiveSession) {
           directPromise = get().enviarElementoDirectoServidor?.(parentCompanyId, nuevoElemento);
         }
 
@@ -1926,10 +2101,11 @@ export const useStore = create(
         return resultObj;
       },
 
-      updateElementoUnifilar: (proyectoId, elementoId, updatedData) => {
+      updateElementoUnifilar: (proyectoId, elementoId, updatedData, options = {}) => {
         const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
         const { token } = get();
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+        const skipNetworkSync = Boolean(options?.skipNetworkSync);
 
         const cleanUpdatedData = { ...updatedData };
         if (cleanUpdatedData.nombre) cleanUpdatedData.nombre = String(cleanUpdatedData.nombre).trim().toUpperCase();
@@ -2020,39 +2196,31 @@ export const useStore = create(
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let updatedSyncQueue = [...currentQueue];
 
-          // REGLA ESTRICTA DE CONECTIVIDAD: Solo si está estrictamente OFFLINE (navigator.onLine === false) se retiene o actualiza en la cola
-          if (!isOnline) {
+          if (!skipNetworkSync && (!isOnline || !hasActiveSession)) {
+            const updatedElement = findElementoInStore(
+              { companies: updatedCompanies, elementosLocales: updatedElementosLocales },
+              elementoId,
+              proyectoId
+            );
             let inQueue = false;
             updatedSyncQueue = currentQueue.map((item) => {
-              if (item?.id === elementoId && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
+              if ((item?.id === elementoId || item?.payload?.id === elementoId) && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
                 inQueue = true;
-                return { ...item, payload: { ...(item?.payload || {}), ...updatedData } };
+                const mergedPayload = updatedElement
+                  ? mergePayloadDeep(item?.payload, updatedElement)
+                  : mergePayloadDeep(item?.payload, cleanUpdatedData);
+                return { ...item, payload: mergedPayload };
               }
               return item;
             });
 
-            if (!inQueue) {
-              let updatedElement = updatedElementosLocales.find(e => e.id === elementoId);
-              if (!updatedElement) {
-                for (const c of updatedCompanies) {
-                  const list = proyectoId 
-                    ? (c.proyectos?.find(p => p.id === proyectoId)?.elementosUnifilares || []) 
-                    : (c.elementosUnifilares || []);
-                  const found = list.find(e => e.id === elementoId);
-                  if (found) {
-                    updatedElement = found;
-                    break;
-                  }
-                }
-              }
-              if (updatedElement) {
-                updatedSyncQueue.push({
-                  id: elementoId,
-                  tipo: 'ELEMENTO_UNIFILAR',
-                  companyId: updatedElement.empresaId || updatedElement.companyId || (state.companies[0]?.id || null),
-                  payload: updatedElement
-                });
-              }
+            if (!inQueue && updatedElement) {
+              updatedSyncQueue.push({
+                id: elementoId,
+                tipo: 'ELEMENTO_UNIFILAR',
+                companyId: updatedElement.empresaId || updatedElement.companyId || (state.companies[0]?.id || null),
+                payload: updatedElement
+              });
             }
           }
 
@@ -2063,12 +2231,13 @@ export const useStore = create(
           };
         });
 
-        // Si está ONLINE: Enviar la actualización directamente al servidor en tiempo real
+        // Si está ONLINE: Buscar el elemento actualizado en companies (proyectos[].elementosUnifilares / tableros) con fallback a elementosLocales
+        // y enviarlo con debounce por elementoId (500ms) para evitar peticiones concurrentes que se pisen entre sí
         let directPromise = null;
-        if (isOnline) {
-          const el = (get().elementosLocales || []).find(e => e.id === elementoId);
+        if (!skipNetworkSync && isOnline && hasActiveSession) {
+          const el = findElementoInStore(get(), elementoId, proyectoId);
           if (el) {
-            directPromise = get().enviarElementoDirectoServidor?.(el.empresaId || el.companyId, el);
+            directPromise = scheduleDebouncedElementoSync(get, elementoId, proyectoId, el);
           }
         }
 
@@ -2257,7 +2426,8 @@ export const useStore = create(
         return { success: true, subestacion: nuevaSubestacion };
       },
 
-      updateSubestacion: (proyectoId, subestacionId, updatedData) => {
+      updateSubestacion: (proyectoId, subestacionId, updatedData, options = {}) => {
+        const skipNetworkSync = Boolean(options?.skipNetworkSync);
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
@@ -2286,11 +2456,19 @@ export const useStore = create(
           });
 
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          if (skipNetworkSync) {
+            return {
+              companies: updatedCompanies,
+              subestacionesLocales: updatedSubestacionesLocales,
+              syncQueue: currentQueue
+            };
+          }
+
           let inQueue = false;
           const updatedSyncQueue = currentQueue.map((item) => {
             if (item?.id === subestacionId && item?.tipo === 'SUBESTACION') {
               inQueue = true;
-              return { ...item, payload: { ...(item.payload || {}), ...updatedData } };
+              return { ...item, payload: mergePayloadDeep(item.payload, updatedData) };
             }
             return item;
           });
@@ -2451,7 +2629,8 @@ export const useStore = create(
         return { success: true, puntoMedicion: nuevoPunto };
       },
 
-      updatePuntoMedicion: (proyectoId, puntoId, updatedData) => {
+      updatePuntoMedicion: (proyectoId, puntoId, updatedData, options = {}) => {
+        const skipNetworkSync = Boolean(options?.skipNetworkSync);
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
@@ -2491,11 +2670,19 @@ export const useStore = create(
           });
 
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          if (skipNetworkSync) {
+            return {
+              companies: updatedCompanies,
+              puntosMedicionLocales: updatedPuntosLocales,
+              syncQueue: currentQueue
+            };
+          }
+
           let inQueue = false;
           const updatedSyncQueue = currentQueue.map((item) => {
             if (item?.id === puntoId && (item?.tipo === 'PUNTO_MEDICION' || item?.tipo === 'ELEMENTO_UNIFILAR')) {
               inQueue = true;
-              return { ...item, payload: { ...(item?.payload || {}), ...updatedData } };
+              return { ...item, payload: mergePayloadDeep(item?.payload, updatedData) };
             }
             return item;
           });
@@ -2658,7 +2845,8 @@ export const useStore = create(
         return { success: true, ccm: nuevoCcm };
       },
 
-      updateCcm: (proyectoId, ccmId, updatedData) => {
+      updateCcm: (proyectoId, ccmId, updatedData, options = {}) => {
+        const skipNetworkSync = Boolean(options?.skipNetworkSync);
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
@@ -2687,11 +2875,19 @@ export const useStore = create(
           });
 
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          if (skipNetworkSync) {
+            return {
+              companies: updatedCompanies,
+              ccmLocales: updatedCcmLocales,
+              syncQueue: currentQueue
+            };
+          }
+
           let inQueue = false;
           const updatedSyncQueue = currentQueue.map((item) => {
             if (item?.id === ccmId && item?.tipo === 'CCM') {
               inQueue = true;
-              return { ...item, payload: { ...(item.payload || {}), ...updatedData } };
+              return { ...item, payload: mergePayloadDeep(item.payload, updatedData) };
             }
             return item;
           });
@@ -3074,6 +3270,26 @@ export const useStore = create(
             elementosLocales: updatedElementosLocales
           };
         });
+
+        // Persistir cambio de orden hacia el backend o syncQueue
+        if (changedItems.length > 0) {
+          const movedItem = changedItems.find((ci) => ci.id === elementoId);
+          const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+          const { token } = get();
+          const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+
+          for (const item of changedItems) {
+            const qTipo = tipoColeccion === 'UNIFILAR' ? 'ELEMENTO_UNIFILAR' : 'SUBESTACION';
+            const compId = companyId || item.empresaId || item.companyId || null;
+            if (!isOnline || !hasActiveSession || tipoColeccion !== 'UNIFILAR') {
+              get().enqueueOfflineItem?.(qTipo, compId, item);
+            }
+          }
+
+          if (isOnline && hasActiveSession && tipoColeccion === 'UNIFILAR' && movedItem) {
+            scheduleDebouncedElementoSync(get, movedItem.id, proyectoId, movedItem);
+          }
+        }
       },
 
       reordenarColeccion: (companyId, proyectoId, orderedIds = [], tipoColeccion = 'UNIFILAR') => {
@@ -3169,6 +3385,26 @@ export const useStore = create(
             elementosLocales: updatedElementosLocales
           };
         });
+
+        // Persistir cambio de orden hacia el backend o syncQueue
+        if (changedItems.length > 0) {
+          const movedItem = changedItems.find((ci) => ci.id === elementoId);
+          const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+          const { token } = get();
+          const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+
+          for (const item of changedItems) {
+            const qTipo = tipoColeccion === 'UNIFILAR' ? 'ELEMENTO_UNIFILAR' : 'SUBESTACION';
+            const compId = companyId || item.empresaId || item.companyId || null;
+            if (!isOnline || !hasActiveSession || tipoColeccion !== 'UNIFILAR') {
+              get().enqueueOfflineItem?.(qTipo, compId, item);
+            }
+          }
+
+          if (isOnline && hasActiveSession && tipoColeccion === 'UNIFILAR' && movedItem) {
+            scheduleDebouncedElementoSync(get, movedItem.id, proyectoId, movedItem);
+          }
+        }
       },
 
       removeFromQueue: (id) => {
@@ -3245,11 +3481,12 @@ export const useStore = create(
         set((state) => {
           const currentQueue = Array.isArray(state.syncQueue) ? [...state.syncQueue] : [];
           const idx = currentQueue.findIndex((item) => item.id === payload.id || item.payload?.id === payload.id);
+          const mergedPayload = idx >= 0 ? mergePayloadDeep(currentQueue[idx]?.payload, payload) : payload;
           const queueItem = {
             id: payload.id,
             tipo: tipo || 'ELEMENTO_UNIFILAR',
-            companyId: companyId || payload.empresaId || payload.companyId || null,
-            payload,
+            companyId: companyId || mergedPayload.empresaId || mergedPayload.companyId || null,
+            payload: mergedPayload,
             ...(syncError ? { syncError, syncFailedAt: Date.now() } : {})
           };
 
@@ -3267,9 +3504,8 @@ export const useStore = create(
         if (!elemento) return { ok: false, error: 'Elemento no proporcionado' };
         const { token, showToast } = get();
 
-        // REGLA ESTRICTA DE CONECTIVIDAD:
-        // Si NO hay conexión a internet (navigator.onLine === false), retener en cola local
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        // Si NO hay conexión a internet (navigator.onLine === false) o no hay sesión activa, retener en cola local
+        if ((typeof navigator !== 'undefined' && !navigator.onLine) || !token || token === 'mock-offline-token') {
           get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, elemento);
           showToast?.('Sin conexión a internet: Elemento retenido localmente en la tablet para sincronizar al volver en línea.', 'info');
           return { ok: false, offline: true, error: 'Dispositivo sin conexión a internet' };
@@ -3337,18 +3573,22 @@ export const useStore = create(
             console.log(`[ONLINE REALTIME] ✅ Elemento ${elemento.id} persistido exitosamente en PostgreSQL en tiempo real.`);
             return { ok: true, data: record };
           } else {
-            // PROHIBIDO ENVIAR A LA COLA OFFLINE POR ERRORES DE TIMEOUT O 500 CUANDO HAY INTERNET
+            // FALLBACK OBLIGATORIO A SYNCQUEUE: Encolar la mutación con merge profundo para evitar pérdida de datos al hacer F5
             const errorMsg = res.error || `HTTP ${res.status || 'ERROR'}`;
-            console.warn(`[ONLINE REALTIME] ⚠️ Servidor devolvió error (${errorMsg}) para elemento ${elemento.id}. NO se retiene en cola offline porque el dispositivo está en línea.`);
-            showToast?.(`Error en el servidor al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Por favor reintenta.`, 'error');
-            return { ok: false, error: errorMsg };
+            const latestEl = findElementoInStore(get(), elemento.id, elemento.proyectoId) || elemento;
+            get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, latestEl, errorMsg);
+            console.warn(`[ONLINE REALTIME] ⚠️ Servidor devolvió error (${errorMsg}) para elemento ${elemento.id}. Respaldado en syncQueue.`);
+            showToast?.(`Error en el servidor al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Respaldado en cola local.`, 'warning');
+            return { ok: false, queuedOffline: true, error: errorMsg };
           }
         } catch (err) {
-          // PROHIBIDO ENVIAR A LA COLA OFFLINE POR TIMEOUT O ERROR DE RED CUANDO HAY INTERNET
+          // FALLBACK OBLIGATORIO A SYNCQUEUE EN TIMEOUT O ERROR DE RED: Evita pérdida de datos al hacer F5
           const errorMsg = err.message || 'Error de comunicación con el servidor';
-          console.warn(`[ONLINE REALTIME] ⚠️ Error de red o timeout (${errorMsg}) para elemento ${elemento.id}. NO se retiene en cola offline porque el dispositivo está en línea.`);
-          showToast?.(`Error de conexión o tiempo de espera al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Por favor reintenta.`, 'error');
-          return { ok: false, error: errorMsg };
+          const latestEl = findElementoInStore(get(), elemento.id, elemento.proyectoId) || elemento;
+          get().enqueueOfflineItem('ELEMENTO_UNIFILAR', empresaId, latestEl, errorMsg);
+          console.warn(`[ONLINE REALTIME] ⚠️ Error de red o timeout (${errorMsg}) para elemento ${elemento.id}. Respaldado en syncQueue.`);
+          showToast?.(`Conexión inestable al guardar "${elemento.nombre || elemento.codigo}": ${errorMsg}. Respaldado en cola local.`, 'warning');
+          return { ok: false, queuedOffline: true, error: errorMsg };
         } finally {
           // RESET INMEDIATO: Limpiar flags de sincronización al concluir el envío directo
           set({
@@ -3418,7 +3658,7 @@ export const useStore = create(
       },
 
       backupDatos: async (tipo = 'completo') => {
-        const { user } = get();
+        const { user, token } = get();
         if (!user) return { success: false, error: 'No ha iniciado sesión' };
         
         try {
@@ -3426,7 +3666,10 @@ export const useStore = create(
           
           const res = await fetch(`${API_BASE_URL}/api/backup/local`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${user.token}` },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({ tipo })
           });
           
@@ -3486,7 +3729,7 @@ export const useStore = create(
       
       messages: [],
       sendMessage: async (receiverId, text) => {
-        const { user } = get();
+        const { user, token } = get();
         if (!user) return { success: false, error: 'No ha iniciado sesión.' };
         
         const newMessage = {
@@ -3505,7 +3748,10 @@ export const useStore = create(
         try {
           const res = await fetch(`${API_BASE_URL}/api/messages`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify(newMessage)
           });
           const data = await res.json();
@@ -3531,7 +3777,7 @@ export const useStore = create(
       },
 
       markMessagesAsRead: async (senderId) => {
-        const { user } = get();
+        const { user, token } = get();
         if (!user) return;
 
         set((state) => ({
@@ -3546,7 +3792,10 @@ export const useStore = create(
         try {
           await fetch(`${API_BASE_URL}/api/messages/read`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({ senderId, receiverId: user.id })
           });
         } catch (e) {
@@ -3555,6 +3804,7 @@ export const useStore = create(
       },
 
       vincularJerarquia: (proyectoId, padreId, hijoId, datosEnlace = {}) => {
+        let updatedHijo = null;
         set((state) => {
           let nombrePadre = '';
           const newCompanies = (state.companies || []).map((c) => ({
@@ -3581,7 +3831,7 @@ export const useStore = create(
                 ...p,
                 elementosUnifilares: (p.elementosUnifilares || []).map((e) => {
                   if (e.id === hijoId) {
-                    return {
+                    const nextEl = {
                       ...e,
                       alimentadoPorId: padreId,
                       alimentadoPor: nombrePadre ? `${nombrePadre} (${cOrigen})` : e.alimentadoPor,
@@ -3590,8 +3840,14 @@ export const useStore = create(
                       breakerAmperaje: datosEnlace.breakerAmperaje || e.breakerAmperaje,
                       breakerMarca: cMarca || e.breakerMarca,
                       breakerTipo: cTipo || e.breakerTipo,
-                      estadoVinculo: 'ACTIVO'
+                      estadoVinculo: 'ACTIVO',
+                      datosTecnicos: {
+                        ...(e.datosTecnicos || {}),
+                        alimentadoPorId: padreId
+                      }
                     };
+                    updatedHijo = { ...nextEl, empresaId: nextEl.empresaId || nextEl.companyId || c.id, proyectoId };
+                    return nextEl;
                   }
                   return e;
                 })
@@ -3600,9 +3856,22 @@ export const useStore = create(
           }));
           return { companies: newCompanies };
         });
+
+        // Persistir cambio hacia el backend o syncQueue
+        const targetEl = updatedHijo || findElementoInStore(get(), hijoId, proyectoId);
+        if (targetEl) {
+          const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+          const { token } = get();
+          if (isOnline && token && token !== 'mock-offline-token') {
+            scheduleDebouncedElementoSync(get, hijoId, proyectoId, targetEl);
+          } else {
+            get().enqueueOfflineItem?.('ELEMENTO_UNIFILAR', targetEl.empresaId || targetEl.companyId, targetEl);
+          }
+        }
       },
 
       desvincularJerarquia: (proyectoId, hijoId) => {
+        let updatedHijo = null;
         set((state) => {
           const newCompanies = (state.companies || []).map((c) => ({
             ...c,
@@ -3612,13 +3881,18 @@ export const useStore = create(
                 ...p,
                 elementosUnifilares: (p.elementosUnifilares || []).map((e) => {
                   if (e.id === hijoId) {
-                    return {
+                    const nextDatosTecnicos = { ...(e.datosTecnicos || {}) };
+                    delete nextDatosTecnicos.alimentadoPorId;
+                    const nextEl = {
                       ...e,
                       alimentadoPorId: null,
                       alimentadoPor: null,
                       circuitoOrigen: null,
-                      estadoVinculo: 'ACTIVO'
+                      estadoVinculo: 'ACTIVO',
+                      datosTecnicos: nextDatosTecnicos
                     };
+                    updatedHijo = { ...nextEl, empresaId: nextEl.empresaId || nextEl.companyId || c.id, proyectoId };
+                    return nextEl;
                   }
                   return e;
                 })
@@ -3627,6 +3901,18 @@ export const useStore = create(
           }));
           return { companies: newCompanies };
         });
+
+        // Persistir cambio hacia el backend o syncQueue
+        const targetEl = updatedHijo || findElementoInStore(get(), hijoId, proyectoId);
+        if (targetEl) {
+          const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+          const { token } = get();
+          if (isOnline && token && token !== 'mock-offline-token') {
+            scheduleDebouncedElementoSync(get, hijoId, proyectoId, targetEl);
+          } else {
+            get().enqueueOfflineItem?.('ELEMENTO_UNIFILAR', targetEl.empresaId || targetEl.companyId, targetEl);
+          }
+        }
       },
 
       crearElementoProvisional: (proyectoId, datosProvisional = {}) => {

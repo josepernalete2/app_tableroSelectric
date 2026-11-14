@@ -2447,7 +2447,7 @@ export const ModalEdicionCircuito = ({
                   type="text"
                   value={rotulo}
                   onChange={(e) => setRotulo(e.target.value)}
-                  placeholder="Ej. RESERVA, ILUMINACIÓN, TOMACORRIENTES..."
+                  placeholder="Ej. RESERVA, VACÍO, ILUMINACIÓN, TOMACORRIENTES..."
                   className="w-full px-3 py-2 text-sm border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                 />
               </div>
