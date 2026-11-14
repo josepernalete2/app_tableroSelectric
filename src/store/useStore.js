@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
 import { API_BASE_URL } from '../utils/api.js';
 import { cleanTipoElemento, enviarElementoDirectoAlServidor, fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS, readResponsePayload, registrarEmpresaApi } from '../utils/syncService.js';
-import { initialTablerosData } from '../data/mockTableros.js';
 
 // Configurar localforage
 localforage.config({
@@ -315,164 +314,7 @@ const localForageStorage = {
   }
 };
 
-const initialCompanies = [
-  {
-    id: 'c-1',
-    nombre: 'Clínica Valentina Canabal',
-    proyectos: [
-      {
-        id: 'p-1',
-        nombre: 'Proyecto Diagrama Unifilar y Tableros 2025',
-        descripcion: 'Estudio de transformadores, generadores, tableros y malla de puesta a tierra.',
-        elementosUnifilares: [
-          {
-            id: 'TAB-1',
-            codigo: 'tab-1',
-            nombre: 'Tablero Principal (No. 20)',
-            tipoElemento: 'TABLERO',
-            ubicacion: 'SOTANO SALA DE TABLEROS',
-            alimentadoPor: 'ATS SOTANO (TRANSFERENCIA (ATS/MTS)) transferecia 580',
-            foto: null,
-            fotoBlob: null,
-            observacionesGenerales: 'SALEN ACOMETIDAS 1 X 500 Y 1X250 MCM DE LA BARRA PARTE INFERIOR. LA ACOMETIDA 250 MCM VA A CAJA CON UN BREAKER AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR EATON, Ki400, 350 A. SALEN UNA ACOMETIDA 4/0 QUE ALIMENTA TRANSFERENCIA 160. LA ACOMETIDA 500 MCM VA A UNA CAJA AL LADO DEL TABLERO PRINCIPAL. INTERRUPTOR ABB, TIPO 6520, 400 A, SALEN 2X500 Y ALIMENTAN TABLERO EN PRIMER PISO.',
-            datosTecnicos: {
-              codigo: 'tab-1',
-              maxPoles: 30,
-              tipoTablero: 'SUPERFICIAL',
-              voltajeAcometida: '211.5 / 207.4 / 208.6 V',
-              barrasPrincipales: { ia: '', ib: '', ic: '' },
-              breakerPrincipal: { marca: 'SIN BREAKER', tipo: '', amp: '' },
-              voltaje: { va: '211,5', vb: '207,4', vc: '208,6' },
-              acometida: '3X500 MCM',
-              neutroLlegada: { calibre: '1X500', observaciones: '' },
-              puestaTierra: { calibre: 'SOLIDO #4', observaciones: 'LLEGA SOLIDO #4. BUSCAR TANQUILLA DE MALLA A TIERRA' }
-            },
-            proyectoId: 'p-1',
-            companyId: 'c-1',
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 'ATS-1',
-            codigo: 'trs-1',
-            nombre: 'Transferencia 580 Estacionamiento',
-            tipoElemento: 'TRANSFER',
-            ubicacion: 'ESTACIONAMIENTO',
-            alimentadoPor: 'GENERADOR 580 1 + GENERADOR 580 2',
-            foto: null,
-            fotoBlob: null,
-            observacionesGenerales: 'TRANSFERENCIA ALIMENTADA POR LOS DOS GENERADORES',
-            datosTecnicos: {
-              codigo: 'trs-1',
-              modelo: 'DOMOSA',
-              tipoTransferencia: 'YUYE-YES1 3200/4P',
-              amperaje: '3200',
-              voltaje: { vab: '', vac: '', vbc: '' },
-              alimentacionGenerador1: '2(3X500)',
-              alimentacionGenerador2: '2(3X500)',
-              carga: '2(3X500)',
-              neutro: '500',
-              tierra: 'NO'
-            },
-            proyectoId: 'p-1',
-            companyId: 'c-1',
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 'ATS-2',
-            codigo: 'trs-2',
-            nombre: 'Transferencia 580 Sótano Sala Técnica',
-            tipoElemento: 'TRANSFER',
-            ubicacion: 'SOTANO SALA TECNICA',
-            alimentadoPor: 'TRANSFERENCIA DOMOSA + CORPOELEC',
-            foto: null,
-            fotoBlob: null,
-            observacionesGenerales: 'PASA DIRECTAMENTE AL TABLERO .',
-            datosTecnicos: {
-              codigo: 'trs-2',
-              modelo: 'NO TIENE',
-              tipoTransferencia: 'NO TIENE',
-              amperaje: '',
-              voltaje: { vab: '211', vac: '208', vbc: '209' },
-              alimentacionCorpoelec: '3X500',
-              alimentacionTransfDomosa: '2X500',
-              carga: '3X500',
-              neutro: '500',
-              tierra: 'NO'
-            },
-            proyectoId: 'p-1',
-            companyId: 'c-1',
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 'GEN-1',
-            codigo: 'gen-1',
-            nombre: 'Generador No. 1 DOMOSA 580 KVA',
-            tipoElemento: 'GENERADOR',
-            ubicacion: 'ESTACIONAMIENTO',
-            alimentadoPor: 'Fuente Primaria Independiente',
-            foto: null,
-            fotoBlob: null,
-            observacionesGenerales: 'Generador No. 1 DOMOSA 580 KVA ubicado en el estacionamiento.',
-            datosTecnicos: {
-              codigo: 'gen-1',
-              kva: '580 KVA',
-              marca: 'DOMOSA',
-              fases: '3',
-              voltaje: '208/120 V',
-              amperaje: '',
-              frecuencia: '60 Hz',
-              hz: '60 Hz',
-              rpm: '1800 RPM',
-              velocidadRpm: '1800 RPM',
-              fp: '',
-              combustible: 'DIÉSEL',
-              interruptor: { marca: 'CHINT', tipo: '', amp: '1600', condFase: '2(3X500)', condNeutro: '500' }
-            },
-            proyectoId: 'p-1',
-            companyId: 'c-1',
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 'GEN-2',
-            codigo: 'gen-2',
-            nombre: 'Generador No. 2 DOMOSA 580 KVA',
-            tipoElemento: 'GENERADOR',
-            ubicacion: 'ESTACIONAMIENTO',
-            alimentadoPor: 'Fuente Primaria Independiente',
-            foto: null,
-            fotoBlob: null,
-            observacionesGenerales: 'Generador No. 2 DOMOSA 580 KVA ubicado en el estacionamiento.',
-            datosTecnicos: {
-              codigo: 'gen-2',
-              kva: '580 KVA',
-              marca: 'DOMOSA',
-              fases: '3',
-              voltaje: '208/120 V',
-              amperaje: '800 A',
-              frecuencia: '60 Hz',
-              hz: '60 Hz',
-              rpm: '1800 RPM',
-              velocidadRpm: '1800 RPM',
-              fp: '',
-              combustible: 'DIÉSEL',
-              interruptor: { marca: 'CHINT', tipo: '', amp: '1600', condFase: '2(3X500)', condNeutro: '500' }
-            },
-            proyectoId: 'p-1',
-            companyId: 'c-1',
-            createdAt: new Date().toISOString()
-          }
-        ],
-        inspeccionesSubestacion: [],
-        createdAt: new Date().toISOString()
-      }
-    ]
-  },
-  {
-    id: 'c-2',
-    nombre: 'Alimentos Polar Planta Turmero',
-    proyectos: []
-  }
-];
+const initialCompanies = [];
 
 const getInitialUser = () => {
   try {
@@ -767,6 +609,20 @@ export const useStore = create(
                   return true;
                 });
                 stale.forEach((c) => get().purgeCompanyLocal(c.id));
+              }
+              if (data.data.length === 0) {
+                if (queueNow.length === 0) {
+                  set({
+                    companies: [],
+                    proyectosLocales: [],
+                    elementosLocales: [],
+                    tablerosLocales: [],
+                    subestacionesLocales: [],
+                    puntosMedicionLocales: [],
+                    ccmLocales: []
+                  });
+                }
+                return { success: true, count: 0 };
               }
               if (data.data.length > 0) {
                 get().importCompanies(data.data);
@@ -3965,6 +3821,19 @@ export const useStore = create(
           if (!Array.isArray(state.syncQueue)) state.syncQueue = [];
           if (!Array.isArray(state.companies)) state.companies = [];
           if (!Array.isArray(state.elementosLocales)) state.elementosLocales = [];
+
+          // Depurar posibles datos mock residuales ('c-1', 'c-2') de la caché local (IndexedDB)
+          const legacyMockCompanyIds = new Set(['c-1', 'c-2']);
+          const legacyMockProjectIds = new Set(['p-1']);
+          if (state.companies.some((c) => c && legacyMockCompanyIds.has(c.id))) {
+            state.companies = state.companies.filter((c) => c && !legacyMockCompanyIds.has(c.id));
+            state.proyectosLocales = (state.proyectosLocales || []).filter(
+              (p) => p && !legacyMockCompanyIds.has(p.companyId) && !legacyMockCompanyIds.has(p.empresaId) && !legacyMockProjectIds.has(p.id)
+            );
+            state.elementosLocales = (state.elementosLocales || []).filter(
+              (e) => e && !legacyMockCompanyIds.has(e.companyId) && !legacyMockCompanyIds.has(e.empresaId) && !legacyMockProjectIds.has(e.proyectoId)
+            );
+          }
 
           // Sincronizar token y usuario con localStorage para evitar tokens antiguos rehidratados de IndexedDB
           const currentLocalToken = getInitialToken();

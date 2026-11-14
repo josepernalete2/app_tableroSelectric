@@ -535,55 +535,26 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           }
         }
 
-        // Asegurar restricciones de claves foráneas para proyectos y empresas (ej. IDs temporales o generados offline)
+        // Validar existencia de proyecto y empresa padre (sin crear registros ficticios)
         if (['elementoUnifilar', 'subestacion', 'tablero', 'puntoMedicion', 'ccm', 'alimentador', 'inspeccionTermografica', 'inspeccionAterramiento', 'inspeccionTanqueCombustible'].includes(modelName)) {
-          let projId = rawData.proyectoId;
+          const projId = rawData.proyectoId;
           if (!projId) {
-            const firstProj = await prisma.proyecto.findFirst();
-            if (firstProj) {
-              projId = firstProj.id;
-              rawData.proyectoId = projId;
-            }
+            throw new Error(`El campo proyectoId es obligatorio para sincronizar ${entity} (${id}).`);
           }
 
-          if (projId) {
-            let targetProj = await prisma.proyecto.findUnique({ where: { id: projId } });
-            if (!targetProj) {
-              // Si el proyecto referenciado no existe aún en PostgreSQL, garantizar su creación
-              let empId = rawData.empresaId;
-              let targetEmp = empId ? await prisma.empresa.findUnique({ where: { id: empId } }) : null;
-              if (!targetEmp) {
-                targetEmp = await prisma.empresa.findFirst();
-                if (!targetEmp) {
-                  targetEmp = await prisma.empresa.create({
-                    data: {
-                      id: empId || `empresa-${Date.now()}`,
-                      nombre: 'Empresa Principal',
-                      rif: `J-${Date.now()}`,
-                      direccionFiscal: 'Sede Principal'
-                    }
-                  });
-                }
-              }
+          const targetProj = await prisma.proyecto.findUnique({ where: { id: projId } });
+          if (!targetProj) {
+            throw new Error(`El proyecto padre (${projId}) no existe en la base de datos para ${entity} (${id}).`);
+          }
 
-              targetProj = await prisma.proyecto.create({
-                data: {
-                  id: projId,
-                  nombre: 'Proyecto Principal Offline',
-                  direccion: 'Sede de Operaciones',
-                  empresaId: targetEmp.id
-                }
-              });
-              console.log(`[SYNC AUTO-PARENT] ✅ Proyecto padre creado automáticamente para resolver clave foránea: ${projId}`);
+          // Asegurar que empresaId apunte a la empresa válida del proyecto
+          if (rawData.empresaId) {
+            const empCheck = await prisma.empresa.findUnique({ where: { id: rawData.empresaId } });
+            if (!empCheck) {
+              rawData.empresaId = targetProj.empresaId;
             }
-
-            // Asegurar que empresaId apunte a una empresa válida si se proporciona
-            if (rawData.empresaId) {
-              const empCheck = await prisma.empresa.findUnique({ where: { id: rawData.empresaId } });
-              if (!empCheck) {
-                rawData.empresaId = targetProj.empresaId;
-              }
-            }
+          } else {
+            rawData.empresaId = targetProj.empresaId;
           }
 
           // Para alimentadoPorId autorreferencial, resolución en dos fases para no perder jerarquía si el padre viene en el mismo lote o en el paso multipart
@@ -1008,50 +979,26 @@ export const sincronizarElementoMultipart = async (req, res) => {
       }
     }
 
-    // 3. Auto-resolución de dependencias padre (Proyecto y Empresa) para garantizar integridad referencial
-    let resolvedProyectoId = proyectoId;
-    let resolvedEmpresaId = empresaId || req.body.companyId || req.user?.empresaId || req.user?.companyId;
-
+    // 3. Validar existencia de Proyecto y Empresa padre (sin auto-crear registros ficticios)
+    const resolvedProyectoId = proyectoId;
     if (!resolvedProyectoId) {
-      const firstProj = await prisma.proyecto.findFirst();
-      if (firstProj) {
-        resolvedProyectoId = firstProj.id;
-        if (!resolvedEmpresaId) resolvedEmpresaId = firstProj.empresaId;
-      }
+      return res.status(400).json({
+        ok: false,
+        success: false,
+        error: 'El campo proyectoId es obligatorio para sincronizar el elemento.'
+      });
     }
 
-    if (resolvedProyectoId) {
-      let targetProj = await prisma.proyecto.findUnique({ where: { id: resolvedProyectoId } });
-      if (!targetProj) {
-        // Garantizar empresa padre
-        let targetEmp = resolvedEmpresaId ? await prisma.empresa.findUnique({ where: { id: resolvedEmpresaId } }) : null;
-        if (!targetEmp) {
-          targetEmp = await prisma.empresa.findFirst();
-          if (!targetEmp) {
-            targetEmp = await prisma.empresa.create({
-              data: {
-                id: resolvedEmpresaId || `empresa-${Date.now()}`,
-                nombre: 'Empresa Principal',
-                rif: `J-${Date.now()}`,
-                direccionFiscal: 'Sede Principal'
-              }
-            });
-          }
-        }
-        targetProj = await prisma.proyecto.create({
-          data: {
-            id: resolvedProyectoId,
-            nombre: 'Proyecto Principal Offline',
-            direccion: 'Sede de Operaciones',
-            empresaId: targetEmp.id
-          }
-        });
-        console.log(`[SYNC MULTIPART] ✅ Proyecto padre creado automáticamente para resolver clave foránea: ${resolvedProyectoId}`);
-      }
-      if (!resolvedEmpresaId || resolvedEmpresaId !== targetProj.empresaId) {
-        resolvedEmpresaId = targetProj.empresaId;
-      }
+    const targetProj = await prisma.proyecto.findUnique({ where: { id: resolvedProyectoId } });
+    if (!targetProj) {
+      return res.status(422).json({
+        ok: false,
+        success: false,
+        error: `El proyecto padre (${resolvedProyectoId}) no existe en la base de datos.`
+      });
     }
+
+    const resolvedEmpresaId = targetProj.empresaId;
 
     // 4. Verificar alimentadoPorId para evitar fallo de FK autorreferencial, conservando la referencia en datosTecnicos si el padre aún no se ha sincronizado
     const requestedParentId = alimentadoPorId || parsedDatosTecnicos.alimentadoPorId || null;

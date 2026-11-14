@@ -100,44 +100,23 @@ export const crearElementoUnifilar = async (req, res, next) => {
     const cleanCircuitoOrigen = req.body.circuitoOrigen ? String(req.body.circuitoOrigen).trim().toUpperCase() : '';
     const cleanObservaciones = observacionesGenerales ? String(observacionesGenerales).trim().toUpperCase() : '';
 
-    let targetProyectoId = proyectoId;
+    const targetProyectoId = proyectoId;
     if (!targetProyectoId) {
-      const firstProj = await prisma.proyecto.findFirst();
-      if (firstProj) {
-        targetProyectoId = firstProj.id;
-      }
+      return res.status(400).json({
+        ok: false,
+        error: 'El campo proyectoId es obligatorio para registrar un elemento.'
+      });
     }
 
-    let proyectoExiste = targetProyectoId ? await prisma.proyecto.findUnique({
+    const proyectoExiste = await prisma.proyecto.findUnique({
       where: { id: targetProyectoId }
-    }) : null;
+    });
 
     if (!proyectoExiste) {
-      console.log(`[AF AUTO-PARENT] El proyecto con ID '${targetProyectoId || 'offline'}' no existe en el servidor. Creando automáticamente para sincronización offline...`);
-      let targetEmp = empresaId ? await prisma.empresa.findUnique({ where: { id: empresaId } }) : null;
-      if (!targetEmp) {
-        targetEmp = await prisma.empresa.findFirst();
-        if (!targetEmp) {
-          targetEmp = await prisma.empresa.create({
-            data: {
-              id: empresaId || `empresa-${Date.now()}`,
-              nombre: 'Empresa Principal',
-              rif: `J-${Date.now()}`,
-              direccionFiscal: 'Sede Principal'
-            }
-          });
-        }
-      }
-      targetProyectoId = targetProyectoId || `proj-${Date.now()}`;
-      proyectoExiste = await prisma.proyecto.create({
-        data: {
-          id: targetProyectoId,
-          nombre: 'Proyecto Principal Offline',
-          direccion: 'Sede de Operaciones',
-          empresaId: targetEmp.id
-        }
+      return res.status(422).json({
+        ok: false,
+        error: `El proyecto especificado (${targetProyectoId}) no existe en la base de datos.`
       });
-      console.log(`[AF AUTO-PARENT] ✅ Proyecto padre creado exitosamente: ${targetProyectoId}`);
     }
 
     // 3. Comprobación previa de la existencia de la Empresa
