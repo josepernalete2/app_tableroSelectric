@@ -9,7 +9,7 @@ import {
   generarPinResguardoEmpresa,
   generarBackupEmpresaJson
 } from '../services/backup.service.js';
-import { subirBackupAR2 } from '../services/r2Backup.service.js';
+import { subirBackupAR2, descargarBackupDeR2 } from '../services/r2Backup.service.js';
 import { enviarBackupTelegram } from '../services/telegramBackup.service.js';
 
 /**
@@ -537,7 +537,7 @@ export const restaurarDesdeDatos = async (dataInput) => {
         }
       }
     }
-  });
+  }, { maxWait: 15000, timeout: 60000 });
 };
 
 /**
@@ -674,12 +674,24 @@ export const descargarBackupEnNube = async (req, res) => {
       });
     }
 
+    let resolvedData = backup.data;
+    const isMetadataOnly = resolvedData && !Array.isArray(resolvedData) && !Array.isArray(resolvedData.data);
+    if (isMetadataOnly && resolvedData.cloudStorage?.r2?.key) {
+      const r2Snapshot = await descargarBackupDeR2(
+        resolvedData.cloudStorage.r2.key,
+        resolvedData.cloudStorage.r2.bucket
+      );
+      if (r2Snapshot) {
+        resolvedData = r2Snapshot;
+      }
+    }
+
     return res.status(200).json({
       ok: true,
       success: true,
       nombre: backup.nombre,
       createdAt: backup.createdAt,
-      data: backup.data
+      data: resolvedData
     });
   } catch (error) {
     console.error('Error al descargar respaldo de la nube:', error);
@@ -711,8 +723,20 @@ export const restaurarBackupEnNube = async (req, res) => {
       });
     }
 
+    let sourcePayload = backup.data;
+    const isMetadataOnly = sourcePayload && !Array.isArray(sourcePayload) && !Array.isArray(sourcePayload.data);
+    if (isMetadataOnly && sourcePayload.cloudStorage?.r2?.key) {
+      const r2Snapshot = await descargarBackupDeR2(
+        sourcePayload.cloudStorage.r2.key,
+        sourcePayload.cloudStorage.r2.bucket
+      );
+      if (r2Snapshot) {
+        sourcePayload = r2Snapshot;
+      }
+    }
+
     // Si data contiene snapshot completo o data estructurada
-    const payloadRestaurar = backup.data.data ? backup.data.data : backup.data;
+    const payloadRestaurar = sourcePayload?.data ? sourcePayload.data : sourcePayload;
     await restaurarDesdeDatos(payloadRestaurar);
 
     return res.status(200).json({

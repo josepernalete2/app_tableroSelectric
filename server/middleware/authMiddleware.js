@@ -27,6 +27,9 @@ export const verificarToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.purpose === 'PASSWORD_RESET') {
+      return res.status(401).json({ ok: false, error: 'Token de recuperación no válido para sesión activa.' });
+    }
     req.user = decoded; // { id, username, role, companyId }
     next();
   } catch (error) {

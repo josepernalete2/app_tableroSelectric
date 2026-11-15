@@ -4,7 +4,7 @@
  * para respaldos de la base de datos de tableros eléctricos.
  */
 
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
 /**
  * Obtiene el cliente de S3 configurado para Cloudflare R2 si las credenciales están disponibles.
@@ -70,5 +70,47 @@ export async function subirBackupAR2(buffer, filename) {
       subido: false,
       error: error.message
     };
+  }
+}
+
+/**
+ * Descarga y parsea un archivo JSON de respaldo desde Cloudflare R2.
+ *
+ * @param {string} key Nombre del archivo (Key) en el bucket
+ * @param {string|null} bucketNameOverride Nombre opcional del bucket
+ * @returns {Promise<object|null>}
+ */
+export async function descargarBackupDeR2(key, bucketNameOverride = null) {
+  const bucketName = bucketNameOverride || process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const client = getR2Client();
+
+  if (!client || !key) {
+    return null;
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key
+    });
+
+    const response = await client.send(command);
+    if (!response || !response.Body) return null;
+
+    let rawString = '';
+    if (typeof response.Body.transformToString === 'function') {
+      rawString = await response.Body.transformToString('utf-8');
+    } else {
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      rawString = Buffer.concat(chunks).toString('utf-8');
+    }
+
+    return JSON.parse(rawString);
+  } catch (error) {
+    console.error(`❌ [Cloudflare R2] Error al descargar respaldo "${key}" de R2:`, error.message);
+    return null;
   }
 }

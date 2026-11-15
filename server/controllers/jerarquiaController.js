@@ -211,9 +211,9 @@ export const obtenerArbolProyecto = async (req, res, next) => {
     }
 
     const elementos = await prisma.elementoUnifilar.findMany({
-      where: { proyectoId },
+      where: { proyectoId, deletedAt: null },
       include: {
-        cargasAlimentadas: true,
+        cargasAlimentadas: { where: { deletedAt: null } },
         alimentadoPorElemento: true
       }
     });
@@ -258,6 +258,7 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
     const elementosUnifilares = await prisma.elementoUnifilar.findMany({
       where: {
         proyectoId,
+        deletedAt: null,
         ...(excluirId ? { id: { not: excluirId } } : {})
       },
       orderBy: { nombre: 'asc' }
@@ -265,16 +266,17 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
 
     // 2. Consultar entidades específicas para asegurar cobertura completa
     const [subestaciones, ccms, tableros, alimentadores, puntosMedicion] = await Promise.all([
-      prisma.subestacion.findMany({ where: { proyectoId } }).catch(() => []),
-      prisma.ccm.findMany({ where: { proyectoId } }).catch(() => []),
+      prisma.subestacion.findMany({ where: { proyectoId, deletedAt: null } }).catch(() => []),
+      prisma.ccm.findMany({ where: { proyectoId, deletedAt: null } }).catch(() => []),
       prisma.tablero.findMany({
         where: {
           proyectoId,
+          deletedAt: null,
           ...(excluirId ? { id: { not: excluirId } } : {})
         }
       }).catch(() => []),
       prisma.alimentador.findMany({ where: { proyectoId } }).catch(() => []),
-      prisma.puntoMedicion.findMany({ where: { proyectoId } }).catch(() => [])
+      prisma.puntoMedicion.findMany({ where: { proyectoId, deletedAt: null } }).catch(() => [])
     ]);
 
     const mapaAlimentadores = new Map();

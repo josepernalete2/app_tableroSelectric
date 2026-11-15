@@ -523,12 +523,11 @@ export function useSync() {
               errorCount++;
               processedCount++;
             } else {
-              // Si no vino explícito en applied ni en conflicts pero el batch fue ok
-              removeFromQueue(item?.id);
-              if (item?.payload?.id && item?.payload.id !== item?.id) {
-                removeFromQueue(item.payload.id);
-              }
-              successCount++;
+              // Si no vino explícito en applied ni en conflicts, NO eliminar de la cola para evitar pérdida silenciosa
+              const ambiguousErr = 'Respuesta del servidor sin confirmación explícita de aplicación';
+              console.warn(`[SYNC CLIENT] ⚠️ Respuesta ambigua para ítem ${item?.id}: reteniendo en cola local.`);
+              markQueueItemError(item?.id, ambiguousErr);
+              errorCount++;
               processedCount++;
             }
           }
@@ -681,7 +680,9 @@ export function useSync() {
         if (showToast) {
           showToast('¡Todos los datos y fotografías han sido sincronizados exitosamente!', 'success');
         }
-        await useStore.getState().pullInitialData?.();
+        if (successCount > 0) {
+          await useStore.getState().pullInitialData?.();
+        }
       } else if (successCount > 0 && errorCount > 0) {
         if (showToast) {
           showToast(`Sincronizados ${successCount} elementos. ${errorCount} elemento(s) no pudieron subirse (ver detalles).`, 'warning');
@@ -728,16 +729,48 @@ export function useSync() {
 
     try {
       if (tieneImagenAdjunta(item)) {
-        const res = await sincronizarElementoUnifilar(item.companyId, item.payload, item.id);
-        if (res.success) {
+        let res = null;
+        if (item.tipo === 'PROYECTO') {
+          res = await sincronizarProyecto(item.companyId, item.payload);
+        } else if (
+          item.tipo === 'ELEMENTO_UNIFILAR' ||
+          item.tipo === 'TABLERO' ||
+          item.tipo === 'ELEMENTO' ||
+          !item.tipo
+        ) {
+          res = await sincronizarElementoUnifilar(item.companyId, item.payload, item.id);
+        } else {
+          const singleMutation = await prepareMutation(item);
+          if (singleMutation) {
+            const batchSingle = await sincronizarLote([singleMutation], MULTIPART_REQUEST_TIMEOUT_MS);
+            const singleApplied = Array.isArray(batchSingle.data?.applied) ? batchSingle.data.applied : [];
+            if (batchSingle.success && singleApplied.length > 0) {
+              res = { success: true, status: batchSingle.status, data: singleApplied[0] };
+            } else {
+              res = {
+                success: false,
+                status: batchSingle.status,
+                error: batchSingle.error || batchSingle.data?.conflicts?.[0]?.error || 'Error al sincronizar'
+              };
+            }
+          } else {
+            res = { success: false, error: 'Mutación inválida' };
+          }
+        }
+
+        if (res?.success) {
           removeFromQueue(item.id);
           if (item.payload?.id) removeFromQueue(item.payload.id);
+          if (res.data) {
+            actualizarRegistroEnStore(res.data);
+          }
           if (showToast) showToast('Elemento sincronizado exitosamente', 'success');
           return { success: true };
         } else {
-          markQueueItemError(item.id, res.error || 'Error al sincronizar');
-          if (showToast) showToast(`Error: ${res.error}`, 'error');
-          return { success: false, error: res.error };
+          const err = res?.error || 'Error al sincronizar';
+          markQueueItemError(item.id, err);
+          if (showToast) showToast(`Error: ${err}`, 'error');
+          return { success: false, error: err };
         }
       } else {
         const mutation = await prepareMutation(item);

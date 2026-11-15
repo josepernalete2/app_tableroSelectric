@@ -13,14 +13,15 @@ const connectionString = rawUrl;
 const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
 
 const globalForPrisma = globalThis;
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 if (!globalForPrisma.prismaPool) {
   globalForPrisma.prismaPool = new pg.Pool({ 
     connectionString,
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
-    max: 10,
+    max: isServerless ? 2 : 10,
     connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 30000
+    idleTimeoutMillis: isServerless ? 5000 : 30000
   });
 
   globalForPrisma.prismaPool.on('error', (err) => {
@@ -74,15 +75,6 @@ export function normalizeValueToUpper(val, key = '') {
     ) {
       return trimmed;
     }
-    // Si contiene formato JSON serializado
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        return JSON.stringify(normalizeObjectToUpper(parsed));
-      } catch {
-        // Si no es JSON válido, procesar como string estándar
-      }
-    }
     return trimmed.toUpperCase();
   }
   if (Array.isArray(val)) {
@@ -117,7 +109,7 @@ const extendedPrisma = basePrisma.$extends({
   query: {
     $allModels: {
       async $allOperations({ model, operation, args, query }) {
-        if (args && model !== 'User') {
+        if (args && !['User', 'Backup', 'Message'].includes(model)) {
           if (['create', 'update', 'updateMany'].includes(operation) && args.data) {
             args.data = normalizeObjectToUpper(args.data);
           } else if (operation === 'createMany' && args.data) {

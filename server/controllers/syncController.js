@@ -477,19 +477,30 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           }
           if (!rawData.direccion) rawData.direccion = 'Sin dirección registrada';
         } else if (modelName === 'inspeccionTanqueCombustible') {
+          const toNullableFloat = (v) => {
+            if (v === undefined || v === null || v === '') return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+          };
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
           if (!rawData.nombre) rawData.nombre = 'Inspección Tanque de Combustible';
           if (rawData.capacidadLitros !== undefined && rawData.capacidadTotalLitros === undefined) {
-            rawData.capacidadTotalLitros = String(rawData.capacidadLitros);
+            rawData.capacidadTotalLitros = toNullableFloat(rawData.capacidadLitros);
+          } else if (rawData.capacidadTotalLitros !== undefined) {
+            rawData.capacidadTotalLitros = toNullableFloat(rawData.capacidadTotalLitros);
           }
           if (rawData.nivelCombustible !== undefined && rawData.nivelActualPorcentaje === undefined) {
-            rawData.nivelActualPorcentaje = String(rawData.nivelCombustible);
+            rawData.nivelActualPorcentaje = toNullableFloat(rawData.nivelCombustible);
           }
           if (rawData.nivelPorcentaje !== undefined && rawData.nivelActualPorcentaje === undefined) {
-            rawData.nivelActualPorcentaje = String(rawData.nivelPorcentaje);
+            rawData.nivelActualPorcentaje = toNullableFloat(rawData.nivelPorcentaje);
+          } else if (rawData.nivelActualPorcentaje !== undefined) {
+            rawData.nivelActualPorcentaje = toNullableFloat(rawData.nivelActualPorcentaje);
           }
           if (rawData.consumoLh !== undefined && rawData.consumoGeneradorLh === undefined) {
-            rawData.consumoGeneradorLh = String(rawData.consumoLh);
+            rawData.consumoGeneradorLh = toNullableFloat(rawData.consumoLh);
+          } else if (rawData.consumoGeneradorLh !== undefined) {
+            rawData.consumoGeneradorLh = toNullableFloat(rawData.consumoGeneradorLh);
           }
           if (rawData.diqueContencion !== undefined && rawData.diqueContencion110 === undefined) {
             rawData.diqueContencion110 = String(rawData.diqueContencion);
@@ -682,17 +693,20 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
     }
 
     // Re-vincular hijos que hayan llegado antes y guardado su alimentadoPorId pendiente en datosTecnicos
-    const upsertedElementIds = applied
-      .filter((a) => mapEntityToPrismaModel(a.entity) === 'elementoUnifilar')
-      .map((a) => a.id);
+    const upsertedElementEntries = applied.filter((a) => mapEntityToPrismaModel(a.entity) === 'elementoUnifilar');
+    const upsertedElementIds = upsertedElementEntries.map((a) => a.id);
     if (upsertedElementIds.length > 0) {
       try {
+        const affectedProjectIds = [
+          ...new Set(upsertedElementEntries.map((a) => a.record?.proyectoId).filter(Boolean))
+        ];
         const orphanChildren = await prisma.elementoUnifilar.findMany({
           where: {
             alimentadoPorId: null,
-            deletedAt: null
+            deletedAt: null,
+            ...(affectedProjectIds.length > 0 ? { proyectoId: { in: affectedProjectIds } } : {})
           },
-          select: { id: true, datosTecnicos: true, alimentadoPor: true }
+          select: { id: true, datosTecnicos: true }
         });
         const parentSet = new Set(upsertedElementIds);
         for (const child of orphanChildren) {
@@ -1012,6 +1026,19 @@ export const sincronizarElementoMultipart = async (req, res) => {
     }
 
     // 5. Preparar datos de ElementoUnifilar para Upsert con auto-curación
+    let parsedDetallesFormato = undefined;
+    if (detallesFormato) {
+      if (typeof detallesFormato === 'string') {
+        try {
+          parsedDetallesFormato = JSON.parse(detallesFormato);
+        } catch {
+          parsedDetallesFormato = undefined;
+        }
+      } else if (typeof detallesFormato === 'object' && detallesFormato !== null) {
+        parsedDetallesFormato = detallesFormato;
+      }
+    }
+
     const elementData = {
       nombre: cleanNombre,
       tipoElemento: cleanTipo,
@@ -1030,7 +1057,7 @@ export const sincronizarElementoMultipart = async (req, res) => {
       breakerTipo: breakerTipo || '',
       potenciaEstimada: potenciaEstimada !== undefined && potenciaEstimada !== null ? String(potenciaEstimada) : '',
       estadoVinculo: ['ACTIVO', 'RESERVA', 'PENDIENTE_CREAR'].includes(estadoVinculo) ? estadoVinculo : 'ACTIVO',
-      detallesFormato: typeof detallesFormato === 'object' && detallesFormato !== null ? detallesFormato : undefined
+      detallesFormato: parsedDetallesFormato
     };
 
     // 6. Upsert en ElementoUnifilar
@@ -1154,7 +1181,7 @@ export const generarBackupLocal = async (req, res) => {
     // WHERE simple: solo filtrar por empresa si es CLIENT
     const where = {};
     if (user.role === 'CLIENT' && user.companyId) {
-      where.rif = user.companyId; // Usar rif como identificador de empresa para CLIENT
+      where.id = user.companyId;
     }
 
     // Simplificado: solo traer empresas con proyectos básicos (sin relaciones anidadas profundas)

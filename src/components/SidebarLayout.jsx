@@ -100,7 +100,7 @@ export const SidebarLayout = () => {
       }
       fetchMessagesList(user.id);
 
-      const socketInstance = io(API_BASE_URL);
+      const socketInstance = io(API_BASE_URL, { auth: { token } });
 
       socketInstance.on('connect', () => {
         console.log('⚡ Conectado al servidor de Sockets');
@@ -127,10 +127,15 @@ export const SidebarLayout = () => {
     }
   }, [user]);
 
-  // Marcar como leído al abrir la conversación
+  // Marcar como leído al abrir la conversación (solo si hay mensajes no leídos)
   useEffect(() => {
     if (showChatModal && activeContactId) {
-      markMessagesAsRead(activeContactId);
+      const hasUnread = Array.isArray(messages) && messages.some(
+        (m) => m.senderId === activeContactId && m.receiverId === user?.id && !m.read
+      );
+      if (hasUnread) {
+        markMessagesAsRead(activeContactId);
+      }
     }
   }, [showChatModal, activeContactId, messages]);
 

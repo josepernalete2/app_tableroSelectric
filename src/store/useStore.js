@@ -2834,6 +2834,10 @@ export const useStore = create(
         const cleanCode = String(nuevoCodigo || '').trim().toLowerCase();
         if (!cleanCode) return { success: false, error: 'El código o ID visual no puede estar vacío.' };
 
+        let resolvedPayload = null;
+        let resolvedType = 'ELEMENTO_UNIFILAR';
+        let resolvedCompanyId = null;
+
         set((state) => {
           let updatedItemPayload = null;
           let itemType = 'ELEMENTO_UNIFILAR';
@@ -2975,6 +2979,10 @@ export const useStore = create(
             });
           }
 
+          resolvedPayload = updatedItemPayload;
+          resolvedType = itemType;
+          resolvedCompanyId = itemCompanyId;
+
           return {
             companies: updatedCompanies,
             elementosLocales: updatedElementosLocales,
@@ -2985,30 +2993,44 @@ export const useStore = create(
           };
         });
 
-        // Sincronización remota si está en línea
-        if (navigator.onLine) {
+        // Sincronización remota si está en línea vía POST /api/sync/batch (o debounce unifilar)
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        const { token } = get();
+        if (isOnline && token && token !== 'mock-offline-token' && resolvedPayload) {
           try {
-            const { token } = get();
-            const normalizedType = String(tipoElemento || '').toUpperCase();
-            let endpoint = `/api/elementos-unifilares/${elementoId}`;
-            if (normalizedType.includes('SUBESTACION')) {
-              endpoint = `/api/subestaciones/${elementoId}`;
-            } else if (normalizedType.includes('PUNTO_MEDICION') || normalizedType.includes('MEDICION')) {
-              endpoint = `/api/puntos-medicion/${elementoId}`;
-            } else if (normalizedType.includes('CCM')) {
-              endpoint = `/api/ccm/${elementoId}`;
-            }
-
-            await fetch(`${API_BASE_URL}${endpoint}`, {
-              method: 'PUT',
+            const entityMap = {
+              ELEMENTO_UNIFILAR: 'ElementoUnifilar',
+              SUBESTACION: 'Subestacion',
+              PUNTO_MEDICION: 'PuntoMedicion',
+              CCM: 'Ccm'
+            };
+            const entityName = entityMap[resolvedType] || 'ElementoUnifilar';
+            const res = await fetch(`${API_BASE_URL}/api/sync/batch`, {
+              method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...(token && token !== 'mock-offline-token' ? { 'Authorization': `Bearer ${token}` } : {})
+                'Authorization': `Bearer ${token}`
               },
-              body: JSON.stringify({ codigo: cleanCode })
+              body: JSON.stringify({
+                mutations: [
+                  {
+                    entity: entityName,
+                    id: elementoId,
+                    operation: 'UPSERT',
+                    data: resolvedPayload
+                  }
+                ]
+              })
             });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.ok && Array.isArray(data.applied) && data.applied.length > 0) {
+              get().removeFromQueue(elementoId);
+            } else if (resolvedType === 'ELEMENTO_UNIFILAR') {
+              scheduleDebouncedElementoSync(get, elementoId, proyectoId || resolvedPayload.proyectoId, resolvedPayload);
+            }
           } catch (e) {
             console.error('Error al sincronizar actualización de código ID:', e);
+            get().enqueueOfflineItem?.(resolvedType, resolvedCompanyId, resolvedPayload, e.message);
           }
         }
 
@@ -3481,7 +3503,7 @@ export const useStore = create(
             body: JSON.stringify({ mutations: (Array.isArray(syncQueue) ? syncQueue : []).map(item => ({
               entity: item?.tipo,
               id: item?.id,
-              operation: 'CREATE',
+              operation: item?.operation || 'UPSERT',
               data: item?.payload
             })) })
           });
@@ -3493,9 +3515,18 @@ export const useStore = create(
 
           const data = await res.json();
           if (res.ok && data.ok) {
-            // Limpiar la cola localmente tras confirmación exitosa
-            set({ syncQueue: [] });
-            get().pullInitialData();
+            // Conservar en cola los ítems que hayan reportado conflicto
+            const conflictIds = new Set(
+              (Array.isArray(data.conflicts) ? data.conflicts : []).map((c) => c?.id).filter(Boolean)
+            );
+            set((state) => ({
+              syncQueue: conflictIds.size > 0
+                ? (state.syncQueue || []).filter((q) => conflictIds.has(q?.id) || conflictIds.has(q?.payload?.id))
+                : []
+            }));
+            if (conflictIds.size === 0) {
+              get().pullInitialData();
+            }
             get().showToast('Sincronización completada exitosamente', 'success');
             return { success: true };
           } else {
@@ -3520,7 +3551,7 @@ export const useStore = create(
         try {
           get().showToast('Generando backup ' + tipo + '...', 'info');
           
-          const res = await fetch(`${API_BASE_URL}/api/backup/local`, {
+          const res = await fetch(`${API_BASE_URL}/api/sync/backup/local`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -3530,7 +3561,7 @@ export const useStore = create(
           });
           
           const data = await res.json();
-          if (data.success && data.archivo) {
+          if ((data.ok || data.success) && data.archivo) {
             // Guardar archivo en localforage
             const nombreArchivo = `backup-${tipo}-${Date.now()}.json`;
             await localforage.setItem(nombreArchivo, data.archivo);
@@ -3633,8 +3664,12 @@ export const useStore = create(
       },
 
       markMessagesAsRead: async (senderId) => {
-        const { user, token } = get();
+        const { user, token, messages } = get();
         if (!user) return;
+        const hasUnread = (messages || []).some(
+          (m) => m.senderId === senderId && m.receiverId === user.id && !m.read
+        );
+        if (!hasUnread) return;
 
         set((state) => ({
           messages: (state.messages || []).map((m) => {
@@ -3835,11 +3870,11 @@ export const useStore = create(
             );
           }
 
-          // Sincronizar token y usuario con localStorage para evitar tokens antiguos rehidratados de IndexedDB
+          // Sincronizar token y usuario con localStorage para evitar tokens antiguos rehidratados de IndexedDB tras logout
           const currentLocalToken = getInitialToken();
           const currentLocalUser = getInitialUser();
-          if (currentLocalToken) state.token = currentLocalToken;
-          if (currentLocalUser) state.user = currentLocalUser;
+          state.token = currentLocalToken || null;
+          state.user = currentLocalUser || null;
 
           if (state.token && state.token !== 'mock-offline-token' && typeof navigator !== 'undefined' && navigator.onLine) {
             // Prioridad Local-First: Solo descargar datos del servidor tras rehidratar si NO hay mutaciones pendientes locales en la cola

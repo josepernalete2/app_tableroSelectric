@@ -89,14 +89,17 @@ export default function ReportesView() {
         const resAudit = await fetch(`${API_BASE_URL}/api/auditoria/${selectedProyectoId}`, { headers });
         if (resAudit.ok) {
           const auditJson = await resAudit.json();
-          if (isMounted) setAuditData(auditJson);
+          if (isMounted) setAuditData(auditJson?.data || auditJson);
         }
 
         // 2. Alarmas
         const resAlarmas = await fetch(`${API_BASE_URL}/api/alarmas/proyecto/${selectedProyectoId}`, { headers });
         if (resAlarmas.ok) {
           const alarmasJson = await resAlarmas.json();
-          if (isMounted) setAlarmasData(Array.isArray(alarmasJson) ? alarmasJson : []);
+          if (isMounted) {
+            const list = Array.isArray(alarmasJson) ? alarmasJson : (Array.isArray(alarmasJson?.data) ? alarmasJson.data : []);
+            setAlarmasData(list);
+          }
         }
       } catch (err) {
         console.error('Error al cargar auditoría y alarmas:', err);
@@ -115,6 +118,11 @@ export default function ReportesView() {
   const transformadores = elementos.filter(e => e.tipoElemento === 'TRANSFORMADOR');
   const generadores = elementos.filter(e => e.tipoElemento === 'GENERADOR');
   const subestaciones = currentProyecto?.inspeccionesSubestacion || currentProyecto?.subestaciones || [];
+
+  const saludScore = auditData?.salud?.score ?? auditData?.saludRed ?? 100;
+  const huerfanosItems = auditData?.huerfanos?.items || (Array.isArray(auditData?.huerfanos) ? auditData.huerfanos : []);
+  const sinCargaItems = auditData?.sinCarga?.items || (Array.isArray(auditData?.sinCarga) ? auditData.sinCarga : []);
+  const totalInconsistencias = auditData?.totalInconsistencias ?? (huerfanosItems.length + sinCargaItems.length);
 
   // Descarga de DXF
   const handleDownloadDXF = async (tableroId, tableroNombre) => {
@@ -234,20 +242,20 @@ export default function ReportesView() {
           </span>
           <div className="my-2">
             <span className={`text-2xl font-black ${
-              (auditData?.saludRed || 100) >= 80 ? 'text-emerald-400' : (auditData?.saludRed || 100) >= 50 ? 'text-amber-400' : 'text-red-400'
+              saludScore >= 80 ? 'text-emerald-400' : saludScore >= 50 ? 'text-amber-400' : 'text-red-400'
             }`}>
-              {loadingData ? '...' : `${auditData?.saludRed ?? 100}%`}
+              {loadingData ? '...' : `${saludScore}%`}
             </span>
             <p className="text-[10px] text-slate-500">
-              {auditData?.saludRed >= 80 ? 'Red en estado óptimo' : 'Requiere atención'}
+              {saludScore >= 80 ? 'Red en estado óptimo' : 'Requiere atención'}
             </p>
           </div>
           <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
             <div 
               className={`h-full transition-all duration-500 ${
-                (auditData?.saludRed || 100) >= 80 ? 'bg-emerald-500' : (auditData?.saludRed || 100) >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                saludScore >= 80 ? 'bg-emerald-500' : saludScore >= 50 ? 'bg-amber-500' : 'bg-red-500'
               }`} 
-              style={{ width: `${auditData?.saludRed ?? 100}%` }}
+              style={{ width: `${saludScore}%` }}
             />
           </div>
         </div>
@@ -309,7 +317,7 @@ export default function ReportesView() {
       <div className="flex border-b border-slate-800 gap-2 overflow-x-auto text-xs font-semibold">
         {[
           { id: 'informes', label: 'Informes Técnicos PDF', icon: FileText, count: currentProjects.length },
-          { id: 'auditoria', label: 'Auditoría de Red', icon: CheckCircle2, count: auditData?.totalInconsistencias || 0 },
+          { id: 'auditoria', label: 'Auditoría de Red', icon: CheckCircle2, count: totalInconsistencias },
           { id: 'alarmas', label: 'Alarmas y Desbalance', icon: AlertTriangle, count: alarmasData.length },
           { id: 'dxf', label: 'Planos AutoCAD (DXF)', icon: FileCode, count: tableros.length },
           { id: 'ia', label: 'Analíticas IA (Futuro)', icon: Sparkles }
@@ -421,11 +429,11 @@ export default function ReportesView() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">Índice de Salud:</span>
               <span className={`text-base font-black px-2.5 py-0.5 rounded-lg border ${
-                (auditData?.saludRed || 100) >= 80 
+                saludScore >= 80 
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
                   : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
               }`}>
-                {auditData?.saludRed ?? 100}%
+                {saludScore}%
               </span>
             </div>
           </div>
@@ -435,11 +443,11 @@ export default function ReportesView() {
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                Equipos Huérfanos ({auditData?.huerfanos?.length || 0})
+                Equipos Huérfanos ({huerfanosItems.length})
               </h3>
-              {auditData?.huerfanos?.length > 0 ? (
+              {huerfanosItems.length > 0 ? (
                 <div className="space-y-2">
-                  {auditData.huerfanos.map((item, idx) => (
+                  {huerfanosItems.map((item, idx) => (
                     <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
                       <div>
                         <strong className="text-slate-200 block">{item.nombre}</strong>
@@ -462,11 +470,11 @@ export default function ReportesView() {
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-blue-400" />
-                Tableros Sin Carga Registrada ({auditData?.sinCarga?.length || 0})
+                Tableros Sin Carga Registrada ({sinCargaItems.length})
               </h3>
-              {auditData?.sinCarga?.length > 0 ? (
+              {sinCargaItems.length > 0 ? (
                 <div className="space-y-2">
-                  {auditData.sinCarga.map((item, idx) => (
+                  {sinCargaItems.map((item, idx) => (
                     <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
                       <div>
                         <strong className="text-slate-200 block">{item.nombre}</strong>

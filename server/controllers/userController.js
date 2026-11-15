@@ -306,11 +306,11 @@ export const solicitarResetPassword = async (req, res, next) => {
       JWT_SECRET,
       { expiresIn: '1h' }
     );
+    void resetToken;
 
     return res.status(200).json({
       ok: true,
-      message: 'Instrucciones de restablecimiento procesadas correctamente.',
-      resetToken // Disponible para entornos controlados/desarrollo
+      message: 'Instrucciones de restablecimiento procesadas correctamente.'
     });
   } catch (error) {
     console.error('Error en solicitarResetPassword:', error);

@@ -172,16 +172,22 @@ export const crearElementoUnifilar = async (req, res, next) => {
       finalFoto = sanitizeFotoServer(finalFoto);
     }
 
+    const toSafeInt = (val, fallback) => {
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
     // SI ES TABLERO, APLICAR VALIDACIONES TOLERANTES (Sin arrojar errores bloqueantes)
     if (cleanTipo === 'TABLERO') {
-      const maxPolos = parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42;
+      const maxPolos = toSafeInt(parsedDatosTecnicos.maxPoles, 42);
       const circuits = parsedDatosTecnicos.circuits || [];
 
       // Validar y ajustar reglas de polos sin interrumpir sincronización
       for (const circ of circuits) {
-        const rawNumPolos = circ.numPolos !== undefined ? parseInt(circ.numPolos, 10) : (circ.poles ? circ.poles.length : 1);
-        circ.numPolos = Math.min(Math.max(isNaN(rawNumPolos) ? 1 : rawNumPolos, 1), 3);
-        const posicionPolo = circ.posicionPolo !== undefined ? parseInt(circ.posicionPolo, 10) : (circ.poles ? circ.poles[0] : 1);
+        const rawNumPolos = circ.numPolos !== undefined ? toSafeInt(circ.numPolos, 1) : (Array.isArray(circ.poles) && circ.poles.length > 0 ? circ.poles.length : 1);
+        circ.numPolos = Math.min(Math.max(rawNumPolos, 1), 3);
+        const posicionPolo = circ.posicionPolo !== undefined ? toSafeInt(circ.posicionPolo, 1) : (Array.isArray(circ.poles) ? toSafeInt(circ.poles[0], 1) : 1);
+        circ.posicionPolo = posicionPolo;
 
         const requiredPoles = [];
         for (let i = 0; i < circ.numPolos; i++) {
@@ -279,8 +285,8 @@ export const crearElementoUnifilar = async (req, res, next) => {
               deleteMany: {},
               create: (parsedDatosTecnicos.circuits || []).map((c, idx) => ({
                 id: resolveSafeCircuitPk(finalElementId, c.id, idx),
-                posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
-                numPolos: Math.min(Math.max(c.numPolos !== undefined ? parseInt(c.numPolos, 10) : 1, 1), 3),
+                posicionPolo: c.posicionPolo !== undefined ? toSafeInt(c.posicionPolo, 1) : (Array.isArray(c.poles) ? toSafeInt(c.poles[0], 1) : 1),
+                numPolos: Math.min(Math.max(c.numPolos !== undefined ? toSafeInt(c.numPolos, 1) : 1, 1), 3),
                 amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : 0) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : 0),
                 descripcion: c.descripcion || c.equipo || 'Circuito de Distribución',
                 estado: c.estado || 'ACTIVO',
@@ -294,7 +300,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
             id: finalElementId,
             nombre: cleanNombre,
             ubicacion: ubicacion || 'General',
-            maxPolos: parsedDatosTecnicos.maxPoles !== undefined ? parseInt(parsedDatosTecnicos.maxPoles, 10) : 42,
+            maxPolos: parsedDatosTecnicos.maxPoles !== undefined ? toSafeInt(parsedDatosTecnicos.maxPoles, 42) : 42,
             tension,
             fases,
             alimentadorId,
@@ -304,8 +310,8 @@ export const crearElementoUnifilar = async (req, res, next) => {
             circuitos: {
               create: (parsedDatosTecnicos.circuits || []).map((c, idx) => ({
                 id: resolveSafeCircuitPk(finalElementId, c.id, idx),
-                posicionPolo: c.posicionPolo !== undefined ? parseInt(c.posicionPolo, 10) : (c.poles ? c.poles[0] : 1),
-                numPolos: Math.min(Math.max(c.numPolos !== undefined ? parseInt(c.numPolos, 10) : 1, 1), 3),
+                posicionPolo: c.posicionPolo !== undefined ? toSafeInt(c.posicionPolo, 1) : (Array.isArray(c.poles) ? toSafeInt(c.poles[0], 1) : 1),
+                numPolos: Math.min(Math.max(c.numPolos !== undefined ? toSafeInt(c.numPolos, 1) : 1, 1), 3),
                 amperaje: c.amperaje !== undefined ? (c.amperaje ? parseFloat(c.amperaje) : 0) : (c.breaker?.amp ? parseFloat(c.breaker.amp) : 0),
                 descripcion: c.descripcion || c.equipo || 'Circuito de Distribución',
                 estado: c.estado || 'ACTIVO',
@@ -350,9 +356,15 @@ export const crearElementoUnifilar = async (req, res, next) => {
             }
             const anc = await tx.elementoUnifilar.findUnique({
               where: { id: currAncestor },
-              select: { alimentadoPorId: true, nombre: true }
+              select: { alimentadoPorId: true, nombre: true, deletedAt: true }
             });
-            if (!anc) break;
+            if (!anc || anc.deletedAt !== null) {
+              if (depth === 0) {
+                cleanAlimentadoPorId = null;
+                cleanAlimentadoPor = '';
+              }
+              break;
+            }
             if (!cleanAlimentadoPor && depth === 0) {
               cleanAlimentadoPor = anc.nombre;
             }
@@ -434,6 +446,8 @@ export const crearElementoUnifilar = async (req, res, next) => {
         // Desvincular equipos que antes eran alimentados por finalElementId pero ya no están en safeAlimentaAIds
         await tx.elementoUnifilar.updateMany({
           where: {
+            proyectoId: targetProyectoId,
+            deletedAt: null,
             alimentadoPorId: finalElementId,
             id: { notIn: safeAlimentaAIds }
           },
@@ -447,6 +461,8 @@ export const crearElementoUnifilar = async (req, res, next) => {
         if (safeAlimentaAIds.length > 0) {
           await tx.elementoUnifilar.updateMany({
             where: {
+              proyectoId: targetProyectoId,
+              deletedAt: null,
               id: { in: safeAlimentaAIds }
             },
             data: {
@@ -458,7 +474,11 @@ export const crearElementoUnifilar = async (req, res, next) => {
       } else {
         // Actualizar el nombre descriptivo de alimentación en las cargas existentes si el equipo cambió de nombre
         await tx.elementoUnifilar.updateMany({
-          where: { alimentadoPorId: finalElementId },
+          where: {
+            proyectoId: targetProyectoId,
+            deletedAt: null,
+            alimentadoPorId: finalElementId
+          },
           data: { alimentadoPor: cleanNombre }
         });
       }

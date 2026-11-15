@@ -5,12 +5,13 @@ import {
   unsubscribe,
   sendTestNotification
 } from '../controllers/pushController.js';
+import { verificarToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.get('/vapid-key', getVapidPublicKey);
-router.post('/subscribe', subscribe);
-router.post('/unsubscribe', unsubscribe);
-router.post('/send-test', sendTestNotification);
+router.post('/subscribe', verificarToken, subscribe);
+router.post('/unsubscribe', verificarToken, unsubscribe);
+router.post('/send-test', verificarToken, sendTestNotification);
 
 export default router;

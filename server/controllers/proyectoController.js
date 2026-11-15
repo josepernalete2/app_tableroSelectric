@@ -201,14 +201,16 @@ export const obtenerProyectoCompleto = async (req, res, next) => {
     const proyecto = await prisma.proyecto.findUnique({
       where: { id: proyectoId },
       include: {
-        elementosUnifilares: true,
-        subestaciones: true,
-        puntosMedicion: true,
-        ccmList: true,
+        elementosUnifilares: { where: { deletedAt: null } },
+        subestaciones: { where: { deletedAt: null } },
+        puntosMedicion: { where: { deletedAt: null } },
+        ccmList: { where: { deletedAt: null } },
         alimentadores: true,
         tableros: {
+          where: { deletedAt: null },
           include: {
             circuitos: {
+              where: { deletedAt: null },
               orderBy: { posicionPolo: 'asc' }
             }
           }

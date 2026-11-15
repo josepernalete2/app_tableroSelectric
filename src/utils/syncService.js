@@ -155,8 +155,8 @@ export function validateAndSanitizeFoto(foto) {
       return null;
     }
 
-    // Límite de tamaño máximo seguro para persistencia en base de datos (14MB)
-    const MAX_BASE64_LENGTH = 14 * 1024 * 1024;
+    // Límite de tamaño máximo seguro para persistencia en Vercel Serverless (3.2MB Base64 < 4.5MB payload limit)
+    const MAX_BASE64_LENGTH = 3.2 * 1024 * 1024;
     if (base64Data.length > MAX_BASE64_LENGTH) {
       console.warn(`[FOTO VALIDATOR] ⚠️ Imagen base64 excede el límite permitido (${(base64Data.length / 1024 / 1024).toFixed(1)}MB). Omitiendo.`);
       return null;
@@ -420,17 +420,20 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
 export async function autoHealMutationDataAsync(entityName, rawData = {}, item = {}) {
   const data = autoHealMutationData(entityName, rawData, item);
 
-  if (data.foto && typeof data.foto === 'string' && data.foto.startsWith('data:image/')) {
-    if (data.foto.length > 300 * 1024) {
-      try {
-        const originalLen = data.foto.length;
-        const compressed = await compressImageToBase64(data.foto, 1280, 1280, 0.75);
-        if (compressed && compressed.startsWith('data:image/')) {
-          console.log(`[SYNC COMPRESS] 🗜️ Foto optimizada en vuelo: ${(originalLen / 1024).toFixed(0)} KB -> ${(compressed.length / 1024).toFixed(0)} KB`);
-          data.foto = compressed;
+  const imageFields = ['foto', 'firmaInspector', 'firmaSupervisor'];
+  for (const field of imageFields) {
+    if (data[field] && typeof data[field] === 'string' && data[field].startsWith('data:image/')) {
+      if (data[field].length > 300 * 1024) {
+        try {
+          const originalLen = data[field].length;
+          const compressed = await compressImageToBase64(data[field], 1280, 1280, 0.75);
+          if (compressed && compressed.startsWith('data:image/')) {
+            console.log(`[SYNC COMPRESS] 🗜️ ${field} optimizado en vuelo: ${(originalLen / 1024).toFixed(0)} KB -> ${(compressed.length / 1024).toFixed(0)} KB`);
+            data[field] = compressed;
+          }
+        } catch (compressErr) {
+          console.warn(`[SYNC COMPRESS] ⚠️ Fallo al comprimir ${field} en vuelo, continuando con original:`, compressErr.message);
         }
-      } catch (compressErr) {
-        console.warn('[SYNC COMPRESS] ⚠️ Fallo al comprimir foto en vuelo, continuando con original:', compressErr.message);
       }
     }
   }
@@ -480,6 +483,9 @@ export async function prepareMutation(item) {
  */
 export async function enviarElementoDirectoAlServidor(empresaId, elemento, token) {
   if (!elemento) return { ok: false, error: 'Elemento no proporcionado' };
+  if (!token || token === 'mock-offline-token') {
+    return { ok: false, status: 401, error: 'Sesión offline activa' };
+  }
 
   try {
     const elementId = elemento.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `elem-${Date.now()}`);

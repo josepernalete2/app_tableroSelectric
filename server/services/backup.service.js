@@ -230,13 +230,13 @@ export async function obtenerResumenTodasEmpresas() {
   });
 
   return empresas.map(emp => {
-    let totalTableros = emp.tableros.length;
-    let totalCircuitos = emp.tableros.reduce((acc, t) => acc + (t._count?.circuitos || 0), 0);
+    let totalTableros = 0;
+    let totalCircuitos = 0;
     let totalAlimentadores = 0;
-    let totalUnifilares = emp._count.elementosUnifilares || 0;
-    let totalSubestaciones = emp._count.subestaciones || 0;
-    let totalPuntosMedicion = emp._count.puntosMedicion || 0;
-    let totalCcm = emp._count.ccmList || 0;
+    let totalUnifilares = 0;
+    let totalSubestaciones = 0;
+    let totalPuntosMedicion = 0;
+    let totalCcm = 0;
     let totalInspecciones = 0;
     let totalAlarmas = 0;
 
