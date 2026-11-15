@@ -3,6 +3,9 @@ import { Camera, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 
+// Pausar temporalmente la carga de fotografías para garantizar sincronización ligera 100% JSON
+export const PHOTO_UPLOAD_PAUSED = true;
+
 // Renderizado seguro de imágenes con soporte para File / Blob / Data URL / URL remota
 export const SafePreviewImage = ({ blob, src, alt, className, onError }) => {
   const [objectUrl, setObjectUrl] = useState(null);
@@ -73,7 +76,7 @@ export default function DualPhotoUploader({
   const hasPhoto = !!(fotoBlob || activeSrc);
 
   const handleFileChange = async (e) => {
-    if (readOnly) return;
+    if (readOnly || PHOTO_UPLOAD_PAUSED) return;
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
@@ -151,6 +154,33 @@ export default function DualPhotoUploader({
               </button>
             </div>
           )}
+        </div>
+      ) : PHOTO_UPLOAD_PAUSED ? (
+        <div className="p-3.5 border border-dashed border-slate-800 bg-slate-950/40 rounded-2xl text-center space-y-2.5 no-print">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-bold">
+            <Camera className="w-3.5 h-3.5" />
+            <span>Carga de fotos pausada temporalmente (Prioridad de datos activa)</span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-0.5">
+            <button
+              type="button"
+              disabled
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-800/60 text-slate-500 border border-slate-800 font-bold text-xs rounded-xl cursor-not-allowed opacity-60"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Tomar Foto (Cámara)</span>
+            </button>
+
+            <button
+              type="button"
+              disabled
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-800/60 text-slate-500 border border-slate-800 font-bold text-xs rounded-xl cursor-not-allowed opacity-60"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>Subir Archivo / Galería</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="p-4 sm:p-5 border-2 border-dashed border-slate-800 hover:border-slate-700 bg-slate-950/40 rounded-2xl text-center space-y-3 transition-colors no-print">

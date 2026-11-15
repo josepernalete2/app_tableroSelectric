@@ -207,22 +207,35 @@ export function dataURLtoBlob(dataUrl) {
 }
 
 /**
- * Determina de forma exhaustiva y segura si un elemento de la cola posee una imagen adjunta válida.
+ * Limpia recursivamente cualquier payload de imagen pesada (fotoBlob, previewUrl, objetos Blob/File y cadenas Base64 data:image/*),
+ * reemplazándolas por null y conservando únicamente URLs cortas HTTP/HTTPS o rutas /uploads/... existentes en el servidor.
  */
-export function tieneImagenAdjunta(item) {
-  if (!item || !item.payload) return false;
-  const p = item.payload;
-  if (p.fotoBlob && (typeof Blob !== 'undefined' && p.fotoBlob instanceof Blob) && p.fotoBlob.size > 50) {
-    return true;
+export function stripAllImagePayloads(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof Blob !== 'undefined' && obj instanceof Blob) return null;
+  if (typeof File !== 'undefined' && obj instanceof File) return null;
+  if (typeof obj === 'string') {
+    return obj.trim().startsWith('data:image/') ? null : obj;
   }
-  const sanitizedFoto = validateAndSanitizeFoto(p.foto);
-  if (sanitizedFoto && sanitizedFoto.startsWith('data:image')) {
-    return true;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => stripAllImagePayloads(item));
   }
-  const sanitizedFotoUrl = validateAndSanitizeFoto(p.fotoUrl);
-  if (sanitizedFotoUrl && sanitizedFotoUrl.startsWith('data:image')) {
-    return true;
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    const clone = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === 'fotoBlob' || k === 'previewUrl') continue;
+      clone[k] = stripAllImagePayloads(v);
+    }
+    return clone;
   }
+  return obj;
+}
+
+/**
+ * Determina de forma exhaustiva y segura si un elemento de la cola posee una imagen adjunta válida.
+ * MÓDULO DE IMÁGENES PAUSADO TEMPORALMENTE: Retorna siempre false para procesar el 100% de la cola vía JSON (/api/sync/batch).
+ */
+export function tieneImagenAdjunta(_item) {
   return false;
 }
 
@@ -253,11 +266,11 @@ export const ENTITY_SYNC_PRIORITY = {
  * 4. Garantiza que datosTecnicos sea siempre un objeto JSON válido normalizado con la norma venezolana COVENIN 159:1997 / CEN 200.
  */
 export function autoHealMutationData(entityName, rawData = {}, item = {}) {
-  const data = { ...rawData };
+  const data = stripAllImagePayloads({ ...rawData });
   delete data.fotoBlob;
   delete data.previewUrl;
 
-  // 1. Auto-Healing de Fotos (proteger foto existente salvo bandera explícita de borrado)
+  // 1. Auto-Healing de Fotos (Módulo de imágenes pausado: conservar únicamente URLs remotas o rutas /uploads/... cortas)
   const explicitDeletePhoto = (
     rawData.eliminarFoto === true ||
     rawData.eliminarFoto === 'true' ||
@@ -267,7 +280,9 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
     rawData.fotoUrl === '__DELETE__'
   );
   const rawFoto = data.foto || data.fotoUrl;
-  const validFoto = !explicitDeletePhoto ? validateAndSanitizeFoto(rawFoto) : null;
+  const validFoto = !explicitDeletePhoto && typeof rawFoto === 'string' && !rawFoto.trim().startsWith('data:image/')
+    ? validateAndSanitizeFoto(rawFoto)
+    : null;
   if (validFoto) {
     data.foto = validFoto;
     delete data.fotoUrl;
@@ -418,27 +433,9 @@ export function autoHealMutationData(entityName, rawData = {}, item = {}) {
  * Canvas a 1280px / JPEG 75% antes de construir la solicitud HTTP.
  */
 export async function autoHealMutationDataAsync(entityName, rawData = {}, item = {}) {
-  const data = autoHealMutationData(entityName, rawData, item);
-
-  const imageFields = ['foto', 'firmaInspector', 'firmaSupervisor'];
-  for (const field of imageFields) {
-    if (data[field] && typeof data[field] === 'string' && data[field].startsWith('data:image/')) {
-      if (data[field].length > 300 * 1024) {
-        try {
-          const originalLen = data[field].length;
-          const compressed = await compressImageToBase64(data[field], 1280, 1280, 0.75);
-          if (compressed && compressed.startsWith('data:image/')) {
-            console.log(`[SYNC COMPRESS] 🗜️ ${field} optimizado en vuelo: ${(originalLen / 1024).toFixed(0)} KB -> ${(compressed.length / 1024).toFixed(0)} KB`);
-            data[field] = compressed;
-          }
-        } catch (compressErr) {
-          console.warn(`[SYNC COMPRESS] ⚠️ Fallo al comprimir ${field} en vuelo, continuando con original:`, compressErr.message);
-        }
-      }
-    }
-  }
-
-  return data;
+  const cleanRaw = stripAllImagePayloads(rawData || {});
+  const data = autoHealMutationData(entityName, cleanRaw, item);
+  return stripAllImagePayloads(data);
 }
 
 /**
@@ -458,15 +455,16 @@ export async function prepareMutation(item) {
   else if (item.tipo === 'INSPECCION_ATERRAMIENTO') entityName = 'InspeccionAterramiento';
   else if (item.tipo === 'INSPECCION_TANQUE_COMBUSTIBLE') entityName = 'InspeccionTanqueCombustible';
 
-  const mutationData = await autoHealMutationDataAsync(entityName, item.payload || {}, item);
-  const mutationId = item.payload?.id || item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}`);
+  const cleanPayload = stripAllImagePayloads(item.payload || {});
+  const mutationData = stripAllImagePayloads(await autoHealMutationDataAsync(entityName, cleanPayload, item));
+  const mutationId = cleanPayload?.id || item.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}`);
 
   return {
     entity: entityName,
     id: mutationId,
     queueId: item.id,
     operation: item.operation || item.accion || item.operacion || 'UPSERT',
-    baseVersion: item.payload?.version || 1,
+    baseVersion: cleanPayload?.version || 1,
     data: mutationData
   };
 }
@@ -488,8 +486,9 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
   }
 
   try {
-    const elementId = elemento.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `elem-${Date.now()}`);
-    const healed = await autoHealMutationDataAsync('ElementoUnifilar', elemento, { id: elementId, companyId: empresaId });
+    const cleanElemento = stripAllImagePayloads(elemento);
+    const elementId = cleanElemento.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `elem-${Date.now()}`);
+    const healed = stripAllImagePayloads(await autoHealMutationDataAsync('ElementoUnifilar', cleanElemento, { id: elementId, companyId: empresaId }));
 
     const formData = new FormData();
     formData.append('id', elementId);
@@ -501,7 +500,7 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     if (healed.alimentaA) formData.append('alimentaA', healed.alimentaA);
     if (healed.alimentaAIds && healed.alimentaAIds.length > 0) formData.append('alimentaAIds', JSON.stringify(healed.alimentaAIds));
     formData.append('observacionesGenerales', healed.observacionesGenerales);
-    formData.append('proyectoId', elemento.proyectoId || '');
+    formData.append('proyectoId', cleanElemento.proyectoId || '');
     formData.append('circuitoOrigen', healed.circuitoOrigen);
     formData.append('calibreConductor', healed.calibreConductor);
     formData.append('breakerAmperaje', String(healed.breakerAmperaje));
@@ -510,35 +509,16 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     formData.append('potenciaEstimada', healed.potenciaEstimada);
     formData.append('estadoVinculo', healed.estadoVinculo);
 
-    const compId = empresaId || healed.empresaId || elemento.companyId;
+    const compId = empresaId || healed.empresaId || cleanElemento.companyId;
     if (compId) {
       formData.append('empresaId', compId);
     }
 
     formData.append('datosTecnicos', JSON.stringify(healed.datosTecnicos));
 
-    // Sanitización y auto-curación de fotografía
+    // Módulo de imágenes pausado: NO adjuntar archivos binarios foto ni cadenas data:image/...
     const validFoto = healed.foto;
-    let fileBlob = null;
-    if (elemento.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob) && elemento.fotoBlob.size > 50) {
-      if (elemento.fotoBlob.size > 300 * 1024) {
-        try {
-          const compressedBlobBase64 = await compressImageToBase64(elemento.fotoBlob, 1280, 1280, 0.75);
-          fileBlob = dataURLtoBlob(compressedBlobBase64) || elemento.fotoBlob;
-        } catch {
-          fileBlob = elemento.fotoBlob;
-        }
-      } else {
-        fileBlob = elemento.fotoBlob;
-      }
-    } else if (validFoto && validFoto.startsWith('data:image')) {
-      fileBlob = dataURLtoBlob(validFoto);
-    }
-
-    if (fileBlob) {
-      const fileExt = fileBlob.type ? (fileBlob.type.split('/')[1] || 'jpg') : 'jpg';
-      formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
-    } else if (validFoto && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
+    if (validFoto && typeof validFoto === 'string' && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
       formData.append('fotoUrl', validFoto);
     } else if (healed.eliminarFoto === true || elemento.eliminarFoto === true || elemento.foto === '__DELETE__') {
       formData.append('eliminarFoto', 'true');

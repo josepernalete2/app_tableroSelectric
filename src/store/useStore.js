@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import localforage from 'localforage';
 import { API_BASE_URL } from '../utils/api.js';
-import { cleanTipoElemento, enviarElementoDirectoAlServidor, fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS, readResponsePayload, registrarEmpresaApi } from '../utils/syncService.js';
+import { cleanTipoElemento, enviarElementoDirectoAlServidor, fetchWithTimeout, DEFAULT_REQUEST_TIMEOUT_MS, readResponsePayload, registrarEmpresaApi, stripAllImagePayloads } from '../utils/syncService.js';
 
 // Configurar localforage
 localforage.config({
@@ -3356,12 +3356,15 @@ export const useStore = create(
 
       enqueueOfflineItem: (tipo, companyId, payload, syncError = null) => {
         if (!payload || !payload.id) return;
+        const cleanPayload = stripAllImagePayloads(payload);
         set((state) => {
           const currentQueue = Array.isArray(state.syncQueue) ? [...state.syncQueue] : [];
-          const idx = currentQueue.findIndex((item) => item.id === payload.id || item.payload?.id === payload.id);
-          const mergedPayload = idx >= 0 ? mergePayloadDeep(currentQueue[idx]?.payload, payload) : payload;
+          const idx = currentQueue.findIndex((item) => item.id === cleanPayload.id || item.payload?.id === cleanPayload.id);
+          const mergedPayload = idx >= 0
+            ? stripAllImagePayloads(mergePayloadDeep(currentQueue[idx]?.payload, cleanPayload))
+            : cleanPayload;
           const queueItem = {
-            id: payload.id,
+            id: cleanPayload.id,
             tipo: tipo || 'ELEMENTO_UNIFILAR',
             companyId: companyId || mergedPayload.empresaId || mergedPayload.companyId || null,
             payload: mergedPayload,
@@ -3378,8 +3381,9 @@ export const useStore = create(
         });
       },
 
-      enviarElementoDirectoServidor: async (empresaId, elemento) => {
-        if (!elemento) return { ok: false, error: 'Elemento no proporcionado' };
+      enviarElementoDirectoServidor: async (empresaId, rawElemento) => {
+        if (!rawElemento) return { ok: false, error: 'Elemento no proporcionado' };
+        const elemento = stripAllImagePayloads(rawElemento);
         const { token, showToast } = get();
 
         // Si NO hay conexión a internet (navigator.onLine === false) o no hay sesión activa, retener en cola local
@@ -3856,6 +3860,22 @@ export const useStore = create(
           if (!Array.isArray(state.syncQueue)) state.syncQueue = [];
           if (!Array.isArray(state.companies)) state.companies = [];
           if (!Array.isArray(state.elementosLocales)) state.elementosLocales = [];
+
+          // Limpiar automáticamente cualquier fotoBlob o imagen Base64 pesada en syncQueue, elementosLocales y companies
+          // para destrabar elementos pendientes con error 413 FUNCTION_PAYLOAD_TOO_LARGE sin perder datos eléctricos
+          state.syncQueue = state.syncQueue.map((item) => {
+            if (!item) return item;
+            const cleanedItem = {
+              ...item,
+              payload: stripAllImagePayloads(item.payload || {})
+            };
+            delete cleanedItem.fotoBlob;
+            delete cleanedItem.syncError;
+            delete cleanedItem.syncFailedAt;
+            return cleanedItem;
+          });
+          state.elementosLocales = state.elementosLocales.map((el) => stripAllImagePayloads(el));
+          state.companies = state.companies.map((c) => stripAllImagePayloads(c));
 
           // Depurar posibles datos mock residuales ('c-1', 'c-2') de la caché local (IndexedDB)
           const legacyMockCompanyIds = new Set(['c-1', 'c-2']);

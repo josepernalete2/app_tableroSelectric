@@ -12,6 +12,7 @@ import {
   readResponsePayload,
   validateAndSanitizeFoto,
   dataURLtoBlob,
+  stripAllImagePayloads,
   tieneImagenAdjunta,
   ENTITY_SYNC_PRIORITY,
   autoHealMutationData,
@@ -31,6 +32,7 @@ export {
   readResponsePayload,
   validateAndSanitizeFoto,
   dataURLtoBlob,
+  stripAllImagePayloads,
   tieneImagenAdjunta,
   ENTITY_SYNC_PRIORITY,
   autoHealMutationData,
@@ -204,10 +206,11 @@ export function useSync() {
    * Sincronización individual de elemento multipart con fotografía vía FormData y timeout de 30s.
    * Sanitiza la foto antes de enviarla para evitar errores fatales en Prisma.
    */
-  const sincronizarElementoUnifilar = async (empresaId, elemento, queueItemId) => {
+  const sincronizarElementoUnifilar = async (empresaId, rawElemento, queueItemId) => {
     try {
+      const elemento = stripAllImagePayloads(rawElemento || {});
       const elementId = elemento?.id || queueItemId;
-      const healed = await autoHealMutationDataAsync('ElementoUnifilar', elemento || {}, { id: elementId, companyId: empresaId });
+      const healed = stripAllImagePayloads(await autoHealMutationDataAsync('ElementoUnifilar', elemento || {}, { id: elementId, companyId: empresaId }));
 
       const formData = new FormData();
       formData.append('id', elementId);
@@ -233,30 +236,11 @@ export function useSync() {
 
       formData.append('datosTecnicos', JSON.stringify(healed.datosTecnicos));
 
-      // Sanitización y auto-curación de fotografía
+      // Módulo de imágenes pausado: nunca adjuntar blobs ni data:image/...
       const validFoto = healed.foto;
-      let fileBlob = null;
-      if (elemento?.fotoBlob && (typeof Blob !== 'undefined' && elemento.fotoBlob instanceof Blob) && elemento.fotoBlob.size > 50) {
-        if (elemento.fotoBlob.size > 300 * 1024) {
-          try {
-            const compressedBlobBase64 = await compressImageToBase64(elemento.fotoBlob, 1280, 1280, 0.75);
-            fileBlob = dataURLtoBlob(compressedBlobBase64) || elemento.fotoBlob;
-          } catch {
-            fileBlob = elemento.fotoBlob;
-          }
-        } else {
-          fileBlob = elemento.fotoBlob;
-        }
-      } else if (validFoto && validFoto.startsWith('data:image')) {
-        fileBlob = dataURLtoBlob(validFoto);
-      }
-
-      if (fileBlob) {
-        const fileExt = fileBlob.type ? (fileBlob.type.split('/')[1] || 'jpg') : 'jpg';
-        formData.append('foto', fileBlob, `foto_${elementId}.${fileExt}`);
-      } else if (validFoto && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
+      if (validFoto && typeof validFoto === 'string' && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
         formData.append('fotoUrl', validFoto);
-      } else if (healed.eliminarFoto === true || elemento?.eliminarFoto === true || elemento?.foto === '__DELETE__') {
+      } else if (healed.eliminarFoto === true || rawElemento?.eliminarFoto === true || rawElemento?.foto === '__DELETE__') {
         formData.append('eliminarFoto', 'true');
         formData.append('foto', '__DELETE__');
       }
