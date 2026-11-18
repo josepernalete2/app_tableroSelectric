@@ -14,18 +14,33 @@ import {
   Activity,
   Settings,
   RotateCcw,
-  Edit3
+  Edit3,
+  Save
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
+import DualPhotoUploader from './DualPhotoUploader';
 import { TENSIONES_COVENIN_TODAS } from '../utils/constants';
 import TensionNominalInput from './TensionNominalInput';
 import useStore, { getElementCode } from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
 
 export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, elementosCreados = [] }) {
-  const { companies, crearElementoProvisional } = useStore();
+  const { companies, crearElementoProvisional, showToast } = useStore();
+  const { confirm: customConfirm } = useConfirm();
+  const [isEditing, setIsEditing] = useState(false);
+  const effectivelyReadOnly = Boolean(readOnly || !isEditing);
+
+  const [localData, setLocalData] = useState(puntoData || {});
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    if (puntoData) {
+      setLocalData(puntoData);
+    }
+  }, [puntoData]);
   const resolvedElementosCreados = React.useMemo(() => {
     if (Array.isArray(elementosCreados) && elementosCreados.length > 0) {
       return elementosCreados.filter(e => e.id !== puntoData?.id);
@@ -70,13 +85,13 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
     empresaDistribuidora = '',
     nivelTensionContrato = '',
     tensionNominal = '',
-    potenciaContratada = '',
+    potenciaContratada = localData?.potenciaContratada || localData?.capacidadContratadaKva || localData?.cargaContratadaKva || '',
     tarifaAplicable = '',
     codigoElementoPrincipal = '',
 
     // 2. Punto de Acometida
-    tipoAcometida = puntoData.tipoAcometida || puntoData.tipo || '',
-    tipo = puntoData.tipo || puntoData.tipoAcometida || '',
+    tipoAcometida = localData?.tipoAcometida || localData?.tipo || '',
+    tipo = localData?.tipo || localData?.tipoAcometida || '',
     puntoConexionPCC = '',
     conductorAcometida = '',
     longitudAcometida = '',
@@ -94,25 +109,46 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
     marcaModeloMedidor = '',
     numeroSerieAno = '',
 
-    // 5. Observaciones y Firmas
-    observaciones = '',
+    // 5. Observaciones, Foto y Firmas
+    observaciones = localData?.observaciones || localData?.observacionesGenerales || '',
+    foto = localData?.foto || null,
+    fotoBlob = localData?.fotoBlob || null,
     firmaInspector = '',
     firmaSupervisor = ''
-  } = puntoData;
+  } = localData || {};
 
   const updateField = (field, value) => {
-    if (readOnly) return;
-    onUpdate({
-      ...puntoData,
+    if (effectivelyReadOnly) return;
+    setLocalData((prev) => ({
+      ...prev,
       [field]: value
-    });
+    }));
   };
 
-  const handleLimpiarFormulario = () => {
+  const handleSave = () => {
     if (readOnly) return;
-    onUpdate({
+    const payloadToSave = {
+      ...puntoData,
+      ...localData,
+      observacionesGenerales: localData?.observaciones ?? localData?.observacionesGenerales ?? '',
+      capacidadContratadaKva: localData?.potenciaContratada ?? localData?.capacidadContratadaKva ?? '',
+      cargaContratadaKva: localData?.potenciaContratada ?? localData?.cargaContratadaKva ?? ''
+    };
+    if (onUpdate) {
+      onUpdate(payloadToSave);
+    }
+    setIsEditing(false);
+    showToast?.('Información del Punto de Suministro guardada por completo.', 'success');
+  };
+
+  const handleLimpiarFormulario = async () => {
+    if (effectivelyReadOnly) return;
+    const confirmed = await customConfirm("¿Deseas reiniciar todos los campos de este punto de suministro a valores en blanco?");
+    if (!confirmed) return;
+    const cleaned = {
+      ...localData,
       id: puntoData.id,
-      nombre: puntoData.nombre || '',
+      nombre: localData.nombre || puntoData.nombre || '',
       fecha: '',
       hora: '',
       inspector: '',
@@ -122,9 +158,12 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
       nivelTensionContrato: '',
       tensionNominal: '',
       potenciaContratada: '',
+      capacidadContratadaKva: '',
+      cargaContratadaKva: '',
       tarifaAplicable: '',
       codigoElementoPrincipal: '',
       tipoAcometida: '',
+      tipo: '',
       puntoConexionPCC: '',
       conductorAcometida: '',
       longitudAcometida: '',
@@ -139,9 +178,16 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
       numeroSerieAno: '',
       mediciones: {},
       observaciones: '',
+      observacionesGenerales: '',
+      foto: null,
+      fotoBlob: null,
+      eliminarFoto: true,
       firmaInspector: '',
       firmaSupervisor: ''
-    });
+    };
+    setLocalData(cleaned);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   };
 
   const sheetRef = useRef(null);
@@ -176,35 +222,67 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
       
       {/* Encabezado General */}
       <div className="tablero-header-bar flex flex-col md:flex-row print:flex-row justify-between items-start md:items-center print:items-center gap-4 print:gap-2 pb-6 print:p-2 border-b border-slate-800 print:border-2 print:border-slate-900 print:rounded-xs">
-        <div>
+        <div className="flex-1 min-w-0">
           <span className="text-[10px] print:text-[8.5px] text-amber-500 font-extrabold uppercase tracking-widest print:text-slate-800">
             Formato de Levantamiento
           </span>
           <h2 className="text-xl md:text-2xl print:text-xs font-extrabold text-slate-100 tracking-wide mt-1 print:mt-0 print:text-slate-950 uppercase">
-            Punto de Medición y Suministro de Energía Eléctrica {nombre ? `— ${nombre}` : ''}
+            {isEditing ? (
+              <input
+                type="text"
+                value={nombre ?? ''}
+                onChange={(e) => updateField('nombre', e.target.value)}
+                placeholder="Ej. PUNTO DE SUMINISTRO PRINCIPAL"
+                className="bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3 py-1.5 w-full max-w-xl text-base md:text-lg font-extrabold text-slate-100 outline-none"
+              />
+            ) : (
+              <>Punto de Medición y Suministro de Energía Eléctrica {nombre ? `— ${nombre}` : ''}</>
+            )}
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!readOnly && (
-            <button
-              type="button"
-              onClick={handleLimpiarFormulario}
-              className="no-print bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs transition-all border border-slate-700 cursor-pointer"
-              title="Reiniciar todos los campos del formulario a blanco"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-amber-500" /> Limpiar
-            </button>
+            <>
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={handleLimpiarFormulario}
+                  className="no-print bg-slate-800 hover:bg-red-950/60 text-slate-300 hover:text-red-400 font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 text-xs transition-all border border-slate-700 hover:border-red-800 cursor-pointer"
+                  title="Reiniciar todos los campos del formulario a blanco"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Limpiar
+                </button>
+              )}
+
+              {isEditing ? (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="no-print px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl transition-all font-black text-xs cursor-pointer flex items-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95"
+                >
+                  <Save className="w-4 h-4" /> Guardar Cambios
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="no-print px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition-all font-black text-xs cursor-pointer flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"
+                >
+                  <Edit3 className="w-4 h-4" /> Editar Punto de Suministro
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => window.print()}
-            className="no-print bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl flex items-center gap-2 text-xs transition-all cursor-pointer shadow-md"
+            className="no-print bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 text-xs transition-all cursor-pointer shadow-sm"
             title="Guardar como PDF o Imprimir este Formato"
           >
-            <Printer className="w-4 h-4" /> Guardar PDF
+            <Printer className="w-4 h-4 text-amber-400" /> Guardar PDF
           </button>
           <div className="flex items-center gap-1">
             <span className="tablero-badge-amber inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 print:px-2 print:py-0.5 rounded-lg print:rounded border border-amber-500/30 text-xs print:text-[9.5px] shadow-sm">
-              ID: {getElementCode(puntoData, 'PUNTO_MEDICION')}
+              ID: {getElementCode(localData || puntoData, 'PUNTO_MEDICION')}
             </span>
             {isAdmin && (
               <button
@@ -229,10 +307,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             </span>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={inspector ?? ''}
               onChange={(e) => updateField('inspector', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. Ing. Juan Pérez"
             />
           </div>
@@ -242,10 +320,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             </span>
             <input
               type="date"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={fecha ?? ''}
               onChange={(e) => updateField('fecha', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -254,10 +332,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             </span>
             <input
               type="time"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={hora ?? ''}
               onChange={(e) => updateField('hora', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
         </div>
@@ -275,10 +353,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Nombre del Usuario / Razón Social</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={nombreUsuario ?? ''}
               onChange={(e) => updateField('nombreUsuario', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. Industrias Eléctricas C.A."
             />
           </div>
@@ -288,10 +366,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">N° de Contrato / Cuenta / NIC</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={numeroContrato ?? ''}
               onChange={(e) => updateField('numeroContrato', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. NIC-84920491"
             />
           </div>
@@ -301,10 +379,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Empresa Distribuidora (ED) / Suministrador</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={empresaDistribuidora ?? ''}
               onChange={(e) => updateField('empresaDistribuidora', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. CORPOELEC / Suministrador Local"
             />
           </div>
@@ -319,7 +397,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                   <button
                     key={nivel}
                     type="button"
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onClick={() => updateField('nivelTensionContrato', nivel)}
                     className={`py-2 px-2 text-center rounded-xl border text-[11px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                       isSelected
@@ -339,7 +417,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tensión Nominal de Suministro (COVENIN 159:1997)</label>
             <TensionNominalInput
               tipo="TODAS"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={tensionNominal ?? ''}
               onChange={(val) => updateField('tensionNominal', val)}
               placeholder="Ej. 13800 V o 208Y/120 V"
@@ -351,10 +429,15 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Potencia Contratada / Conectada (kVA)</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={potenciaContratada ?? ''}
-              onChange={(e) => updateField('potenciaContratada', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              onChange={(e) => {
+                const val = e.target.value;
+                updateField('potenciaContratada', val);
+                updateField('capacidadContratadaKva', val);
+                updateField('cargaContratadaKva', val);
+              }}
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. 500 kVA"
             />
           </div>
@@ -364,10 +447,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Tarifa / Régimen Tarifario Aplicable</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={tarifaAplicable ?? ''}
               onChange={(e) => updateField('tarifaAplicable', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. Tarifa Industrial General T-2"
             />
           </div>
@@ -377,10 +460,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Código del Elemento Principal</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={codigoElementoPrincipal ?? ''}
               onChange={(e) => updateField('codigoElementoPrincipal', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 uppercase"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed uppercase"
               placeholder="Ej. ELEM-MED-01"
             />
           </div>
@@ -395,7 +478,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                 proyectoId={puntoData?.proyectoId}
                 tableroActualId={puntoData?.id}
                 value={alimentadoPor}
-                disabled={readOnly}
+                disabled={effectivelyReadOnly}
                 multiple={false}
                 tipoElementoActual="PUNTO_MEDICION"
                 direccionRelacion="ALIMENTADO_POR"
@@ -421,7 +504,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                 proyectoId={puntoData?.proyectoId}
                 tableroActualId={puntoData?.id}
                 value={alimentaA}
-                disabled={readOnly}
+                disabled={effectivelyReadOnly}
                 multiple={true}
                 tipoElementoActual="PUNTO_MEDICION"
                 direccionRelacion="ALIMENTA_A"
@@ -450,7 +533,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
           </span>
           <button
             type="button"
-            disabled={readOnly}
+            disabled={effectivelyReadOnly}
             onClick={() => {
               setWizardModo('ENTRADA');
               setCircuitDataWizard({
@@ -462,7 +545,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
               });
               setModalJerarquiaOpen(true);
             }}
-            className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all shadow-sm disabled:opacity-60"
+            className="no-print inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             title="Configurar Conexión de Jerarquía (Wizard)"
           >
             <Settings className="w-3.5 h-3.5 text-amber-400" /> Configurar Jerarquía
@@ -480,7 +563,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                   <button
                     key={tipoVal}
                     type="button"
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onClick={() => {
                       updateField('tipoAcometida', tipoVal);
                       updateField('tipo', tipoVal);
@@ -503,10 +586,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Punto de Conexión (PCC)</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={puntoConexionPCC ?? ''}
               onChange={(e) => updateField('puntoConexionPCC', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Tag / Código de Poste, Celda o Subestación"
             />
           </div>
@@ -516,10 +599,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Conductor de Acometida (Tipo / Calibre)</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={conductorAcometida ?? ''}
               onChange={(e) => updateField('conductorAcometida', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. 3x(1x500 kcmil) Cu TTU"
             />
           </div>
@@ -529,10 +612,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Longitud Acometida (metros)</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={longitudAcometida ?? ''}
               onChange={(e) => updateField('longitudAcometida', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. 45 m / 3 Fases + N"
             />
           </div>
@@ -547,7 +630,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                   <button
                     key={elem}
                     type="button"
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onClick={() => updateField('elementoManiobra', elem)}
                     className={`py-2 px-2.5 text-center rounded-xl border text-[10px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                       isSelected
@@ -567,10 +650,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Capacidad de Interrupción General (Marca / Modelo / Amperaje)</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={capacidadInterrupcion ?? ''}
               onChange={(e) => updateField('capacidadInterrupcion', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. Square D / Masterpact NW16 / 1600A - 65kA"
             />
           </div>
@@ -596,7 +679,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                 <button
                   key={ubic}
                   type="button"
-                  disabled={readOnly}
+                  disabled={effectivelyReadOnly}
                   onClick={() => updateField('ubicacionTransformador', ubic)}
                   className={`py-2 px-3 text-left rounded-xl border text-[10px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                     isSelected
@@ -622,7 +705,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                 <button
                   key={prop}
                   type="button"
-                  disabled={readOnly}
+                  disabled={effectivelyReadOnly}
                   onClick={() => updateField('propiedadTransformador', prop)}
                   className={`py-2 px-3 text-left rounded-xl border text-[10px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                     isSelected
@@ -648,7 +731,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                 <button
                   key={uso}
                   type="button"
-                  disabled={readOnly}
+                  disabled={effectivelyReadOnly}
                   onClick={() => updateField('usoTransformador', uso)}
                   className={`py-2 px-3 text-left rounded-xl border text-[10px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                     isSelected
@@ -684,7 +767,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                   <button
                     key={ubic}
                     type="button"
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onClick={() => updateField('ubicacionMedidor', ubic)}
                     className={`py-2 px-2 text-center rounded-xl border text-[10px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                       isSelected
@@ -712,7 +795,7 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
                   <button
                     key={tipo}
                     type="button"
-                    disabled={readOnly}
+                    disabled={effectivelyReadOnly}
                     onClick={() => updateField('tipoMedicion', tipo)}
                     className={`py-2 px-2 text-center rounded-xl border text-[10px] font-bold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                       isSelected
@@ -732,10 +815,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">Marca / Modelo del Medidor</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={marcaModeloMedidor ?? ''}
               onChange={(e) => updateField('marcaModeloMedidor', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. Elster A1800 ALPHA / ION7650"
             />
           </div>
@@ -745,10 +828,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <label className="text-[11px] font-bold text-slate-400 print:text-slate-700">N° de Serie / Año de Fabricación</label>
             <input
               type="text"
-              disabled={readOnly}
+              disabled={effectivelyReadOnly}
               value={numeroSerieAno ?? ''}
               onChange={(e) => updateField('numeroSerieAno', e.target.value)}
-              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60"
+              className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-100 outline-none h-10 transition-all font-mono print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Ej. SN-7492019 / 2022"
             />
           </div>
@@ -757,20 +840,21 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
 
       {/* SECCIÓN 4.1: MEDICIONES */}
       <MetrologiaElectricaSection
-        mediciones={puntoData.mediciones || {}}
+        mediciones={localData?.mediciones || {}}
         onChange={(nuevasMediciones, field, val) => {
           if (typeof nuevasMediciones === 'object' && nuevasMediciones !== null) {
             updateField('mediciones', nuevasMediciones);
           } else if (typeof nuevasMediciones === 'string') {
             updateField('mediciones', {
-              ...(puntoData.mediciones || {}),
+              ...(localData?.mediciones || {}),
               [nuevasMediciones]: val
             });
           }
         }}
         titulo="MEDICIONES"
         subtitulo="Tensiones Línea-Línea, Línea-Neutro y Canales de Corriente (COVENIN 159)"
-        readOnly={readOnly}
+        readOnly={effectivelyReadOnly}
+        isEditing={isEditing}
       />
 
       {/* SECCIÓN 5: Anomalías u observaciones */}
@@ -780,11 +864,38 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
         </h3>
 
         <textarea
+          disabled={effectivelyReadOnly}
           value={observaciones}
           onChange={(e) => updateField('observaciones', e.target.value)}
           rows={4}
-          className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl p-3.5 text-xs text-slate-100 outline-none transition-all placeholder-slate-600 font-sans print:bg-white print:text-slate-900 print:border-gray-300"
+          className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl p-3.5 text-xs text-slate-100 outline-none transition-all placeholder-slate-600 font-sans print:bg-white print:text-slate-900 print:border-gray-300 disabled:opacity-60 disabled:cursor-not-allowed"
           placeholder="Escriba aquí las observaciones, hallazgos o anomalías detectadas en la acometida, transformador o equipo de medición..."
+        />
+      </div>
+
+      {/* SECCIÓN 5.1: Evidencia Fotográfica del Punto de Suministro */}
+      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1 print:border-slate-500">
+        <DualPhotoUploader
+          fotoBlob={fotoBlob}
+          fotoSrc={foto}
+          previewUrl={previewUrl}
+          onImageSelected={(file, base64Url) => {
+            updateField('fotoBlob', file);
+            updateField('foto', base64Url);
+            updateField('eliminarFoto', false);
+            if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(base64Url);
+          }}
+          onRemove={() => {
+            updateField('fotoBlob', null);
+            updateField('foto', null);
+            updateField('eliminarFoto', true);
+            if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(null);
+          }}
+          readOnly={effectivelyReadOnly}
+          label="6. Registro Fotográfico del Punto de Suministro / Medidor"
+          sublabel="Captura con cámara en vivo o selecciona desde galería"
         />
       </div>
 
@@ -800,9 +911,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma del Inspector / Técnico</span>
             <input
               type="text"
+              disabled={effectivelyReadOnly}
               value={firmaInspector}
               onChange={(e) => updateField('firmaInspector', e.target.value)}
-              className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
+              className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Nombre / Iniciales del Inspector"
             />
             <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
@@ -816,9 +928,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma / Sello de la Empresa</span>
             <input
               type="text"
+              disabled={effectivelyReadOnly}
               value={firmaSupervisor}
               onChange={(e) => updateField('firmaSupervisor', e.target.value)}
-              className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
+              className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print disabled:opacity-60 disabled:cursor-not-allowed"
               placeholder="Nombre / Sello de la Empresa"
             />
             <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
@@ -828,6 +941,29 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
           </div>
         </div>
       </div>
+
+      {/* Botón flotante / barra inferior de guardado rápido en modo edición */}
+      {!readOnly && isEditing && (
+        <div className="no-print flex items-center justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setLocalData(puntoData || {});
+              setIsEditing(false);
+            }}
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-slate-700"
+          >
+            Cancelar Edición
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-black text-xs cursor-pointer flex items-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+          >
+            <Save className="w-4 h-4" /> Guardar Información Completa
+          </button>
+        </div>
+      )}
 
       <ModalEdicionCircuito
         isOpen={modalJerarquiaOpen}

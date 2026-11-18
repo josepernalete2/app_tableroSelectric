@@ -933,7 +933,20 @@ export default function InformeCompiladoView() {
               <div className={isEditingReport ? "" : "pointer-events-none select-none"}>
                 <PuntoMedicionComponent
                   puntoData={pm}
-                  onUpdate={(updatedData) => updatePuntoMedicion(proyectoId, pm.id, updatedData)}
+                  onUpdate={(updatedData) => {
+                    const isUnifilarPm = elementos.some(e => e.id === pm.id);
+                    if (isUnifilarPm) {
+                      updateElementoUnifilar(proyectoId, pm.id, {
+                        ...updatedData,
+                        datosTecnicos: {
+                          ...(pm.datosTecnicos || {}),
+                          ...updatedData
+                        }
+                      });
+                    } else {
+                      updatePuntoMedicion(proyectoId, pm.id, updatedData);
+                    }
+                  }}
                 />
               </div>
             </div>
