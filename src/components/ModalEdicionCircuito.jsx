@@ -18,14 +18,15 @@ import {
   Gauge, 
   Radio,
   RotateCcw,
-  Trash2
+  Trash2,
+  Save
 } from 'lucide-react';
 import { AMP_OPTIONS, COND_OPTIONS, MARCA_OPTIONS, TIPO_OPTIONS } from '../utils/constants';
 import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
 import DualPhotoUploader from './DualPhotoUploader';
-import useStore, { getElementCode, cleanElementName } from '../store/useStore';
+import useStore, { getElementCode, getSimpleElementCode, assignSimpleHierarchyCodes, cleanElementName } from '../store/useStore';
 
 const normalizeText = (str) => {
   if (typeof str !== 'string' || !str) return str || '';
@@ -33,10 +34,10 @@ const normalizeText = (str) => {
 };
 
 const MOCK_ELEMENTOS_CREADOS = [
-  { id: 'TAB-1', nombre: 'TABLERO PRINCIPAL DE BAJA TENSIÓN', tipo: 'TABLERO' },
-  { id: 'SUB-1', nombre: 'SUBESTACIÓN PRINCIPAL 13.8KV', tipo: 'SUBESTACION' },
-  { id: 'ATS-1', nombre: 'TRANSFERENCIA (ATS/MTS) SÓTANO', tipo: 'TRANSFER' },
-  { id: 'CCM-1', nombre: 'CCM BOMBAS DE AGUA', tipo: 'CCM' }
+  { id: 'tab-1', nombre: 'TABLERO PRINCIPAL DE BAJA TENSIÓN', tipo: 'TABLERO' },
+  { id: 'sub-1', nombre: 'SUBESTACIÓN PRINCIPAL 13.8KV', tipo: 'SUBESTACION' },
+  { id: 'trs-1', nombre: 'TRANSFERENCIA (ATS/MTS) SÓTANO', tipo: 'TRANSFER' },
+  { id: 'ccm-1', nombre: 'CCM BOMBAS DE AGUA', tipo: 'CCM' }
 ];
 
 export const isCircuitEmptyReserve = (circuitData) => {
@@ -149,7 +150,13 @@ export const ModalEdicionCircuito = ({
   const { registrarConflictoCircuito, showToast, setPanelConflictosOpen } = useStore();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
 
+  const normalizedElementos = useMemo(
+    () => assignSimpleHierarchyCodes(elementosCreados || []),
+    [elementosCreados]
+  );
+
   const [step, setStep] = useState(() => getCircuitInitialStep(circuitData, isTablero, tipoOrigen, modo));
+  const [categoriaInicial, setCategoriaInicial] = useState(null); // null | 'ARTEFACTO' | 'NO_ARTEFACTO'
   const [alimentaOtro, setAlimentaOtro] = useState(() => {
     const t = circuitData?.tipoDestino;
     return t === 'SUB_TABLERO' || t === 'ELEMENTO_VINCULADO' || t === 'SUB_TABLERO_PENDIENTE' || t === 'ELEMENTO_PENDIENTE' || Boolean(circuitData?.elementoDestinoId || circuitData?.vinculadoId);
@@ -185,6 +192,7 @@ export const ModalEdicionCircuito = ({
   });
   const [estado, setEstado] = useState(() => {
     if (circuitData?.estado === 'RESERVA') return 'RESERVA';
+    if (circuitData?.estado === 'DISPONIBLE') return 'DISPONIBLE';
     if (circuitData?.estado === 'ACTIVO') return 'ACTIVO';
     const raw = circuitData?.equipo || circuitData?.nombre || '';
     const hasBreaker = circuitData?.breaker?.amp || circuitData?.breaker?.marca;
@@ -196,16 +204,16 @@ export const ModalEdicionCircuito = ({
   // Búsqueda y vinculación
   const [searchQuery, setSearchQuery] = useState(() => {
     const prevId = circuitData?.elementoDestinoId || circuitData?.vinculadoId;
-    if (prevId && elementosCreados) {
-      const found = elementosCreados.find(el => String(el.id) === String(prevId));
-      if (found) return found.nombre;
+    if (prevId && normalizedElementos) {
+      const found = normalizedElementos.find(el => String(el.id) === String(prevId));
+      if (found) return cleanElementName(found.nombre, found.id, found.simpleCode);
     }
     return '';
   });
   const [selectedLink, setSelectedLink] = useState(() => {
     const prevId = circuitData?.elementoDestinoId || circuitData?.vinculadoId;
-    if (prevId && elementosCreados) {
-      return elementosCreados.find(el => String(el.id) === String(prevId)) || null;
+    if (prevId && normalizedElementos) {
+      return normalizedElementos.find(el => String(el.id) === String(prevId)) || null;
     }
     return null;
   });
@@ -241,7 +249,7 @@ export const ModalEdicionCircuito = ({
       PUNTO_MEDICION: [],
       OTROS: []
     };
-    (elementosCreados || []).forEach(el => {
+    normalizedElementos.forEach(el => {
       const type = (el.tipo || el.tipoElemento || '').toUpperCase();
       if (type.includes('TRANSFER') || type.includes('ATS') || type.includes('MTS')) {
         groups.TRANSFER.push(el);
@@ -262,7 +270,7 @@ export const ModalEdicionCircuito = ({
       }
     });
     return groups;
-  }, [elementosCreados]);
+  }, [normalizedElementos]);
 
   // Manejar cambio en el selector universal con autocompletado editable
   const handleUniversalElementChange = (e) => {
@@ -329,7 +337,7 @@ export const ModalEdicionCircuito = ({
     // Elemento existente ya registrado
     setIsCreatingNewProvisional(false);
     setProvisionalCustomName('');
-    const found = (elementosCreados || []).find(el => String(el.id) === String(val));
+    const found = normalizedElementos.find(el => String(el.id) === String(val));
     if (found) {
       setSelectedElementoDestinoId(found.id);
       const t = found.tipo || found.tipoElemento || 'TABLERO';
@@ -343,11 +351,11 @@ export const ModalEdicionCircuito = ({
                         t === 'TRANSFORMADOR' ? 'Transformador' :
                         t === 'PUNTO_MEDICION' ? 'Equipo de Medida' :
                         t === 'TABLERO' ? 'Tablero' : (t || 'Elemento');
-      const autoDesc = `Alimentación a ${tipoLabel}: ${cleanElementName(found.nombre, found.id, found.codigo)}`;
+      const autoDesc = `Alimentación a ${tipoLabel}: ${cleanElementName(found.nombre, found.id, found.simpleCode)}`;
       setNombreArtefacto(autoDesc);
       setRotulo(autoDesc);
       if (!descArtefacto) {
-        setDescArtefacto(`Alimentación directa hacia ${cleanElementName(found.nombre, found.id, found.codigo)} (ID: ${getElementCode(found, found.tipoElemento || t)})`);
+        setDescArtefacto(`Alimentación directa hacia ${cleanElementName(found.nombre, found.id, found.simpleCode)} (${found.simpleCode})`);
       }
     }
   };
@@ -403,6 +411,7 @@ export const ModalEdicionCircuito = ({
   // Cargar datos al abrir modal
   useEffect(() => {
     if (circuitData && isOpen) {
+      setCategoriaInicial(null);
       const isAutoPole = !circuitData.id || String(circuitData.id).startsWith('auto_');
       const rawEquipo = circuitData.equipo || circuitData.nombre || '';
       const isReservaPlaceholder = !rawEquipo || rawEquipo === 'RESERVA' || rawEquipo === 'DISPONIBLE';
@@ -447,10 +456,10 @@ export const ModalEdicionCircuito = ({
 
       if (prevDestinoId) {
         setSelectorValue(prevDestinoId);
-        const found = (elementosCreados || []).find(el => String(el.id) === String(prevDestinoId) || el.nombre === circuitData.equipo);
+        const found = normalizedElementos.find(el => String(el.id) === String(prevDestinoId) || el.nombre === circuitData.equipo);
         if (found) {
           setSelectedLink(found);
-          setSearchQuery(found.nombre);
+          setSearchQuery(cleanElementName(found.nombre, found.id, found.simpleCode));
         } else {
           setSelectedLink(null);
           setSearchQuery(circuitData.equipo || '');
@@ -472,6 +481,8 @@ export const ModalEdicionCircuito = ({
       let initialEstado = 'ACTIVO';
       if (circuitData.estado === 'RESERVA') {
         initialEstado = 'RESERVA';
+      } else if (circuitData.estado === 'DISPONIBLE') {
+        initialEstado = 'DISPONIBLE';
       } else if (circuitData.estado === 'ACTIVO') {
         initialEstado = 'ACTIVO';
       } else if (rawEquipo === 'RESERVA' && !initialAmp && !initialConductor && !initialMarca) {
@@ -532,7 +543,7 @@ export const ModalEdicionCircuito = ({
         }
       }
     }
-  }, [circuitData, isOpen, isTablero, tipoOrigen, modo, elementosCreados]);
+  }, [circuitData, isOpen, isTablero, tipoOrigen, modo, normalizedElementos]);
 
   // Validación de colisión y ocupación de polos en tiempo real
   const validation = useMemo(() => {
@@ -556,10 +567,15 @@ export const ModalEdicionCircuito = ({
 
   if (!isOpen || !circuitData) return null;
 
-  const filteredElements = (elementosCreados || []).filter((el) =>
-    (el.nombre || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (el.id || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredElements = normalizedElementos.filter((el) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      cleanElementName(el.nombre, el.id, el.simpleCode).toLowerCase().includes(q) ||
+      (el.simpleCode || el.codigo || '').toLowerCase().includes(q) ||
+      (el.tipo || el.tipoElemento || '').toLowerCase().includes(q)
+    );
+  });
 
   const getPolesArray = (startPole, n) => {
     const arr = [];
@@ -651,7 +667,7 @@ export const ModalEdicionCircuito = ({
       posicionPolo: isTablero ? posicionPolo : 1,
       codigoPolo: circuitData?.codigoPolo || circuitData?.polo_label || extra.codigoPolo || '',
       polo_label: circuitData?.polo_label || circuitData?.codigoPolo || extra.polo_label || '',
-      estado: estado,
+      estado: extra.estado || estado,
       ficha: {
         descripcion: descArtefacto,
         potenciaWatts: potenciaWatts ? parseFloat(potenciaWatts) : null,
@@ -694,17 +710,63 @@ export const ModalEdicionCircuito = ({
     });
   };
 
+  const handleSaveInitialConfig = () => {
+    if (isTablero && !validation.isValid) return;
+    if (estado === 'RESERVA' || estado === 'DISPONIBLE') {
+      handleSaveEquipment(estado, estado, {
+        estado,
+        tipoDestino: estado,
+        vinculadoId: null,
+        elementoDestinoId: null,
+        tipoElementoDestino: null,
+        equipo: estado
+      });
+      return;
+    }
+    if (categoriaInicial === 'ARTEFACTO') {
+      handleSaveEquipment((nombreArtefacto || '').trim() || 'CARGA DIRECTA', 'ARTEFACTO', {
+        estado: 'ACTIVO',
+        tipoDestino: 'ARTEFACTO'
+      });
+      return;
+    }
+    if (categoriaInicial === 'NO_ARTEFACTO') {
+      handleSaveEquipment((rotulo || nombreArtefacto || '').trim() || 'DERIVACIÓN / SALIDA', 'NO_ARTEFACTO', {
+        estado,
+        tipoDestino: 'NO_ARTEFACTO'
+      });
+      return;
+    }
+    handleSaveEquipment((nombreArtefacto || rotulo || 'CIRCUITO ACTIVO').trim(), 'CARGA_DIRECTA', {
+      estado,
+      tipoDestino: 'CARGA_DIRECTA'
+    });
+  };
+
+  const handleContinueFromInitial = () => {
+    if (isTablero && !validation.isValid) return;
+    if (categoriaInicial === 'ARTEFACTO') {
+      setEstado('ACTIVO');
+      setStep('FORMULARIO_ARTEFACTO');
+    } else if (categoriaInicial === 'NO_ARTEFACTO') {
+      setStep('PREGUNTA_ALIMENTA_OTRO');
+    } else if (estado === 'RESERVA' || estado === 'DISPONIBLE') {
+      handleSaveInitialConfig();
+    }
+  };
+
   const handleSaveVinculo = (linkElement) => {
     if (isMultiSelect) {
       if (selectedLinks.length === 0) return customAlert('Por favor, selecciona al menos un elemento para vincular.');
-      const names = selectedLinks.map(el => `${cleanElementName(el.nombre, el.id, el.codigo)} (ID: ${getElementCode(el, el.tipo || 'SUB_TABLERO')})`).join(', ');
+      const names = selectedLinks.map(el => `${cleanElementName(el.nombre, el.id, el.simpleCode || el.codigo)} (${el.simpleCode || getSimpleElementCode(el, el.tipo || 'SUB_TABLERO')})`).join(', ');
       const ids = selectedLinks.map(el => el.id).join(', ');
       handleSaveEquipment(names, 'SUB_TABLERO', { vinculadoId: ids, elementoDestinoId: ids, tipoElementoDestino: 'SUB_TABLERO', vinculados: selectedLinks });
       return;
     }
     const el = linkElement || selectedLink;
     if (!el) return customAlert('Por favor, selecciona un elemento para vincular.');
-    handleSaveEquipment(`${cleanElementName(el.nombre, el.id, el.codigo)} (ID: ${getElementCode(el, el.tipo || 'SUB_TABLERO')})`, el.tipo || 'SUB_TABLERO', { vinculadoId: el.id, elementoDestinoId: el.id, tipoElementoDestino: el.tipo || 'SUB_TABLERO' });
+    const simpleCode = el.simpleCode || getSimpleElementCode(el, el.tipo || el.tipoElemento || 'SUB_TABLERO');
+    handleSaveEquipment(`${cleanElementName(el.nombre, el.id, simpleCode)} (${simpleCode})`, el.tipo || el.tipoElemento || 'SUB_TABLERO', { vinculadoId: el.id, elementoDestinoId: el.id, tipoElementoDestino: el.tipo || el.tipoElemento || 'SUB_TABLERO' });
   };
 
   const handleSavePorCrear = () => {
@@ -757,11 +819,17 @@ export const ModalEdicionCircuito = ({
           <Zap className="w-3.5 h-3.5 text-amber-500" />
           Destino / Vinculación de la Reserva o Salida:
         </label>
-        {selectedElementoDestinoId ? (
-          <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
-            ID: {getElementCode(selectedElementoDestinoId)}
-          </span>
-        ) : isCreatingNewProvisional && showCreateOptions ? (
+        {selectedElementoDestinoId ? (() => {
+          const matched = normalizedElementos.find(
+            el => String(el.id) === String(selectedElementoDestinoId) || String(el.simpleCode || '').toLowerCase() === String(selectedElementoDestinoId).toLowerCase()
+          );
+          const displayCode = matched?.simpleCode || getSimpleElementCode(selectedElementoDestinoId, selectedTipoElementoDestino || 'TABLERO');
+          return (
+            <span className="text-[9px] font-mono lowercase font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+              {displayCode}
+            </span>
+          );
+        })() : isCreatingNewProvisional && showCreateOptions ? (
           <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
             NUEVO ({provisionalTipo})
           </span>
@@ -794,7 +862,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🏢 Tableros y Subtableros Existentes">
             {groupedElements.TABLERO.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'TABLERO')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -803,7 +871,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🔄 Transferencias (ATS/MTS) Existentes">
             {groupedElements.TRANSFER.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'TRANSFER')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -812,7 +880,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="⚙️ Centros de Control de Motores (CCM) Existentes">
             {groupedElements.CCM.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'CCM')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -821,7 +889,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="⚡ Generadores y Plantas Existentes">
             {groupedElements.GENERADOR.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'GENERADOR')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -830,7 +898,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🏛️ Subestaciones Eléctricas Existentes">
             {groupedElements.SUBESTACION.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'SUBESTACION')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -839,7 +907,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="🔌 Transformadores Existentes">
             {groupedElements.TRANSFORMADOR.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'TRANSFORMADOR')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -848,7 +916,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="📊 Equipos / Puntos de Medida Existentes">
             {groupedElements.PUNTO_MEDICION.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, 'PUNTO_MEDICION')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -857,7 +925,7 @@ export const ModalEdicionCircuito = ({
           <optgroup label="📦 Otros Elementos Registrados">
             {groupedElements.OTROS.map(el => (
               <option key={el.id} value={el.id}>
-                {cleanElementName(el.nombre, el.id, el.codigo)} ({el.codigo || getElementCode(el, el.tipo || 'TABLERO')})
+                {cleanElementName(el.nombre, el.id, el.simpleCode)} ({el.simpleCode})
               </option>
             ))}
           </optgroup>
@@ -911,6 +979,7 @@ export const ModalEdicionCircuito = ({
                     if (step === 'FORMULARIO_ARTEFACTO' || step === 'PREGUNTA_ALIMENTA_OTRO') {
                       setStep('PREGUNTA_ES_ARTEFACTO');
                       setAlimentaOtro(false);
+                      setCategoriaInicial(null);
                     } else if (step === 'PREGUNTA_CREADO' || step === 'ROTULAR_Y_FOTO') {
                       setStep('PREGUNTA_ALIMENTA_OTRO');
                       setAlimentaOtro(false);
@@ -1124,36 +1193,95 @@ export const ModalEdicionCircuito = ({
           {/* FLOW TABLERO COMPONENT */}
           {/* ============================================================== */}
           {isTablero && step === 'PREGUNTA_ES_ARTEFACTO' && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div className="text-center">
                 <Settings className="w-12 h-12 text-amber-500 mx-auto mb-3" />
                 <h4 className="text-base font-semibold text-slate-100">
                   ¿El circuito alimenta a un equipo o artefacto final?
                 </h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  Selecciona la categoría del elemento alimentado por esta salida eléctrica.
+                  Selecciona la categoría del elemento alimentado y confirma para guardar o continuar.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <button
+                  type="button"
                   onClick={() => {
+                    setCategoriaInicial('ARTEFACTO');
                     setEstado('ACTIVO');
-                    setStep('FORMULARIO_ARTEFACTO');
                   }}
-                  className="flex flex-col items-center justify-center p-6 h-36 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all text-center group cursor-pointer active:scale-95"
+                  className={`relative flex flex-col items-center justify-center p-6 h-36 rounded-xl border-2 transition-all text-center group cursor-pointer active:scale-95 ${
+                    categoriaInicial === 'ARTEFACTO'
+                      ? 'border-amber-500 bg-amber-500/15 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
+                      : 'border-slate-800 hover:border-amber-500/70 hover:bg-amber-500/5'
+                  }`}
                 >
+                  {categoriaInicial === 'ARTEFACTO' && (
+                    <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow">
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </span>
+                  )}
                   <span className="text-3xl mb-2">🔌</span>
-                  <span className="font-bold text-slate-200 group-hover:text-amber-400">Sí, es un Artefacto</span>
+                  <span className={`font-bold ${categoriaInicial === 'ARTEFACTO' ? 'text-amber-400' : 'text-slate-200 group-hover:text-amber-400'}`}>
+                    Sí, es un Artefacto
+                  </span>
                   <span className="text-[10px] text-slate-400 mt-1">Luminarias, motores, tomacorrientes directos</span>
                 </button>
                 <button
-                  onClick={() => setStep('PREGUNTA_ALIMENTA_OTRO')}
-                  className="flex flex-col items-center justify-center p-6 h-36 rounded-xl border-2 border-slate-800 hover:border-amber-500 hover:bg-amber-500/5 transition-all text-center group cursor-pointer active:scale-95"
+                  type="button"
+                  onClick={() => setCategoriaInicial('NO_ARTEFACTO')}
+                  className={`relative flex flex-col items-center justify-center p-6 h-36 rounded-xl border-2 transition-all text-center group cursor-pointer active:scale-95 ${
+                    categoriaInicial === 'NO_ARTEFACTO'
+                      ? 'border-amber-500 bg-amber-500/15 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
+                      : 'border-slate-800 hover:border-amber-500/70 hover:bg-amber-500/5'
+                  }`}
                 >
+                  {categoriaInicial === 'NO_ARTEFACTO' && (
+                    <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow">
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </span>
+                  )}
                   <span className="text-3xl mb-2">⚡</span>
-                  <span className="font-bold text-slate-200 group-hover:text-amber-400">No es un Artefacto</span>
+                  <span className={`font-bold ${categoriaInicial === 'NO_ARTEFACTO' ? 'text-amber-400' : 'text-slate-200 group-hover:text-amber-400'}`}>
+                    No es un Artefacto
+                  </span>
                   <span className="text-[10px] text-slate-400 mt-1">Sub-tableros, reservas, derivaciones</span>
                 </button>
+              </div>
+
+              {/* Barra explícita de Guardado y Confirmación inicial */}
+              <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                {!categoriaInicial && estado === 'ACTIVO' && (
+                  <p className="text-[11px] text-amber-400/90 text-center font-medium">
+                    Elige una opción arriba para continuar o pulsa "Guardar" para registrar los polos/estado actuales.
+                  </p>
+                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveInitialConfig}
+                    disabled={isTablero && !validation.isValid}
+                    className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-100 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Save className="w-4 h-4 text-amber-400" />
+                    <span>Guardar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleContinueFromInitial}
+                    disabled={(isTablero && !validation.isValid) || (!categoriaInicial && estado === 'ACTIVO')}
+                    className="flex-1 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>
+                      {isTablero && !validation.isValid
+                        ? 'Resolver Conflicto de Polos'
+                        : (!categoriaInicial && (estado === 'RESERVA' || estado === 'DISPONIBLE'))
+                        ? 'Guardar Estado'
+                        : 'Guardar y Continuar'}
+                    </span>
+                  </button>
+                </div>
               </div>
 
               {/* Botón explícito para desvincular y revertir a Reserva */}
@@ -2178,7 +2306,7 @@ export const ModalEdicionCircuito = ({
                       setSearchQuery(e.target.value);
                       if (!isMultiSelect) setSelectedLink(null);
                     }}
-                    placeholder="Escribe el nombre o ID del elemento..."
+                    placeholder="Buscar por ID simple (med-1, tra-1, tab-2) o nombre..."
                     className="w-full pl-10 pr-4 py-2 border border-slate-700 rounded-lg bg-slate-950 text-white focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
                   />
                   <Search className="w-5 h-5 absolute left-3 top-2.5 text-slate-500" />
@@ -2207,7 +2335,7 @@ export const ModalEdicionCircuito = ({
                             setSelectedLink(el);
                             setSelectedElementoDestinoId(el.id);
                             setSelectedTipoElementoDestino(el.tipo || el.tipoElemento || 'TABLERO');
-                            setSearchQuery(el.nombre);
+                            setSearchQuery(cleanElementName(el.nombre, el.id, el.simpleCode));
                           }
                         }}
                         className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-900 flex justify-between items-center transition-colors cursor-pointer ${
@@ -2224,8 +2352,11 @@ export const ModalEdicionCircuito = ({
                             />
                           )}
                           <div>
-                            <p className="font-semibold text-slate-200">{el.nombre}</p>
-                            <p className="text-[10px] text-amber-500 font-mono">ID: {el.codigo || getElementCode(el, el.tipo)} {el.tipo ? `• [${el.tipo}]` : ''}</p>
+                            <p className="font-semibold text-slate-200">{cleanElementName(el.nombre, el.id, el.simpleCode)}</p>
+                            <p className="text-[10px] text-amber-500 font-mono">
+                              <span className="lowercase">{el.simpleCode}</span>
+                              {el.tipo || el.tipoElemento ? ` • [${el.tipo || el.tipoElemento}]` : ''}
+                            </p>
                           </div>
                         </div>
                         {isSelected && <Check className="w-4 h-4 text-amber-500" />}

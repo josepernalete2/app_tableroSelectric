@@ -548,6 +548,7 @@ const TableroWrapper = () => {
     nombre: element?.nombre || 'Tablero Eléctrico',
     ubicacion: element?.ubicacion || '',
     alimentadoPor: element?.alimentadoPor || '',
+    alimentadoPorId: element?.alimentadoPorId || element?.datosTecnicos?.alimentadoPorId || element?.datosTecnicos?.alimentadorId || null,
     foto: element?.foto || null,
     fotoBlob: element?.fotoBlob || null,
     observacionesGenerales: element?.observacionesGenerales || '',
@@ -562,7 +563,7 @@ const TableroWrapper = () => {
 
   const handleUpdateTablero = (updatedData) => {
     const { 
-      id, nombre, ubicacion, alimentadoPor, foto, fotoBlob, eliminarFoto, observacionesGenerales, 
+      id, nombre, ubicacion, alimentadoPor, alimentadoPorId, foto, fotoBlob, eliminarFoto, observacionesGenerales, 
       nombreEmpresa, ...datosTecnicos 
     } = updatedData;
 
@@ -570,10 +571,17 @@ const TableroWrapper = () => {
       ? updatedData.circuits 
       : (datosTecnicos.circuits !== undefined ? datosTecnicos.circuits : (element?.circuits || []));
 
+    const nextAlimentadoPorId = alimentadoPorId !== undefined
+      ? alimentadoPorId
+      : (datosTecnicos.alimentadoPorId !== undefined
+          ? datosTecnicos.alimentadoPorId
+          : (datosTecnicos.alimentadorId !== undefined ? datosTecnicos.alimentadorId : (element?.alimentadoPorId ?? null)));
+
     updateElementoUnifilar(targetProyecto?.id || element?.proyectoId || null, tableroId, {
       nombre,
       ubicacion,
       alimentadoPor,
+      alimentadoPorId: nextAlimentadoPorId,
       foto: eliminarFoto ? null : (foto !== undefined ? foto : (element?.foto || null)),
       fotoBlob: eliminarFoto ? null : (fotoBlob !== undefined ? fotoBlob : (element?.fotoBlob || null)),
       eliminarFoto: Boolean(eliminarFoto),
@@ -581,6 +589,7 @@ const TableroWrapper = () => {
       circuits: nextCircuits,
       datosTecnicos: {
         ...datosTecnicos,
+        alimentadoPorId: nextAlimentadoPorId,
         circuits: nextCircuits
       }
     });

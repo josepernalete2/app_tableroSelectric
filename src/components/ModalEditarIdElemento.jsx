@@ -54,13 +54,13 @@ export default function ModalEditarIdElemento({
   }
 
   const currentCode = getElementCode(elemento, tipoElemento || elemento.tipoElemento);
-  const currentPrefix = PREFIX_MAP[elemento.tipoElemento || tipoElemento] || 'ele';
+  const currentPrefix = (PREFIX_MAP[elemento.tipoElemento || tipoElemento] || 'ele').toUpperCase();
 
   const handleSave = async (e) => {
     e.preventDefault();
     setError('');
 
-    const clean = nuevoCodigo.trim().toLowerCase().replace(/\s+/g, '-');
+    const clean = nuevoCodigo.trim().toUpperCase().replace(/\s+/g, '-');
     if (!clean) {
       setError('El identificador no puede quedar vacío.');
       return;
@@ -149,8 +149,8 @@ export default function ModalEditarIdElemento({
               <input
                 type="text"
                 value={nuevoCodigo}
-                onChange={(e) => setNuevoCodigo(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-                placeholder={`ej. ${currentPrefix}-1, ${currentPrefix}-principal`}
+                onChange={(e) => setNuevoCodigo(e.target.value.toUpperCase().replace(/\s+/g, '-'))}
+                placeholder={`ej. ${currentPrefix}-1, ${currentPrefix}-2`}
                 className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm font-mono font-bold text-amber-300 placeholder-slate-600 focus:outline-none transition-all"
                 autoFocus
               />

@@ -219,11 +219,19 @@ export default function TransferComponent({
 
   const handleSave = () => {
     if (readOnly) return;
+    const resolvedAlimentadoPor = [dt.fuenteNormalNombre, dt.fuenteEmergenciaNombre]
+      .map((v) => String(v || '').trim())
+      .filter(Boolean)
+      .join(' / ') || data.alimentadoPor || '';
+    const resolvedAlimentadoPorId = dt.fuenteNormalId || data.alimentadoPorId || null;
+
     if (onUpdate) {
       onUpdate({
         ...data,
         nombre,
         ubicacion,
+        alimentadoPor: resolvedAlimentadoPor,
+        alimentadoPorId: resolvedAlimentadoPorId,
         observacionesGenerales: observaciones,
         fotoBlob,
         foto: fotoSrc,
@@ -597,7 +605,14 @@ export default function TransferComponent({
                       <div className="no-print">
                         <SelectorAlimentadorJerarquico
                           value={fuenteNormalNombre}
-                          onChange={(val) => handleDtChange('fuenteNormalNombre', val)}
+                          onChange={(val, selectedObj) => {
+                            if (readOnly) return;
+                            setDt((prev) => ({
+                              ...prev,
+                              fuenteNormalNombre: val,
+                              fuenteNormalId: selectedObj?.id || null
+                            }));
+                          }}
                           proyectoId={data.proyectoId}
                           tableroActualId={data.id}
                           elementosList={projectElements}
@@ -713,7 +728,14 @@ export default function TransferComponent({
                         {modoFuenteEmergencia === 'EXISTENTE' ? (
                           <SelectorAlimentadorJerarquico
                             value={fuenteEmergenciaNombre}
-                            onChange={(val) => handleDtChange('fuenteEmergenciaNombre', val)}
+                            onChange={(val, selectedObj) => {
+                              if (readOnly) return;
+                              setDt((prev) => ({
+                                ...prev,
+                                fuenteEmergenciaNombre: val,
+                                fuenteEmergenciaId: selectedObj?.id || null
+                              }));
+                            }}
                             proyectoId={data.proyectoId || data.projectId}
                             tableroActualId={data.id}
                             elementosList={projectElements}

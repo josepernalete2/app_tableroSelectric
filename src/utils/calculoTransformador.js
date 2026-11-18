@@ -8,7 +8,7 @@
 export const TIPOS_CONEXION_TRAFO = [
   {
     id: 'TRIFASICO_ESTRELLA',
-    label: 'Trifásico Estrella (3F - 4H, ej. 208Y/120V, 480Y/277V)',
+    label: 'Trifásico Estrella (3F - 4H)',
     shortLabel: '3F - 4H Estrella (Y)',
     fases: 3,
     hilos: 4,
@@ -19,7 +19,7 @@ export const TIPOS_CONEXION_TRAFO = [
   },
   {
     id: 'TRIFASICO_DELTA',
-    label: 'Trifásico Delta (3F - 3H / 4H, ej. 240V / 480V)',
+    label: 'Trifásico Delta (3F - 3H / 4H)',
     shortLabel: '3F - 3H/4H Delta (Δ)',
     fases: 3,
     hilos: 3,
@@ -41,7 +41,7 @@ export const TIPOS_CONEXION_TRAFO = [
   },
   {
     id: 'MONOFASICO',
-    label: 'Monofásico (1F - 2H / 3H, ej. 120/240V)',
+    label: 'Monofásico (1F - 2H / 3H)',
     shortLabel: '1F - 2H/3H Monofásico',
     fases: 1,
     hilos: 2,

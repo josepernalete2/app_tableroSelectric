@@ -340,6 +340,9 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
 
       mapaAlimentadores.set(el.id, {
         id: el.id,
+        codigo: tech.codigo || null,
+        orden: tech.orden ?? null,
+        createdAt: el.createdAt || null,
         nombre: el.nombre,
         tipoElemento: el.tipoElemento,
         categoria: resolverCategoria(el.tipoElemento),
@@ -355,6 +358,8 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
       if (!mapaAlimentadores.has(sub.id)) {
         mapaAlimentadores.set(sub.id, {
           id: sub.id,
+          codigo: sub.codigo || null,
+          createdAt: sub.createdAt || null,
           nombre: sub.nombre,
           tipoElemento: 'SUBESTACION',
           categoria: 'Subestaciones',
@@ -372,6 +377,8 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
         const params = typeof c.parametrosElectricos === 'object' && c.parametrosElectricos ? c.parametrosElectricos : {};
         mapaAlimentadores.set(c.id, {
           id: c.id,
+          codigo: c.codigo || null,
+          createdAt: c.createdAt || null,
           nombre: c.nombre,
           tipoElemento: 'CCM',
           categoria: 'Celdas y CCM',
@@ -388,6 +395,8 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
       if (!mapaAlimentadores.has(tab.id)) {
         mapaAlimentadores.set(tab.id, {
           id: tab.id,
+          codigo: tab.codigo || null,
+          createdAt: tab.createdAt || null,
           nombre: tab.nombre,
           tipoElemento: 'TABLERO',
           categoria: 'Tableros Aguas Arriba',
@@ -404,6 +413,8 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
       if (!mapaAlimentadores.has(pm.id)) {
         mapaAlimentadores.set(pm.id, {
           id: pm.id,
+          codigo: pm.codigo || null,
+          createdAt: pm.createdAt || null,
           nombre: pm.nombre,
           tipoElemento: 'PUNTO_MEDICION',
           categoria: 'Puntos de Medición / Acometidas',
@@ -420,6 +431,8 @@ export const obtenerPotencialesAlimentadores = async (req, res, next) => {
       if (!mapaAlimentadores.has(alim.id)) {
         mapaAlimentadores.set(alim.id, {
           id: alim.id,
+          codigo: alim.codigo || null,
+          createdAt: alim.createdAt || null,
           nombre: alim.nombre,
           tipoElemento: 'ALIMENTADOR',
           categoria: 'Alimentadores Dedicados',

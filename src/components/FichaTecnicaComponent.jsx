@@ -107,6 +107,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   const [nombre, setNombre] = useState(elementoData?.nombre || '');
   const [ubicacion, setUbicacion] = useState(elementoData?.ubicacion || '');
   const [alimentadoPor, setAlimentadoPor] = useState(elementoData?.alimentadoPor || '');
+  const [alimentadoPorId, setAlimentadoPorId] = useState(elementoData?.alimentadoPorId || elementoData?.datosTecnicos?.alimentadoPorId || null);
   const [alimentaA, setAlimentaA] = useState(elementoData?.alimentaA || elementoData?.datosTecnicos?.alimentaA || '');
   const [alimentaAIds, setAlimentaAIds] = useState(elementoData?.alimentaAIds || elementoData?.datosTecnicos?.alimentaAIds || []);
   const [observacionesGenerales, setObservacionesGenerales] = useState(elementoData?.observacionesGenerales || '');
@@ -123,6 +124,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       setNombre(elementoData.nombre || '');
       setUbicacion(elementoData.ubicacion || '');
       setAlimentadoPor(elementoData.alimentadoPor || '');
+      setAlimentadoPorId(elementoData.alimentadoPorId || elementoData.datosTecnicos?.alimentadoPorId || null);
       setAlimentaA(elementoData.alimentaA || elementoData.datosTecnicos?.alimentaA || '');
       setAlimentaAIds(elementoData.alimentaAIds || elementoData.datosTecnicos?.alimentaAIds || []);
       setObservacionesGenerales(elementoData.observacionesGenerales || '');
@@ -332,13 +334,14 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     }
     finalDt.alimentaA = alimentaA ? String(alimentaA).trim().toUpperCase() : '';
     finalDt.alimentaAIds = Array.isArray(alimentaAIds) ? alimentaAIds : [];
+    finalDt.alimentadoPorId = tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null);
     if (onUpdate) {
       onUpdate({
         ...elementoData,
         nombre,
         ubicacion,
         alimentadoPor: tipoElemento === 'GENERADOR' ? 'FUENTE PRIMARIA INDEPENDIENTE' : alimentadoPor,
-        alimentadoPorId: tipoElemento === 'GENERADOR' ? null : (elementoData?.alimentadoPorId || null),
+        alimentadoPorId: tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null),
         alimentaA,
         alimentaAIds,
         observacionesGenerales,
@@ -357,6 +360,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
     setNombre('');
     setUbicacion('');
     setAlimentadoPor('');
+    setAlimentadoPorId(null);
     setObservacionesGenerales('');
     setDt({});
     setFotoBlob(null);
@@ -584,7 +588,10 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     value={alimentadoPor}
                     tipoElementoActual={tipoElemento}
                     direccionRelacion="ALIMENTADO_POR"
-                    onChange={(val) => setAlimentadoPor(val)}
+                    onChange={(val, selectedObj, ids) => {
+                      setAlimentadoPor(val ? val.toUpperCase() : '');
+                      setAlimentadoPorId(selectedObj?.id || ids?.[0] || null);
+                    }}
                     label=""
                     placeholder="Seleccionar o escribir procedencia..."
                   />
@@ -1272,7 +1279,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       )}
 
       {/* ========================================================================= */}
-      {/* 4. PLANTILLA: TRANSFORMADOR ("INFORMACIÓN GENERAL DE TRANSFORMADOR No. X") */}
+      {/* 4. PLANTILLA: TRANSFORMADOR */}
       {/* ========================================================================= */}
       {tipoElemento === 'TRANSFORMADOR' && (
         <div className="bg-slate-950 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl print:border-black print:bg-white print:text-black">
@@ -1288,7 +1295,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   className="bg-slate-950 border border-slate-600 rounded px-3 py-1 text-center w-full focus:outline-none focus:border-violet-500 text-slate-100 font-bold"
                 />
               ) : (
-                `INFORMACIÓN GENERAL DE TRANSFORMADOR No. ${nombre || '—'}`
+                nombre || 'TRANSFORMADOR'
               )}
             </h2>
           </div>
@@ -1299,7 +1306,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               <div>
                 <span className="font-bold uppercase text-slate-400 print:text-black mr-1.5">ID ELEMENTO:</span>
                 <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 print:text-black print:border-black">
-                  {elementoData.id || '—'}
+                  {getElementCode(elementoData, 'TRANSFORMADOR') || 'TRA-1'}
                 </span>
               </div>
             </div>
@@ -1334,7 +1341,10 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     multiple={false}
                     tipoElementoActual="TRANSFORMADOR"
                     direccionRelacion="ALIMENTADO_POR"
-                    onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
+                    onChange={(val, selectedObj, ids) => {
+                      setAlimentadoPor(val ? val.toUpperCase() : '');
+                      setAlimentadoPorId(selectedObj?.id || ids?.[0] || null);
+                    }}
                     label=""
                     placeholder="Seleccionar Subestación, Red Eléctrica o Acometida..."
                   />
@@ -1431,14 +1441,9 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                       ))}
                     </select>
                   ) : (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-violet-400 print:text-black">
-                        {calculosTrafo?.metaConexion?.label || dt.tipoConexion || dt.conexion || 'Trifásico Estrella (3F - 4H)'}
-                      </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/30 print:hidden">
-                        {calculosTrafo?.metaConexion?.shortLabel || '3F - 4H (Y)'}
-                      </span>
-                    </div>
+                    <span className="font-bold text-violet-400 print:text-black">
+                      {(calculosTrafo?.metaConexion?.label || dt.tipoConexion || dt.conexion || 'Trifásico Estrella (3F - 4H)').replace(/,\s*ej\.[^)]+/gi, '')}
+                    </span>
                   )}
                 </td>
               </tr>
@@ -1467,19 +1472,18 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </tbody>
           </table>
 
-          {/* Cuadro de Datos de Placa */}
+          {/* Cuadro de Datos de Placa (Sin columna UNIDAD) */}
           <table className="w-full text-xs text-left border-collapse border-b-2 border-slate-700 font-mono print:border-black">
             <thead>
               <tr className="bg-slate-900/50 border-b border-slate-800 font-bold text-slate-400 uppercase print:bg-gray-100 print:text-black print:border-gray-300">
                 <th className="p-2.5 border-r border-slate-800 w-1/3 print:border-gray-300">PARÁMETRO</th>
-                <th className="p-2.5 border-r border-slate-800 w-1/3 text-center print:border-gray-300">VALOR</th>
-                <th className="p-2.5 w-1/3 text-center">UNIDAD</th>
+                <th className="p-2.5 w-2/3 text-center">VALOR</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 print:divide-gray-300">
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">POTENCIA</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-extrabold text-violet-400 print:text-black print:border-gray-300">
+                <td className="p-2.5 text-center font-extrabold text-violet-400 print:text-black">
                   {isEditing ? (
                     <input
                       type="text"
@@ -1497,24 +1501,10 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     dt.potenciaKva || dt.kva || '—'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">
-                  {isEditing ? (
-                    <select
-                      value={dt.unidadPotencia || 'kVA'}
-                      onChange={(e) => handleDtChange('unidadPotencia', e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500 text-center"
-                    >
-                      <option value="kVA">kVA</option>
-                      <option value="MVA">MVA</option>
-                    </select>
-                  ) : (
-                    dt.unidadPotencia || 'kVA'
-                  )}
-                </td>
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">IMPEDANCIA</td>
-                <td className="p-2.5 border-r border-slate-800 print:border-gray-300" colSpan="2">
+                <td className="p-2.5">
                   <div className="grid grid-cols-3 gap-2 text-center items-center">
                     <div className="flex items-center gap-1 justify-center">
                       {isEditing ? (
@@ -1563,7 +1553,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               </tr>
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TENSIÓN PRIMARIA</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                <td className="p-2.5 text-center font-bold text-slate-100 print:text-black">
                   {isEditing ? (
                     <input
                       type="text"
@@ -1580,20 +1570,6 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     dt.tensionPrimaria || dt.voltajePrimario || '—'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">
-                  {isEditing ? (
-                    <select
-                      value={dt.unidadTensionPrimaria || 'kV'}
-                      onChange={(e) => handleDtChange('unidadTensionPrimaria', e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500 text-center"
-                    >
-                      <option value="kV">kV</option>
-                      <option value="V">V</option>
-                    </select>
-                  ) : (
-                    dt.unidadTensionPrimaria || 'kV'
-                  )}
-                </td>
               </tr>
 
               {/* CORRIENTE PRIMARIA CALCULADA (I₁) */}
@@ -1606,7 +1582,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     </span>
                   </div>
                 </td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-black text-violet-400 print:text-black print:border-gray-300 font-mono text-sm">
+                <td className="p-2.5 text-center font-black text-violet-400 print:text-black font-mono text-sm">
                   <div className="flex flex-col items-center">
                     <span>{calculosTrafo?.i1Formateada || '—'}</span>
                     {calculosTrafo?.formulaI1 && (
@@ -1616,12 +1592,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     )}
                   </div>
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
               </tr>
 
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">TENSIÓN SECUNDARIA</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                <td className="p-2.5 text-center font-bold text-slate-100 print:text-black">
                   {isEditing ? (
                     <input
                       type="text"
@@ -1638,7 +1613,6 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     dt.tensionSecundaria || dt.voltajeSecundario || '—'
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">V</td>
               </tr>
 
               {/* CORRIENTE SECUNDARIA CALCULADA (I₂) */}
@@ -1651,7 +1625,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     </span>
                   </div>
                 </td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-black text-violet-400 print:text-black print:border-gray-300 font-mono text-sm">
+                <td className="p-2.5 text-center font-black text-violet-400 print:text-black font-mono text-sm">
                   <div className="flex flex-col items-center">
                     <span>{calculosTrafo?.i2Formateada || '—'}</span>
                     {calculosTrafo?.formulaI2 && (
@@ -1661,12 +1635,11 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     )}
                   </div>
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
               </tr>
 
               <tr>
                 <td className="p-2.5 bg-slate-900/40 font-bold text-slate-300 border-r border-slate-800 print:bg-gray-50 print:text-black print:border-gray-300">AMPERIOS SEC. (PLACA)</td>
-                <td className="p-2.5 border-r border-slate-800 text-center font-bold text-slate-100 print:text-black print:border-gray-300">
+                <td className="p-2.5 text-center font-bold text-slate-100 print:text-black">
                   {isEditing ? (
                     <input
                       type="text"
@@ -1679,7 +1652,6 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                     dt.amperiosSecundaria || (calculosTrafo?.i2 ? `${calculosTrafo.i2} A` : '—')
                   )}
                 </td>
-                <td className="p-2.5 text-center text-slate-400 print:text-black">AMP</td>
               </tr>
             </tbody>
           </table>
@@ -1714,28 +1686,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 return (
                   <tr key={seccion} className="print:text-black">
                     <td className="p-2 font-bold bg-slate-900/40 border-r border-slate-800 uppercase print:bg-gray-50 print:border-gray-300 text-slate-350 print:text-black">
-                      <div className="flex items-center justify-between gap-1">
-                        <span>{seccion}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const isEntrada = seccion === 'primaria';
-                            setWizardModo(isEntrada ? 'ENTRADA' : 'SECUNDARIA');
-                            setCircuitDataWizard({
-                              id: `TRANSFORMADOR_${seccion.toUpperCase()}`,
-                              nombre: `Transformador - Acometida ${seccion.toUpperCase()}`,
-                              equipo: isEntrada ? alimentadoPor : (ac.observaciones || ''),
-                              poles: [3],
-                              breaker: { amp: '', marca: '', tipo: '' }
-                            });
-                            setModalJerarquiaOpen(true);
-                          }}
-                          className="no-print p-1 hover:bg-violet-500/20 text-violet-400 rounded transition-all cursor-pointer"
-                          title={`Configurar Jerarquía (${seccion})`}
-                        >
-                          <Settings className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <span>{seccion}</span>
                     </td>
                     <td className="p-2 border-r border-slate-800 print:border-gray-300 text-center">
                       {isEditing ? (
@@ -1848,7 +1799,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             <thead>
               <tr className="bg-slate-900/50 border-b border-slate-800 font-bold text-slate-400 uppercase print:bg-gray-100 print:text-black print:border-gray-300">
                 <th className="p-2 border-r border-slate-800 print:border-gray-300 w-20" rowSpan="2">SPT</th>
-                <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="3">BARILLA (VARILLA)</th>
+                <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="3">ELECTRODO</th>
                 <th className="p-2 border-r border-slate-800 print:border-gray-300" colSpan="2">CONDUCTOR</th>
                 <th className="p-2 border-r border-slate-800 print:border-gray-300 w-24" rowSpan="2">RESISTENCIA</th>
                 <th className="p-2 print:text-black" rowSpan="2">AMP</th>
@@ -1870,40 +1821,47 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                   {isEditing ? (
                     <input
                       type="text"
-                      value={dt.spt?.barillaCalibre || ''}
-                      onChange={(e) => handleSptChange('barillaCalibre', e.target.value)}
+                      value={dt.spt?.electrodoCalibre || dt.spt?.barillaCalibre || ''}
+                      onChange={(e) => {
+                        handleSptChange('electrodoCalibre', e.target.value);
+                        handleSptChange('barillaCalibre', e.target.value);
+                      }}
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
-                    dt.spt?.barillaCalibre || '—'
+                    dt.spt?.electrodoCalibre || dt.spt?.barillaCalibre || '—'
                   )}
                 </td>
                 <td className="p-2 border-r border-slate-800 print:border-gray-300">
                   {isEditing ? (
                     <input
                       type="text"
-                      value={dt.spt?.barillaCantidad || ''}
-                      onChange={(e) => handleSptChange('barillaCantidad', e.target.value)}
+                      value={dt.spt?.electrodoCantidad || dt.spt?.barillaCantidad || ''}
+                      onChange={(e) => {
+                        handleSptChange('electrodoCantidad', e.target.value);
+                        handleSptChange('barillaCantidad', e.target.value);
+                      }}
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
-                    dt.spt?.barillaCantidad || '—'
+                    dt.spt?.electrodoCantidad || dt.spt?.barillaCantidad || '—'
                   )}
                 </td>
                 <td className="p-2 border-r border-slate-800 print:border-gray-300">
                   {isEditing ? (
                     <input
                       type="text"
-                      value={dt.spt?.tipo || dt.spt?.barillaConfiguracion || ''}
+                      value={dt.spt?.tipo || dt.spt?.electrodoConfiguracion || dt.spt?.barillaConfiguracion || ''}
                       onChange={(e) => {
                         handleSptChange('tipo', e.target.value);
+                        handleSptChange('electrodoConfiguracion', e.target.value);
                         handleSptChange('barillaConfiguracion', e.target.value);
                       }}
-                      placeholder="Ej. En Delta"
+                      placeholder="Ej. Electrodo Copperweld"
                       className="w-full text-center bg-slate-900 border border-slate-700 rounded text-slate-100 text-xs p-1 focus:outline-none focus:border-violet-500"
                     />
                   ) : (
-                    dt.spt?.tipo || dt.spt?.barillaConfiguracion || '—'
+                    dt.spt?.tipo || dt.spt?.electrodoConfiguracion || dt.spt?.barillaConfiguracion || '—'
                   )}
                 </td>
                 <td className="p-2 border-r border-slate-800 print:border-gray-300">
@@ -3732,9 +3690,13 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           const isEntradaOrPrimaria = wizardModo === 'ENTRADA' || wizardModo === 'PRIMARIA' || idSalida.includes('PRIMARIA');
 
           let newAlimentadoPor = alimentadoPor;
+          let newAlimentadoPorId = alimentadoPorId;
           if (isEntradaOrPrimaria && updated.equipo) {
             newAlimentadoPor = updated.equipo;
             setAlimentadoPor(updated.equipo);
+            const resolvedId = updated.elementoDestinoId || updated.vinculadoId || null;
+            newAlimentadoPorId = resolvedId;
+            setAlimentadoPorId(resolvedId);
           }
 
           let newDt = { ...dt };
@@ -3798,6 +3760,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             onUpdate({
               ...elementoData,
               alimentadoPor: newAlimentadoPor,
+              alimentadoPorId: newAlimentadoPorId,
               datosTecnicos: newDt
             });
           }

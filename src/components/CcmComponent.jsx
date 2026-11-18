@@ -81,12 +81,16 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
     firmaSupervisor = ''
   } = ccmData;
 
-  const updateField = (field, value) => {
+  const updateFields = (patch = {}) => {
     if (readOnly) return;
     onUpdate({
       ...ccmData,
-      [field]: value
+      ...patch
     });
+  };
+
+  const updateField = (field, value) => {
+    updateFields({ [field]: value });
   };
 
   const updateParametro = (key, field, value) => {
@@ -313,7 +317,13 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
             <input
               type="text"
               value={plantaInstalacion}
-              onChange={(e) => updateField('plantaInstalacion', e.target.value)}
+              onChange={(e) => {
+                const nextPlanta = e.target.value;
+                updateFields({
+                  plantaInstalacion: nextPlanta,
+                  ubicacion: [nextPlanta, areaProceso].map(s => String(s || '').trim()).filter(Boolean).join(' - ')
+                });
+              }}
               className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300"
               placeholder="Ej. Planta Procesadora Central"
             />
@@ -324,7 +334,13 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
             <input
               type="text"
               value={areaProceso}
-              onChange={(e) => updateField('areaProceso', e.target.value)}
+              onChange={(e) => {
+                const nextArea = e.target.value;
+                updateFields({
+                  areaProceso: nextArea,
+                  ubicacion: [plantaInstalacion, nextArea].map(s => String(s || '').trim()).filter(Boolean).join(' - ')
+                });
+              }}
               className="bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all print:bg-white print:text-slate-900 print:border-gray-300"
               placeholder="Ej. Cuarto Eléctrico 02 - Bombeo"
             />
@@ -422,8 +438,10 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
                 direccionRelacion="ALIMENTADO_POR"
                 onChange={(val, selectedObj) => {
                   const upperVal = val ? val.toUpperCase() : '';
-                  updateField('alimentadoPor', upperVal);
-                  updateField('alimentadoPorId', selectedObj?.id || null);
+                  updateFields({
+                    alimentadoPor: upperVal,
+                    alimentadoPorId: selectedObj?.id || null
+                  });
                 }}
                 label="ALIMENTADO POR (Alimentador Principal / Trafo / Subestación)"
                 placeholder="Seleccionar Transformador, Subestación o Tablero General..."
@@ -448,8 +466,10 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
                 direccionRelacion="ALIMENTA_A"
                 onChange={(formatted, primaryObj, ids) => {
                   const upperFormatted = formatted ? formatted.toUpperCase() : '';
-                  updateField('alimentaA', upperFormatted);
-                  updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
+                  updateFields({
+                    alimentaA: upperFormatted,
+                    alimentaAIds: Array.isArray(ids) ? ids : []
+                  });
                 }}
                 label="ALIMENTA A (Cargas y Sub-Paneles Suministrados)"
                 placeholder="Seleccionar Motores, Gavetas, Sub-Tableros o Cargas..."

@@ -220,18 +220,28 @@ export default function ModalDiagramaUnifilar({
     if (e) e.preventDefault();
     if (!selectedNode) return;
 
+    const isTableroTipo = editTipo === 'TABLERO';
+    const cleanAlimentaAText = !isTableroTipo && editAlimentaA ? editAlimentaA.trim().toUpperCase() : '';
     const updated = {
       nombre: editNombre.trim().toUpperCase(),
       tipoElemento: editTipo,
       ubicacion: editUbicacion.trim().toUpperCase(),
       alimentadoPor: editAlimentadoPor ? editAlimentadoPor.trim().toUpperCase() : '',
-      alimentaA: editAlimentaA ? editAlimentaA.trim().toUpperCase() : '',
-      alimentaAIds: editAlimentaAIds,
+      ...(!isTableroTipo
+        ? {
+            alimentaA: cleanAlimentaAText,
+            alimentaAIds: editAlimentaAIds
+          }
+        : {}),
       observacionesGenerales: editObservaciones.trim().toUpperCase(),
       datosTecnicos: {
         ...selectedNode.datosTecnicos,
-        alimentaA: editAlimentaA ? editAlimentaA.trim().toUpperCase() : '',
-        alimentaAIds: editAlimentaAIds,
+        ...(!isTableroTipo
+          ? {
+              alimentaA: cleanAlimentaAText,
+              alimentaAIds: editAlimentaAIds
+            }
+          : {}),
         kva: editKva.trim(),
         fases: editFases.trim(),
         positionX: selectedNode.datosTecnicos?.positionX || 300,
@@ -575,21 +585,23 @@ export default function ModalDiagramaUnifilar({
                       </div>
 
                       {/* Dropdown de Cargas Aguas Abajo (Alimenta A) */}
-                      <div>
-                        <SelectorAlimentadorJerarquico
-                          proyectoId={proyectoId || selectedNode?.proyectoId}
-                          tableroActualId={selectedNode?.id}
-                          elementosList={elementos}
-                          value={editAlimentaA}
-                          multiple={true}
-                          onChange={(formatted, primaryObj, ids) => {
-                            setEditAlimentaA(formatted ? formatted.toUpperCase() : '');
-                            setEditAlimentaAIds(Array.isArray(ids) ? ids : []);
-                          }}
-                          label="Alimenta A (Cargas Aguas Abajo / Salidas)"
-                          placeholder="Ninguno (Elemento terminal)..."
-                        />
-                      </div>
+                      {editTipo !== 'TABLERO' && (
+                        <div>
+                          <SelectorAlimentadorJerarquico
+                            proyectoId={proyectoId || selectedNode?.proyectoId}
+                            tableroActualId={selectedNode?.id}
+                            elementosList={elementos}
+                            value={editAlimentaA}
+                            multiple={true}
+                            onChange={(formatted, primaryObj, ids) => {
+                              setEditAlimentaA(formatted ? formatted.toUpperCase() : '');
+                              setEditAlimentaAIds(Array.isArray(ids) ? ids : []);
+                            }}
+                            label="Alimenta A (Cargas Aguas Abajo / Salidas)"
+                            placeholder="Ninguno (Elemento terminal)..."
+                          />
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-2 gap-3">
                         <div>

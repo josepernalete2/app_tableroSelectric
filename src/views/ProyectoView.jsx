@@ -1,24 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import useStore, { getNextElementId, getElementCode, PREFIX_MAP, formatElementTitleWithId, sortElementsByOrder } from '../store/useStore';
+import useStore, {
+  getNextElementId,
+  getElementCode,
+  PREFIX_MAP,
+  formatElementTitleWithId,
+  sortElementsByOrder,
+  resolveElementParentDisplay,
+  resolveElementUbicacionDisplay,
+  isPlaceholderHierarchyValue
+} from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
 import SelectorAlimentadorJerarquico from '../components/SelectorAlimentadorJerarquico';
 import AvanceProgressBar from '../components/AvanceProgressBar';
 import ElementoCardActions from '../components/ElementoCardActions';
-import { 
-  TENSIONES_COVENIN_159_BT, 
-  TENSIONES_COVENIN_159_MT, 
-  TENSIONES_COVENIN_TODAS,
-  TABLERO_CAPACIDADES_POLOS,
-  TABLERO_CANTIDAD_POLOS_ESTANDAR,
-  TABLERO_USO_ELECTRICO,
-  TABLERO_MONTAJE_OPCIONES,
-  TABLERO_HERMETICIDAD_NEMA_IP,
-  MARCA_OPTIONS,
-  AMP_OPTIONS,
-  TIPO_OPTIONS
-} from '../utils/constants';
 import { 
   ArrowLeft, 
   Layers, 
@@ -38,7 +34,6 @@ import {
   RefreshCw,
   FileText,
   CheckSquare,
-  Settings,
   HelpCircle,
   Plus,
   Edit3,
@@ -47,7 +42,6 @@ import {
   MapPin,
   Phone,
   Mail,
-  Activity,
   GitBranch,
   Maximize2,
   Network,
@@ -63,18 +57,7 @@ import TensionNominalInput from '../components/TensionNominalInput';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 import { API_BASE_URL } from '../utils/api';
 import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
-import { TIPOS_CONEXION_TRAFO, calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador';
-import {
-  PRESET_MARCAS,
-  PRESET_VOLTAJES,
-  PRESET_KVA,
-  PRESET_KW,
-  PRESET_AMPERAJES,
-  PRESET_CONDUCTORES,
-  PRESET_BREAKER_TIPOS,
-  PRESET_UBICACIONES,
-  PRESET_CONEXIONES_TRAFO
-} from '../utils/electricalPresets';
+import { PRESET_UBICACIONES } from '../utils/electricalPresets';
 
 // Componente para renderizar Base64 / Blobs / URLs de forma segura
 const SafeImage = ({ blob, src, alt, className }) => {
@@ -289,28 +272,28 @@ export const ProyectoView = () => {
       nombre: (e.nombre || '').toUpperCase().trim(),
       tipoElemento: e.tipoElemento || 'TABLERO',
       tipo: e.tipoElemento || 'TABLERO',
-      codigo: e.codigo || getElementCode(e, e.tipoElemento || 'TABLERO')
+      codigo: e.codigo || e.datosTecnicos?.codigo || null
     }));
     const subs = (inspecciones || []).map(s => ({
       ...s,
       nombre: (s.nombre || '').toUpperCase().trim(),
       tipoElemento: 'SUBESTACION',
       tipo: 'SUBESTACION',
-      codigo: s.codigo || getElementCode(s, 'SUBESTACION')
+      codigo: s.codigo || null
     }));
     const puntos = (puntosMedicion || []).map(p => ({
       ...p,
       nombre: (p.nombre || '').toUpperCase().trim(),
       tipoElemento: 'PUNTO_MEDICION',
       tipo: 'PUNTO_MEDICION',
-      codigo: p.codigo || getElementCode(p, 'PUNTO_MEDICION')
+      codigo: p.codigo || null
     }));
     const ccms = (proyecto?.ccmList || []).map(c => ({
       ...c,
       nombre: (c.nombre || '').toUpperCase().trim(),
       tipoElemento: 'CCM',
       tipo: 'CCM',
-      codigo: c.codigo || getElementCode(c, 'CCM')
+      codigo: c.codigo || null
     }));
     return [...unifilares, ...subs, ...puntos, ...ccms];
   }, [elementos, inspecciones, puntosMedicion, proyecto?.ccmList]);
@@ -450,98 +433,44 @@ export const ProyectoView = () => {
   // Estado para edición de elementos
   const [editingElemento, setEditingElemento] = useState(null);
 
-  // Efecto para rellenar campos en caso de edición
+  // Efecto para rellenar campos en caso de edición (solo los 6 campos esenciales)
   useEffect(() => {
     if (editingElemento) {
+      const resolvedUbic = resolveElementUbicacionDisplay(editingElemento);
+      const resolvedParent = resolveElementParentDisplay(editingElemento, todosElementosJerarquia);
+      const parentObj = resolvedParent && !isPlaceholderHierarchyValue(resolvedParent)
+        ? todosElementosJerarquia.find(
+            (el) => el.id === editingElemento.alimentadoPorId ||
+                    el.id === editingElemento.datosTecnicos?.alimentadorId ||
+                    el.nombre === resolvedParent
+          )
+        : null;
+
       setNombre(editingElemento.nombre ? String(editingElemento.nombre).toUpperCase() : '');
-      setUbicacion(editingElemento.ubicacion ? String(editingElemento.ubicacion).toUpperCase() : '');
-      setAlimentadoPor(editingElemento.alimentadoPor ? String(editingElemento.alimentadoPor).toUpperCase() : '');
-      setAlimentadoPorId(editingElemento.alimentadoPorId || null);
+      setUbicacion(resolvedUbic);
+      setAlimentadoPor(isPlaceholderHierarchyValue(resolvedParent) ? '' : resolvedParent);
+      setAlimentadoPorId(
+        editingElemento.alimentadoPorId ||
+        editingElemento.datosTecnicos?.alimentadoPorId ||
+        editingElemento.datosTecnicos?.alimentadorId ||
+        (parentObj?.id || null)
+      );
 
       // Cargas alimentadas aguas abajo ("ALIMENTA A")
       const downstreamChildren = (todosElementosJerarquia || []).filter(el => el.alimentadoPorId === editingElemento.id);
-      const initialAlimentaAIds = downstreamChildren.length > 0 
-        ? downstreamChildren.map(c => c.id) 
+      const initialAlimentaAIds = downstreamChildren.length > 0
+        ? downstreamChildren.map(c => c.id)
         : (editingElemento.datosTecnicos?.alimentaAIds || []);
       const initialAlimentaANombres = downstreamChildren.length > 0
         ? downstreamChildren.map(c => c.nombre).join(', ')
-        : (editingElemento.datosTecnicos?.alimentaA || '');
+        : (editingElemento.datosTecnicos?.alimentaA || editingElemento.alimentaA || '');
 
       setAlimentaA(initialAlimentaANombres ? String(initialAlimentaANombres).toUpperCase() : '');
       setAlimentaAIds(Array.isArray(initialAlimentaAIds) ? initialAlimentaAIds : []);
 
       setObservacionesGenerales(editingElemento.observacionesGenerales ? String(editingElemento.observacionesGenerales).toUpperCase() : '');
       setTipoElemento(editingElemento.tipoElemento || 'TABLERO');
-      
-      const tech = editingElemento.datosTecnicos || {};
-      if (editingElemento.tipoElemento === 'TABLERO') {
-        setMaxPoles(tech.maxPoles || 24);
-        setTableroCapacidadPolos(tech.capacidadPolos || (tech.fases === 1 ? 'Monopolar (1F)' : (tech.fases === 2 ? 'Bipolar (2F)' : 'Tripolar (3F)')));
-        setTableroUsoElectrico(tech.usoElectrico || 'TDF (Tablero de Distribución y Fuerza)');
-        setTableroMontaje(tech.montaje || (tech.tipo === 'empotrado' ? 'Empotrar / Embutir' : (tech.tipo === 'autosoportado' ? 'Autosoportado (Gabinete de Piso / Switchgear)' : 'Superficial')));
-        setTableroHermeticidad(tech.nivelHermeticidad || 'Uso Interior Seco (NEMA 1 / IP20)');
-        setTableroTension(tech.tensionNominal || editingElemento.tension || '208Y/120 V (3Φ - 4 hilos Estrella)');
-        setBreakerMarca(tech.breakerPrincipal?.marca || '');
-        setBreakerTipo(tech.breakerPrincipal?.tipo || '');
-        setBreakerAmp(tech.breakerPrincipal?.amp || '');
-        setVoltajeVa(tech.voltaje?.va || '');
-        setVoltajeVb(tech.voltaje?.vb || '');
-        setVoltajeVc(tech.voltaje?.vc || '');
-        setVoltajeVab(tech.voltaje?.vab || '');
-        setVoltajeVbc(tech.voltaje?.vbc || '');
-        setVoltajeVca(tech.voltaje?.vca || '');
-        setCorrienteIa(tech.barrasPrincipales?.ia || '0');
-        setCorrienteIb(tech.barrasPrincipales?.ib || '0');
-        setCorrienteIc(tech.barrasPrincipales?.ic || '0');
-        setAcometidaConductor(tech.acometida || '');
-        setMostrarMetrologiaAvanzada(true);
-      } else if (editingElemento.tipoElemento === 'TRANSFORMADOR') {
-        setKvaTrafo(tech.kva || tech.potenciaKva || '');
-        setMarcaTrafo(tech.marca || '');
-        setTipoTrafo(tech.tipoTransformador || 'Pedestal');
-        setConexionTrafo(tech.tipoConexion || normalizarTipoConexion(tech.conexion, '', tech.fases));
-        setVoltajePrimario(tech.voltajePrimario || tech.tensionPrimaria || '');
-        setVoltajeSecundario(tech.voltajeSecundario || tech.tensionSecundaria || '');
-      } else if (editingElemento.tipoElemento === 'GENERADOR') {
-        setKvaGen(tech.kva || tech.potenciaKva || '');
-        setCombustibleGen(tech.combustible || tech.tipoCombustible || 'DIESEL');
-        setVoltajeGen(tech.voltajeGeneracion || tech.voltaje || '');
-        setPotenciaKwGen(tech.potenciaKw || tech.kw || '');
-        setAmperajeGen(tech.amperaje || '');
-        setHzGen(tech.hz || tech.frecuencia || '60 Hz');
-        setRpmGen(tech.rpm || tech.velocidadRpm || '1800 RPM');
-      } else if (editingElemento.tipoElemento === 'PUESTA_TIERRA') {
-        setResistenciaOhmios(tech.resistenciaOhmios || '');
-        setCorrienteFuga(tech.corrienteFugaAmperios || '');
-        setTipoMalla(tech.tipoMalla || '');
-        setCableAcometidaTierra(tech.cableAcometida || '');
-      } else if (editingElemento.tipoElemento === 'TRANSFER') {
-        setCapacidadAmperios(tech.capacidadAmperios || '');
-        setTipoTransferencia(tech.tipoTransferencia || 'AUTOMATICA');
-        setTensionOperativa(tech.tensionOperativa || '');
-      } else if (editingElemento.tipoElemento === 'BANCO_CONDENSADOR') {
-        setKvarTotal(tech.potenciaReactivaTotal || tech.kvarTotal || '');
-        setPasosCondensador(tech.numPasos || tech.pasosCondensador || '');
-        setTipoBanco(tech.tipoCompensacion === 'Fija' ? 'FIJO' : 'AUTOMATICO');
-        setTensionBanco(tech.tensionNominal || tech.tensionBanco || '');
-      } else if (editingElemento.tipoElemento === 'PUNTO_SUMINISTRO') {
-        setSuministroTension(tech.nivelTension || tech.tensionNominal || '');
-        setSuministroEmpresa(tech.empresaDistribuidora || 'CORPOELEC');
-        setSuministroTipoAcometida(tech.tipoAcometida || 'Subterránea');
-        setSuministroCapacidad(tech.capacidadContratadaKva || tech.cargaContratadaKva || tech.capacidadKva || '');
-        setSuministroTipoMedicion(tech.tipoMedicion || 'Medición Directa (Baja Tensión)');
-        setSuministroEnlaceCorpoelec(tech.enlaceCorpoelec !== undefined ? tech.enlaceCorpoelec : true);
-        setSuministroNumeroContrato(tech.numeroContrato || tech.contrato || '');
-        setSuministroNic(tech.nic || tech.numeroMedidor || '');
-        setSuministroPosteTrafo(tech.posteTransformador || tech.posteTrafo || '');
-      } else if (editingElemento.tipoElemento === 'CCM') {
-        setCcmCapacidadBarra(tech.capacidadBarraAmperios || '');
-        setCcmTension(tech.tensionOperativa || '');
-        setCcmBreakerPrincipal(tech.breakerPrincipal || '');
-        setCcmNumeroGavetas(tech.numeroGavetas || 8);
-      } else {
-        setDescripcionOtro(tech.descripcionEspecificaciones || '');
-      }
+      setEliminarFoto(false);
       setFoto(editingElemento.foto || null);
       setFotoBlob(null);
       setPreviewUrl(editingElemento.foto || null);
@@ -554,60 +483,7 @@ export const ProyectoView = () => {
       setAlimentaAIds([]);
       setObservacionesGenerales('');
       setTipoElemento('TABLERO');
-      setMaxPoles(24);
-      setTableroCapacidadPolos('Tripolar (3F)');
-      setTableroUsoElectrico('TDF (Tablero de Distribución y Fuerza)');
-      setTableroMontaje('Superficial');
-      setTableroHermeticidad('Uso Interior Seco (NEMA 1 / IP20)');
-      setTableroTension('208Y/120 V (3Φ - 4 hilos Estrella)');
-      setBreakerMarca('');
-      setBreakerTipo('');
-      setBreakerAmp('');
-      setVoltajeVa('');
-      setVoltajeVb('');
-      setVoltajeVc('');
-      setVoltajeVab('');
-      setVoltajeVbc('');
-      setVoltajeVca('');
-      setCorrienteIa('0');
-      setCorrienteIb('0');
-      setCorrienteIc('0');
-      setAcometidaConductor('');
-      setMostrarMetrologiaAvanzada(false);
       setEliminarFoto(false);
-      setKvaTrafo('');
-      setMarcaTrafo('');
-      setConexionTrafo('');
-      setVoltajePrimario('');
-      setVoltajeSecundario('');
-      setKvaGen('');
-      setVoltajeGen('');
-      setPotenciaKwGen('');
-      setAmperajeGen('');
-      setHzGen('60 Hz');
-      setRpmGen('1800 RPM');
-      setResistenciaOhmios('');
-      setCorrienteFuga('');
-      setTipoMalla('');
-      setCableAcometidaTierra('');
-      setCapacidadAmperios('');
-      setTensionOperativa('');
-      setKvarTotal('');
-      setPasosCondensador('');
-      setTensionBanco('');
-      setSuministroTension('');
-      setSuministroEmpresa('CORPOELEC');
-      setSuministroTipoAcometida('Subterránea');
-      setSuministroCapacidad('');
-      setSuministroTipoMedicion('Medición Directa (Baja Tensión)');
-      setSuministroEnlaceCorpoelec(true);
-      setSuministroNumeroContrato('');
-      setSuministroNic('');
-      setSuministroPosteTrafo('');
-      setCcmCapacidadBarra('');
-      setCcmTension('');
-      setCcmBreakerPrincipal('');
-      setDescripcionOtro('');
       setFoto(null);
       setFotoBlob(null);
       setPreviewUrl(null);
@@ -618,9 +494,9 @@ export const ProyectoView = () => {
   const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Selector de plantilla / tipo de elemento
-  const [tipoElemento, setTipoElemento] = useState('TABLERO'); // 'TABLERO' | 'TRANSFORMADOR' | 'GENERADOR' | 'PUESTA_TIERRA' | 'TRANSFER' | 'PUNTO_SUMINISTRO' | 'CCM' | 'BANCO_CONDENSADOR' | 'OTRO'
+  const [tipoElemento, setTipoElemento] = useState('TABLERO');
 
-  // Campos comunes
+  // Campos comunes simplificados
   const [nombre, setNombre] = useState('');
   const [ubicacion, setUbicacion] = useState('');
   const [alimentadoPor, setAlimentadoPor] = useState('');
@@ -631,85 +507,7 @@ export const ProyectoView = () => {
   const [fotoBlob, setFotoBlob] = useState(null);
   const [foto, setFoto] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
-
-  // Campos de Tablero
-  const [maxPoles, setMaxPoles] = useState(24);
-  const [tableroCapacidadPolos, setTableroCapacidadPolos] = useState('Tripolar (3F)');
-  const [tableroUsoElectrico, setTableroUsoElectrico] = useState('TDF (Tablero de Distribución y Fuerza)');
-  const [tableroMontaje, setTableroMontaje] = useState('Superficial');
-  const [tableroHermeticidad, setTableroHermeticidad] = useState('Uso Interior Seco (NEMA 1 / IP20)');
-  const [tableroTension, setTableroTension] = useState('208Y/120 V (3Φ - 4 hilos Estrella)');
   const [eliminarFoto, setEliminarFoto] = useState(false);
-
-  // Parámetros Técnicos de Interruptor Principal, Metrología y Acometida
-  const [breakerMarca, setBreakerMarca] = useState('');
-  const [breakerTipo, setBreakerTipo] = useState('');
-  const [breakerAmp, setBreakerAmp] = useState('');
-  const [voltajeVa, setVoltajeVa] = useState('');
-  const [voltajeVb, setVoltajeVb] = useState('');
-  const [voltajeVc, setVoltajeVc] = useState('');
-  const [voltajeVab, setVoltajeVab] = useState('');
-  const [voltajeVbc, setVoltajeVbc] = useState('');
-  const [voltajeVca, setVoltajeVca] = useState('');
-  const [corrienteIa, setCorrienteIa] = useState('0');
-  const [corrienteIb, setCorrienteIb] = useState('0');
-  const [corrienteIc, setCorrienteIc] = useState('0');
-  const [acometidaConductor, setAcometidaConductor] = useState('');
-  const [mostrarMetrologiaAvanzada, setMostrarMetrologiaAvanzada] = useState(false);
-
-  // Campos de Transformador
-  const [kvaTrafo, setKvaTrafo] = useState('');
-  const [marcaTrafo, setMarcaTrafo] = useState('');
-  const [tipoTrafo, setTipoTrafo] = useState('Pedestal'); // 'Pedestal' | 'Seco' | 'Poste'
-  const [conexionTrafo, setConexionTrafo] = useState('TRIFASICO_ESTRELLA');
-  const [voltajePrimario, setVoltajePrimario] = useState('');
-  const [voltajeSecundario, setVoltajeSecundario] = useState('');
-
-  // Campos de Generador
-  const [kvaGen, setKvaGen] = useState('');
-  const [combustibleGen, setCombustibleGen] = useState('DIESEL');
-  const [voltajeGen, setVoltajeGen] = useState('');
-  const [potenciaKwGen, setPotenciaKwGen] = useState('');
-  const [amperajeGen, setAmperajeGen] = useState('');
-  const [hzGen, setHzGen] = useState('60 Hz');
-  const [rpmGen, setRpmGen] = useState('1800 RPM');
-
-  // Campos de Puesta a Tierra
-  const [resistenciaOhmios, setResistenciaOhmios] = useState('');
-  const [corrienteFuga, setCorrienteFuga] = useState('');
-  const [tipoMalla, setTipoMalla] = useState('');
-  const [cableAcometidaTierra, setCableAcometidaTierra] = useState('');
-
-  // Campos de Transfer
-  const [capacidadAmperios, setCapacidadAmperios] = useState('');
-  const [tipoTransferencia, setTipoTransferencia] = useState('AUTOMATICA');
-  const [tensionOperativa, setTensionOperativa] = useState('');
-
-  // Campos de Banco de Condensadores
-  const [kvarTotal, setKvarTotal] = useState('');
-  const [pasosCondensador, setPasosCondensador] = useState('');
-  const [tipoBanco, setTipoBanco] = useState('AUTOMATICO');
-  const [tensionBanco, setTensionBanco] = useState('');
-
-  // Campos de Punto de Suministro
-  const [suministroTension, setSuministroTension] = useState('');
-  const [suministroEmpresa, setSuministroEmpresa] = useState('CORPOELEC');
-  const [suministroTipoAcometida, setSuministroTipoAcometida] = useState('Subterránea');
-  const [suministroCapacidad, setSuministroCapacidad] = useState('');
-  const [suministroTipoMedicion, setSuministroTipoMedicion] = useState('Medición Directa (Baja Tensión)');
-  const [suministroEnlaceCorpoelec, setSuministroEnlaceCorpoelec] = useState(true);
-  const [suministroNumeroContrato, setSuministroNumeroContrato] = useState('');
-  const [suministroNic, setSuministroNic] = useState('');
-  const [suministroPosteTrafo, setSuministroPosteTrafo] = useState('');
-
-  // Campos de CCM Elemento
-  const [ccmCapacidadBarra, setCcmCapacidadBarra] = useState('');
-  const [ccmTension, setCcmTension] = useState('');
-  const [ccmBreakerPrincipal, setCcmBreakerPrincipal] = useState('');
-  const [ccmNumeroGavetas, setCcmNumeroGavetas] = useState(8);
-
-  // Campos de Otro
-  const [descripcionOtro, setDescripcionOtro] = useState('');
 
   // Campos de Inspecciones Separadas (Capa 2)
   const [tipoInspeccionModal, setTipoInspeccionModal] = useState('AMBIENTAL_FISICA'); // 'AMBIENTAL_FISICA' | 'TERMOGRAFICA' | 'SISTEMA_ATERRAMIENTO' | 'TANQUE_COMBUSTIBLE'
@@ -812,266 +610,110 @@ export const ProyectoView = () => {
     if (!isElementoFormValid) return;
 
     try {
-      let datosTecnicos = {};
+      const baseDefaults = tipoElemento === 'TABLERO'
+        ? {
+            maxPoles: 24,
+            fases: 3,
+            circuits: [],
+            barrasPrincipales: { ia: '0', ib: '0', ic: '0' },
+            breakerPrincipal: { marca: '', tipo: '', amp: '' },
+            voltaje: { va: '', vb: '', vc: '', vab: '', vbc: '', vca: '' },
+            neutroLlegada: { calibre: '', observaciones: '' },
+            puestaTierra: { calibre: '', observaciones: '' }
+          }
+        : {};
 
-    if (tipoElemento === 'TABLERO') {
-      const fasesCalc = tableroCapacidadPolos?.includes('Monopolar') ? 1 : (tableroCapacidadPolos?.includes('Bipolar') ? 2 : 3);
-      const tipoCalc = tableroMontaje?.toLowerCase().includes('empotrar') ? 'empotrado' : (tableroMontaje?.toLowerCase().includes('autosoportado') ? 'autosoportado' : 'superficial');
+      const isTableroTipo = tipoElemento === 'TABLERO';
+      const cleanAlimentaAText = isTableroTipo ? '' : (alimentaA ? alimentaA.trim().toUpperCase() : '');
+      const cleanAlimentaAIdsList = isTableroTipo ? [] : (Array.isArray(alimentaAIds) ? alimentaAIds : []);
+      const cleanParentId = tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null);
+      const cleanAlimentadoPorText = tipoElemento === 'GENERADOR'
+        ? 'FUENTE PRIMARIA INDEPENDIENTE'
+        : (isPlaceholderHierarchyValue(alimentadoPor) ? '' : alimentadoPor.trim().toUpperCase());
+      const cleanUbicacionText = isPlaceholderHierarchyValue(ubicacion) ? '' : ubicacion.trim().toUpperCase();
 
-      datosTecnicos = {
-        ...(editingElemento?.datosTecnicos || {}),
-        maxPoles: parseInt(maxPoles, 10) || 24,
-        capacidadPolos: tableroCapacidadPolos || 'Tripolar (3F)',
-        fases: fasesCalc,
-        usoElectrico: tableroUsoElectrico || 'TDF (Tablero de Distribución y Fuerza)',
-        montaje: tableroMontaje || 'Superficial',
-        tipo: tipoCalc,
-        nivelHermeticidad: tableroHermeticidad || 'Uso Interior Seco (NEMA 1 / IP20)',
-        tensionNominal: tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)',
-        barrasPrincipales: {
-          ia: String(corrienteIa !== undefined && corrienteIa !== null ? corrienteIa : '0').trim(),
-          ib: String(corrienteIb !== undefined && corrienteIb !== null ? corrienteIb : '0').trim(),
-          ic: String(corrienteIc !== undefined && corrienteIc !== null ? corrienteIc : '0').trim()
-        },
-        breakerPrincipal: {
-          marca: breakerMarca || '',
-          tipo: breakerTipo || '',
-          amp: String(breakerAmp || '').trim()
-        },
-        voltaje: {
-          va: String(voltajeVa || '').trim(),
-          vb: String(voltajeVb || '').trim(),
-          vc: String(voltajeVc || '').trim(),
-          vab: String(voltajeVab || '').trim(),
-          vbc: String(voltajeVbc || '').trim(),
-          vca: String(voltajeVca || '').trim(),
-        },
-        acometida: acometidaConductor.trim(),
-        circuits: editingElemento?.datosTecnicos?.circuits || [],
-        neutroLlegada: editingElemento?.datosTecnicos?.neutroLlegada || { calibre: '', observaciones: '' },
-        puestaTierra: editingElemento?.datosTecnicos?.puestaTierra || { calibre: '', observaciones: '' }
+      const datosTecnicos = {
+        ...(editingElemento ? (editingElemento.datosTecnicos || {}) : baseDefaults),
+        alimentadoPorId: cleanParentId,
+        ...(cleanParentId === null ? { alimentadorId: null } : {}),
+        ...((!editingElemento || !isTableroTipo)
+          ? {
+              alimentaA: cleanAlimentaAText,
+              alimentaAIds: cleanAlimentaAIdsList
+            }
+          : {})
       };
-    } else if (tipoElemento === 'TRANSFORMADOR') {
-      const canonConexion = normalizarTipoConexion(conexionTrafo || editingElemento?.datosTecnicos?.tipoConexion, editingElemento?.datosTecnicos?.conexion);
-      const calcTrafo = calcularCorrientesTrafo({
-        potencia: kvaTrafo || editingElemento?.datosTecnicos?.potenciaKva || editingElemento?.datosTecnicos?.kva,
-        tensionPrimaria: voltajePrimario || editingElemento?.datosTecnicos?.tensionPrimaria,
-        tensionSecundaria: voltajeSecundario || editingElemento?.datosTecnicos?.tensionSecundaria,
-        tipoConexion: canonConexion
-      });
 
-      const kvaNum = calcTrafo.kva;
-      const fpTrafo = parseFloat(editingElemento?.datosTecnicos?.factorPotencia || 0.9) || 0.9;
-      const kvarCalc = kvaNum ? Math.round(kvaNum * Math.sqrt(Math.max(0, 1 - Math.pow(fpTrafo, 2))) * 100) / 100 : null;
-      const secAmps = calcTrafo.i2;
-      const primAmps = calcTrafo.i1;
-
-      datosTecnicos = {
-        marca: marcaTrafo || editingElemento?.datosTecnicos?.marca || '',
-        fases: String(calcTrafo.fases),
-        potenciaKva: kvaTrafo || editingElemento?.datosTecnicos?.potenciaKva || '',
-        kva: kvaNum || kvaTrafo || '',
-        capEx: editingElemento?.datosTecnicos?.capEx || kvaNum || null,
-        capRe: editingElemento?.datosTecnicos?.capRe || kvarCalc || null,
-        kvar: editingElemento?.datosTecnicos?.kvar || kvarCalc || null,
-        factorPotencia: fpTrafo,
-        corrienteNominalA: editingElemento?.datosTecnicos?.corrienteNominalA || secAmps,
-        corrienteNominalB: editingElemento?.datosTecnicos?.corrienteNominalB || secAmps,
-        corrienteNominalC: editingElemento?.datosTecnicos?.corrienteNominalC || secAmps,
-        corrienteSecundaria: editingElemento?.datosTecnicos?.corrienteSecundaria || secAmps,
-        corrientePrimariaCalculada: primAmps,
-        corrienteSecundariaCalculada: secAmps,
-        tipoTransformador: tipoTrafo || editingElemento?.datosTecnicos?.tipoTransformador || 'Pedestal',
-        tipoConexion: canonConexion,
-        conexion: canonConexion,
-        voltajePrimario: voltajePrimario || editingElemento?.datosTecnicos?.voltajePrimario || '',
-        voltajeSecundario: voltajeSecundario || editingElemento?.datosTecnicos?.voltajeSecundario || '',
-        impedanciaPct: editingElemento?.datosTecnicos?.impedanciaPct || '',
-        impedanciaAmp: editingElemento?.datosTecnicos?.impedanciaAmp || '',
-        impedanciaTemp: editingElemento?.datosTecnicos?.impedanciaTemp || '',
-        tensionPrimaria: editingElemento?.datosTecnicos?.tensionPrimaria || voltajePrimario || '',
-        amperiosPrimaria: primAmps ? String(primAmps) : (editingElemento?.datosTecnicos?.amperiosPrimaria || ''),
-        tensionSecundaria: editingElemento?.datosTecnicos?.tensionSecundaria || voltajeSecundario || '',
-        amperiosSecundaria: editingElemento?.datosTecnicos?.amperiosSecundaria || (secAmps ? String(secAmps) : ''),
-        aislamiento: editingElemento?.datosTecnicos?.aislamiento || '',
-        aceite: editingElemento?.datosTecnicos?.aceite || '',
-        seco: editingElemento?.datosTecnicos?.seco || '',
-        acometidas: editingElemento?.datosTecnicos?.acometidas || {
-          primaria: { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' },
-          secundaria: { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' },
-          neutro: { aerea: false, subterranea: false, calibre: '', tipo: '', terminal: '', fusible: '', pararrayo: '', observaciones: '' }
-        },
-        spt: editingElemento?.datosTecnicos?.spt || {
-          barillaCalibre: '',
-          barillaCantidad: '',
-          tipo: '',
-          barillaConfiguracion: '',
-          conductorCalibre: '',
-          conductorTipoSold: '',
-          resistencia: '',
-          amp: '',
-          fechaMedicion: ''
-        }
-      };
-    } else if (tipoElemento === 'GENERADOR') {
-      const kvaGenNum = parseFloat(String(kvaGen || editingElemento?.datosTecnicos?.kva || 0).replace(/[^0-9.]/g, '')) || null;
-      const kwGenNum = parseFloat(String(potenciaKwGen || editingElemento?.datosTecnicos?.kw || editingElemento?.datosTecnicos?.potenciaKw || 0).replace(/[^0-9.]/g, '')) || (kvaGenNum ? Math.round(kvaGenNum * 0.8 * 100) / 100 : null);
-      const fpGen = parseFloat(editingElemento?.datosTecnicos?.factorPotencia || 0.8) || 0.8;
-      const kvarGen = kvaGenNum ? Math.round(kvaGenNum * Math.sqrt(Math.max(0, 1 - Math.pow(fpGen, 2))) * 100) / 100 : null;
-      const ampGenNum = parseFloat(String(amperajeGen || editingElemento?.datosTecnicos?.amperaje || 0).replace(/[^0-9.]/g, '')) || null;
-
-      datosTecnicos = {
-        kva: kvaGenNum || kvaGen,
-        potenciaKva: kvaGenNum || kvaGen,
-        kw: kwGenNum || potenciaKwGen,
-        potenciaKw: kwGenNum || potenciaKwGen,
-        kvar: editingElemento?.datosTecnicos?.kvar || kvarGen,
-        factorPotencia: fpGen,
-        voltajeGeneracion: voltajeGen || editingElemento?.datosTecnicos?.voltajeGeneracion || editingElemento?.datosTecnicos?.voltaje || '',
-        voltaje: voltajeGen || editingElemento?.datosTecnicos?.voltaje || editingElemento?.datosTecnicos?.voltajeGeneracion || '',
-        hz: hzGen || '60 Hz',
-        frecuencia: hzGen || '60 Hz',
-        rpm: rpmGen || '1800 RPM',
-        velocidadRpm: rpmGen || '1800 RPM',
-        amperaje: ampGenNum || amperajeGen,
-        tipoCombustible: combustibleGen || editingElemento?.datosTecnicos?.tipoCombustible || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
-        combustible: combustibleGen || editingElemento?.datosTecnicos?.combustible || 'DIESEL',
-        capacidadCombustible: editingElemento?.datosTecnicos?.capacidadCombustible || null,
-        consumoEspecificado: editingElemento?.datosTecnicos?.consumoEspecificado || null,
-        horasOperacion: editingElemento?.datosTecnicos?.horasOperacion || null,
-        horasReserva: editingElemento?.datosTecnicos?.horasReserva || null
-      };
-    } else if (tipoElemento === 'BANCO_CONDENSADOR') {
-      datosTecnicos = editingElemento?.datosTecnicos || {
-        marca: '', modelo: '', alimentador: '', calibreConductor: '', fabricante: '', anioFabricacion: '',
-        tensionNominal: tensionBanco || '208 V', tensionRegistrada: tensionBanco || '208 V', frecuencia: '60 Hz', 
-        potenciaReactivaTotal: kvarTotal || '150 kVAR',
-        corrienteNominalTotal: '', numFases: 'Trifásico', conexion: 'Estrella', nivelAislamientoBIL: '',
-        tipoCompensacion: tipoBanco === 'AUTOMATICO' ? 'Automática (Pasos)' : 'Fija', numPasos: pasosCondensador || '6', secuenciaPasosKvar: '',
-        tipoConmutacion: 'Contactores dedicados', potenciaIndividual: '', capacitanciaMuf: '',
-        tensionCondensador: '', tecnologiaDielectrica: 'Polipropileno metalizado',
-        resistenciaDescarga: 'Sí', seguridad: 'Desconectador por sobrepresión',
-        factorDesintonizacion: 'N/A', tipoNucleo: 'Núcleo de Hierro con Entrehierro',
-        claseAislamientoTermico: 'Clase H (180°C)', proteccionTermica: 'Sensor Bimetálico / PT100 integrado',
-        reguladorMarcaModelo: '', relacionTc: '', puertoComunicacion: 'RS-485 (Modbus RTU)',
-        interruptorPrincipalAmp: '', proteccionPasos: 'Fusibles', gradoProteccionEnvolvente: 'IP54',
-        dimensionesAlto: '', dimensionesAncho: '', dimensionesProf: '',
-        sistemaEnfriamiento: 'Ventilación Forzada', temperaturaC: '', humedadPct: ''
-      };
-    } else if (tipoElemento === 'PUNTO_SUMINISTRO') {
-      datosTecnicos = {
-        ...(editingElemento?.datosTecnicos || {}),
-        nivelTension: suministroTension || '13.8 kV',
-        tensionNominal: suministroTension || '13.8 kV',
-        empresaDistribuidora: suministroEmpresa || 'CORPOELEC',
-        tipoAcometida: suministroTipoAcometida || 'Subterránea',
-        capacidadContratadaKva: suministroCapacidad || '',
-        cargaContratadaKva: suministroCapacidad || '',
-        tipoMedicion: suministroTipoMedicion || 'Medición Directa (Baja Tensión)',
-        enlaceCorpoelec: Boolean(suministroEnlaceCorpoelec),
-        numeroContrato: suministroNumeroContrato || '',
-        nic: suministroNic || '',
-        posteTransformador: suministroPosteTrafo || ''
-      };
-    } else if (tipoElemento === 'CCM') {
-      datosTecnicos = {
-        capacidadBarraAmperios: ccmCapacidadBarra || '1200 A',
-        tensionOperativa: ccmTension || '480 V',
-        breakerPrincipal: ccmBreakerPrincipal || '1200A 3P',
-        numeroGavetas: parseInt(ccmNumeroGavetas, 10) || 8
-      };
-    } else if (tipoElemento === 'PUESTA_TIERRA') {
-      datosTecnicos = {
-        resistenciaOhmios,
-        corrienteFugaAmperios: corrienteFuga,
-        tipoMalla,
-        cableAcometida: cableAcometidaTierra
-      };
-    } else if (tipoElemento === 'TRANSFER') {
-      datosTecnicos = {
-        capacidadAmperios,
-        tipoTransferencia,
-        tensionOperativa
-      };
-    } else {
-      datosTecnicos = {
-        descripcionEspecificaciones: descripcionOtro
-      };
-    }
-
-    // Bidireccionalidad: enriquecer datosTecnicos con destinos aguas abajo
-    datosTecnicos = {
-      ...datosTecnicos,
-      alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
-      alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : []
-    };
-
-    if (editingElemento) {
-      updateElementoUnifilar(proyectoId, editingElemento.id, {
-        nombre: nombre.trim().toUpperCase(),
-        tipoElemento,
-        tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : (editingElemento.tension || ''),
-        ubicacion: ubicacion.trim().toUpperCase() || 'SIN UBICACIÓN',
-        alimentadoPor: tipoElemento === 'GENERADOR' ? 'FUENTE PRIMARIA INDEPENDIENTE' : (alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO'),
-        alimentadoPorId: tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null),
-        alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
-        alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
-        foto: eliminarFoto ? null : (foto !== undefined ? foto : editingElemento.foto),
-        fotoBlob: eliminarFoto ? null : (fotoBlob || null),
-        eliminarFoto: Boolean(eliminarFoto),
-        observacionesGenerales: observacionesGenerales.trim().toUpperCase(),
-        datosTecnicos
-      });
-      showToast?.("Elemento actualizado correctamente.", "success");
-      setEditingElemento(null);
-      setAlimentadoPorId(null);
-      setAlimentaA('');
-      setAlimentaAIds([]);
-      setFoto(null);
-      setFotoBlob(null);
-      setEliminarFoto(false);
-      setShowElementoModal(false);
-    } else {
-      const assignedCode = getNextElementId(tipoElemento, proyectoId);
-      const result = addElementoUnifilar(proyectoId, {
-        codigo: assignedCode.toUpperCase(),
-        nombre: nombre.trim().toUpperCase(),
-        tipoElemento,
-        tension: tipoElemento === 'TABLERO' ? (tableroTension || '208Y/120 V (3Φ - 4 hilos Estrella)') : '',
-        ubicacion: ubicacion.trim().toUpperCase() || 'SIN UBICACIÓN',
-        alimentadoPor: tipoElemento === 'GENERADOR' ? 'FUENTE PRIMARIA INDEPENDIENTE' : (alimentadoPor.trim().toUpperCase() || 'NO DEFINIDO'),
-        alimentadoPorId: tipoElemento === 'GENERADOR' ? null : (alimentadoPorId || null),
-        alimentaA: alimentaA ? alimentaA.trim().toUpperCase() : '',
-        alimentaAIds: Array.isArray(alimentaAIds) ? alimentaAIds : [],
-        foto,
-        fotoBlob,
-        observacionesGenerales: observacionesGenerales.trim().toUpperCase(),
-        datosTecnicos
-      });
-
-      if (result.success) {
-        setNombre('');
-        setUbicacion('');
-        setAlimentadoPor('');
+      if (editingElemento) {
+        updateElementoUnifilar(proyectoId, editingElemento.id, {
+          nombre: nombre.trim().toUpperCase(),
+          tipoElemento,
+          tension: editingElemento.tension || '',
+          ubicacion: cleanUbicacionText,
+          alimentadoPor: cleanAlimentadoPorText,
+          alimentadoPorId: cleanParentId,
+          ...(!isTableroTipo
+            ? {
+                alimentaA: cleanAlimentaAText,
+                alimentaAIds: cleanAlimentaAIdsList
+              }
+            : {}),
+          foto: eliminarFoto ? null : (foto !== undefined ? foto : editingElemento.foto),
+          fotoBlob: eliminarFoto ? null : (fotoBlob || null),
+          eliminarFoto: Boolean(eliminarFoto),
+          observacionesGenerales: observacionesGenerales.trim().toUpperCase(),
+          datosTecnicos
+        });
+        showToast?.("Equipo actualizado correctamente.", "success");
+        setEditingElemento(null);
         setAlimentadoPorId(null);
         setAlimentaA('');
         setAlimentaAIds([]);
-        setObservacionesGenerales('');
         setFoto(null);
         setFotoBlob(null);
-        if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
+        setEliminarFoto(false);
         setShowElementoModal(false);
-        showToast?.("Elemento registrado correctamente.", "success");
       } else {
-        customAlert(result.error);
+        const assignedCode = getNextElementId(tipoElemento, proyectoId);
+        const result = addElementoUnifilar(proyectoId, {
+          codigo: assignedCode.toUpperCase(),
+          nombre: nombre.trim().toUpperCase(),
+          tipoElemento,
+          tension: '',
+          ubicacion: cleanUbicacionText,
+          alimentadoPor: cleanAlimentadoPorText,
+          alimentadoPorId: cleanParentId,
+          alimentaA: cleanAlimentaAText,
+          alimentaAIds: cleanAlimentaAIdsList,
+          foto,
+          fotoBlob,
+          observacionesGenerales: observacionesGenerales.trim().toUpperCase(),
+          datosTecnicos
+        });
+
+        if (result.success) {
+          setNombre('');
+          setUbicacion('');
+          setAlimentadoPor('');
+          setAlimentadoPorId(null);
+          setAlimentaA('');
+          setAlimentaAIds([]);
+          setObservacionesGenerales('');
+          setFoto(null);
+          setFotoBlob(null);
+          if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
+          setPreviewUrl(null);
+          setShowElementoModal(false);
+          showToast?.("Equipo registrado correctamente.", "success");
+        } else {
+          customAlert(result.error);
+        }
       }
+    } catch (err) {
+      console.error("Error al registrar o actualizar equipo:", err);
+      showToast?.("No se pudo completar el registro: " + (err.message || 'Error inesperado'), "error");
     }
-  } catch (err) {
-    console.error("Error al registrar o actualizar elemento:", err);
-    showToast?.("No se pudo completar el registro: " + (err.message || 'Error inesperado'), "error");
-  }
-};
+  };
 
   const handleCreateInspeccion = (e) => {
     e.preventDefault();
@@ -1635,7 +1277,9 @@ export const ProyectoView = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-sans">
                     {todosElementosJerarquia.map((elem) => {
-                      const isOrphan = !elem.alimentadoPor || elem.alimentadoPor === 'NO DEFINIDO' || elem.alimentadoPor === 'Sin alimentación';
+                      const resolvedParent = resolveElementParentDisplay(elem, todosElementosJerarquia);
+                      const resolvedUbic = resolveElementUbicacionDisplay(elem);
+                      const isOrphan = !resolvedParent;
                       return (
                         <tr key={elem.id} className="hover:bg-slate-900/40 transition-colors">
                           <td className="py-2.5 px-3 font-mono font-bold text-amber-400">
@@ -1650,7 +1294,7 @@ export const ProyectoView = () => {
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-slate-400 text-[11px]">
-                            {elem.ubicacion || '—'}
+                            {resolvedUbic || '—'}
                           </td>
                           <td className="py-2.5 px-3">
                             <span className={`px-2 py-0.5 rounded text-[10.5px] font-medium inline-flex items-center gap-1.5 ${
@@ -1659,15 +1303,25 @@ export const ProyectoView = () => {
                                 : 'bg-slate-900 text-slate-200 border border-slate-800'
                             }`}>
                               <GitBranch className="w-3 h-3 text-amber-500" />
-                              {elem.alimentadoPor || 'RAÍZ / ACOMETIDA PRINCIPAL'}
+                              {resolvedParent || 'RAÍZ / ACOMETIDA PRINCIPAL'}
                             </span>
                           </td>
                           <td className="py-2.5 px-3">
                             {(() => {
+                              const circuitChildIds = new Set();
+                              const rawCircuits = elem.datosTecnicos?.circuits || elem.circuits || [];
+                              rawCircuits.forEach((c) => {
+                                const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
+                                if (!rawDest) return;
+                                String(rawDest).split(',').map(s => s.trim()).filter(Boolean).forEach(cid => circuitChildIds.add(cid));
+                              });
                               const downstream = todosElementosJerarquia.filter(
-                                (c) => c.alimentadoPorId === elem.id ||
-                                (elem.datosTecnicos?.alimentaAIds && elem.datosTecnicos.alimentaAIds.includes(c.id)) ||
-                                (elem.alimentaAIds && elem.alimentaAIds.includes(c.id))
+                                (c) => c.id !== elem.id && (
+                                  c.alimentadoPorId === elem.id ||
+                                  (elem.datosTecnicos?.alimentaAIds && elem.datosTecnicos.alimentaAIds.includes(c.id)) ||
+                                  (elem.alimentaAIds && elem.alimentaAIds.includes(c.id)) ||
+                                  circuitChildIds.has(c.id)
+                                )
                               );
                               if (downstream.length === 0) {
                                 if (elem.alimentaA) {
@@ -1816,7 +1470,7 @@ export const ProyectoView = () => {
                           {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
                         </h3>
                         <div className="space-y-1 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
-                          <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
+                          <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {resolveElementUbicacionDisplay(item) || 'Sin especificar'}</p>
                           <p className="truncate"><span className="text-slate-500 font-bold">Tensión:</span> {item.nivelTension}</p>
                           <p className="truncate flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-slate-600 shrink-0" /><span className="text-slate-500 font-bold">Fecha:</span> {item.fecha}</p>
                           <p className="truncate flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-slate-600 shrink-0" /><span className="text-slate-500 font-bold">Inspector:</span> {item.inspector}</p>
@@ -1896,6 +1550,8 @@ export const ProyectoView = () => {
                   const isCcm = item.tipoElemento === 'CCM';
                   const isBanco = item.tipoElemento === 'BANCO_CONDENSADOR';
                   const isDragging = draggedItemId === item.id;
+                  const displayUbicacion = resolveElementUbicacionDisplay(item);
+                  const displayAlimentadoPor = resolveElementParentDisplay(item, todosElementosJerarquia);
 
                   return (
                     <div
@@ -2062,8 +1718,8 @@ export const ProyectoView = () => {
                           )}
                           
                           <div className="space-y-1.5 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
-                            <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {item.ubicacion}</p>
-                            <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {item.alimentadoPor || 'No definido'}</p>
+                            <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {displayUbicacion || 'Sin especificar'}</p>
+                            <p className="truncate"><span className="text-slate-500 font-bold">Alimentado por:</span> {displayAlimentadoPor || 'No definido'}</p>
 
                             {/* Mostrar resúmenes enriquecidos de las fichas técnicas reales */}
                             {isTablero && (
@@ -2167,7 +1823,7 @@ export const ProyectoView = () => {
             onClick={() => { setShowElementoModal(false); setEditingElemento(null); }}
           />
           
-          <div className="relative w-full max-w-5xl xl:max-w-6xl max-h-[92vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-150">
+          <div className="relative w-full max-w-4xl max-h-[92vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-150">
             {/* CABECERA FIJA */}
             <div className="px-5 py-3.5 border-b border-slate-800/80 shrink-0 flex items-center justify-between bg-slate-950/90 backdrop-blur">
               <div className="flex items-center gap-2.5">
@@ -2176,10 +1832,10 @@ export const ProyectoView = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-100 flex items-center gap-2">
-                    {editingElemento ? `Editar Plantilla: ${editingElemento.nombre}` : 'Registrar Plantilla Técnica'}
+                    {editingElemento ? `Editar Equipo: ${editingElemento.nombre}` : 'Registrar Equipo Eléctrico'}
                   </h3>
                   <p className="text-[10px] text-slate-400">
-                    Ficha técnica estandarizada y metrología eléctrica de ingeniería
+                    Identificación, jerarquía eléctrica, evidencia fotográfica y observaciones
                   </p>
                 </div>
               </div>
@@ -2205,7 +1861,7 @@ export const ProyectoView = () => {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                    Tipo de Elemento Eléctrico (Plantilla Técnica)
+                    Tipo de Elemento Eléctrico
                   </label>
                   <span className="text-[10px] text-amber-400 font-semibold font-mono">
                     {tipoElemento}
@@ -2238,13 +1894,13 @@ export const ProyectoView = () => {
                 </div>
               </div>
 
-              {/* GRID PRINCIPAL DE 3 COLUMNAS FLUIDAS */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* GRID PRINCIPAL DE 2 COLUMNAS FLUIDAS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 {/* ============================================================== */}
                 {/* COLUMNA 1: Identificación, Ubicación y Procedencia */}
                 {/* ============================================================== */}
-                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
                   <div className="space-y-3">
                     <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800">
                       <Tag className="w-3.5 h-3.5 text-amber-400" />
@@ -2324,638 +1980,39 @@ export const ProyectoView = () => {
                     )}
 
                     {/* 2. ALIMENTA A (Destinos aguas abajo / Salidas) */}
-                    <div>
-                      <SelectorAlimentadorJerarquico
-                        proyectoId={proyectoId}
-                        tableroActualId={editingElemento?.id}
-                        elementosList={todosElementosJerarquia}
-                        value={alimentaA}
-                        multiple={true}
-                        onChange={(val, primaryObj, ids) => {
-                          setAlimentaA(val ? val.toUpperCase() : '');
-                          setAlimentaAIds(Array.isArray(ids) ? ids : []);
-                        }}
-                        tipoElementoActual={tipoElemento}
-                        direccionRelacion="ALIMENTA_A"
-                        label={tipoElemento === 'GENERADOR' ? "ALIMENTA A (Transferencias ATS / Tableros / Cargas de Emergencia)" : "ALIMENTA A (Destinos Aguas Abajo / Salidas)"}
-                        placeholder={tipoElemento === 'GENERADOR' ? "Enlazar Transferencias ATS, Tableros de Emergencia o Cargas Suministradas..." : "Enlazar uno o varios equipos secundarios que reciben energía..."}
-                      />
-                    </div>
+                    {tipoElemento !== 'TABLERO' && (
+                      <div>
+                        <SelectorAlimentadorJerarquico
+                          proyectoId={proyectoId}
+                          tableroActualId={editingElemento?.id}
+                          elementosList={todosElementosJerarquia}
+                          value={alimentaA}
+                          multiple={true}
+                          onChange={(val, primaryObj, ids) => {
+                            setAlimentaA(val ? val.toUpperCase() : '');
+                            setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                          }}
+                          tipoElementoActual={tipoElemento}
+                          direccionRelacion="ALIMENTA_A"
+                          label={tipoElemento === 'GENERADOR' ? "ALIMENTA A (Transferencias ATS / Tableros / Cargas de Emergencia)" : "ALIMENTA A (Destinos Aguas Abajo / Salidas)"}
+                          placeholder={tipoElemento === 'GENERADOR' ? "Enlazar Transferencias ATS, Tableros de Emergencia o Cargas Suministradas..." : "Enlazar uno o varios equipos secundarios que reciben energía..."}
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {/* Nota informativa técnica */}
-                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 text-[10px] text-slate-400">
-                    <p className="font-bold text-amber-400 flex items-center gap-1">
-                      <Zap className="w-3 h-3" /> Marco Normativo:
-                    </p>
-                    <p className="text-[9.5px] text-slate-400 mt-0.5">COVENIN 159:1997 / Código Eléctrico Nacional (CEN 200)</p>
-                  </div>
                 </div>
 
                 {/* ============================================================== */}
-                {/* COLUMNA 2: Ficha Técnica y Clasificación según tipo */}
+                {/* COLUMNA 2: Evidencia Fotográfica y Observaciones Técnicas */}
                 {/* ============================================================== */}
-                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
+                <div className="space-y-4 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80 flex flex-col">
                   <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <Camera className="w-3.5 h-3.5 text-amber-400" />
                     <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider">
-                      Ficha Técnica y Clasificación
+                      Evidencia Fotográfica y Observaciones
                     </h4>
                   </div>
-
-                  {/* TABLERO */}
-                  {tipoElemento === 'TABLERO' && (
-                    <div className="space-y-2.5">
-                      {/* 1. Uso Eléctrico */}
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                          Uso Eléctrico (Función Principal)
-                        </label>
-                        <select
-                          value={tableroUsoElectrico}
-                          onChange={(e) => setTableroUsoElectrico(e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9"
-                        >
-                          {TABLERO_USO_ELECTRICO.map((opc) => (
-                            <option key={opc} value={opc}>{opc}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 2. Capacidad y Cantidad de Polos */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                            Alimentación / Fases
-                          </label>
-                          <select
-                            value={tableroCapacidadPolos}
-                            onChange={(e) => setTableroCapacidadPolos(e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9"
-                          >
-                            {TABLERO_CAPACIDADES_POLOS.map((opc) => (
-                              <option key={opc} value={opc}>{opc}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                            Cantidad de Polos
-                          </label>
-                          <select
-                            value={maxPoles}
-                            onChange={(e) => setMaxPoles(parseInt(e.target.value, 10))}
-                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs font-mono font-bold text-amber-400 h-9"
-                          >
-                            {TABLERO_CANTIDAD_POLOS_ESTANDAR.map((p) => (
-                              <option key={p} value={p}>{p} Polos</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* 3. Montaje y Hermeticidad */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                            Montaje
-                          </label>
-                          <select
-                            value={tableroMontaje}
-                            onChange={(e) => setTableroMontaje(e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9 truncate"
-                          >
-                            {TABLERO_MONTAJE_OPCIONES.map((opc) => (
-                              <option key={opc} value={opc}>{opc}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                            Hermeticidad NEMA/IP
-                          </label>
-                          <select
-                            value={tableroHermeticidad}
-                            onChange={(e) => setTableroHermeticidad(e.target.value)}
-                            className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 h-9 truncate"
-                          >
-                            {TABLERO_HERMETICIDAD_NEMA_IP.map((opc) => (
-                              <option key={opc} value={opc}>{opc}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* 4. Tensión Nominal COVENIN 159 */}
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                          Tensión Nominal (COVENIN 159:1997)
-                        </label>
-                        <TensionNominalInput
-                          tipo="BT"
-                          value={tableroTension}
-                          onChange={(val) => setTableroTension(val)}
-                          placeholder="Ej. 208Y/120 V (3Φ - 4 hilos Estrella)"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TRANSFORMADOR */}
-                  {tipoElemento === 'TRANSFORMADOR' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia KVA</label>
-                          <input type="text" list="preset-kva-list" value={kvaTrafo} onChange={(e) => setKvaTrafo(e.target.value.toUpperCase())} placeholder="Ej. 500 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Marca</label>
-                          <input type="text" list="preset-marcas-list" value={marcaTrafo} onChange={(e) => setMarcaTrafo(e.target.value.toUpperCase())} placeholder="Ej. SCHNEIDER / SIEMENS" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Transformador</label>
-                          <select value={tipoTrafo} onChange={(e) => setTipoTrafo(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
-                            <option value="Pedestal">Pedestal (Aceite)</option>
-                            <option value="Seco">Seco (Encapsulado)</option>
-                            <option value="Aceite">Aceite (Sumergido)</option>
-                            <option value="Poste">Montaje en Poste</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Esquema de Conexión</label>
-                          <select 
-                            value={conexionTrafo} 
-                            onChange={(e) => setConexionTrafo(e.target.value)} 
-                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-violet-300 font-semibold h-9 focus:border-violet-500"
-                          >
-                            {TIPOS_CONEXION_TRAFO.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Primaria MT</label>
-                        <TensionNominalInput
-                          tipo="MT"
-                          value={voltajePrimario}
-                          onChange={(val) => setVoltajePrimario(val)}
-                          placeholder="Ej. 13800 V (13.8 kV)"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Secundaria BT</label>
-                        <TensionNominalInput
-                          tipo="BT"
-                          value={voltajeSecundario}
-                          onChange={(val) => setVoltajeSecundario(val)}
-                          placeholder="Ej. 208Y/120 V o 480Y/277 V"
-                        />
-                      </div>
-
-                      {/* Preview de Corrientes Eléctricas Calculadas */}
-                      {(() => {
-                        const calc = calcularCorrientesTrafo({
-                          potencia: kvaTrafo,
-                          tensionPrimaria: voltajePrimario,
-                          tensionSecundaria: voltajeSecundario,
-                          tipoConexion: conexionTrafo
-                        });
-                        return (
-                          <div className="p-3 bg-violet-950/25 border border-violet-800/40 rounded-xl space-y-1.5 font-mono">
-                            <div className="flex items-center justify-between text-[11px] font-bold text-violet-300">
-                              <span className="flex items-center gap-1.5">⚡ Corrientes Nominales Calculadas</span>
-                              <span className="text-[9px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded border border-violet-500/30">
-                                {calc.esTrifasico ? 'Trifásico (√3·V)' : 'Monofásico (V)'}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
-                              <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
-                                <span className="block text-[10px] text-slate-400 font-sans">Corriente Primaria (I₁)</span>
-                                <span className="text-sm font-black text-violet-400 font-mono">{calc.i1Formateada}</span>
-                                <span className="block text-[9px] text-slate-500 font-mono mt-0.5">{calc.formulaI1}</span>
-                              </div>
-                              <div className="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
-                                <span className="block text-[10px] text-slate-400 font-sans">Corriente Secundaria (I₂)</span>
-                                <span className="text-sm font-black text-violet-400 font-mono">{calc.i2Formateada}</span>
-                                <span className="block text-[9px] text-slate-500 font-mono mt-0.5">{calc.formulaI2}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* GENERADOR */}
-                  {tipoElemento === 'GENERADOR' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad kVA</label>
-                          <input type="text" list="preset-kva-list" value={kvaGen} onChange={(e) => setKvaGen(e.target.value.toUpperCase())} placeholder="Ej. 500 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Potencia kW</label>
-                          <input type="text" list="preset-kw-list" value={potenciaKwGen} onChange={(e) => setPotenciaKwGen(e.target.value.toUpperCase())} placeholder="Ej. 400 KW" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Voltaje Generación</label>
-                          <TensionNominalInput tipo="BT" value={voltajeGen} onChange={(val) => setVoltajeGen(val)} placeholder="Ej. 208/120 V" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Amperaje Breaker</label>
-                          <input type="text" list="preset-amperajes-list" value={amperajeGen} onChange={(e) => setAmperajeGen(e.target.value.toUpperCase())} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Frecuencia (Hz)</label>
-                          <select value={hzGen} onChange={(e) => setHzGen(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono">
-                            <option value="60 Hz">60 Hz</option>
-                            <option value="50 Hz">50 Hz</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Velocidad (RPM)</label>
-                          <input type="text" value={rpmGen} onChange={(e) => setRpmGen(e.target.value.toUpperCase())} placeholder="Ej. 1800 RPM" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Combustible</label>
-                        <select value={combustibleGen} onChange={(e) => setCombustibleGen(e.target.value)} className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
-                          <option value="DIESEL">DIÉSEL / GASOIL</option>
-                          <option value="GAS">GAS NATURAL</option>
-                          <option value="GASOLINA">GASOLINA</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* PUNTO DE SUMINISTRO */}
-                  {tipoElemento === 'PUNTO_SUMINISTRO' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Suministro</label>
-                          <TensionNominalInput tipo="TODAS" value={suministroTension} onChange={(val) => setSuministroTension(val)} placeholder="Ej. 13.8 kV o 208 V" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Carga Contratada</label>
-                          <input type="text" list="preset-kva-list" value={suministroCapacidad} onChange={(e) => setSuministroCapacidad(e.target.value.toUpperCase())} placeholder="Ej. 1000 KVA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Medición</label>
-                        <select value={suministroTipoMedicion} onChange={(e) => setSuministroTipoMedicion(e.target.value)} className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
-                          <option value="Medición Directa (Baja Tensión)">Medición Directa (Baja Tensión)</option>
-                          <option value="Medición Indirecta BT">Medición Indirecta BT (con TCs)</option>
-                          <option value="Medición Indirecta AT/MT">Medición Indirecta AT/MT (TCs y TPs)</option>
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">NIC / Medidor</label>
-                          <input type="text" value={suministroNic} onChange={(e) => setSuministroNic(e.target.value.toUpperCase())} placeholder="Ej. NIC 49210" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. Contrato</label>
-                          <input type="text" value={suministroNumeroContrato} onChange={(e) => setSuministroNumeroContrato(e.target.value.toUpperCase())} placeholder="Ej. C-84920" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TRANSFERENCIA (ATS/MTS) */}
-                  {tipoElemento === 'TRANSFER' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Amperios</label>
-                          <input type="text" list="preset-amperajes-list" value={capacidadAmperios} onChange={(e) => setCapacidadAmperios(e.target.value.toUpperCase())} placeholder="Ej. 1600 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Modo Operación</label>
-                          <select value={tipoTransferencia} onChange={(e) => setTipoTransferencia(e.target.value)} className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
-                            <option value="AUTOMATICA">AUTOMÁTICA (ATS)</option>
-                            <option value="MANUAL">MANUAL (MTS)</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
-                        <TensionNominalInput tipo="BT" value={tensionOperativa} onChange={(val) => setTensionOperativa(val)} placeholder="Ej. 208Y/120 V o 480Y/277 V" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* CCM (MOTORES) */}
-                  {tipoElemento === 'CCM' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Barra (A)</label>
-                          <input type="text" list="preset-amperajes-list" value={ccmCapacidadBarra} onChange={(e) => setCcmCapacidadBarra(e.target.value.toUpperCase())} placeholder="Ej. 1200 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
-                          <TensionNominalInput tipo="BT" value={ccmTension} onChange={(val) => setCcmTension(val)} placeholder="Ej. 480 V o 208 V" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Breaker Principal</label>
-                          <input type="text" list="preset-amperajes-list" value={ccmBreakerPrincipal} onChange={(e) => setCcmBreakerPrincipal(e.target.value.toUpperCase())} placeholder="Ej. 1200 A 3P" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Nro. de Gavetas</label>
-                          <input type="number" min="1" max="48" value={ccmNumeroGavetas} onChange={(e) => setCcmNumeroGavetas(e.target.value)} placeholder="8" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* BANCO DE CONDENSADORES */}
-                  {tipoElemento === 'BANCO_CONDENSADOR' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Capacidad Total (kVAR)</label>
-                          <input type="text" value={kvarTotal} onChange={(e) => setKvarTotal(e.target.value.toUpperCase())} placeholder="Ej. 150 KVAR" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Pasos / Escalones</label>
-                          <input type="text" value={pasosCondensador} onChange={(e) => setPasosCondensador(e.target.value.toUpperCase())} placeholder="Ej. 6 PASOS" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo Banco</label>
-                          <select value={tipoBanco} onChange={(e) => setTipoBanco(e.target.value)} className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9">
-                            <option value="AUTOMATICO">AUTOMÁTICO</option>
-                            <option value="FIJO">FIJO</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tensión Operativa</label>
-                          <TensionNominalInput tipo="BT" value={tensionBanco} onChange={(val) => setTensionBanco(val)} placeholder="Ej. 208 V o 480 V" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* PUESTA A TIERRA */}
-                  {tipoElemento === 'PUESTA_TIERRA' && (
-                    <div className="space-y-2.5">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Resistencia (Ω)</label>
-                          <input type="text" value={resistenciaOhmios} onChange={(e) => setResistenciaOhmios(e.target.value.toUpperCase())} placeholder="Ej. 0.5 Ω" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Corriente Fuga (A)</label>
-                          <input type="text" value={corrienteFuga} onChange={(e) => setCorrienteFuga(e.target.value.toUpperCase())} placeholder="Ej. 4.2 A" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono text-amber-400" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Tipo de Malla / Ubicación</label>
-                        <input type="text" list="preset-ubicaciones-list" value={tipoMalla} onChange={(e) => setTipoMalla(e.target.value.toUpperCase())} placeholder="Ej. MALLA DEBAJO DE LOSA / SALA ELÉCTRICA" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9" />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Cable Acometida Tierra</label>
-                        <input type="text" list="preset-conductores-list" value={cableAcometidaTierra} onChange={(e) => setCableAcometidaTierra(e.target.value.toUpperCase())} placeholder="Ej. #2/0 AWG (Cu)" className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 h-9 font-mono" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* OTRO */}
-                  {tipoElemento === 'OTRO' && (
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Especificaciones Técnicas</label>
-                      <textarea value={descripcionOtro} onChange={(e) => setDescripcionOtro(e.target.value.toUpperCase())} rows={3} placeholder="DETALLES TÉCNICOS ESPECÍFICOS..." className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 focus:outline-none resize-none" />
-                    </div>
-                  )}
-                </div>
-
-                {/* ============================================================== */}
-                {/* COLUMNA 3: Metrología Eléctrica, Interruptor, Foto y Notas */}
-                {/* ============================================================== */}
-                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
-                  <div className="flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                    <Gauge className="w-3.5 h-3.5 text-amber-400" />
-                    <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider">
-                      {tipoElemento === 'TABLERO' ? 'Metrología e Interruptor Principal' : 'Mediciones y Parámetros'}
-                    </h4>
-                  </div>
-
-                  {/* Campos específicos de TABLERO en Columna 3 */}
-                  {tipoElemento === 'TABLERO' && (
-                    <div className="space-y-2.5">
-                      {/* Banner Registro Inicial Ágil (Obs 3) */}
-                      {!editingElemento && (
-                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
-                            <Zap className="w-3.5 h-3.5" />
-                            <span>Registro Inicial Ágil</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 leading-relaxed">
-                            Los parámetros detallados de metrología (voltajes de fase y línea), interruptor principal y circuitos se completan directamente en la <strong>Planilla Definitiva</strong> tras el guardado.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setMostrarMetrologiaAvanzada(!mostrarMetrologiaAvanzada)}
-                            className="text-[10.5px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer flex items-center gap-1 pt-0.5"
-                          >
-                            {mostrarMetrologiaAvanzada ? 'Ocultar Parámetros Técnicos' : '+ Configurar Mediciones / Breaker Ahora (Opcional)'}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Campos profundos de Metrología e Interruptor (visibles si es edición o si el usuario expande) */}
-                      {(editingElemento || mostrarMetrologiaAvanzada) && (
-                        <>
-                          {/* Interruptor Principal */}
-                          <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5 animate-in fade-in duration-150">
-                            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
-                              <Zap className="w-3 h-3" /> Interruptor Principal (Main Breaker)
-                            </span>
-                            <div className="grid grid-cols-3 gap-1.5">
-                              <div>
-                                <label className="block text-[9px] text-slate-400 uppercase">Marca</label>
-                                <input
-                                  type="text"
-                                  list="preset-marcas-list"
-                                  value={breakerMarca}
-                                  onChange={(e) => setBreakerMarca(e.target.value.toUpperCase())}
-                                  placeholder="Ej. SCHNEIDER"
-                                  className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-bold h-8 text-center"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] text-slate-400 uppercase">Tipo</label>
-                                <input
-                                  type="text"
-                                  list="preset-breaker-tipos-list"
-                                  value={breakerTipo}
-                                  onChange={(e) => setBreakerTipo(e.target.value.toUpperCase())}
-                                  placeholder="Ej. CAJA MOLDEADA (MCCB)"
-                                  className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 h-8 text-center"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] text-slate-400 uppercase">Amperaje</label>
-                                <input
-                                  type="text"
-                                  list="preset-amperajes-list"
-                                  value={breakerAmp}
-                                  onChange={(e) => setBreakerAmp(e.target.value.toUpperCase())}
-                                  placeholder="Ej: 225 A"
-                                  className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold h-8 text-center"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Metrología Inicial (Voltajes de Fase y Línea, Corrientes) */}
-                          <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-2 animate-in fade-in duration-150">
-                            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wide flex items-center gap-1">
-                              <Activity className="w-3 h-3" /> Metrología (Voltajes Fase y Línea)
-                            </span>
-                            
-                            {/* Voltajes Fase-Neutro */}
-                            <div>
-                              <span className="block text-[8.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">Voltajes de Fase (Vf-n)</span>
-                              <div className="grid grid-cols-3 gap-1.5 text-center">
-                                <div>
-                                  <span className="text-[9px] text-slate-400 font-mono">Va (V)</span>
-                                  <input
-                                    type="text"
-                                    value={voltajeVa}
-                                    onChange={(e) => setVoltajeVa(e.target.value)}
-                                    placeholder="Ej: 120V"
-                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[9px] text-slate-400 font-mono">Vb (V)</span>
-                                  <input
-                                    type="text"
-                                    value={voltajeVb}
-                                    onChange={(e) => setVoltajeVb(e.target.value)}
-                                    placeholder="Ej: 120V"
-                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[9px] text-slate-400 font-mono">Vc (V)</span>
-                                  <input
-                                    type="text"
-                                    value={voltajeVc}
-                                    onChange={(e) => setVoltajeVc(e.target.value)}
-                                    placeholder="Ej: 120V"
-                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-slate-100 font-mono text-center h-8"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Voltajes Línea-Línea */}
-                            <div className="pt-1.5 border-t border-slate-800/80">
-                              <span className="block text-[8.5px] font-bold text-amber-500/80 uppercase tracking-wider mb-1">Voltajes de Línea (VL-L)</span>
-                              <div className="grid grid-cols-3 gap-1.5 text-center">
-                                <div>
-                                  <span className="text-[9px] text-amber-400 font-mono">Vab (V)</span>
-                                  <input
-                                    type="text"
-                                    value={voltajeVab}
-                                    onChange={(e) => setVoltajeVab(e.target.value)}
-                                    placeholder="Ej: 208V"
-                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-300 font-mono text-center h-8 font-semibold"
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[9px] text-amber-400 font-mono">Vbc (V)</span>
-                                  <input
-                                    type="text"
-                                    value={voltajeVbc}
-                                    onChange={(e) => setVoltajeVbc(e.target.value)}
-                                    placeholder="Ej: 208V"
-                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-300 font-mono text-center h-8 font-semibold"
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[9px] text-amber-400 font-mono">Vca (V)</span>
-                                  <input
-                                    type="text"
-                                    value={voltajeVca}
-                                    onChange={(e) => setVoltajeVca(e.target.value)}
-                                    placeholder="Ej: 208V"
-                                    className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-300 font-mono text-center h-8 font-semibold"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Corrientes de Barra */}
-                            <div className="grid grid-cols-3 gap-1.5 text-center pt-1.5 border-t border-slate-800">
-                              <div>
-                                <span className="text-[9px] text-slate-400 font-mono">Ia (A)</span>
-                                <input
-                                  type="text"
-                                  value={corrienteIa}
-                                  onChange={(e) => setCorrienteIa(e.target.value)}
-                                  placeholder="0"
-                                  className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
-                                />
-                              </div>
-                              <div>
-                                <span className="text-[9px] text-slate-400 font-mono">Ib (A)</span>
-                                <input
-                                  type="text"
-                                  value={corrienteIb}
-                                  onChange={(e) => setCorrienteIb(e.target.value)}
-                                  placeholder="0"
-                                  className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
-                                />
-                              </div>
-                              <div>
-                                <span className="text-[9px] text-slate-400 font-mono">Ic (A)</span>
-                                <input
-                                  type="text"
-                                  value={corrienteIc}
-                                  onChange={(e) => setCorrienteIc(e.target.value)}
-                                  placeholder="0"
-                                  className="w-full px-1.5 py-1 bg-slate-900 border border-slate-700 rounded text-xs text-amber-400 font-mono font-bold text-center h-8"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Acometida */}
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                              Acometida / Calibre Conductor
-                            </label>
-                            <input
-                              type="text"
-                              list="preset-conductores-list"
-                              value={acometidaConductor}
-                              onChange={(e) => setAcometidaConductor(e.target.value.toUpperCase())}
-                              placeholder="Ej. 3x #4/0 AWG + 1x #2/0 N (Cu)"
-                              className="w-full px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-blue-400 font-mono h-8.5"
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
 
                   {/* Foto Offline Blob */}
                   <div>
@@ -3010,9 +2067,9 @@ export const ProyectoView = () => {
                     <textarea
                       value={observacionesGenerales}
                       onChange={(e) => setObservacionesGenerales(e.target.value.toUpperCase())}
-                      rows={2}
+                      rows={5}
                       placeholder="ESTADO DE MANTENIMIENTO, ACCESIBILIDAD O RECOMENDACIONES..."
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 transition-all resize-none h-14"
+                      className="w-full px-2.5 py-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 focus:outline-none placeholder-slate-600 transition-all resize-y min-h-[120px]"
                     />
                   </div>
 
@@ -3020,33 +2077,9 @@ export const ProyectoView = () => {
 
               </div>
 
-              {/* Datalists de Presets Eléctricos Estandarizados */}
-              <datalist id="preset-marcas-list">
-                {PRESET_MARCAS.map(m => <option key={m} value={m} />)}
-              </datalist>
-              <datalist id="preset-voltajes-list">
-                {PRESET_VOLTAJES.map(v => <option key={v} value={v} />)}
-              </datalist>
-              <datalist id="preset-kva-list">
-                {PRESET_KVA.map(k => <option key={k} value={k} />)}
-              </datalist>
-              <datalist id="preset-kw-list">
-                {PRESET_KW.map(w => <option key={w} value={w} />)}
-              </datalist>
-              <datalist id="preset-amperajes-list">
-                {PRESET_AMPERAJES.map(a => <option key={a} value={a} />)}
-              </datalist>
-              <datalist id="preset-conductores-list">
-                {PRESET_CONDUCTORES.map(c => <option key={c} value={c} />)}
-              </datalist>
-              <datalist id="preset-breaker-tipos-list">
-                {PRESET_BREAKER_TIPOS.map(b => <option key={b} value={b} />)}
-              </datalist>
+              {/* Datalist de Ubicaciones Estandarizadas */}
               <datalist id="preset-ubicaciones-list">
                 {PRESET_UBICACIONES.map(u => <option key={u} value={u} />)}
-              </datalist>
-              <datalist id="preset-conexiones-trafo-list">
-                {PRESET_CONEXIONES_TRAFO.map(c => <option key={c} value={c} />)}
               </datalist>
             </form>
 
@@ -3054,7 +2087,7 @@ export const ProyectoView = () => {
             <div className="px-5 py-3 border-t border-slate-800 bg-slate-950/95 backdrop-blur shrink-0 flex items-center justify-between">
               <div className="text-[11px] text-slate-400 hidden sm:flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                <span>Ficha técnica lista para diagramación unifilar</span>
+                <span>Equipo listo para diagramación unifilar</span>
               </div>
               <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                 <button
@@ -3070,7 +2103,7 @@ export const ProyectoView = () => {
                   disabled={!isElementoFormValid}
                   className="bg-amber-500 text-slate-950 font-black hover:bg-amber-400 active:scale-98 transition-all px-5 py-2 rounded-xl flex items-center justify-center gap-2 text-xs cursor-pointer shadow-lg shadow-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {editingElemento ? 'Guardar Cambios' : 'Guardar Plantilla'}
+                  {editingElemento ? 'Guardar Cambios' : 'Guardar Equipo'}
                 </button>
               </div>
             </div>

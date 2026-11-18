@@ -127,9 +127,11 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
 
   const handleSave = () => {
     if (readOnly) return;
+    const resolvedUbicacion = localData?.ubicacion || localData?.puntoConexionPCC || localData?.ubicacionMedidor || puntoData?.ubicacion || '';
     const payloadToSave = {
       ...puntoData,
       ...localData,
+      ubicacion: resolvedUbicacion,
       observacionesGenerales: localData?.observaciones ?? localData?.observacionesGenerales ?? '',
       capacidadContratadaKva: localData?.potenciaContratada ?? localData?.capacidadContratadaKva ?? '',
       cargaContratadaKva: localData?.potenciaContratada ?? localData?.cargaContratadaKva ?? ''

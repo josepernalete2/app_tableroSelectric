@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { API_BASE_URL } from '../utils/api';
-import useStore, { getElementCode, cleanElementName } from '../store/useStore';
+import useStore, { getSimpleElementCode, assignSimpleHierarchyCodes, cleanElementName } from '../store/useStore';
 import {
   Search,
   ChevronDown,
@@ -29,10 +29,27 @@ export const FUENTES_RED_PRIMARIAS = [];
 export const FUENTES_AUTONOMAS_PRIMARIAS = [];
 
 /**
+ * Opción fija e inmutable de suministro eléctrico externo nacional (CORPOELEC).
+ */
+export const CORPOELEC_OPTION = Object.freeze({
+  id: 'CORPOELEC',
+  nombre: 'CORPOELEC',
+  codigo: 'corpoelec',
+  tipoElemento: 'RED_PUBLICA',
+  categoria: 'Red Eléctrica Nacional',
+  nivelTension: 'Red Pública Nacional',
+  ubicacion: 'Compañía Eléctrica Nacional (CORPOELEC)',
+  isCorpoelec: true,
+  isFixedSource: true
+});
+
+/**
  * Retorna el icono temático y colores según el tipo de elemento eléctrico
  */
 const getIconAndColor = (tipo) => {
   switch (tipo) {
+    case 'RED_PUBLICA':
+      return { icon: Zap, color: 'text-sky-400 bg-sky-500/15 border-sky-500/40' };
     case 'SUBESTACION':
       return { icon: Building2, color: 'text-rose-400 bg-rose-500/10 border-rose-500/30' };
     case 'TRANSFORMADOR':
@@ -62,23 +79,27 @@ const getIconAndColor = (tipo) => {
  * Extrae EXCLUSIVAMENTE los elementos pertenecientes al proyecto actual.
  * Aplica aislamiento estricto: nunca mezcla elementos de otros proyectos o empresas.
  */
-const extractStoreProjectElements = (projId, currentId, companyId = null) => {
+const extractStoreProjectElements = (projId, companyId = null) => {
   const storeState = useStore.getState();
   const list = [];
   const seenIds = new Set();
 
   const addIfNew = (item, defaultTipo = 'TABLERO') => {
     if (!item || !item.id) return;
-    if (currentId && (String(item.id) === String(currentId) || String(item.nombre || '').toUpperCase() === String(currentId).toUpperCase())) return;
     const key = String(item.id);
     if (seenIds.has(key)) return;
     seenIds.add(key);
 
-    const tipo = item.tipoElemento || defaultTipo;
+    const tipo = item.tipoElemento || item.tipo || defaultTipo;
+    const rawCodigo = item.codigo || item.datosTecnicos?.codigo || null;
+    const cleanedNombre = cleanElementName(item.nombre, item.id, rawCodigo).toUpperCase().trim();
+
     list.push({
       id: item.id,
-      codigo: item.codigo || getElementCode(item, tipo),
-      nombre: (item.nombre || `EQUIPO ${item.id}`).toUpperCase().trim(),
+      codigo: rawCodigo,
+      orden: item.orden ?? item.datosTecnicos?.orden ?? null,
+      createdAt: item.createdAt || null,
+      nombre: cleanedNombre || tipo,
       tipoElemento: tipo,
       ubicacion: item.ubicacion || item.plantaInstalacion || 'Ubicación registrada',
       datosTecnicos: item.datosTecnicos || item.parametrosElectricos || {},
@@ -268,52 +289,57 @@ export default function SelectorAlimentadorJerarquico({
   }, [proyectoId, tableroActualId]);
 
   // Consolidar lista completa aplicando aislamiento estricto por proyecto
-  // y limpiando todas las fuentes genéricas o acometidas externas no registradas.
+  // y asignando identificadores simples correlativos en minúsculas (med-1, tra-1, tab-2...).
   const items = useMemo(() => {
     const combinedMap = new Map();
 
-    // 1. Extraer del Zustand store filtrando EXCLUSIVAMENTE por el proyecto actual
-    const storeItems = extractStoreProjectElements(proyectoId, tableroActualId, companyId);
-    storeItems.forEach(el => {
+    const mergeIntoMap = (el, defaultTipo = 'TABLERO', fromStore = false) => {
+      if (!el || !el.id) return;
+      const prev = combinedMap.get(el.id) || {};
+      const tipo = el.tipoElemento || el.tipo || prev.tipoElemento || defaultTipo;
+      const incomingCode = el.simpleCode || el.codigo || el.datosTecnicos?.codigo || null;
+      const rawCodigo = prev._fromStore
+        ? (prev.codigo || el.simpleCode || null)
+        : (incomingCode || prev.codigo || null);
+      const rawNombre = el.nombre || prev.nombre || '';
+      const cleanedNombre = cleanElementName(rawNombre, el.id, rawCodigo).toUpperCase().trim();
+      const mergedTech = (el.datosTecnicos && Object.keys(el.datosTecnicos).length > 0)
+        ? el.datosTecnicos
+        : (prev.datosTecnicos || el.parametrosElectricos || {});
+
       combinedMap.set(el.id, {
+        ...prev,
+        ...el,
+        _fromStore: prev._fromStore || fromStore,
         id: el.id,
-        codigo: el.codigo || getElementCode(el, el.tipoElemento),
-        nombre: (el.nombre || '').toUpperCase().trim(),
-        tipoElemento: el.tipoElemento || 'TABLERO',
-        categoria: resolverCategoria(el.tipoElemento),
-        nivelTension: resolverNivelTension(el),
-        ubicacion: el.ubicacion || 'Ubicación registrada',
-        detalles: el.detalles || null
+        codigo: rawCodigo,
+        orden: el.orden ?? el.datosTecnicos?.orden ?? prev.orden ?? null,
+        createdAt: el.createdAt || prev.createdAt || null,
+        datosTecnicos: mergedTech,
+        nombre: cleanedNombre || tipo,
+        tipoElemento: tipo,
+        categoria: el.categoria || prev.categoria || resolverCategoria(tipo),
+        nivelTension: el.nivelTension || prev.nivelTension || resolverNivelTension({ ...el, tipoElemento: tipo, datosTecnicos: mergedTech }),
+        ubicacion: el.ubicacion || prev.ubicacion || 'Ubicación registrada',
+        detalles: el.detalles || prev.detalles || null
       });
-    });
+    };
+
+    // 1. Extraer del Zustand store filtrando EXCLUSIVAMENTE por el proyecto actual
+    const storeItems = extractStoreProjectElements(proyectoId, companyId);
+    storeItems.forEach(el => mergeIntoMap(el, el.tipoElemento, true));
 
     // 2. Incorporar lista externa si se pasó por props (verificando coincidencia estricta de proyectoId)
     if (Array.isArray(elementosList) && elementosList.length > 0) {
       elementosList
         .filter(el => {
           if (!el || !el.id) return false;
-          if (tableroActualId && (String(el.id) === String(tableroActualId) || String(el.nombre || '').toUpperCase() === String(tableroActualId).toUpperCase())) {
-            return false;
-          }
-          // Aislamiento: si se pasa proyectoId y el elemento posee proyectoId, deben coincidir exactamente
           if (proyectoId && el.proyectoId && String(el.proyectoId) !== String(proyectoId)) {
             return false;
           }
           return true;
         })
-        .forEach(el => {
-          const tipo = el.tipoElemento || el.tipo || 'TABLERO';
-          combinedMap.set(el.id, {
-            id: el.id,
-            codigo: el.codigo || getElementCode(el, tipo),
-            nombre: (el.nombre || '').toUpperCase().trim(),
-            tipoElemento: tipo,
-            categoria: el.categoria || resolverCategoria(tipo),
-            nivelTension: el.nivelTension || resolverNivelTension(el),
-            ubicacion: el.ubicacion || 'Ubicación registrada',
-            detalles: el.detalles || null
-          });
-        });
+        .forEach(el => mergeIntoMap(el, el.tipoElemento || el.tipo || 'TABLERO'));
     }
 
     // 3. Incorporar resultados del backend (ya filtrados por proyectoId)
@@ -321,30 +347,27 @@ export default function SelectorAlimentadorJerarquico({
       remoteItems
         .filter(el => {
           if (!el || !el.id) return false;
-          if (tableroActualId && (String(el.id) === String(tableroActualId) || String(el.nombre || '').toUpperCase() === String(tableroActualId).toUpperCase())) {
-            return false;
-          }
           if (proyectoId && el.proyectoId && String(el.proyectoId) !== String(proyectoId)) {
             return false;
           }
           return true;
         })
-        .forEach(el => {
-          const tipo = el.tipoElemento || 'TABLERO';
-          combinedMap.set(el.id, {
-            id: el.id,
-            codigo: el.codigo || getElementCode(el, tipo),
-            nombre: (el.nombre || '').toUpperCase().trim(),
-            tipoElemento: tipo,
-            categoria: el.categoria || resolverCategoria(tipo),
-            nivelTension: el.nivelTension || resolverNivelTension(el),
-            ubicacion: el.ubicacion || 'Ubicación registrada',
-            detalles: el.detalles || null
-          });
-        });
+        .forEach(el => mergeIntoMap(el, el.tipoElemento || 'TABLERO'));
     }
 
-    return Array.from(combinedMap.values());
+    // Asignar IDs simples uniformes sobre el proyecto completo antes de excluir el elemento actual
+    const normalizedAll = assignSimpleHierarchyCodes(Array.from(combinedMap.values()));
+
+    return normalizedAll.filter((el) => {
+      if (!el || !el.id) return false;
+      if (tableroActualId && (
+        String(el.id) === String(tableroActualId) ||
+        String(el.nombre || '').toUpperCase() === String(tableroActualId).toUpperCase()
+      )) {
+        return false;
+      }
+      return true;
+    });
   }, [elementosList, remoteItems, proyectoId, tableroActualId, companyId, tipoElementoActual, isAlimentaA]);
 
   // Enfocar input correspondiente al abrir o al cambiar de modo
@@ -370,9 +393,22 @@ export default function SelectorAlimentadorJerarquico({
     }
 
     const result = [];
+    const IGNORED_PLACEHOLDERS = new Set(['NO DEFINIDO', 'NO DEFINIDA', 'SIN ALIMENTACIÓN', 'SIN ALIMENTACION', '—', '-']);
+
     tokens.forEach((token) => {
       const cleanToken = cleanElementName(token).toUpperCase().trim();
       const rawUpper = token.toUpperCase().trim();
+
+      if (!rawUpper || IGNORED_PLACEHOLDERS.has(rawUpper) || IGNORED_PLACEHOLDERS.has(cleanToken)) {
+        return;
+      }
+
+      if (rawUpper === 'CORPOELEC' || cleanToken === 'CORPOELEC') {
+        if (!result.some(r => r.id === CORPOELEC_OPTION.id)) {
+          result.push(CORPOELEC_OPTION);
+        }
+        return;
+      }
 
       // Buscar por ID exacto, código, nombre o coincidencia normalizada
       const found = items.find((item) => {
@@ -479,8 +515,15 @@ export default function SelectorAlimentadorJerarquico({
 
   const emitChange = (newSelectedItems) => {
     const formattedString = newSelectedItems.map(i => i.nombre.toUpperCase().trim()).join(', ');
-    const ids = newSelectedItems.map(i => i.id);
-    const primaryObj = newSelectedItems.length > 0 ? newSelectedItems[0] : null;
+    const ids = newSelectedItems
+      .filter(i => !i.isManual && !i.isCorpoelec)
+      .map(i => i.id);
+    const primary = newSelectedItems.length > 0 ? newSelectedItems[0] : null;
+    const primaryObj = primary
+      ? ((primary.isManual || primary.isCorpoelec)
+        ? { ...primary, id: null, externalSourceId: primary.id }
+        : primary)
+      : null;
 
     if (onChange) {
       onChange(formattedString, primaryObj, ids, newSelectedItems);
@@ -514,6 +557,23 @@ export default function SelectorAlimentadorJerarquico({
   const handleClear = (e) => {
     if (e) e.stopPropagation();
     emitChange([]);
+  };
+
+  const isCorpoelecSelected = selectedItems.some(
+    (sel) => sel.isCorpoelec || sel.id === CORPOELEC_OPTION.id
+  );
+
+  const handleSelectCorpoelec = () => {
+    setIsManualMode(false);
+    if (multiple) {
+      if (isCorpoelecSelected) {
+        emitChange(selectedItems.filter((sel) => sel.id !== CORPOELEC_OPTION.id && !sel.isCorpoelec));
+      } else {
+        emitChange([...selectedItems, CORPOELEC_OPTION]);
+      }
+      return;
+    }
+    emitChange([CORPOELEC_OPTION]);
   };
 
   // Manejador de Entrada Manual Libre
@@ -606,14 +666,18 @@ export default function SelectorAlimentadorJerarquico({
                     <span className="font-bold text-xs truncate max-w-[180px] sm:max-w-[260px] uppercase">
                       {sel.nombre}
                     </span>
-                    {sel.isManual ? (
+                    {sel.isCorpoelec ? (
+                      <span className="text-[8.5px] font-bold uppercase text-sky-300 bg-sky-500/15 px-1.5 py-0.2 rounded border border-sky-500/30">
+                        RED NACIONAL
+                      </span>
+                    ) : sel.isManual ? (
                       <span className="text-[8.5px] font-bold uppercase text-amber-300 bg-amber-500/15 px-1.5 py-0.2 rounded border border-amber-500/30">
                         Manual
                       </span>
                     ) : (
-                      sel.codigo && (
-                        <span className="font-mono text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">
-                          {sel.codigo}
+                      (sel.codigo || sel.tipoElemento) && (
+                        <span className="font-mono lowercase text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                          {sel.codigo || getSimpleElementCode(sel, sel.tipoElemento)}
                         </span>
                       )
                     )}
@@ -687,14 +751,14 @@ export default function SelectorAlimentadorJerarquico({
                 </button>
               </div>
 
-              {/* 2. Selector de Modo: [📋 Equipos del Proyecto] vs [📝 Escribir Nombre / Manual] */}
+              {/* 2. Selector de Modo Fijo: [📋 Equipos del Proyecto] | [⚡ CORPOELEC] | [📝 Escribir Nombre / Manual] */}
               <div className="px-4 py-2.5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0 flex-wrap">
-                <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setIsManualMode(false)}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      !isManualMode
+                      !isManualMode && !( !isAlimentaA && isCorpoelecSelected )
                         ? 'bg-amber-500 text-slate-950 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
@@ -702,6 +766,25 @@ export default function SelectorAlimentadorJerarquico({
                     <Layers className="w-3.5 h-3.5" />
                     <span>Equipos del Proyecto ({items.length})</span>
                   </button>
+
+                  {!isAlimentaA && (
+                    <button
+                      type="button"
+                      onClick={handleSelectCorpoelec}
+                      title="Fijar compañía eléctrica nacional CORPOELEC como fuente de alimentación"
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer border ${
+                        isCorpoelecSelected && !isManualMode
+                          ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-sm ring-2 ring-sky-400/30'
+                          : 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20 hover:border-sky-400/60'
+                      }`}
+                    >
+                      <Zap className={`w-3.5 h-3.5 ${isCorpoelecSelected && !isManualMode ? 'text-slate-950' : 'text-sky-400'}`} />
+                      <span>CORPOELEC</span>
+                      {isCorpoelecSelected && !isManualMode && (
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      )}
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -840,8 +923,8 @@ export default function SelectorAlimentadorJerarquico({
                           type="text"
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
-                          placeholder="Buscar equipo por nombre, ID (tab-1, tra-1), tipo o tensión..."
-                          className="w-full pl-10 pr-9 py-2.5 sm:py-3 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono shadow-inner uppercase"
+                          placeholder="Buscar por ID simple (med-1, tra-1, tab-2), nombre, tipo o tensión..."
+                          className="w-full pl-10 pr-9 py-2.5 sm:py-3 bg-slate-900 border border-slate-700/80 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono shadow-inner"
                         />
                         {search && (
                           <button
@@ -867,6 +950,25 @@ export default function SelectorAlimentadorJerarquico({
                         <span className="hidden sm:inline">📝 Manual</span>
                       </button>
                     </div>
+
+                    {/* Confirmación visual cuando CORPOELEC está fijado */}
+                    {!isAlimentaA && isCorpoelecSelected && (
+                      <div className="p-2.5 bg-sky-500/10 border border-sky-500/40 rounded-xl flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs text-sky-200 min-w-0">
+                          <Zap className="w-4 h-4 text-sky-400 shrink-0" />
+                          <span className="truncate">
+                            Fuente Externa Fijada: <strong className="text-sky-300 font-black">CORPOELEC</strong> — Compañía Eléctrica Nacional
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => handleRemoveItem(CORPOELEC_OPTION.id, e)}
+                          className="text-[11px] font-bold text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded hover:bg-rose-500/10 cursor-pointer shrink-0"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    )}
 
                     {/* Opción rápida si el término buscado no está en la base de datos */}
                     {search.trim() && (
@@ -986,8 +1088,8 @@ export default function SelectorAlimentadorJerarquico({
                                           {item.nombre}
                                         </span>
                                         {item.codigo && (
-                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
-                                            ID: {item.codigo}
+                                          <span className="px-2 py-0.5 rounded text-[10px] font-mono lowercase font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
+                                            {item.codigo}
                                           </span>
                                         )}
                                         {item.nivelTension && (
@@ -1049,8 +1151,12 @@ export default function SelectorAlimentadorJerarquico({
           {selectedItems.map((item, idx) => (
             <span key={item.id} className="inline-flex items-center gap-1 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 px-2 py-0.5 rounded-md">
               <span className="font-semibold text-slate-200 uppercase">{item.nombre}</span>
-              <span className="text-amber-400 font-mono text-[9.5px]">
-                {item.isManual ? '(MANUAL)' : `(${item.codigo || getElementCode(item)})`}
+              <span className={`font-mono text-[9.5px] ${item.isCorpoelec ? 'text-sky-400 uppercase' : 'text-amber-400 lowercase'}`}>
+                {item.isCorpoelec
+                  ? '(CORPOELEC • RED NACIONAL)'
+                  : item.isManual
+                  ? '(manual)'
+                  : `(${item.codigo || getSimpleElementCode(item, item.tipoElemento)})`}
               </span>
               {idx < selectedItems.length - 1 && <span className="text-slate-600 font-bold">,</span>}
             </span>

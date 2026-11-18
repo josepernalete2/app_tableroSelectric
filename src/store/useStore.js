@@ -25,6 +25,7 @@ export const PREFIX_MAP = {
   TANQUE_COMBUSTIBLE: 'tk',
   TERMOGRAFICA: 'ter',
   AMBIENTAL_FISICA: 'amb',
+  ALIMENTADOR: 'ali',
   OTRO: 'otr'
 };
 
@@ -34,7 +35,10 @@ export const LEGACY_PREFIX_MAP = {
   SUB: 'sub',
   SUM: 'med',
   PM: 'med',
+  MED: 'med',
   ATS: 'trs',
+  TRS: 'trs',
+  ALI: 'ali',
   BC: 'bco',
   BCO: 'bco',
   TRAFO: 'tra',
@@ -196,6 +200,401 @@ export const sortElementsByOrder = (list = []) => {
     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return timeA - timeB;
+  });
+};
+
+const resolveSimpleTypePrefix = (tipoOrItem, defaultType = 'TABLERO') => {
+  const rawType = typeof tipoOrItem === 'string'
+    ? tipoOrItem
+    : (tipoOrItem?.tipoElemento || tipoOrItem?.tipo || defaultType || 'TABLERO');
+  const upper = String(rawType || 'TABLERO').trim().toUpperCase();
+  if (upper === 'SUB_TABLERO' || upper === 'SUB-TABLERO' || upper === 'PANEL' || upper === 'SUB_TABLERO_PENDIENTE') return 'tab';
+  if (upper === 'TRAFO') return 'tra';
+  if (upper === 'ATS' || upper === 'MTS' || upper === 'TRANSFERENCIA') return 'trs';
+  if (upper === 'MEDIDOR' || upper === 'PUNTO_SUMINISTRO' || upper === 'PUNTO_MEDICION') return 'med';
+  if (upper === 'PLANTA' || upper === 'GEN') return 'gen';
+  if (upper === 'SE') return 'sub';
+  if (upper === 'MOTOR') return 'ccm';
+  return (PREFIX_MAP[upper] || LEGACY_PREFIX_MAP[upper] || 'elm').toLowerCase();
+};
+
+const parseStrictSimpleCode = (raw) => {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^([a-zA-Z]{2,6})[-_](\d{1,4})$/);
+  if (!match) return null;
+  const rawPfx = match[1].toUpperCase();
+  const blocked = new Set(['CIRC', 'AUTO', 'TEMP', 'NODO', 'ELEM']);
+  if (blocked.has(rawPfx)) return null;
+  const num = parseInt(match[2], 10);
+  if (!Number.isInteger(num) || num <= 0 || num > 9999) return null;
+  const canon = (LEGACY_PREFIX_MAP[rawPfx] || PREFIX_MAP[rawPfx] || rawPfx.toLowerCase()).toLowerCase();
+  return {
+    prefix: canon,
+    num,
+    code: `${canon}-${num}`
+  };
+};
+
+export const getSimpleElementCode = (item, defaultType = 'TABLERO') => {
+  if (!item) return '';
+  const fallbackPfx = resolveSimpleTypePrefix(
+    typeof item === 'string' ? defaultType : item,
+    defaultType
+  );
+
+  if (typeof item === 'string') {
+    const parsed = parseStrictSimpleCode(item);
+    return parsed ? parsed.code : `${fallbackPfx}-1`;
+  }
+
+  const candidates = [
+    item.simpleCode,
+    item.codigo,
+    item.datosTecnicos?.codigo,
+    item.id
+  ];
+  for (const cand of candidates) {
+    const parsed = parseStrictSimpleCode(cand);
+    if (parsed) return parsed.code;
+  }
+
+  const consecutivo = item.consecutivo ?? item.orden ?? item.datosTecnicos?.orden;
+  if (consecutivo !== undefined && consecutivo !== null && consecutivo !== '') {
+    const n = parseInt(consecutivo, 10);
+    if (Number.isInteger(n) && n > 0 && n <= 9999) {
+      return `${fallbackPfx}-${n}`;
+    }
+  }
+
+  return `${fallbackPfx}-1`;
+};
+
+export const assignSimpleHierarchyCodes = (elements = []) => {
+  if (!Array.isArray(elements) || elements.length === 0) return [];
+
+  const indexed = elements.map((el, idx) => ({
+    el,
+    idx,
+    orden: el?.orden ?? el?.datosTecnicos?.orden ?? null,
+    createdAt: el?.createdAt || null
+  }));
+
+  const sorted = sortElementsByOrder(indexed);
+  const usedByPrefix = new Map();
+  const assignedByIdx = new Map();
+
+  const reserveSlot = (pfx, num) => {
+    if (!usedByPrefix.has(pfx)) usedByPrefix.set(pfx, new Set());
+    usedByPrefix.get(pfx).add(num);
+  };
+
+  const isSlotUsed = (pfx, num) => Boolean(usedByPrefix.get(pfx)?.has(num));
+
+  // Pass 1: preserve valid existing unique short codes in chronological/ordered sequence
+  sorted.forEach((entry) => {
+    const el = entry.el;
+    if (!el) return;
+    const candidates = [
+      el.simpleCode,
+      el.codigo,
+      el.datosTecnicos?.codigo,
+      el.id
+    ];
+    for (const cand of candidates) {
+      const parsed = parseStrictSimpleCode(cand);
+      if (parsed && !isSlotUsed(parsed.prefix, parsed.num)) {
+        reserveSlot(parsed.prefix, parsed.num);
+        assignedByIdx.set(entry.idx, parsed.code);
+        break;
+      }
+    }
+  });
+
+  // Pass 2: assign lowest unused correlative integer per canonical prefix
+  sorted.forEach((entry) => {
+    if (assignedByIdx.has(entry.idx)) return;
+    const el = entry.el;
+    if (!el) return;
+    const pfx = resolveSimpleTypePrefix(el);
+    let n = 1;
+    while (isSlotUsed(pfx, n)) {
+      n += 1;
+    }
+    reserveSlot(pfx, n);
+    assignedByIdx.set(entry.idx, `${pfx}-${n}`);
+  });
+
+  return elements.map((el, idx) => {
+    if (!el) return el;
+    const code = assignedByIdx.get(idx) || getSimpleElementCode(el);
+    return {
+      ...el,
+      codigo: code,
+      simpleCode: code
+    };
+  });
+};
+
+const HIERARCHY_PLACEHOLDERS = new Set([
+  '',
+  'NO DEFINIDO',
+  'NO DEFINIDA',
+  'SIN ALIMENTACIÓN',
+  'SIN ALIMENTACION',
+  'SIN UBICACIÓN',
+  'SIN UBICACION',
+  'UBICACIÓN NO ESPECIFICADA',
+  'UBICACION NO ESPECIFICADA',
+  'N/A',
+  'N/D',
+  '-',
+  '—'
+]);
+
+export const isPlaceholderHierarchyValue = (val) => {
+  if (val === undefined || val === null) return true;
+  const trimmed = String(val).trim().toUpperCase();
+  return HIERARCHY_PLACEHOLDERS.has(trimmed);
+};
+
+const sanitizeParentId = (rawId, selfId = null) => {
+  if (!rawId || typeof rawId !== 'string') return null;
+  const trimmed = rawId.trim();
+  if (!trimmed || (selfId && trimmed === String(selfId))) return null;
+  if (trimmed.toUpperCase() === 'CORPOELEC' || trimmed.startsWith('manual_')) return null;
+  return trimmed;
+};
+
+const parseDatosTecnicosSafe = (raw) => {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === 'object' ? raw : {};
+};
+
+export const resolveElementUbicacionDisplay = (item) => {
+  if (!item || typeof item !== 'object') return '';
+  const dt = parseDatosTecnicosSafe(item.datosTecnicos);
+  const plantaArea = [
+    item.plantaInstalacion || dt.plantaInstalacion || '',
+    item.areaProceso || dt.areaProceso || ''
+  ]
+    .map((s) => String(s || '').trim())
+    .filter((s) => !isPlaceholderHierarchyValue(s))
+    .join(' - ');
+
+  const candidates = [
+    item.ubicacion,
+    dt.ubicacion,
+    plantaArea,
+    item.puntoConexionPCC || dt.puntoConexionPCC,
+    item.ubicacionMedidor || dt.ubicacionMedidor,
+    item.ubicacionTransformador || dt.ubicacionTransformador,
+    dt.tipoMalla,
+    item.direccion || dt.direccion
+  ];
+
+  for (const cand of candidates) {
+    if (!isPlaceholderHierarchyValue(cand)) {
+      return String(cand).trim().toUpperCase();
+    }
+  }
+  return '';
+};
+
+export const resolveElementParentDisplay = (item, allProjectElements = []) => {
+  if (!item || typeof item !== 'object') return '';
+  const tipo = String(item.tipoElemento || item.tipo || '').toUpperCase();
+  if (tipo === 'GENERADOR') return 'FUENTE PRIMARIA INDEPENDIENTE';
+
+  const dt = parseDatosTecnicosSafe(item.datosTecnicos);
+  const elements = Array.isArray(allProjectElements) ? allProjectElements : [];
+  const byId = new Map();
+  const byCode = new Map();
+  elements.forEach((el) => {
+    if (!el || !el.id) return;
+    byId.set(String(el.id), el);
+    const code = el.codigo || el.simpleCode;
+    if (code) byCode.set(String(code).trim().toLowerCase(), el);
+  });
+
+  const formatParentLabel = (parentEl) => {
+    if (!parentEl) return '';
+    return cleanElementName(parentEl.nombre, parentEl.id, parentEl.codigo || parentEl.simpleCode).toUpperCase().trim();
+  };
+
+  const rawTextTop = !isPlaceholderHierarchyValue(item.alimentadoPor)
+    ? String(item.alimentadoPor).trim()
+    : (!isPlaceholderHierarchyValue(dt.alimentadoPor) ? String(dt.alimentadoPor).trim() : '');
+
+  if (rawTextTop.toUpperCase() === 'CORPOELEC' && !sanitizeParentId(item.alimentadoPorId, item.id)) {
+    return 'CORPOELEC';
+  }
+
+  // 1. Vínculo directo por ID de padre (top-level o en datosTecnicos)
+  const directParentIds = [
+    item.alimentadoPorId,
+    dt.alimentadoPorId,
+    dt.alimentadorId,
+    item.origenId
+  ]
+    .map((idVal) => sanitizeParentId(idVal, item.id))
+    .filter(Boolean);
+
+  for (const pid of directParentIds) {
+    const parentEl = byId.get(String(pid)) || byCode.get(String(pid).toLowerCase());
+    if (parentEl && parentEl.id !== item.id) {
+      return formatParentLabel(parentEl);
+    }
+  }
+
+  // 2. Campo de texto explícito no placeholder (resolviendo si trae UUID crudo)
+  if (rawTextTop) {
+    const byIdMatch = byId.get(rawTextTop);
+    if (byIdMatch && byIdMatch.id !== item.id) {
+      return formatParentLabel(byIdMatch);
+    }
+    return cleanElementName(rawTextTop).toUpperCase().trim();
+  }
+
+  // 3. Caso Transferencia: fuentes normal / emergencia
+  if (tipo === 'TRANSFER') {
+    const srcLabels = [dt.fuenteNormalNombre, dt.fuenteEmergenciaNombre]
+      .filter((s) => !isPlaceholderHierarchyValue(s))
+      .map((s) => cleanElementName(String(s)).toUpperCase().trim())
+      .filter(Boolean);
+    if (srcLabels.length > 0) {
+      return Array.from(new Set(srcLabels)).join(' / ');
+    }
+  }
+
+  // 4. Búsqueda inversa en el árbol (alimentaAIds o circuitos de tableros padres)
+  const reverseNames = [];
+  const itemIdStr = String(item.id || '');
+  elements.forEach((parentEl) => {
+    if (!parentEl || !parentEl.id || String(parentEl.id) === itemIdStr) return;
+    const pDt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
+    const pAlimentaIds = [
+      ...(Array.isArray(parentEl.alimentaAIds) ? parentEl.alimentaAIds : []),
+      ...(Array.isArray(pDt.alimentaAIds) ? pDt.alimentaAIds : [])
+    ].map((x) => String(x));
+
+    let isLinked = pAlimentaIds.includes(itemIdStr);
+    if (!isLinked) {
+      const circuits = Array.isArray(pDt.circuits)
+        ? pDt.circuits
+        : (Array.isArray(parentEl.circuits) ? parentEl.circuits : []);
+      isLinked = circuits.some((c) => {
+        const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
+        if (!rawDest) return false;
+        return String(rawDest)
+          .split(',')
+          .map((s) => s.trim())
+          .includes(itemIdStr);
+      });
+    }
+
+    if (isLinked) {
+      const lbl = formatParentLabel(parentEl);
+      if (lbl && !reverseNames.includes(lbl)) reverseNames.push(lbl);
+    }
+  });
+
+  if (reverseNames.length > 0) {
+    return reverseNames.join(', ');
+  }
+
+  // 5. Fallback para Punto de Suministro vinculado a red eléctrica
+  if (tipo === 'PUNTO_SUMINISTRO' || tipo === 'PUNTO_MEDICION') {
+    if (!isPlaceholderHierarchyValue(dt.empresaDistribuidora)) {
+      return String(dt.empresaDistribuidora).trim().toUpperCase();
+    }
+    if (dt.enlaceCorpoelec) {
+      return 'CORPOELEC';
+    }
+  }
+
+  return '';
+};
+
+export const hydrateProjectHierarchyLinks = (elements = []) => {
+  if (!Array.isArray(elements) || elements.length === 0) return [];
+
+  const reverseParentIds = new Map();
+  elements.forEach((parentEl) => {
+    if (!parentEl || !parentEl.id) return;
+    const pDt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
+    const childIds = new Set([
+      ...(Array.isArray(parentEl.alimentaAIds) ? parentEl.alimentaAIds : []),
+      ...(Array.isArray(pDt.alimentaAIds) ? pDt.alimentaAIds : [])
+    ].filter(Boolean).map((x) => String(x)));
+
+    const circuits = Array.isArray(pDt.circuits)
+      ? pDt.circuits
+      : (Array.isArray(parentEl.circuits) ? parentEl.circuits : []);
+    circuits.forEach((c) => {
+      const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
+      if (!rawDest) return;
+      String(rawDest)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((cid) => childIds.add(cid));
+    });
+
+    childIds.forEach((cid) => {
+      if (cid === String(parentEl.id)) return;
+      if (!reverseParentIds.has(cid)) reverseParentIds.set(cid, []);
+      reverseParentIds.get(cid).push(parentEl.id);
+    });
+  });
+
+  return elements.map((el) => {
+    if (!el || !el.id) return el;
+    const dt = parseDatosTecnicosSafe(el.datosTecnicos);
+    const currentId = sanitizeParentId(
+      el.alimentadoPorId || dt.alimentadoPorId || dt.alimentadorId || el.origenId,
+      el.id
+    );
+    const revParents = reverseParentIds.get(String(el.id)) || [];
+    const nextParentId = currentId || (isPlaceholderHierarchyValue(el.alimentadoPor) && revParents.length === 1 ? revParents[0] : null);
+
+    const candidateEl = nextParentId !== el.alimentadoPorId
+      ? { ...el, alimentadoPorId: nextParentId }
+      : el;
+
+    const resolvedParent = resolveElementParentDisplay(candidateEl, elements);
+    const resolvedUbic = resolveElementUbicacionDisplay(el);
+
+    const nextAlimentadoPor = !isPlaceholderHierarchyValue(el.alimentadoPor)
+      ? el.alimentadoPor
+      : (resolvedParent || '');
+    const nextUbicacion = !isPlaceholderHierarchyValue(el.ubicacion)
+      ? el.ubicacion
+      : (resolvedUbic || '');
+
+    if (
+      nextParentId === (el.alimentadoPorId || null) &&
+      nextAlimentadoPor === (el.alimentadoPor || '') &&
+      nextUbicacion === (el.ubicacion || '')
+    ) {
+      return el;
+    }
+
+    return {
+      ...el,
+      alimentadoPorId: nextParentId,
+      alimentadoPor: nextAlimentadoPor,
+      ubicacion: nextUbicacion
+    };
   });
 };
 
@@ -1139,15 +1538,18 @@ export const useStore = create(
 
       updateTableroAlimentador: (proyectoId, tableroId, alimentadorId) => {
         let resolvedPayload = null;
+        const cleanParentId = sanitizeParentId(alimentadorId, tableroId);
 
         set((state) => {
           const updateElement = (e) => {
             if (e.id === tableroId) {
               return {
                 ...e,
+                alimentadoPorId: cleanParentId,
                 datosTecnicos: {
                   ...(e.datosTecnicos || {}),
-                  alimentadorId
+                  alimentadorId: cleanParentId,
+                  alimentadoPorId: cleanParentId
                 }
               };
             }
@@ -1189,9 +1591,11 @@ export const useStore = create(
           if (updatedElement) {
             payload = {
               ...updatedElement,
+              alimentadoPorId: cleanParentId,
               datosTecnicos: {
                 ...(updatedElement.datosTecnicos || {}),
-                alimentadorId
+                alimentadorId: cleanParentId,
+                alimentadoPorId: cleanParentId
               }
             };
             resolvedPayload = payload;
@@ -1563,7 +1967,7 @@ export const useStore = create(
                 telefono: respTel,
                 email: respMail
               },
-              elementosUnifilares: p.elementosUnifilares || p.tableros || [],
+              elementosUnifilares: hydrateProjectHierarchyLinks(p.elementosUnifilares || p.tableros || []),
               inspeccionesSubestacion: p.inspeccionesSubestacion || p.subestaciones || [],
               puntosMedicion: p.puntosMedicion || [],
               ccmList: p.ccmList || []
@@ -1674,7 +2078,7 @@ export const useStore = create(
 
                 mergedProjects[localProjIndex] = {
                   ...projBase,
-                  elementosUnifilares: mergedElements,
+                  elementosUnifilares: hydrateProjectHierarchyLinks(mergedElements),
                   inspeccionesSubestacion: mergedSubs,
                   subestaciones: mergedSubs,
                   puntosMedicion: mergedPms,
@@ -1843,15 +2247,30 @@ export const useStore = create(
           ? String(elementoData.nombre).trim().toUpperCase()
           : `${codigo.toUpperCase()} - ${tipoElemento.toUpperCase()}`;
 
+        const rawParentId = elementoData.alimentadoPorId || elementoData.datosTecnicos?.alimentadoPorId || elementoData.datosTecnicos?.alimentadorId || null;
+        const cleanParentId = sanitizeParentId(rawParentId, uuidId);
+        let cleanAlimentadoPorText = !isPlaceholderHierarchyValue(elementoData.alimentadoPor)
+          ? String(elementoData.alimentadoPor).trim().toUpperCase()
+          : '';
+
+        if (!cleanAlimentadoPorText && cleanParentId) {
+          const parentFound = existingElements.find((e) => e.id === cleanParentId) || findElementoInStore(get(), cleanParentId, proyectoId);
+          if (parentFound) {
+            cleanAlimentadoPorText = cleanElementName(parentFound.nombre, parentFound.id, parentFound.codigo).toUpperCase().trim();
+          }
+        }
+
+        const cleanUbicacionText = resolveElementUbicacionDisplay(elementoData);
+
         const nuevoElemento = {
           id: uuidId,
           codigo: codigo.toUpperCase(),
           nombre: nombreFinal,
           tipoElemento,
           orden: nextOrden,
-          ubicacion: elementoData.ubicacion ? String(elementoData.ubicacion).trim().toUpperCase() : 'SIN UBICACIÓN',
-          alimentadoPor: elementoData.alimentadoPor ? String(elementoData.alimentadoPor).trim().toUpperCase() : '',
-          alimentadoPorId: elementoData.alimentadoPorId || null,
+          ubicacion: cleanUbicacionText,
+          alimentadoPor: cleanAlimentadoPorText,
+          alimentadoPorId: cleanParentId,
           alimentaA: elementoData.alimentaA ? String(elementoData.alimentaA).trim().toUpperCase() : '',
           alimentaAIds: Array.isArray(elementoData.alimentaAIds) ? elementoData.alimentaAIds : (Array.isArray(elementoData.datosTecnicos?.alimentaAIds) ? elementoData.datosTecnicos.alimentaAIds : []),
           foto: elementoData.foto || null,
@@ -1859,6 +2278,7 @@ export const useStore = create(
           observacionesGenerales: elementoData.observacionesGenerales ? String(elementoData.observacionesGenerales).trim().toUpperCase() : '',
           datosTecnicos: {
             ...(elementoData.datosTecnicos || {}),
+            ...(cleanParentId ? { alimentadoPorId: cleanParentId } : {}),
             codigo: codigo.toUpperCase()
           },
           proyectoId: proyectoId || null,
@@ -1870,9 +2290,10 @@ export const useStore = create(
         const { token } = get();
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
         const safeNewAlimentaAIds = (nuevoElemento.alimentaAIds || []).filter(cid => cid && cid !== uuidId);
+        const modifiedChildMap = new Map();
 
-        set((state) => ({
-          companies: state.companies.map((c) => {
+        set((state) => {
+          const updatedCompanies = state.companies.map((c) => {
             if (c.id === parentCompanyId) {
               if (proyectoId) {
                 return {
@@ -1881,7 +2302,14 @@ export const useStore = create(
                     if (p.id === proyectoId) {
                       const elementos = (p.elementosUnifilares || p.tableros || []).map(e => {
                         if (safeNewAlimentaAIds.includes(e.id)) {
-                          return { ...e, alimentadoPorId: uuidId, alimentadoPor: nombreFinal };
+                          const updatedChild = {
+                            ...e,
+                            alimentadoPorId: uuidId,
+                            alimentadoPor: nombreFinal,
+                            datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: uuidId }
+                          };
+                          modifiedChildMap.set(e.id, updatedChild);
+                          return updatedChild;
                         }
                         return e;
                       });
@@ -1896,7 +2324,14 @@ export const useStore = create(
               } else {
                 const elementosComp = (c.elementosUnifilares || []).map(e => {
                   if (safeNewAlimentaAIds.includes(e.id)) {
-                    return { ...e, alimentadoPorId: uuidId, alimentadoPor: nombreFinal };
+                    const updatedChild = {
+                      ...e,
+                      alimentadoPorId: uuidId,
+                      alimentadoPor: nombreFinal,
+                      datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: uuidId }
+                    };
+                    modifiedChildMap.set(e.id, updatedChild);
+                    return updatedChild;
                   }
                   return e;
                 });
@@ -1907,30 +2342,59 @@ export const useStore = create(
               }
             }
             return c;
-          }),
-          elementosLocales: [
+          });
+
+          const updatedElementosLocales = [
             ...(state.elementosLocales || []).map(e => {
               if (safeNewAlimentaAIds.includes(e.id)) {
-                return { ...e, alimentadoPorId: uuidId, alimentadoPor: nombreFinal };
+                const updatedChild = {
+                  ...e,
+                  alimentadoPorId: uuidId,
+                  alimentadoPor: nombreFinal,
+                  datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: uuidId }
+                };
+                modifiedChildMap.set(e.id, updatedChild);
+                return updatedChild;
               }
               return e;
             }),
             nuevoElemento
-          ],
-          syncQueue: (!isOnline || !hasActiveSession)
-            ? [...(Array.isArray(state.syncQueue) ? state.syncQueue.filter((q) => q?.id !== uuidId) : []), {
+          ];
+
+          let nextSyncQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          if (!isOnline || !hasActiveSession) {
+            const excludedIds = new Set([uuidId, ...modifiedChildMap.keys()]);
+            nextSyncQueue = [
+              ...nextSyncQueue.filter((q) => !excludedIds.has(q?.id)),
+              {
                 id: uuidId,
                 tipo: 'ELEMENTO_UNIFILAR',
                 companyId: parentCompanyId,
                 payload: nuevoElemento
-              }]
-            : (Array.isArray(state.syncQueue) ? state.syncQueue : [])
-        }));
+              },
+              ...Array.from(modifiedChildMap.values()).map((childEl) => ({
+                id: childEl.id,
+                tipo: 'ELEMENTO_UNIFILAR',
+                companyId: childEl.empresaId || childEl.companyId || parentCompanyId,
+                payload: childEl
+              }))
+            ];
+          }
+
+          return {
+            companies: updatedCompanies,
+            elementosLocales: updatedElementosLocales,
+            syncQueue: nextSyncQueue
+          };
+        });
 
         let directPromise = null;
         // Si hay internet y sesión activa, enviar DIRECTAMENTE al servidor en tiempo real (con fallback automático a syncQueue si falla)
         if (isOnline && hasActiveSession) {
           directPromise = get().enviarElementoDirectoServidor?.(parentCompanyId, nuevoElemento);
+          modifiedChildMap.forEach((childEl, childId) => {
+            scheduleDebouncedElementoSync(get, childId, proyectoId, childEl);
+          });
         }
 
         const resultObj = {
@@ -1963,10 +2427,42 @@ export const useStore = create(
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
         const skipNetworkSync = Boolean(options?.skipNetworkSync);
 
+        const existingEl = findElementoInStore(get(), elementoId, proyectoId);
         const cleanUpdatedData = { ...updatedData };
         if (cleanUpdatedData.nombre) cleanUpdatedData.nombre = String(cleanUpdatedData.nombre).trim().toUpperCase();
-        if (cleanUpdatedData.ubicacion) cleanUpdatedData.ubicacion = String(cleanUpdatedData.ubicacion).trim().toUpperCase();
-        if (cleanUpdatedData.alimentadoPor) cleanUpdatedData.alimentadoPor = String(cleanUpdatedData.alimentadoPor).trim().toUpperCase();
+        if ('ubicacion' in cleanUpdatedData) {
+          cleanUpdatedData.ubicacion = isPlaceholderHierarchyValue(cleanUpdatedData.ubicacion)
+            ? ''
+            : String(cleanUpdatedData.ubicacion).trim().toUpperCase();
+        }
+        if ('alimentadoPor' in cleanUpdatedData) {
+          cleanUpdatedData.alimentadoPor = isPlaceholderHierarchyValue(cleanUpdatedData.alimentadoPor)
+            ? ''
+            : String(cleanUpdatedData.alimentadoPor).trim().toUpperCase();
+        }
+        if ('alimentadoPorId' in cleanUpdatedData) {
+          const sanitizedPid = sanitizeParentId(cleanUpdatedData.alimentadoPorId, elementoId);
+          cleanUpdatedData.alimentadoPorId = sanitizedPid;
+          if (sanitizedPid && isPlaceholderHierarchyValue(cleanUpdatedData.alimentadoPor)) {
+            const parentFound = findElementoInStore(get(), sanitizedPid, proyectoId);
+            if (parentFound) {
+              cleanUpdatedData.alimentadoPor = cleanElementName(parentFound.nombre, parentFound.id, parentFound.codigo).toUpperCase().trim();
+            }
+          }
+          if (cleanUpdatedData.datosTecnicos && typeof cleanUpdatedData.datosTecnicos === 'object') {
+            cleanUpdatedData.datosTecnicos = {
+              ...cleanUpdatedData.datosTecnicos,
+              alimentadoPorId: sanitizedPid,
+              ...(sanitizedPid === null ? { alimentadorId: null } : {})
+            };
+          } else if (existingEl?.datosTecnicos) {
+            cleanUpdatedData.datosTecnicos = {
+              ...existingEl.datosTecnicos,
+              alimentadoPorId: sanitizedPid,
+              ...(sanitizedPid === null ? { alimentadorId: null } : {})
+            };
+          }
+        }
         if (cleanUpdatedData.breakerMarca) cleanUpdatedData.breakerMarca = String(cleanUpdatedData.breakerMarca).trim().toUpperCase();
         if (cleanUpdatedData.breakerTipo) cleanUpdatedData.breakerTipo = String(cleanUpdatedData.breakerTipo).trim().toUpperCase();
         if (cleanUpdatedData.calibreConductor) cleanUpdatedData.calibreConductor = String(cleanUpdatedData.calibreConductor).trim().toUpperCase();
@@ -1980,7 +2476,25 @@ export const useStore = create(
           : cleanUpdatedData.datosTecnicos?.alimentaAIds;
         const hasExplicitAlimentaA = Array.isArray(explicitAlimentaAIds);
         const safeAlimentaAIds = hasExplicitAlimentaA ? explicitAlimentaAIds.filter(cid => cid && cid !== elementoId) : [];
-        const effectiveParentName = cleanUpdatedData.nombre;
+        const effectiveParentName = cleanUpdatedData.nombre || existingEl?.nombre || '';
+
+        const updatedCircuitsSource = Array.isArray(cleanUpdatedData.circuits)
+          ? cleanUpdatedData.circuits
+          : (Array.isArray(cleanUpdatedData.datosTecnicos?.circuits) ? cleanUpdatedData.datosTecnicos.circuits : null);
+        const circuitLinkedChildIds = new Set();
+        if (updatedCircuitsSource) {
+          updatedCircuitsSource.forEach((c) => {
+            const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
+            if (!rawDest) return;
+            String(rawDest)
+              .split(',')
+              .map((s) => s.trim())
+              .filter((cid) => cid && cid !== elementoId)
+              .forEach((cid) => circuitLinkedChildIds.add(cid));
+          });
+        }
+
+        const modifiedChildIds = new Set();
 
         const syncElementBidirectional = (e) => {
           if (e.id === elementoId) {
@@ -2001,12 +2515,41 @@ export const useStore = create(
           }
           if (hasExplicitAlimentaA) {
             if (safeAlimentaAIds.includes(e.id)) {
-              return { ...e, alimentadoPorId: elementoId, alimentadoPor: effectiveParentName || e.alimentadoPor };
+              const nextParentName = effectiveParentName || (isPlaceholderHierarchyValue(e.alimentadoPor) ? '' : e.alimentadoPor);
+              if (e.alimentadoPorId !== elementoId || e.alimentadoPor !== nextParentName) {
+                modifiedChildIds.add(e.id);
+              }
+              return {
+                ...e,
+                alimentadoPorId: elementoId,
+                alimentadoPor: nextParentName,
+                datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: elementoId }
+              };
             }
             if (e.alimentadoPorId === elementoId && !safeAlimentaAIds.includes(e.id)) {
-              return { ...e, alimentadoPorId: null, alimentadoPor: '' };
+              modifiedChildIds.add(e.id);
+              return {
+                ...e,
+                alimentadoPorId: null,
+                alimentadoPor: '',
+                datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: null }
+              };
             }
-          } else if (e.alimentadoPorId === elementoId && effectiveParentName) {
+          } else if (circuitLinkedChildIds.has(e.id)) {
+            if (!e.alimentadoPorId || e.alimentadoPorId === elementoId || isPlaceholderHierarchyValue(e.alimentadoPor)) {
+              const nextParentName = effectiveParentName || e.alimentadoPor;
+              if (e.alimentadoPorId !== elementoId || e.alimentadoPor !== nextParentName) {
+                modifiedChildIds.add(e.id);
+              }
+              return {
+                ...e,
+                alimentadoPorId: elementoId,
+                alimentadoPor: nextParentName,
+                datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: elementoId }
+              };
+            }
+          } else if (e.alimentadoPorId === elementoId && effectiveParentName && e.alimentadoPor !== effectiveParentName) {
+            modifiedChildIds.add(e.id);
             return { ...e, alimentadoPor: effectiveParentName };
           }
           return e;
@@ -2053,31 +2596,34 @@ export const useStore = create(
           let updatedSyncQueue = [...currentQueue];
 
           if (!skipNetworkSync && (!isOnline || !hasActiveSession)) {
-            const updatedElement = findElementoInStore(
-              { companies: updatedCompanies, elementosLocales: updatedElementosLocales },
-              elementoId,
-              proyectoId
-            );
-            let inQueue = false;
-            updatedSyncQueue = currentQueue.map((item) => {
-              if ((item?.id === elementoId || item?.payload?.id === elementoId) && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
-                inQueue = true;
-                const mergedPayload = updatedElement
-                  ? mergePayloadDeep(item?.payload, updatedElement)
-                  : mergePayloadDeep(item?.payload, cleanUpdatedData);
-                return { ...item, payload: mergedPayload };
-              }
-              return item;
-            });
-
-            if (!inQueue && updatedElement) {
-              updatedSyncQueue.push({
-                id: elementoId,
-                tipo: 'ELEMENTO_UNIFILAR',
-                companyId: updatedElement.empresaId || updatedElement.companyId || (state.companies[0]?.id || null),
-                payload: updatedElement
+            const idsToQueue = [elementoId, ...modifiedChildIds];
+            idsToQueue.forEach((targetId) => {
+              const updatedTarget = findElementoInStore(
+                { companies: updatedCompanies, elementosLocales: updatedElementosLocales },
+                targetId,
+                proyectoId
+              );
+              let inQueue = false;
+              updatedSyncQueue = updatedSyncQueue.map((item) => {
+                if ((item?.id === targetId || item?.payload?.id === targetId) && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
+                  inQueue = true;
+                  const mergedPayload = updatedTarget
+                    ? mergePayloadDeep(item?.payload, updatedTarget)
+                    : (targetId === elementoId ? mergePayloadDeep(item?.payload, cleanUpdatedData) : item?.payload);
+                  return { ...item, payload: mergedPayload };
+                }
+                return item;
               });
-            }
+
+              if (!inQueue && updatedTarget) {
+                updatedSyncQueue.push({
+                  id: targetId,
+                  tipo: 'ELEMENTO_UNIFILAR',
+                  companyId: updatedTarget.empresaId || updatedTarget.companyId || (state.companies[0]?.id || null),
+                  payload: updatedTarget
+                });
+              }
+            });
           }
 
           return {
@@ -2087,14 +2633,19 @@ export const useStore = create(
           };
         });
 
-        // Si está ONLINE: Buscar el elemento actualizado en companies (proyectos[].elementosUnifilares / tableros) con fallback a elementosLocales
-        // y enviarlo con debounce por elementoId (500ms) para evitar peticiones concurrentes que se pisen entre sí
+        // Si está ONLINE: Buscar el elemento actualizado (y sus hijos vinculados modificados) y sincronizar con debounce por ID
         let directPromise = null;
         if (!skipNetworkSync && isOnline && hasActiveSession) {
           const el = findElementoInStore(get(), elementoId, proyectoId);
           if (el) {
             directPromise = scheduleDebouncedElementoSync(get, elementoId, proyectoId, el);
           }
+          modifiedChildIds.forEach((childId) => {
+            const childEl = findElementoInStore(get(), childId, proyectoId);
+            if (childEl) {
+              scheduleDebouncedElementoSync(get, childId, proyectoId, childEl);
+            }
+          });
         }
 
         return {
@@ -2831,7 +3382,7 @@ export const useStore = create(
       },
 
       updateElementoCodigo: async (elementoId, nuevoCodigo, tipoElemento = null, proyectoId = null) => {
-        const cleanCode = String(nuevoCodigo || '').trim().toLowerCase();
+        const cleanCode = String(nuevoCodigo || '').trim().toUpperCase();
         if (!cleanCode) return { success: false, error: 'El código o ID visual no puede estar vacío.' };
 
         let resolvedPayload = null;

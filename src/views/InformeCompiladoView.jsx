@@ -130,7 +130,7 @@ export default function InformeCompiladoView() {
 
   const handleUpdateElemento = (elementoId, updatedData) => {
     const { 
-      id, nombre, ubicacion, alimentadoPor, foto, fotoBlob, eliminarFoto, observacionesGenerales, 
+      id, nombre, ubicacion, alimentadoPor, alimentadoPorId, alimentaA, alimentaAIds, foto, fotoBlob, eliminarFoto, observacionesGenerales, 
       ...datosTecnicos 
     } = updatedData;
 
@@ -138,6 +138,9 @@ export default function InformeCompiladoView() {
       nombre,
       ubicacion,
       alimentadoPor,
+      ...(alimentadoPorId !== undefined ? { alimentadoPorId } : {}),
+      ...(alimentaA !== undefined ? { alimentaA } : {}),
+      ...(alimentaAIds !== undefined ? { alimentaAIds } : {}),
       ...(eliminarFoto
         ? { foto: null, fotoBlob: null, eliminarFoto: true }
         : {
