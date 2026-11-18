@@ -84,10 +84,10 @@ export const EditablePoleCell = ({
     <div
       onDoubleClick={() => setIsEditing(true)}
       title="Doble clic o clic en el lápiz para editar el código/etiqueta del polo"
-      className="relative group/polecell inline-flex items-center justify-center cursor-pointer w-full py-0.5 min-h-[1.5rem] select-none hover:bg-amber-500/20 dark:hover:bg-amber-500/10 rounded transition-colors"
+      className="relative group/polecell inline-flex items-center justify-center cursor-pointer w-full py-0.5 min-h-[1.5rem] print:min-h-0 print:py-0 select-none hover:bg-amber-500/20 dark:hover:bg-amber-500/10 rounded transition-colors"
     >
       <span
-        className={`font-mono font-bold tracking-tight ${
+        className={`font-mono font-bold tracking-tight print:text-amber-950 print:font-black ${
           isCustomized 
             ? 'text-amber-800 dark:text-amber-300 underline decoration-amber-400/50 underline-offset-2' 
             : 'text-amber-700 dark:text-amber-400'

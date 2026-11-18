@@ -827,7 +827,7 @@ export default function InformeCompiladoView() {
           </div>
 
           {/* Elementos Unifilares */}
-          {elementos.map((item, idx) => {
+          {elementos.filter(item => item.tipoElemento !== 'PUNTO_MEDICION' && item.tipoElemento !== 'CCM').map((item, idx) => {
             const isTablero = item.tipoElemento === 'TABLERO';
             
             const enrichedElement = isTablero ? {
@@ -839,26 +839,29 @@ export default function InformeCompiladoView() {
               fotoBlob: item.fotoBlob,
               observacionesGenerales: item.observacionesGenerales,
               ...item.datosTecnicos,
+              circuits: Array.isArray(item.datosTecnicos?.circuits)
+                ? item.datosTecnicos.circuits
+                : (Array.isArray(item.circuits) ? item.circuits : []),
               nombreEmpresa: company.nombre
             } : item;
 
             return (
-              <div key={item.id} className="break-inside-avoid pt-4 space-y-3 px-4 md:px-6 print:px-0">
-                <div className="border-b border-amber-500/80 pb-2 flex justify-between items-center print:border-slate-700 print:pb-1 bg-slate-900/40 print:bg-slate-100 p-2.5 rounded-t-xl print:rounded-none">
+              <div key={item.id} className="page-break break-inside-avoid pt-4 print:pt-0 space-y-3 print:space-y-1 px-4 md:px-6 print:px-0">
+                <div className="no-print border-b border-amber-500/80 pb-2 flex justify-between items-center bg-slate-900/40 p-2.5 rounded-t-xl">
                   <div>
-                    <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                    <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block">
                       Ficha #{idx + 1} &bull; {item.tipoElemento || 'TABLERO'}
                     </span>
-                    <h3 className="text-sm font-black text-slate-100 print:text-slate-950 uppercase">
+                    <h3 className="text-sm font-black text-slate-100 uppercase">
                       {cleanElementName(item.nombre, item.id, item.codigo)}
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded print:border-slate-400 print:text-slate-900 print:bg-white">
+                    <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
                       ID: {getElementCode(item, item.tipoElemento)}
                     </span>
                     {isTablero && (
-                      <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 rounded print:border-slate-400 print:text-slate-900 print:bg-white">
+                      <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 rounded">
                         ⚡ {calcularPotenciaEstimadaTablero(enrichedElement).texto}
                       </span>
                     )}
@@ -886,17 +889,17 @@ export default function InformeCompiladoView() {
 
           {/* Subestaciones */}
           {subestaciones.map((sub, idx) => (
-            <div key={sub.id} className="break-inside-avoid pt-4 space-y-3 px-4 md:px-6 print:px-0">
-              <div className="border-b border-amber-500/80 pb-2 flex justify-between items-center print:border-slate-700 print:pb-1 bg-slate-900/40 print:bg-slate-100 p-2.5 rounded-t-xl print:rounded-none">
+            <div key={sub.id} className="page-break break-inside-avoid pt-4 print:pt-0 space-y-3 print:space-y-1 px-4 md:px-6 print:px-0">
+              <div className="no-print border-b border-amber-500/80 pb-2 flex justify-between items-center bg-slate-900/40 p-2.5 rounded-t-xl">
                 <div>
-                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block">
                     Subestación #{idx + 1} &bull; Obras Civiles y Transformación
                   </span>
-                  <h3 className="text-sm font-black text-slate-100 print:text-slate-950 uppercase">
+                  <h3 className="text-sm font-black text-slate-100 uppercase">
                     {cleanElementName(sub.nombre, sub.id, sub.codigo)}
                   </h3>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded print:border-slate-400 print:text-slate-900 print:bg-white">
+                <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
                   ID: {getElementCode(sub, 'SUBESTACION')}
                 </span>
               </div>
@@ -912,17 +915,17 @@ export default function InformeCompiladoView() {
 
           {/* Puntos de Medición */}
           {puntosMedicion.map((pm, idx) => (
-            <div key={pm.id} className="break-inside-avoid pt-4 space-y-3 px-4 md:px-6 print:px-0">
-              <div className="border-b border-amber-500/80 pb-2 flex justify-between items-center print:border-slate-700 print:pb-1 bg-slate-900/40 print:bg-slate-100 p-2.5 rounded-t-xl print:rounded-none">
+            <div key={pm.id} className="page-break break-inside-avoid pt-4 print:pt-0 space-y-3 print:space-y-1 px-4 md:px-6 print:px-0">
+              <div className="no-print border-b border-amber-500/80 pb-2 flex justify-between items-center bg-slate-900/40 p-2.5 rounded-t-xl">
                 <div>
-                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block">
                     Punto de Medición #{idx + 1} &bull; Parámetros de Suministro y Mediciones
                   </span>
-                  <h3 className="text-sm font-black text-slate-100 print:text-slate-950 uppercase">
+                  <h3 className="text-sm font-black text-slate-100 uppercase">
                     {cleanElementName(pm.nombre, pm.id, pm.codigo)}
                   </h3>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded print:border-slate-400 print:text-slate-900 print:bg-white">
+                <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
                   ID: {getElementCode(pm, 'PUNTO_MEDICION')}
                 </span>
               </div>
@@ -938,17 +941,17 @@ export default function InformeCompiladoView() {
 
           {/* CCMs */}
           {ccmList.map((ccm, idx) => (
-            <div key={ccm.id} className="break-inside-avoid pt-4 space-y-3 px-4 md:px-6 print:px-0">
-              <div className="border-b border-amber-500/80 pb-2 flex justify-between items-center print:border-slate-700 print:pb-1 bg-slate-900/40 print:bg-slate-100 p-2.5 rounded-t-xl print:rounded-none">
+            <div key={ccm.id} className="page-break break-inside-avoid pt-4 print:pt-0 space-y-3 print:space-y-1 px-4 md:px-6 print:px-0">
+              <div className="no-print border-b border-amber-500/80 pb-2 flex justify-between items-center bg-slate-900/40 p-2.5 rounded-t-xl">
                 <div>
-                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block print:text-slate-600">
+                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest block">
                     CCM #{idx + 1} &bull; Centro de Control de Motores y Gavetas
                   </span>
-                  <h3 className="text-sm font-black text-slate-100 print:text-slate-950 uppercase">
+                  <h3 className="text-sm font-black text-slate-100 uppercase">
                     {cleanElementName(ccm.nombre, ccm.id, ccm.codigo)}
                   </h3>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded print:border-slate-400 print:text-slate-900 print:bg-white">
+                <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
                   ID: {getElementCode(ccm, 'CCM')}
                 </span>
               </div>

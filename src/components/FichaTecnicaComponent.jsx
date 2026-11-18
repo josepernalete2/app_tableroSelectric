@@ -141,6 +141,44 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   // Restringir a las opciones permitidas: TABLERO, TRANSFER, GENERADOR, TRANSFORMADOR
   const tipoElemento = elementoData?.tipoElemento || 'TABLERO';
 
+  const sheetRef = React.useRef(null);
+  const hasPhotoAttached = Boolean(fotoBlob || fotoSrc || previewUrl);
+
+  const printOptimization = React.useMemo(() => {
+    let baseZoom = 0.96;
+    let density = 'comfortable';
+
+    if (tipoElemento === 'TRANSFORMADOR' || tipoElemento === 'GENERADOR') {
+      baseZoom = hasPhotoAttached ? 0.86 : 0.94;
+      density = hasPhotoAttached ? 'compact' : 'comfortable';
+    } else if (tipoElemento === 'BANCO_CONDENSADOR' || tipoElemento === 'PUESTA_TIERRA') {
+      const extraRows = (dt.pasosAuditoria?.length || 0) + (dt.puntosTermograficos?.length || 0);
+      baseZoom = hasPhotoAttached || extraRows > 3 ? 0.85 : 0.92;
+      density = hasPhotoAttached || extraRows > 3 ? 'compact' : 'comfortable';
+    } else if (hasPhotoAttached) {
+      baseZoom = 0.9;
+      density = 'compact';
+    }
+
+    return { zoom: baseZoom, density };
+  }, [tipoElemento, hasPhotoAttached, dt.pasosAuditoria?.length, dt.puntosTermograficos?.length]);
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const el = sheetRef.current;
+      if (!el) return;
+      el.style.setProperty('--tablero-print-zoom', String(printOptimization.zoom));
+      const printableHeightPx = 940;
+      const naturalHeight = el.scrollHeight;
+      if (naturalHeight > 0 && naturalHeight * printOptimization.zoom > printableHeightPx) {
+        const fittedZoom = Math.max(0.62, Math.min(printOptimization.zoom, Number((printableHeightPx / naturalHeight).toFixed(3))));
+        el.style.setProperty('--tablero-print-zoom', String(fittedZoom));
+      }
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, [printOptimization.zoom]);
+
   // Cálculo eléctrico automático para transformadores (IEEE C57 / CEN 200 / COVENIN 159)
   const calculosTrafo = React.useMemo(() => {
     if (tipoElemento !== 'TRANSFORMADOR') return null;
@@ -346,10 +384,10 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               if (match[2]) elementId = match[2].trim();
             }
             return (
-              <span key={idx} className="inline-flex items-center gap-1 bg-slate-900/60 print:bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-800 print:border-slate-300">
-                <span className="font-semibold text-slate-100 print:text-black">{cleanName}</span>
+              <span key={idx} className="tablero-badge-slate inline-flex items-center gap-1 bg-slate-900/60 print:bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-800 print:border-slate-300">
+                <span className="font-semibold text-slate-100 print:text-slate-950">{cleanName}</span>
                 {elementId && (
-                  <span className="inline-flex items-center font-mono font-bold text-[9.5px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                  <span className="tablero-badge-amber inline-flex items-center font-mono font-bold text-[9.5px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
                     ID: {getElementCode(elementId, tipoElemento)}
                   </span>
                 )}
@@ -372,9 +410,9 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
 
     return (
       <span className="inline-flex items-center gap-1.5 flex-wrap">
-        <span className="font-semibold text-slate-100 print:text-black">{cleanName}</span>
+        <span className="font-semibold text-slate-100 print:text-slate-950">{cleanName}</span>
         {elementId && (
-          <span className="inline-flex items-center font-mono font-bold text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
+          <span className="tablero-badge-amber inline-flex items-center font-mono font-bold text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-sm">
             ID: {getElementCode(elementId, tipoElemento)}
           </span>
         )}
@@ -405,7 +443,12 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   };
 
   return (
-    <div className={`max-w-5xl mx-auto space-y-6 animate-fade-in font-sans pb-12 print-card print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
+    <div
+      ref={sheetRef}
+      data-print-density={printOptimization.density}
+      style={{ '--tablero-print-zoom': printOptimization.zoom }}
+      className={`tablero-print-sheet tablero-element-sheet max-w-5xl print:max-w-none print:w-full mx-auto space-y-6 print:space-y-1.5 animate-fade-in font-sans pb-12 print:pb-0 print-card print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}
+    >
       
       {/* Botones de control superior (Ocultos en impresión) */}
       <div className="flex justify-between items-center no-print">
@@ -533,17 +576,20 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </div>
             {isEditing ? (
               <div className="w-full sm:w-2/3">
-                <SelectorAlimentadorJerarquico
-                  proyectoId={elementoData?.proyectoId}
-                  tableroActualId={elementoData?.id}
-                  elementosList={allFeeders}
-                  value={alimentadoPor}
-                  tipoElementoActual={tipoElemento}
-                  direccionRelacion="ALIMENTADO_POR"
-                  onChange={(val) => setAlimentadoPor(val)}
-                  label=""
-                  placeholder="Seleccionar o escribir procedencia..."
-                />
+                <div className="no-print">
+                  <SelectorAlimentadorJerarquico
+                    proyectoId={elementoData?.proyectoId}
+                    tableroActualId={elementoData?.id}
+                    elementosList={allFeeders}
+                    value={alimentadoPor}
+                    tipoElementoActual={tipoElemento}
+                    direccionRelacion="ALIMENTADO_POR"
+                    onChange={(val) => setAlimentadoPor(val)}
+                    label=""
+                    placeholder="Seleccionar o escribir procedencia..."
+                  />
+                </div>
+                <span className="hidden print:inline font-bold text-slate-950">{alimentadoPor || '—'}</span>
               </div>
             ) : (
               alimentadoPor ? renderElementWithId(alimentadoPor, elementoData?.alimentadoPorId) : <span className="text-slate-500 italic">—</span>
@@ -557,21 +603,24 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </div>
             {isEditing ? (
               <div className="w-full sm:w-2/3">
-                <SelectorAlimentadorJerarquico
-                  proyectoId={elementoData?.proyectoId}
-                  tableroActualId={elementoData?.id}
-                  elementosList={allFeeders}
-                  value={alimentaA}
-                  multiple={true}
-                  tipoElementoActual={tipoElemento}
-                  direccionRelacion="ALIMENTA_A"
-                  onChange={(formatted, primaryObj, ids) => {
-                    setAlimentaA(formatted ? formatted.toUpperCase() : '');
-                    setAlimentaAIds(Array.isArray(ids) ? ids : []);
-                  }}
-                  label=""
-                  placeholder="Seleccionar uno o varios equipos secundarios suministrados..."
-                />
+                <div className="no-print">
+                  <SelectorAlimentadorJerarquico
+                    proyectoId={elementoData?.proyectoId}
+                    tableroActualId={elementoData?.id}
+                    elementosList={allFeeders}
+                    value={alimentaA}
+                    multiple={true}
+                    tipoElementoActual={tipoElemento}
+                    direccionRelacion="ALIMENTA_A"
+                    onChange={(formatted, primaryObj, ids) => {
+                      setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                      setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                    }}
+                    label=""
+                    placeholder="Seleccionar uno o varios equipos secundarios suministrados..."
+                  />
+                </div>
+                <span className="hidden print:inline font-bold text-slate-950">{alimentaA || '—'}</span>
               </div>
             ) : (
               <div className="flex flex-wrap gap-1">
@@ -764,21 +813,26 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 </td>
                 <td className="p-3 text-slate-100 font-semibold print:text-black">
                   {isEditing ? (
-                    <SelectorAlimentadorJerarquico
-                      proyectoId={elementoData?.proyectoId}
-                      tableroActualId={elementoData?.id}
-                      elementosList={allFeeders}
-                      value={alimentaA}
-                      multiple={true}
-                      tipoElementoActual="GENERADOR"
-                      direccionRelacion="ALIMENTA_A"
-                      onChange={(formatted, primaryObj, ids) => {
-                        setAlimentaA(formatted ? formatted.toUpperCase() : '');
-                        setAlimentaAIds(Array.isArray(ids) ? ids : []);
-                      }}
-                      label=""
-                      placeholder="Seleccionar Transferencias (ATS), Tableros o Cargas de Emergencia..."
-                    />
+                    <>
+                      <div className="no-print">
+                        <SelectorAlimentadorJerarquico
+                          proyectoId={elementoData?.proyectoId}
+                          tableroActualId={elementoData?.id}
+                          elementosList={allFeeders}
+                          value={alimentaA}
+                          multiple={true}
+                          tipoElementoActual="GENERADOR"
+                          direccionRelacion="ALIMENTA_A"
+                          onChange={(formatted, primaryObj, ids) => {
+                            setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                            setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                          }}
+                          label=""
+                          placeholder="Seleccionar Transferencias (ATS), Tableros o Cargas de Emergencia..."
+                        />
+                      </div>
+                      <span className="hidden print:inline font-bold text-slate-950">{alimentaA || 'Sin cargas secundarias vinculadas'}</span>
+                    </>
                   ) : (
                     alimentaA ? (
                       <span className="font-semibold text-emerald-400 print:text-black">{alimentaA}</span>
@@ -1271,18 +1325,21 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </div>
             {isEditing ? (
               <div className="w-full sm:w-2/3">
-                <SelectorAlimentadorJerarquico
-                  proyectoId={elementoData?.proyectoId}
-                  tableroActualId={elementoData?.id}
-                  elementosList={allFeeders}
-                  value={alimentadoPor}
-                  multiple={false}
-                  tipoElementoActual="TRANSFORMADOR"
-                  direccionRelacion="ALIMENTADO_POR"
-                  onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
-                  label=""
-                  placeholder="Seleccionar Subestación, Red Eléctrica o Acometida..."
-                />
+                <div className="no-print">
+                  <SelectorAlimentadorJerarquico
+                    proyectoId={elementoData?.proyectoId}
+                    tableroActualId={elementoData?.id}
+                    elementosList={allFeeders}
+                    value={alimentadoPor}
+                    multiple={false}
+                    tipoElementoActual="TRANSFORMADOR"
+                    direccionRelacion="ALIMENTADO_POR"
+                    onChange={(val) => setAlimentadoPor(val ? val.toUpperCase() : '')}
+                    label=""
+                    placeholder="Seleccionar Subestación, Red Eléctrica o Acometida..."
+                  />
+                </div>
+                <span className="hidden print:inline font-bold text-slate-950">{alimentadoPor || '—'}</span>
               </div>
             ) : (
               <span className="font-semibold text-amber-400 print:text-black">{alimentadoPor || '—'}</span>
@@ -1296,21 +1353,24 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
             </div>
             {isEditing ? (
               <div className="w-full sm:w-2/3">
-                <SelectorAlimentadorJerarquico
-                  proyectoId={elementoData?.proyectoId}
-                  tableroActualId={elementoData?.id}
-                  elementosList={allFeeders}
-                  value={alimentaA}
-                  multiple={true}
-                  tipoElementoActual="TRANSFORMADOR"
-                  direccionRelacion="ALIMENTA_A"
-                  onChange={(formatted, primaryObj, ids) => {
-                    setAlimentaA(formatted ? formatted.toUpperCase() : '');
-                    setAlimentaAIds(Array.isArray(ids) ? ids : []);
-                  }}
-                  label=""
-                  placeholder="Seleccionar Tableros, ATS o CCMs que reciben energía..."
-                />
+                <div className="no-print">
+                  <SelectorAlimentadorJerarquico
+                    proyectoId={elementoData?.proyectoId}
+                    tableroActualId={elementoData?.id}
+                    elementosList={allFeeders}
+                    value={alimentaA}
+                    multiple={true}
+                    tipoElementoActual="TRANSFORMADOR"
+                    direccionRelacion="ALIMENTA_A"
+                    onChange={(formatted, primaryObj, ids) => {
+                      setAlimentaA(formatted ? formatted.toUpperCase() : '');
+                      setAlimentaAIds(Array.isArray(ids) ? ids : []);
+                    }}
+                    label=""
+                    placeholder="Seleccionar Tableros, ATS o CCMs que reciben energía..."
+                  />
+                </div>
+                <span className="hidden print:inline font-bold text-slate-950">{alimentaA || 'Sin cargas secundarias enlazadas'}</span>
               </div>
             ) : (
               <div className="flex flex-wrap gap-1">
@@ -1625,7 +1685,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           </table>
 
           {/* Sub-Header: Acometidas */}
-          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-violet-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+          <div className="tablero-sky-header bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-violet-400 font-mono print:bg-gray-200 print:text-black print:border-black">
             ACOMETIDAS
           </div>
 
@@ -1780,7 +1840,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           </table>
 
           {/* Sub-Header: SPT */}
-          <div className="bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-violet-400 font-mono print:bg-gray-200 print:text-black print:border-black">
+          <div className="tablero-amber-header bg-slate-900/80 border-b border-slate-700 p-2 text-center font-bold text-xs uppercase tracking-wider text-violet-400 font-mono print:bg-gray-200 print:text-black print:border-black">
             SISTEMA DE PUESTA A TIERRA (SPT)
           </div>
 
@@ -1918,8 +1978,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           </div>
 
           {/* Caja de Observaciones Generales */}
-          <div className="bg-slate-900/60 border-b border-slate-700 p-4 font-mono text-xs text-slate-200 print:bg-white print:text-black print:border-black">
-            <span className="font-black uppercase text-slate-400 block mb-1 print:text-black">OBSERVACIONES:</span>
+          <div className="tablero-obs-box bg-slate-900/60 border-b border-slate-700 p-4 print:p-2 font-mono text-xs text-slate-200 print:bg-yellow-100 print:text-black print:border-black">
+            <span className="tablero-obs-label font-black uppercase text-slate-400 block mb-1 print:text-black">OBSERVACIONES:</span>
             {isEditing ? (
               <textarea
                 value={observacionesGenerales}
@@ -1935,7 +1995,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
           </div>
 
           {/* Leyenda */}
-          <div className="p-4 bg-slate-950 text-[10px] text-slate-500 font-mono leading-relaxed border-b border-slate-700 print:bg-white print:text-black print:border-black print:text-[8px]">
+          <div className="p-4 print:p-1.5 bg-slate-950 text-[10px] text-slate-500 font-mono leading-relaxed print:leading-tight border-b border-slate-700 print:bg-white print:text-black print:border-black print:text-[7.5px]">
             <p><strong>LEYENDA:</strong> <strong>BB</strong> BARRA EN BUEN ESTADO, <strong>BD</strong> BARRA DEFECTUOSA, <strong>SB</strong> SIN BARRA, <strong>CB</strong> CONDUCTOR EN BUEN ESTADO, <strong>CS</strong> CONDUCTOR SULFATADO, <strong>SC</strong> SIN CONDUCTOR, <strong>IB</strong> INTERRUPTOR EN BUEN ESTADO, <strong>ID</strong> INTERRUPTOR DEFECTUOSO, <strong>IS</strong> INTERRUPTOR SULFATADO, <strong>AT</strong> ALTA TEMPERATURA, <strong>CTB</strong> COPA TERMINAL BUEN ESTADO, <strong>CTD</strong> COPA TERMINAL DEFECTUOSA, <strong>SCT</strong> SIN COPA, <strong>FB</strong> FUSIBLE EN BUEN ESTADO, <strong>FD</strong> FUSIBLE DEFECTUOSO, <strong>SF</strong> SIN FUSIBLE, <strong>PB</strong> PARARRAYO EN BUEN ESTADO, <strong>PD</strong> PARARRAYO DEFECTUOSO, <strong>SP</strong> SIN PARARRAYO. <strong>SE</strong> SOLDADURA EXOTÉRMICA, <strong>KS</strong> CONECTORES EN BARRA DE TIERRA.</p>
           </div>
 
@@ -3611,54 +3671,50 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
       )}
 
       {/* Cierre / Firmas */}
-      <div className="mt-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-slate-50 print:border-gray-200 print:mt-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-900 pb-2.5 print:text-slate-700 print:border-gray-200">
+      <div className="tablero-signatures-box mt-8 print:mt-2 bg-slate-950/40 border border-slate-800/80 rounded-2xl print:rounded p-5 print:p-2.5 space-y-4 print:space-y-1.5 break-inside-avoid">
+        <h3 className="tablero-subheader-row text-xs print:text-[9px] font-bold uppercase tracking-wider text-slate-400 print:text-slate-950 border-b border-slate-900 print:border-slate-400 pb-2.5 print:pb-1 print:px-2 print:py-0.5 print:rounded-xs">
           Firma y Cierre de Inspección
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4">
           {/* Firma Inspector */}
-          <div className="flex flex-col gap-1.5 items-center text-center">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Firma del Inspector</span>
+          <div className="flex flex-col gap-1.5 print:gap-0.5 items-center text-center">
+            <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma del Inspector</span>
             {isEditing ? (
-              <>
-                <input
-                  type="text"
-                  value={dt.firmaInspector || ''}
-                  onChange={(e) => handleDtChange('firmaInspector', e.target.value)}
-                  className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
-                  placeholder="Nombre del Inspector"
-                />
-                <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
-                  {dt.firmaInspector || '___________________________'}
-                </span>
-              </>
+              <input
+                type="text"
+                value={dt.firmaInspector || ''}
+                onChange={(e) => handleDtChange('firmaInspector', e.target.value)}
+                className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
+                placeholder="Nombre del Inspector"
+              />
             ) : (
-              <span className="text-xs text-slate-100 font-bold print:text-slate-900">{dt.firmaInspector || '—'}</span>
+              <span className="text-xs text-slate-100 font-bold no-print">{dt.firmaInspector || '—'}</span>
             )}
-            <div className="hidden print:block w-48 border-b border-gray-300 mt-6 h-1"></div>
+            <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
+            <span className="hidden print:block text-[9.5px] font-black text-slate-950">
+              {dt.firmaInspector || '—'}
+            </span>
           </div>
 
           {/* Firma / Sello de la Empresa */}
-          <div className="flex flex-col gap-1.5 items-center text-center">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Firma / Sello de la Empresa</span>
+          <div className="flex flex-col gap-1.5 print:gap-0.5 items-center text-center">
+            <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma / Sello de la Empresa</span>
             {isEditing ? (
-              <>
-                <input
-                  type="text"
-                  value={dt.firmaSupervisor || ''}
-                  onChange={(e) => handleDtChange('firmaSupervisor', e.target.value)}
-                  className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
-                  placeholder="Nombre / Sello de la Empresa"
-                />
-                <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
-                  {dt.firmaSupervisor || '___________________________'}
-                </span>
-              </>
+              <input
+                type="text"
+                value={dt.firmaSupervisor || ''}
+                onChange={(e) => handleDtChange('firmaSupervisor', e.target.value)}
+                className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
+                placeholder="Nombre / Sello de la Empresa"
+              />
             ) : (
-              <span className="text-xs text-slate-100 font-bold print:text-slate-900">{dt.firmaSupervisor || '—'}</span>
+              <span className="text-xs text-slate-100 font-bold no-print">{dt.firmaSupervisor || '—'}</span>
             )}
-            <div className="hidden print:block w-48 border-b border-gray-300 mt-6 h-1"></div>
+            <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
+            <span className="hidden print:block text-[9.5px] font-black text-slate-950">
+              {dt.firmaSupervisor || '—'}
+            </span>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw, Edit3, Layers } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
@@ -161,13 +161,44 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
     }
   ];
 
+  const sheetRef = useRef(null);
+  const hasPhotoAttached = Boolean(fotoBlob || foto || previewUrl);
+
+  const printOptimization = useMemo(() => {
+    return {
+      zoom: hasPhotoAttached ? 0.80 : 0.86,
+      density: 'compact'
+    };
+  }, [hasPhotoAttached]);
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const el = sheetRef.current;
+      if (!el) return;
+      el.style.setProperty('--tablero-print-zoom', String(printOptimization.zoom));
+      const printableHeightPx = 940;
+      const naturalHeight = el.scrollHeight;
+      if (naturalHeight > 0 && naturalHeight * printOptimization.zoom > printableHeightPx) {
+        const fittedZoom = Math.max(0.60, Math.min(printOptimization.zoom, Number((printableHeightPx / naturalHeight).toFixed(3))));
+        el.style.setProperty('--tablero-print-zoom', String(fittedZoom));
+      }
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, [printOptimization.zoom]);
+
   return (
-    <div className={`w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl mx-auto space-y-8 print-card print:bg-white print:text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
+    <div
+      ref={sheetRef}
+      data-print-density={printOptimization.density}
+      style={{ '--tablero-print-zoom': printOptimization.zoom }}
+      className={`tablero-print-sheet tablero-element-sheet w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl print:max-w-none mx-auto space-y-8 print:space-y-1.5 print-card print:bg-white print:text-slate-950 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}
+    >
       {/* Encabezado General */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-slate-800 print:border-gray-200">
+      <div className="tablero-header-bar flex flex-col md:flex-row print:flex-row justify-between items-start md:items-center print:items-center gap-4 print:gap-2 pb-6 print:p-2 border-b border-slate-800 print:border-2 print:border-slate-900 print:rounded-xs">
         <div>
-          <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-widest print:text-amber-600">Inspección de Subestación Eléctrica</span>
-          <h2 className="text-xl md:text-2xl font-extrabold text-slate-100 tracking-wide mt-1 print:text-slate-900">{nombre || 'Subestación Eléctrica'}</h2>
+          <span className="text-[10px] print:text-[8.5px] text-amber-500 font-extrabold uppercase tracking-widest print:text-slate-800">Inspección de Subestación Eléctrica</span>
+          <h2 className="text-xl md:text-2xl print:text-xs font-extrabold text-slate-100 tracking-wide mt-1 print:mt-0 print:text-slate-950 uppercase">{nombre || 'Subestación Eléctrica'}</h2>
         </div>
         <div className="flex items-center gap-3">
           {!readOnly && (
@@ -189,14 +220,14 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
           <div className="flex items-center gap-1">
-            <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+            <span className="tablero-badge-amber inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 print:px-2 print:py-0.5 rounded-lg print:rounded border border-amber-500/30 text-xs print:text-[9.5px] shadow-sm">
               ID: {getElementCode(subestacionData, 'SUBESTACION')}
             </span>
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setIsEditIdModalOpen(true)}
-                className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                className="no-print p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
                 title="Editar ID del elemento (Solo Administradores)"
               >
                 <Edit3 className="w-3 h-3" />
@@ -207,12 +238,12 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
       </div>
 
       {/* 1. Información General */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-slate-50 print:border-gray-200">
+      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1.5 print:bg-white print:border-slate-500">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-900 pb-2.5 flex items-center gap-2 print:text-slate-700 print:border-gray-200">
-          <User className="w-4 h-4 text-amber-500 print:text-amber-600" /> 1. Información General
+          <User className="w-4 h-4 text-amber-500 no-print" /> 1. Información General
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 print:grid-cols-5 gap-5 print:gap-2">
           {/* Ubicación / Código */}
           <div className="flex flex-col gap-1.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Ubicación / Código</span>
@@ -277,45 +308,57 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
         </div>
 
         {/* Topología y Jerarquía Eléctrica de la Subestación */}
-        <div className="pt-4 border-t border-slate-900 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="pt-4 print:pt-1.5 border-t border-slate-900 print:border-slate-300 grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-5 print:gap-2">
           {/* ALIMENTADO POR */}
           <div>
-            <SelectorAlimentadorJerarquico
-              proyectoId={subestacionData?.proyectoId}
-              tableroActualId={subestacionData?.id}
-              value={alimentadoPor}
-              disabled={readOnly}
-              multiple={false}
-              tipoElementoActual="SUBESTACION"
-              direccionRelacion="ALIMENTADO_POR"
-              onChange={(val, selectedObj) => {
-                const upperVal = val ? val.toUpperCase() : '';
-                updateField('alimentadoPor', upperVal);
-                updateField('alimentadoPorId', selectedObj?.id || null);
-              }}
-              label="ALIMENTADO POR (Origen / Red Eléctrica Aguas Arriba)"
-              placeholder="Seleccionar Red CORPOELEC, Acometida Primaria o Generador..."
-            />
+            <div className="no-print">
+              <SelectorAlimentadorJerarquico
+                proyectoId={subestacionData?.proyectoId}
+                tableroActualId={subestacionData?.id}
+                value={alimentadoPor}
+                disabled={readOnly}
+                multiple={false}
+                tipoElementoActual="SUBESTACION"
+                direccionRelacion="ALIMENTADO_POR"
+                onChange={(val, selectedObj) => {
+                  const upperVal = val ? val.toUpperCase() : '';
+                  updateField('alimentadoPor', upperVal);
+                  updateField('alimentadoPorId', selectedObj?.id || null);
+                }}
+                label="ALIMENTADO POR (Origen / Red Eléctrica Aguas Arriba)"
+                placeholder="Seleccionar Red CORPOELEC, Acometida Primaria o Generador..."
+              />
+            </div>
+            <div className="hidden print:block tablero-ficha-card p-1.5">
+              <span className="tablero-ficha-label block text-[8px] font-black uppercase">ALIMENTADO POR (ORIGEN / RED ELÉCTRICA):</span>
+              <span className="text-[9.5px] font-black font-mono text-slate-950">{alimentadoPor || '—'}</span>
+            </div>
           </div>
 
           {/* ALIMENTA A */}
           <div>
-            <SelectorAlimentadorJerarquico
-              proyectoId={subestacionData?.proyectoId}
-              tableroActualId={subestacionData?.id}
-              value={alimentaA}
-              disabled={readOnly}
-              multiple={true}
-              tipoElementoActual="SUBESTACION"
-              direccionRelacion="ALIMENTA_A"
-              onChange={(formatted, primaryObj, ids) => {
-                const upperFormatted = formatted ? formatted.toUpperCase() : '';
-                updateField('alimentaA', upperFormatted);
-                updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
-              }}
-              label="ALIMENTA A (Cargas y Transformadores Suministrados)"
-              placeholder="Seleccionar Transformadores, CCMs o Tableros alimentados..."
-            />
+            <div className="no-print">
+              <SelectorAlimentadorJerarquico
+                proyectoId={subestacionData?.proyectoId}
+                tableroActualId={subestacionData?.id}
+                value={alimentaA}
+                disabled={readOnly}
+                multiple={true}
+                tipoElementoActual="SUBESTACION"
+                direccionRelacion="ALIMENTA_A"
+                onChange={(formatted, primaryObj, ids) => {
+                  const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                  updateField('alimentaA', upperFormatted);
+                  updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
+                }}
+                label="ALIMENTA A (Cargas y Transformadores Suministrados)"
+                placeholder="Seleccionar Transformadores, CCMs o Tableros alimentados..."
+              />
+            </div>
+            <div className="hidden print:block tablero-ficha-card p-1.5">
+              <span className="tablero-ficha-label block text-[8px] font-black uppercase">ALIMENTA A (CARGAS Y TRANSFORMADORES):</span>
+              <span className="text-[9.5px] font-black font-mono text-slate-950">{alimentaA || '—'}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -330,39 +373,40 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
       />
 
       {/* Bloques de Evaluación Visual */}
-      <div className="space-y-8">
-        {SECCIONES.map((sec) => {
+      <div className="space-y-8 print:space-y-0 print:grid print:grid-cols-2 print:gap-2">
+        {SECCIONES.map((sec, secIdx) => {
           const sectionData = subestacionData[sec.key] || {};
+          const isLastOdd = SECCIONES.length % 2 === 1 && secIdx === SECCIONES.length - 1;
 
           return (
-            <div key={sec.key} className="bg-slate-950/20 border border-slate-800/80 rounded-2xl overflow-hidden shadow-sm print:bg-white print:border-gray-200 print:shadow-none">
+            <div key={sec.key} className={`${isLastOdd ? 'print:col-span-2' : ''} bg-slate-950/20 border border-slate-800/80 rounded-2xl print:rounded overflow-hidden shadow-sm print:bg-white print:border-slate-500 print:shadow-none break-inside-avoid`}>
               {/* Encabezado Sección */}
-              <div className="bg-slate-950/40 px-5 py-4 border-b border-slate-800 flex items-start gap-3 print:bg-slate-50 print:border-gray-200">
-                <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl mt-0.5 shadow-inner print:bg-white print:border-gray-300">
+              <div className="bg-slate-950/40 px-5 py-4 print:p-1.5 border-b border-slate-800 print:border-slate-400 flex items-start gap-3">
+                <div className="no-print p-2 bg-slate-900 border border-slate-800 rounded-xl mt-0.5 shadow-inner">
                   {sec.icon}
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-200 print:text-slate-800">{sec.title}</h3>
-                  <p className="text-[10px] text-slate-500 mt-1 print:text-slate-500">{sec.description}</p>
+                <div className="w-full">
+                  <h3 className="text-sm font-bold text-slate-200 print:text-slate-950 print:mb-0">{sec.title}</h3>
+                  <p className="no-print text-[10px] text-slate-500 mt-1">{sec.description}</p>
                 </div>
               </div>
 
               {/* Grid / Tabla para los Elementos */}
-              <div className="divide-y divide-slate-800/60 print:divide-gray-200">
+              <div className={`divide-y divide-slate-800/60 print:divide-slate-300 ${isLastOdd ? 'print:grid print:grid-cols-2 print:divide-y-0 print:gap-x-3 print:p-1' : ''}`}>
                 {sec.elements.map((elem) => {
                   const item = sectionData[elem.key] || { estado: 'B', observaciones: '' };
 
                   return (
-                    <div key={elem.key} className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-900/10 transition-all print:bg-white print:text-slate-900">
+                    <div key={elem.key} className="p-4 md:p-5 print:py-0.5 print:px-1.5 flex flex-col md:flex-row print:flex-row md:items-center print:items-center justify-between gap-4 print:gap-1.5 hover:bg-slate-900/10 transition-all print:bg-white print:text-slate-950 print:border-b print:border-slate-200">
                       {/* Nombre del Elemento */}
-                      <div className="md:w-[35%] flex flex-col">
-                        <span className="text-xs font-bold text-slate-200 print:text-slate-800">{elem.label}</span>
+                      <div className="md:w-[35%] print:w-[44%] shrink-0 flex flex-col">
+                        <span className="text-xs print:text-[8.5px] font-bold text-slate-200 print:text-slate-950 leading-tight">{elem.label}</span>
                       </div>
 
                       {/* Botones de Estado (B / R / M) */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mr-2 hidden md:inline print:text-slate-500">Estado:</span>
-                        <div className="flex bg-slate-900/60 p-1 rounded-xl border border-slate-800/80 shadow-inner print:bg-gray-100 print:border-gray-300 print:shadow-none">
+                      <div className="flex items-center gap-2 print:gap-0.5 shrink-0">
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mr-2 hidden md:inline no-print">Estado:</span>
+                        <div className="flex bg-slate-900/60 p-1 print:p-0.5 rounded-xl print:rounded border border-slate-800/80 shadow-inner print:bg-white print:border-slate-300 print:shadow-none gap-0.5">
                           {[
                             { value: 'B', label: 'Bueno', color: 'bg-emerald-500 text-slate-950 font-bold', hover: 'hover:text-emerald-400' },
                             { value: 'R', label: 'Regular', color: 'bg-amber-500 text-slate-950 font-bold', hover: 'hover:text-amber-400' },
@@ -374,10 +418,10 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
                                 key={opt.value}
                                 type="button"
                                 onClick={() => updateSectionItem(sec.key, elem.key, 'estado', opt.value)}
-                                className={`px-3 py-1.5 text-[10px] rounded-lg font-bold transition-all cursor-pointer ${
+                                className={`px-3 py-1.5 print:px-1.5 print:py-0 text-[10px] print:text-[8px] rounded-lg font-bold transition-all cursor-pointer ${
                                   isSelected 
                                     ? opt.color + ' shadow-md scale-105 print:shadow-none print:scale-100' 
-                                    : 'text-slate-400 hover:bg-slate-800/50 print:text-slate-400 print:hover:bg-transparent ' + opt.hover
+                                    : 'bg-slate-900 text-slate-400 hover:bg-slate-800/50 print:text-slate-500 ' + opt.hover
                                 }`}
                               >
                                 {opt.value}
@@ -388,12 +432,12 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
                       </div>
 
                       {/* Input de Observaciones */}
-                      <div className="flex-1 min-w-[30%]">
+                      <div className="flex-1 min-w-[30%] print:min-w-0">
                         <input
                           type="text"
                           value={item.observaciones || ''}
                           onChange={(e) => updateSectionItem(sec.key, elem.key, 'observaciones', e.target.value)}
-                          className="w-full bg-slate-900/50 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all placeholder-slate-600 font-sans print:bg-white print:text-slate-900 print:border-gray-300 print:placeholder-transparent"
+                          className="w-full bg-slate-900/50 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all placeholder-slate-600 font-sans print:bg-white print:text-slate-950 print:border-slate-300 print:placeholder-transparent"
                           placeholder="Observaciones / Hallazgos encontrados..."
                         />
                       </div>
@@ -407,7 +451,7 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
       </div>
 
       {/* Carga Dual de Fotografías de la Subestación */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5">
+      <div className={`bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 ${!hasPhotoAttached ? 'no-print' : ''}`}>
         <DualPhotoUploader
           fotoBlob={fotoBlob}
           fotoSrc={foto}
@@ -431,15 +475,15 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
       </div>
 
       {/* Cierre / Firmas */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-slate-50 print:border-gray-200 print:mt-3">
+      <div className="tablero-signatures-box bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1 print:mt-1 break-inside-avoid">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-900 pb-2.5 print:text-slate-700 print:border-gray-200">
           Firma y Cierre de Inspección
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4">
           {/* Firma Inspector */}
-          <div className="flex flex-col gap-1.5 items-center text-center">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Firma del Inspector</span>
+          <div className="flex flex-col gap-1.5 print:gap-0.5 items-center text-center">
+            <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma del Inspector</span>
             <input
               type="text"
               value={firmaInspector}
@@ -447,15 +491,15 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
               className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
               placeholder="Iniciales o Nombre del Inspector"
             />
-            <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
-              {firmaInspector || '___________________________'}
+            <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
+            <span className="hidden print:block text-[9.5px] font-black text-slate-950">
+              {firmaInspector || '—'}
             </span>
-            <div className="hidden print:block w-48 border-b border-gray-400 mt-6 h-1"></div>
           </div>
 
           {/* Firma / Sello de la Empresa */}
-          <div className="flex flex-col gap-1.5 items-center text-center">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-600">Firma / Sello de la Empresa</span>
+          <div className="flex flex-col gap-1.5 print:gap-0.5 items-center text-center">
+            <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma / Sello de la Empresa</span>
             <input
               type="text"
               value={firmaSupervisor}
@@ -463,17 +507,17 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
               className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
               placeholder="Nombre / Sello de la Empresa"
             />
-            <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
-              {firmaSupervisor || '___________________________'}
+            <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
+            <span className="hidden print:block text-[9.5px] font-black text-slate-950">
+              {firmaSupervisor || '—'}
             </span>
-            <div className="hidden print:block w-48 border-b border-gray-400 mt-6 h-1"></div>
           </div>
         </div>
       </div>
 
       {/* Leyenda de Evaluación */}
-      <div className="text-[10px] text-slate-500 text-center leading-relaxed border-t border-slate-800 pt-4 font-sans select-none print:border-gray-200 print:text-slate-500">
-        <span className="font-bold text-slate-400 uppercase print:text-slate-600">Nota de Evaluación:</span> B = Bueno, R = Regular (Requiere mantenimiento preventivo), M = Malo (Acción correctiva inmediata).
+      <div className="text-[10px] print:text-[8px] text-slate-500 text-center leading-relaxed print:leading-tight border-t border-slate-800 pt-4 print:pt-1 font-sans select-none print:border-slate-300 print:text-slate-800">
+        <span className="font-bold text-slate-400 uppercase print:text-slate-950">Nota de Evaluación:</span> B = Bueno, R = Regular (Requiere mantenimiento preventivo), M = Malo (Acción correctiva inmediata).
       </div>
 
       {/* Modal de Edición de ID Visual (Solo Administradores) */}

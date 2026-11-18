@@ -195,7 +195,7 @@ const TableroWrapper = () => {
   // 1. Renderizar Inspección de Subestación
   if (subestacion) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+      <div className="min-h-screen print:min-h-0 bg-slate-900 print:bg-white text-slate-100 print:text-slate-950 flex flex-col print:block antialiased">
         {/* Top Navbar */}
         <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center gap-3">
@@ -245,7 +245,7 @@ const TableroWrapper = () => {
         </header>
 
         {/* Formulario de Subestación */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+        <main className="flex-1 max-w-7xl print:max-w-none w-full mx-auto px-3 py-4 md:px-6 md:py-8 print:p-0">
           <SubestacionComponent
             subestacionData={subestacion}
             onUpdate={(updatedData) => updateSubestacion(targetProyecto?.id || subestacion?.proyectoId, tableroId, updatedData)}
@@ -259,7 +259,7 @@ const TableroWrapper = () => {
   // 1.5. Renderizar Punto de Medición y Suministro
   if (puntoMedicion) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+      <div className="min-h-screen print:min-h-0 bg-slate-900 print:bg-white text-slate-100 print:text-slate-950 flex flex-col print:block antialiased">
         {/* Top Navbar */}
         <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center gap-3">
@@ -309,7 +309,7 @@ const TableroWrapper = () => {
         </header>
 
         {/* Formulario de Punto de Medición */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+        <main className="flex-1 max-w-7xl print:max-w-none w-full mx-auto px-3 py-4 md:px-6 md:py-8 print:p-0">
           <PuntoMedicionComponent
             puntoData={puntoMedicion}
             elementosCreados={projectElementosList}
@@ -337,7 +337,7 @@ const TableroWrapper = () => {
   // 1.2 Renderizar Centro de Control de Motores (CCM)
   if (ccmItem) {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+      <div className="min-h-screen print:min-h-0 bg-slate-900 print:bg-white text-slate-100 print:text-slate-950 flex flex-col print:block antialiased">
         {/* Top Navbar */}
         <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center gap-3">
@@ -387,7 +387,7 @@ const TableroWrapper = () => {
         </header>
 
         {/* Formulario de CCM */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+        <main className="flex-1 max-w-7xl print:max-w-none w-full mx-auto px-3 py-4 md:px-6 md:py-8 print:p-0">
           <CcmComponent
             ccmData={ccmItem}
             elementosCreados={projectElementosList}
@@ -415,7 +415,7 @@ const TableroWrapper = () => {
   // 1.3 Renderizar Transferencia Eléctrica (TRANSFER / ATS / MTS)
   if (element && element.tipoElemento === 'TRANSFER') {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+      <div className="min-h-screen print:min-h-0 bg-slate-900 print:bg-white text-slate-100 print:text-slate-950 flex flex-col print:block antialiased">
         {/* Top Navbar */}
         <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center gap-3">
@@ -465,7 +465,7 @@ const TableroWrapper = () => {
         </header>
 
         {/* Componente de Transferencia */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+        <main className="flex-1 max-w-7xl print:max-w-none w-full mx-auto px-3 py-4 md:px-6 md:py-8 print:p-0">
           <TransferComponent
             transferData={element}
             onUpdate={(updatedData) => updateElementoUnifilar(targetProyecto?.id || null, tableroId, updatedData)}
@@ -479,7 +479,7 @@ const TableroWrapper = () => {
   // 2. Renderizar Elemento Especial (Generador / Trafo / Otro)
   if (element && element.tipoElemento !== 'TABLERO') {
     return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+      <div className="min-h-screen print:min-h-0 bg-slate-900 print:bg-white text-slate-100 print:text-slate-950 flex flex-col print:block antialiased">
         {/* Top Navbar */}
         <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
           <div className="flex items-center gap-3">
@@ -529,7 +529,7 @@ const TableroWrapper = () => {
         </header>
 
         {/* Ficha Técnica del Elemento */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+        <main className="flex-1 max-w-7xl print:max-w-none w-full mx-auto px-3 py-4 md:px-6 md:py-8 print:p-0">
           <ErrorBoundary title="Error al cargar la ficha técnica del elemento">
             <FichaTecnicaComponent
               elementoData={element}
@@ -587,7 +587,7 @@ const TableroWrapper = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased print:min-h-0 print:bg-white print:text-slate-950 print:block">
       {/* Top Navbar */}
       <header className="bg-slate-950 border-b border-slate-800 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-md no-print">
         <div className="flex items-center gap-3">
@@ -638,7 +638,7 @@ const TableroWrapper = () => {
       </header>
 
       {/* Renders Tablero Component */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 py-4 md:px-6 md:py-8 print:p-0 print:max-w-none print:w-full">
         <ErrorBoundary title="Error al cargar la planilla del tablero">
           <TableroComponent
             tableroData={enrichedTablero}

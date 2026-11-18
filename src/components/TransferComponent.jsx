@@ -277,8 +277,38 @@ export default function TransferComponent({
   const acometidaCargaConductor = dt.acometidaCarga || dt.acometidaCargaConductor || dt.neutroConductor || dt.neutro || '';
   const tierraConductor = dt.tierraConductor || dt.tierra || '';
 
+  const sheetRef = React.useRef(null);
+  const hasPhotoAttached = Boolean(fotoBlob || fotoSrc || previewUrl);
+
+  const printOptimization = useMemo(() => {
+    const baseZoom = hasPhotoAttached ? 0.86 : 0.94;
+    const density = hasPhotoAttached ? 'compact' : 'comfortable';
+    return { zoom: baseZoom, density };
+  }, [hasPhotoAttached]);
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const el = sheetRef.current;
+      if (!el) return;
+      el.style.setProperty('--tablero-print-zoom', String(printOptimization.zoom));
+      const printableHeightPx = 940;
+      const naturalHeight = el.scrollHeight;
+      if (naturalHeight > 0 && naturalHeight * printOptimization.zoom > printableHeightPx) {
+        const fittedZoom = Math.max(0.62, Math.min(printOptimization.zoom, Number((printableHeightPx / naturalHeight).toFixed(3))));
+        el.style.setProperty('--tablero-print-zoom', String(fittedZoom));
+      }
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, [printOptimization.zoom]);
+
   return (
-    <div className={`max-w-6xl mx-auto space-y-6 animate-fade-in font-sans pb-16 print-card print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-95' : ''}`}>
+    <div
+      ref={sheetRef}
+      data-print-density={printOptimization.density}
+      style={{ '--tablero-print-zoom': printOptimization.zoom }}
+      className={`tablero-print-sheet tablero-element-sheet max-w-6xl print:max-w-none print:w-full mx-auto space-y-6 print:space-y-1.5 animate-fade-in font-sans pb-16 print:pb-0 print-card print:p-0 print:m-0 ${readOnly ? 'pointer-events-none opacity-95' : ''}`}
+    >
       
       {/* ========================================================================= */}
       {/* 1. BARRA DE HERRAMIENTAS Y ACCIONES SUPERIORES (NO PRINT) */}
@@ -368,16 +398,16 @@ export default function TransferComponent({
       {/* ========================================================================= */}
       {/* 2. CUADRO PRINCIPAL CON TARJETA SUPERIOR DERECHA DE DOBLE FUENTE */}
       {/* ========================================================================= */}
-      <div className="bg-slate-950 border-2 border-slate-800 rounded-2xl overflow-hidden shadow-2xl print:border-black print:bg-white print:text-black">
+      <div className="tablero-main-table bg-slate-950 border-2 border-slate-800 rounded-2xl print:rounded overflow-hidden shadow-2xl print:shadow-none print:border-slate-900 print:bg-white print:text-slate-950">
         
         {/* Cabecera Principal */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-850 border-b-2 border-slate-800 p-4 print:bg-gray-100 print:border-black">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="tablero-header-bar bg-gradient-to-r from-slate-900 via-slate-900 to-slate-850 border-b-2 border-slate-800 p-4 print:p-2 print:border-slate-900">
+          <div className="flex flex-col md:flex-row print:flex-row md:items-center print:items-center justify-between gap-3 print:gap-2">
             <div>
-              <span className="text-[10px] font-mono font-bold tracking-widest text-amber-400 uppercase">
+              <span className="text-[10px] print:text-[8.5px] font-mono font-bold tracking-widest text-amber-400 print:text-slate-800 uppercase">
                 SISTEMA DE CONMUTACIÓN DE POTENCIA • TRANSFERENCIA (ATS/MTS)
               </span>
-              <h2 className="text-xl font-black text-slate-100 tracking-wide uppercase font-mono print:text-black">
+              <h2 className="text-xl print:text-xs font-black text-slate-100 tracking-wide uppercase font-mono print:text-slate-950">
                 {isEditing ? (
                   <input
                     type="text"
@@ -393,7 +423,7 @@ export default function TransferComponent({
             </div>
             
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-bold text-slate-400">Capacidad Nominal:</span>
+              <span className="text-xs print:text-[9px] font-mono font-bold text-slate-400 print:text-slate-900">Capacidad Nominal:</span>
               {isEditing ? (
                 <input
                   type="text"
@@ -407,7 +437,7 @@ export default function TransferComponent({
                   className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono font-bold text-amber-400 text-center w-28 focus:border-amber-500 focus:outline-none"
                 />
               ) : (
-                <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg font-mono font-black text-sm">
+                <span className="tablero-badge-amber px-3 py-1 print:px-2 print:py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg print:rounded font-mono font-black text-sm print:text-[10px]">
                   {dt.amperaje !== undefined && dt.amperaje !== null && dt.amperaje !== '' ? `${dt.amperaje}` : (dt.capacidadAmperios !== undefined && dt.capacidadAmperios !== null && dt.capacidadAmperios !== '' ? `${dt.capacidadAmperios}` : '—')}
                 </span>
               )}
@@ -416,10 +446,10 @@ export default function TransferComponent({
         </div>
 
         {/* Layout de 2 Columnas Superiores: Izquierda (Generales) y Derecha (Doble Fuente) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-800 border-b-2 border-slate-800">
+        <div className="grid grid-cols-1 lg:grid-cols-12 print:grid-cols-12 divide-y lg:divide-y-0 print:divide-y-0 lg:divide-x print:divide-x divide-slate-800 print:divide-slate-400 border-b-2 border-slate-800 print:border-slate-900">
           
           {/* Columna Izquierda: Datos del Equipo y Parámetros Constructivos (5 columnas) */}
-          <div className="lg:col-span-5 p-5 space-y-4 bg-slate-900/40">
+          <div className="lg:col-span-5 print:col-span-5 p-5 print:p-2 space-y-4 print:space-y-1.5 bg-slate-900/40">
             <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Cpu className="w-4 h-4 text-amber-400" />
               Especificaciones Constructivas de Transferencia (ATS/MTS)
@@ -535,55 +565,62 @@ export default function TransferComponent({
           </div>
 
           {/* Columna Derecha: TARJETA SUPERIOR DERECHA - DOBLE FUENTE DE ALIMENTACIÓN (7 columnas) */}
-          <div className="lg:col-span-7 p-5 space-y-4 bg-slate-950/60">
+          <div className="lg:col-span-7 print:col-span-7 p-5 print:p-2 space-y-4 print:space-y-1.5 bg-slate-950/60">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <Zap className="w-4 h-4 text-emerald-400" />
+                <Zap className="w-4 h-4 text-emerald-400 no-print" />
                 Doble Fuente de Alimentación • Transferencia (ATS/MTS)
               </h3>
-              <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+              <span className="tablero-badge-slate text-[10px] print:text-[8px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                 Jerarquía Activa
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-3.5 print:gap-2">
               
               {/* Tarjeta 1: FUENTE NORMAL / PRINCIPAL (VERDE) */}
-              <div className="bg-gradient-to-b from-emerald-950/30 to-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-20 focus-within:z-40">
-                <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <div className="tablero-sky-cell bg-gradient-to-b from-emerald-950/30 to-slate-900/90 border border-emerald-500/30 print:border-slate-500 rounded-xl print:rounded p-3.5 print:p-2 space-y-2.5 print:space-y-1 shadow-lg print:shadow-none relative z-20 focus-within:z-40">
+                <div className="tablero-sky-header flex items-center justify-between border-b border-emerald-500/20 print:border-slate-400 pb-2 print:pb-1 print:px-1.5 print:py-0.5 print:rounded-xs">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 print:p-0 rounded-full text-[10px] print:text-[8.5px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 print:border-0">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse no-print"></span>
                     Fuente Normal (Prioridad 1)
                   </span>
-                  <span className="text-[10px] font-mono font-bold text-emerald-400">RED</span>
+                  <span className="text-[10px] print:text-[8.5px] font-mono font-bold text-emerald-400">RED</span>
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1 print:mb-0.5">
                     Origen / Alimentador Normal:
                   </label>
                   {isEditing ? (
-                    <SelectorAlimentadorJerarquico
-                      value={fuenteNormalNombre}
-                      onChange={(val) => handleDtChange('fuenteNormalNombre', val)}
-                      proyectoId={data.proyectoId}
-                      tableroActualId={data.id}
-                      elementosList={projectElements}
-                      placeholder="Seleccionar Subestación, Transformador..."
-                      className="text-xs"
-                      label=""
-                      allowQuickCreate={true}
-                      onQuickCreate={() => {
-                        setQuickCreateTargetField('fuenteNormal');
-                        setNewSourceTipo('TRANSFORMADOR');
-                        setNewSourceNombre(`Transformador Alimentador ${projectElements.filter(e => e.tipoElemento === 'TRANSFORMADOR').length + 1}`);
-                        setNewSourceCapacidad(dt.amperaje || '500');
-                        setNewSourceTension(dt.tensionNominal || '208/120 V');
-                        setQuickCreateOpen(true);
-                      }}
-                    />
+                    <>
+                      <div className="no-print">
+                        <SelectorAlimentadorJerarquico
+                          value={fuenteNormalNombre}
+                          onChange={(val) => handleDtChange('fuenteNormalNombre', val)}
+                          proyectoId={data.proyectoId}
+                          tableroActualId={data.id}
+                          elementosList={projectElements}
+                          placeholder="Seleccionar Subestación, Transformador..."
+                          className="text-xs"
+                          label=""
+                          allowQuickCreate={true}
+                          onQuickCreate={() => {
+                            setQuickCreateTargetField('fuenteNormal');
+                            setNewSourceTipo('TRANSFORMADOR');
+                            setNewSourceNombre(`Transformador Alimentador ${projectElements.filter(e => e.tipoElemento === 'TRANSFORMADOR').length + 1}`);
+                            setNewSourceCapacidad(dt.amperaje || '500');
+                            setNewSourceTension(dt.tensionNominal || '208/120 V');
+                            setQuickCreateOpen(true);
+                          }}
+                        />
+                      </div>
+                      <p className="hidden print:block font-black text-slate-950 text-[9.5px] font-mono">
+                        {fuenteNormalNombre || '—'}
+                      </p>
+                    </>
                   ) : (
-                    <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteNormalNombre}>
+                    <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteNormalNombre}>
                       {fuenteNormalNombre || '—'}
                     </p>
                   )}
@@ -622,18 +659,18 @@ export default function TransferComponent({
               </div>
 
               {/* Tarjeta 2: FUENTE EMERGENCIA (ÁMBAR/ROJO) - SELECTOR DUAL */}
-              <div className="bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 rounded-xl p-3.5 space-y-2.5 shadow-lg relative z-10 focus-within:z-40">
-                <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <div className="tablero-amber-cell bg-gradient-to-b from-amber-950/30 to-slate-900/90 border border-amber-500/30 print:border-slate-500 rounded-xl print:rounded p-3.5 print:p-2 space-y-2.5 print:space-y-1 shadow-lg print:shadow-none relative z-10 focus-within:z-40">
+                <div className="tablero-amber-header flex items-center justify-between border-b border-amber-500/20 print:border-slate-400 pb-2 print:pb-1 print:px-1.5 print:py-0.5 print:rounded-xs">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 print:p-0 rounded-full text-[10px] print:text-[8.5px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40 print:border-0">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse no-print"></span>
                     Fuente Emergencia (Prioridad 2)
                   </span>
-                  <span className="text-[10px] font-mono font-bold text-amber-400">GEN</span>
+                  <span className="text-[10px] print:text-[8.5px] font-mono font-bold text-amber-400">GEN</span>
                 </div>
 
                 {/* Selector Dual en Modo Edición */}
                 {isEditing && (
-                  <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800 mb-1">
+                  <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800 mb-1 no-print">
                     <button
                       type="button"
                       onClick={() => setModoFuenteEmergencia('EXISTENTE')}
@@ -667,69 +704,76 @@ export default function TransferComponent({
                 )}
 
                 <div>
-                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1 print:mb-0.5">
                     Origen / Planta Generador:
                   </label>
                   {isEditing ? (
-                    modoFuenteEmergencia === 'EXISTENTE' ? (
-                      <SelectorAlimentadorJerarquico
-                        value={fuenteEmergenciaNombre}
-                        onChange={(val) => handleDtChange('fuenteEmergenciaNombre', val)}
-                        proyectoId={data.proyectoId || data.projectId}
-                        tableroActualId={data.id}
-                        elementosList={projectElements}
-                        placeholder="Seleccionar Generador del proyecto..."
-                        className="text-xs"
-                        label=""
-                        allowQuickCreate={true}
-                        onQuickCreate={() => {
-                          setModoFuenteEmergencia('NUEVO');
-                          setQuickCreateTargetField('fuenteEmergencia');
-                          setNewSourceTipo('GENERADOR');
-                          setNewSourceNombre(`Generador Emergencia ${projectElements.filter(e => e.tipoElemento === 'GENERADOR').length + 1}`);
-                          setNewSourceCapacidad(dt.amperaje || '500');
-                          setNewSourceTension(dt.tensionNominal || '208/120 V');
-                        }}
-                      />
-                    ) : (
-                      <div className="bg-slate-950/80 p-2.5 rounded-xl border border-amber-500/40 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-amber-400 uppercase font-mono">Nuevo Generador al Vuelo:</span>
-                          <button
-                            type="button"
-                            onClick={() => setModoFuenteEmergencia('EXISTENTE')}
-                            className="text-[9px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          value={newSourceNombre}
-                          onChange={(e) => setNewSourceNombre(e.target.value)}
-                          placeholder="Nombre (Ej. Planta Diésel Sótano)"
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="text"
-                            value={newSourceCapacidad}
-                            onChange={(e) => setNewSourceCapacidad(e.target.value)}
-                            placeholder="Capacidad (Ej. 500 kVA)"
-                            className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-mono"
+                    <>
+                      <div className="no-print">
+                        {modoFuenteEmergencia === 'EXISTENTE' ? (
+                          <SelectorAlimentadorJerarquico
+                            value={fuenteEmergenciaNombre}
+                            onChange={(val) => handleDtChange('fuenteEmergenciaNombre', val)}
+                            proyectoId={data.proyectoId || data.projectId}
+                            tableroActualId={data.id}
+                            elementosList={projectElements}
+                            placeholder="Seleccionar Generador del proyecto..."
+                            className="text-xs"
+                            label=""
+                            allowQuickCreate={true}
+                            onQuickCreate={() => {
+                              setModoFuenteEmergencia('NUEVO');
+                              setQuickCreateTargetField('fuenteEmergencia');
+                              setNewSourceTipo('GENERADOR');
+                              setNewSourceNombre(`Generador Emergencia ${projectElements.filter(e => e.tipoElemento === 'GENERADOR').length + 1}`);
+                              setNewSourceCapacidad(dt.amperaje || '500');
+                              setNewSourceTension(dt.tensionNominal || '208/120 V');
+                            }}
                           />
-                          <button
-                            type="button"
-                            onClick={(e) => handleCreateQuickSource(e, 'GENERADOR', newSourceNombre, newSourceCapacidad)}
-                            className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded transition-all cursor-pointer shadow"
-                          >
-                            Crear y Asignar
-                          </button>
-                        </div>
+                        ) : (
+                          <div className="bg-slate-950/80 p-2.5 rounded-xl border border-amber-500/40 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-amber-400 uppercase font-mono">Nuevo Generador al Vuelo:</span>
+                              <button
+                                type="button"
+                                onClick={() => setModoFuenteEmergencia('EXISTENTE')}
+                                className="text-[9px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={newSourceNombre}
+                              onChange={(e) => setNewSourceNombre(e.target.value)}
+                              placeholder="Nombre (Ej. Planta Diésel Sótano)"
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={newSourceCapacidad}
+                                onChange={(e) => setNewSourceCapacidad(e.target.value)}
+                                placeholder="Capacidad (Ej. 500 kVA)"
+                                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => handleCreateQuickSource(e, 'GENERADOR', newSourceNombre, newSourceCapacidad)}
+                                className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded transition-all cursor-pointer shadow"
+                              >
+                                Crear y Asignar
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )
+                      <p className="hidden print:block font-black text-slate-950 text-[9.5px] font-mono">
+                        {fuenteEmergenciaNombre || '—'}
+                      </p>
+                    </>
                   ) : (
-                    <p className="font-bold text-slate-100 text-xs font-mono truncate" title={fuenteEmergenciaNombre}>
+                    <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteEmergenciaNombre}>
                       {fuenteEmergenciaNombre || '—'}
                     </p>
                   )}
@@ -789,17 +833,17 @@ export default function TransferComponent({
         {/* ========================================================================= */}
         {/* 3. ENCLAVAMIENTO, MODO OPERATIVO Y ESTADO DE SERVICIO */}
         {/* ========================================================================= */}
-        <div className="p-4 bg-slate-900/90 border-b-2 border-slate-800">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="tablero-subheader-row p-4 print:p-2 bg-slate-900/90 border-b-2 border-slate-800 print:border-slate-900">
+          <div className="flex flex-col md:flex-row print:flex-row md:items-center print:items-center justify-between gap-4 print:gap-2">
             
             {/* Modo Operativo (ATS / MTS) */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                <Sliders className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center gap-3 print:gap-1.5">
+              <span className="text-xs print:text-[9px] font-bold text-slate-300 print:text-slate-950 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <Sliders className="w-4 h-4 text-amber-400 no-print" />
                 Modo de Operación:
               </span>
               {isEditing ? (
-                <div className="flex gap-2">
+                <div className="flex gap-2 print:gap-1">
                   <button
                     type="button"
                     onClick={() => handleDtChange('modoOperativo', 'ATS')}
@@ -824,16 +868,16 @@ export default function TransferComponent({
                   </button>
                 </div>
               ) : (
-                <span className="px-3 py-1 bg-slate-900 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-black font-mono">
+                <span className="tablero-badge-amber px-3 py-1 print:px-1.5 print:py-0.5 bg-slate-900 text-amber-400 border border-amber-500/30 rounded-lg print:rounded text-xs print:text-[9px] font-black font-mono">
                   {modoOperativo === 'ATS' ? '🔄 AUTOMÁTICA (ATS)' : '🔀 MANUAL (MTS)'}
                 </span>
               )}
             </div>
 
             {/* Selector de Estado de Servicio (En Servicio / Fuera de Servicio) */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                <Shield className="w-4 h-4 text-emerald-400" />
+            <div className="flex items-center gap-3 print:gap-1.5">
+              <span className="text-xs print:text-[9px] font-bold text-slate-300 print:text-slate-950 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <Shield className="w-4 h-4 text-emerald-400 no-print" />
                 Estado de Operatividad:
               </span>
               {isEditing ? (
@@ -846,10 +890,10 @@ export default function TransferComponent({
                   <option value="Fuera de Servicio">🔴 Fuera de Servicio</option>
                 </select>
               ) : (
-                <span className={`px-3 py-1 rounded-lg text-xs font-bold font-mono ${
+                <span className={`px-3 py-1 print:px-1.5 print:py-0.5 rounded-lg print:rounded text-xs print:text-[9px] font-bold font-mono ${
                   estadoServicio === 'En Servicio' 
-                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' 
-                    : 'bg-red-950 text-red-400 border border-red-800'
+                    ? 'tablero-active-emerald bg-emerald-950 text-emerald-400 border border-emerald-800' 
+                    : 'tablero-active-red bg-red-950 text-red-400 border border-red-800'
                 }`}>
                   {estadoServicio === 'En Servicio' ? '🟢 En Servicio' : '🔴 Fuera de Servicio'}
                 </span>
@@ -857,9 +901,9 @@ export default function TransferComponent({
             </div>
 
             {/* Selector de Tipo de Transición */}
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                <ArrowRightLeft className="w-4 h-4 text-sky-400" />
+            <div className="flex items-center gap-3 print:gap-1.5">
+              <span className="text-xs print:text-[9px] font-bold text-slate-300 print:text-slate-950 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <ArrowRightLeft className="w-4 h-4 text-sky-400 no-print" />
                 Transición:
               </span>
               {isEditing ? (
@@ -873,7 +917,7 @@ export default function TransferComponent({
                   <option value="RETARDADA">Retardada (Pausa Programada en Cero)</option>
                 </select>
               ) : (
-                <span className="px-3 py-1 bg-slate-900 text-sky-400 border border-sky-500/30 rounded-lg text-xs font-bold font-mono">
+                <span className="tablero-badge-sky px-3 py-1 print:px-1.5 print:py-0.5 bg-slate-900 text-sky-400 border border-sky-500/30 rounded-lg print:rounded text-xs print:text-[9px] font-bold font-mono">
                   {tipoTransicion === 'CERRADA' ? '⚡ Cerrada' :
                    tipoTransicion === 'RETARDADA' ? '⏱️ Retardada' :
                    '🔌 Abierta'}
@@ -887,7 +931,7 @@ export default function TransferComponent({
         {/* ========================================================================= */}
         {/* 4. MEDICIONES (COVENIN 159) */}
         {/* ========================================================================= */}
-        <div className="p-4 bg-slate-950 border-b-2 border-slate-800">
+        <div className="p-4 print:p-2 bg-slate-950 border-b-2 border-slate-800 print:border-slate-900">
           <MetrologiaElectricaSection
             mediciones={dt.mediciones || {}}
             onChange={(nuevasMediciones) => handleDtChange('mediciones', nuevasMediciones)}
@@ -900,24 +944,24 @@ export default function TransferComponent({
         {/* ========================================================================= */}
         {/* 5. CUADRO DE CONDUCTORES, SALIDA A CARGA Y NEUTRO */}
         {/* ========================================================================= */}
-        <div className="p-5 space-y-4 border-b-2 border-slate-800 bg-slate-950">
+        <div className="p-5 print:p-2 space-y-4 print:space-y-1.5 border-b-2 border-slate-800 print:border-slate-900 bg-slate-950">
           <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-2 font-mono">
-            <Layers className="w-4 h-4 text-amber-400" />
+            <Layers className="w-4 h-4 text-amber-400 no-print" />
             Líneas de Salida Conmutada hacia la Carga del Proyecto
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 print:gap-2 font-mono text-xs">
             {/* LÍNEA DE SALIDA FLEXIBLE (HOMOLOGADA CON CIRCUITOS DE TABLEROS) */}
-            <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+            <div className="tablero-ficha-card bg-slate-900/80 p-3.5 print:p-2 rounded-xl border border-slate-800 space-y-1.5 print:space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">
+                <span className="tablero-ficha-label text-[10px] print:text-[8.5px] text-slate-400 font-bold uppercase block">
                   CARGA O TABLERO ALIMENTADO:
                 </span>
                 {isEditing && (
                   <button
                     type="button"
                     onClick={() => setSalidaModo(salidaModo === 'CARGA_DIRECTA' ? 'SELECT' : 'CARGA_DIRECTA')}
-                    className="text-[9px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                    className="no-print text-[9px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
                   >
                     {salidaModo === 'CARGA_DIRECTA' ? 'Ver Lista Proyecto' : 'Escribir Carga Directa'}
                   </button>
@@ -1013,12 +1057,12 @@ export default function TransferComponent({
                   </select>
                 )
               ) : (
-                <p className="text-slate-100 font-black text-sm truncate" title={salidaCargaNombre}>
+                <p className="text-slate-100 print:text-slate-950 font-black text-sm print:text-[10px] truncate" title={salidaCargaNombre}>
                   {salidaCargaNombre || '—'}
                 </p>
               )}
-              <div className="pt-1">
-                <span className="text-[10px] text-slate-500 block">Conductor Salida:</span>
+              <div className="pt-1 print:pt-0.5">
+                <span className="text-[10px] print:text-[8px] text-slate-500 print:text-slate-800 block">Conductor Salida:</span>
                 {isEditing ? (
                   <input
                     type="text"
@@ -1028,14 +1072,14 @@ export default function TransferComponent({
                     className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs mt-0.5 font-mono"
                   />
                 ) : (
-                  <span className="text-slate-300 font-bold text-xs">{salidaCargaConductor || '—'}</span>
+                  <span className="text-slate-300 print:text-slate-950 font-bold text-xs print:text-[9.5px]">{salidaCargaConductor || '—'}</span>
                 )}
               </div>
             </div>
 
             {/* RENOMBRADO TÉCNICO: ACOMETIDA DE CARGA (ANTES BARRA Y CONDUCTOR DE NEUTRO) */}
-            <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
-              <span className="text-[10px] text-cyan-400 font-bold uppercase block">
+            <div className="tablero-ficha-card bg-slate-900/80 p-3.5 print:p-2 rounded-xl border border-slate-800 space-y-1.5 print:space-y-1">
+              <span className="tablero-ficha-label text-[10px] print:text-[8.5px] text-cyan-400 font-bold uppercase block">
                 ACOMETIDA DE CARGA:
               </span>
               {isEditing ? (
@@ -1052,13 +1096,13 @@ export default function TransferComponent({
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-mono"
                 />
               ) : (
-                <p className="text-slate-200 font-bold text-xs">{acometidaCargaConductor || '—'}</p>
+                <p className="text-slate-200 print:text-slate-950 font-bold text-xs print:text-[10px]">{acometidaCargaConductor || '—'}</p>
               )}
-              <span className="text-[10px] text-slate-500 block">Conductor general de acometida hacia barra de carga común</span>
+              <span className="text-[10px] print:text-[8px] text-slate-500 print:text-slate-800 block">Conductor general de acometida hacia barra de carga común</span>
             </div>
 
-            <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
-              <span className="text-[10px] text-emerald-400 font-bold uppercase block">
+            <div className="tablero-ficha-card bg-slate-900/80 p-3.5 print:p-2 rounded-xl border border-slate-800 space-y-1.5 print:space-y-1">
+              <span className="tablero-ficha-label text-[10px] print:text-[8.5px] text-emerald-400 font-bold uppercase block">
                 TIERRA DE PROTECCIÓN (PE / SPT):
               </span>
               {isEditing ? (
@@ -1070,9 +1114,9 @@ export default function TransferComponent({
                   className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
                 />
               ) : (
-                <p className="text-slate-200 font-bold text-xs">{tierraConductor || '—'}</p>
+                <p className="text-slate-200 print:text-slate-950 font-bold text-xs print:text-[10px]">{tierraConductor || '—'}</p>
               )}
-              <span className="text-[10px] text-slate-500 block">Conexión directa a barra de equipotencialidad</span>
+              <span className="text-[10px] print:text-[8px] text-slate-500 print:text-slate-800 block">Conexión directa a barra de equipotencialidad</span>
             </div>
           </div>
         </div>
@@ -1080,12 +1124,12 @@ export default function TransferComponent({
         {/* ========================================================================= */}
         {/* 6. REGISTRO FOTOGRÁFICO Y OBSERVACIONES TÉCNICAS */}
         {/* ========================================================================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-800 bg-slate-900/30">
+        <div className="grid grid-cols-1 lg:grid-cols-12 print:grid-cols-12 divide-y lg:divide-y-0 print:divide-y-0 lg:divide-x print:divide-x divide-slate-800 print:divide-slate-400 bg-slate-900/30">
           
           {/* Observaciones (7 columnas) */}
-          <div className="lg:col-span-7 p-5 space-y-2.5">
+          <div className={`${hasPhotoAttached ? 'lg:col-span-7 print:col-span-7' : 'lg:col-span-7 print:col-span-12'} p-5 print:p-2 space-y-2.5 print:space-y-1`}>
             <h3 className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-2 font-mono">
-              <Info className="w-4 h-4 text-amber-400" />
+              <Info className="w-4 h-4 text-amber-400 no-print" />
               Observaciones Técnicas y Diagnóstico
             </h3>
 
@@ -1098,14 +1142,14 @@ export default function TransferComponent({
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 font-mono focus:outline-none focus:border-amber-500 placeholder-slate-600"
               />
             ) : (
-              <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 text-xs font-mono text-slate-300 leading-relaxed whitespace-pre-wrap">
+              <div className="tablero-obs-box p-4 print:p-2 bg-slate-950/70 rounded-xl print:rounded border border-slate-800 text-xs print:text-[9.5px] font-mono text-slate-300 print:text-slate-950 leading-relaxed print:leading-tight whitespace-pre-wrap">
                 {observaciones || 'Sin observaciones registradas para esta transferencia.'}
               </div>
             )}
           </div>
 
           {/* Fotografía de la Transferencia con Carga Dual (5 columnas) */}
-          <div className="lg:col-span-5 p-5">
+          <div className={`lg:col-span-5 print:col-span-5 p-5 print:p-2 ${!hasPhotoAttached ? 'no-print' : ''}`}>
             <DualPhotoUploader
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}

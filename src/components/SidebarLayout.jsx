@@ -311,7 +311,7 @@ export const SidebarLayout = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col lg:flex-row antialiased">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col lg:flex-row antialiased print:min-h-0 print:bg-white print:text-slate-950 print:block">
       
       {/* 1. TOP BAR MÓVIL (no-print) */}
       <header className="lg:hidden bg-slate-950/90 border-b border-slate-800/80 px-4 py-3 flex items-center justify-between shadow-md shrink-0 no-print sticky top-0 z-40 backdrop-blur-md">
@@ -561,7 +561,7 @@ export const SidebarLayout = () => {
       </aside>
 
       {/* 4. MAIN PANEL DE CONTENIDO (Scrollable en Escritorio) */}
-      <div className="flex-1 min-w-0 overflow-y-auto max-h-screen">
+      <div className="flex-1 min-w-0 overflow-y-auto max-h-screen print:max-h-none print:overflow-visible print:block">
         <Outlet />
       </div>
 

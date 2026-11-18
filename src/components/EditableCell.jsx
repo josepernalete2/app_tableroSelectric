@@ -81,8 +81,8 @@ export const EditableCell = ({
 
   if (disabled) {
     return (
-      <div className={`p-1.5 min-h-[1.75rem] text-slate-800 dark:text-slate-200 select-none ${className}`}>
-        {value || <span className="opacity-30">—</span>}
+      <div className={`p-1.5 min-h-[1.75rem] print:p-1 print:min-h-0 print:leading-tight text-slate-950 dark:text-slate-200 print:text-slate-950 print:font-semibold select-none ${className}`}>
+        {value || <span className="opacity-30 print:opacity-60">—</span>}
       </div>
     );
   }
@@ -145,11 +145,20 @@ export const EditableCell = ({
     <div
       onClick={() => setIsEditing(true)}
       title="Haz clic para editar o seleccionar preset"
-      className={`p-1.5 min-h-[1.75rem] transition-colors duration-150 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 break-words ${
-        isEmpty ? 'text-slate-400 dark:text-slate-600 italic' : 'text-slate-900 dark:text-slate-100 font-mono'
+      className={`p-1.5 min-h-[1.75rem] print:p-1 print:min-h-0 print:leading-tight transition-colors duration-150 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 break-words ${
+        isEmpty
+          ? 'text-slate-400 dark:text-slate-600 italic print:not-italic print:text-slate-500'
+          : 'text-slate-950 dark:text-slate-100 print:text-slate-950 font-mono print:font-bold'
       } ${className}`}
     >
-      {isEmpty ? (placeholder || '—') : displayVal}
+      {isEmpty ? (
+        <>
+          <span className="no-print">{placeholder || '—'}</span>
+          <span className="hidden print:inline text-slate-400 font-normal">—</span>
+        </>
+      ) : (
+        displayVal
+      )}
     </div>
   );
 };

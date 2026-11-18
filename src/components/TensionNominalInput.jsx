@@ -326,7 +326,7 @@ export default function TensionNominalInput({
   return (
     <div ref={containerRef} className={`relative w-full ${className}`}>
       {/* Input principal de entrada con disparador de cuadro flotante */}
-      <div className="relative flex items-center group">
+      <div className="relative flex items-center group no-print">
         <input
           ref={inputRef}
           type="text"
@@ -358,6 +358,9 @@ export default function TensionNominalInput({
         >
           <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180 text-amber-400' : ''}`} />
         </button>
+      </div>
+      <div className="hidden print:block text-[10px] font-mono font-black text-slate-950 leading-tight py-0.5 break-words">
+        {value || '—'}
       </div>
 
       {/* CUADRO FLOTANTE AMPLIO Y EXPANSIVO (RENDERIZADO EN PORTAL) */}

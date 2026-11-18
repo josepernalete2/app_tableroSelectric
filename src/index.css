@@ -128,22 +128,14 @@ body {
 
 @media print {
   @page {
-    size: auto;
-    margin: 0mm;
-  }
-  body {
-    background-color: #ffffff !important;
-    color: #000000 !important;
-    margin: 3mm 8mm 3mm 8mm !important; /* Sube la plantilla más hacia arriba */
-  }
-  @page {
     size: letter portrait;
-    margin: 10mm 8mm 10mm 8mm;
+    margin: 5mm 7mm 5mm 7mm;
   }
 
   body {
     background-color: #ffffff !important;
-    color: #0f172a !important;
+    color: #020617 !important;
+    margin: 0 !important;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -159,7 +151,7 @@ body {
     display: none !important;
   }
   
-  /* Force dark text and clean background for print-card elements and children */
+  /* Force dark text and clean background for general print-card elements */
   .print-card, 
   .print-card *,
   .print-card div,
@@ -173,48 +165,35 @@ body {
   .print-card input,
   .print-card textarea,
   .print-card select {
-    color: #0f172a !important;
+    color: #020617 !important;
     text-shadow: none !important;
     box-shadow: none !important;
-  }
-
-  /* Clear dark backgrounds to keep prints clean and white */
-  .print-card,
-  .print-card div:not(.bg-emerald-500):not(.bg-amber-500):not(.bg-red-500):not(.bg-emerald-600):not(.bg-slate-100):not(.bg-slate-50):not(.bg-slate-200),
-  .print-card table,
-  .print-card tr,
-  .print-card td,
-  .print-card th,
-  .print-card input,
-  .print-card textarea {
-    background-color: transparent !important;
-    background: transparent !important;
-  }
-
-  /* Ensure background-color adjust is exact to preserve colored badges/states */
-  .bg-emerald-500, 
-  .bg-amber-500, 
-  .bg-red-500,
-  .bg-emerald-600,
-  .bg-slate-100,
-  .bg-slate-200,
-  .bg-amber-50,
-  .bg-blue-50 {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Define solid dark gray borders for printed components */
-  .print-card,
-  .print-card *,
-  .print-card table,
-  .print-card th,
-  .print-card td,
-  .print-card tr,
-  .print-card div,
-  .print-card input,
-  .print-card textarea {
-    border-color: #cbd5e1 !important;
+  /* Clear dark backgrounds on non-tablero print-card elements */
+  .print-card:not(.tablero-print-sheet),
+  .print-card:not(.tablero-print-sheet) div:not(.bg-emerald-500):not(.bg-amber-500):not(.bg-red-500):not(.bg-emerald-600):not(.bg-slate-100):not(.bg-slate-50):not(.bg-slate-200),
+  .print-card:not(.tablero-print-sheet) span:not(.bg-emerald-500):not(.bg-amber-500):not(.bg-red-500),
+  .print-card:not(.tablero-print-sheet) table,
+  .print-card:not(.tablero-print-sheet) tr,
+  .print-card:not(.tablero-print-sheet) td,
+  .print-card:not(.tablero-print-sheet) th,
+  .print-card:not(.tablero-print-sheet) input,
+  .print-card:not(.tablero-print-sheet) textarea,
+  .print-card:not(.tablero-print-sheet) select {
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+
+  .print-card:not(.tablero-print-sheet) *,
+  .print-card:not(.tablero-print-sheet) table,
+  .print-card:not(.tablero-print-sheet) th,
+  .print-card:not(.tablero-print-sheet) td,
+  .print-card:not(.tablero-print-sheet) tr,
+  .print-card:not(.tablero-print-sheet) div {
+    border-color: #94a3b8 !important;
   }
 
   .print-card {
@@ -223,11 +202,443 @@ body {
     margin: 0 !important;
   }
 
+  /* ==========================================================================
+     ESTILOS DE IMPRESIÓN / PDF EXCLUSIVOS PARA PANEL ELÉCTRICO (TABLERO)
+     Tonalidades del Sistema (Slate + Ámbar Eléctrico + Azul Técnico)
+     y tipografía ultra-oscura de alto contraste (#020617 / #0f172a)
+     ========================================================================== */
+  .tablero-print-sheet {
+    background-color: #ffffff !important;
+    color: #020617 !important;
+    zoom: var(--tablero-print-zoom, 1) !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+  }
+
+  /* Evitar que el inline style de la foto estire innecesariamente la tabla superior */
+  .tablero-print-sheet .tablero-photo-box {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  .tablero-print-sheet .tablero-photo-frame,
+  .tablero-print-sheet .tablero-photo-frame img {
+    height: auto !important;
+    max-height: 175px !important;
+    object-fit: cover !important;
+  }
+
+  /* Modos de densidad progresiva automática según cantidad de polos y contenido */
+  .tablero-print-sheet[data-print-density="compact"] .tablero-circuits-table td,
+  .tablero-print-sheet[data-print-density="compact"] .tablero-circuits-table th {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    font-size: 9.5px !important;
+  }
+
+  .tablero-print-sheet[data-print-density="compact"] .tablero-photo-frame,
+  .tablero-print-sheet[data-print-density="compact"] .tablero-photo-frame img {
+    max-height: 150px !important;
+  }
+
+  .tablero-print-sheet[data-print-density="ultra"] .tablero-circuits-table td,
+  .tablero-print-sheet[data-print-density="ultra"] .tablero-circuits-table th {
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
+    font-size: 8.8px !important;
+    line-height: 1.15 !important;
+  }
+
+  .tablero-print-sheet[data-print-density="ultra"] .tablero-photo-frame,
+  .tablero-print-sheet[data-print-density="ultra"] .tablero-photo-frame img {
+    max-height: 130px !important;
+  }
+
+  .tablero-print-sheet table,
+  .tablero-print-sheet tr,
+  .tablero-print-sheet td,
+  .tablero-print-sheet th,
+  .tablero-print-sheet div {
+    background-color: #ffffff !important;
+  }
+
+  /* Bordes estructurales definidos y nítidos */
+  .tablero-print-sheet .tablero-main-table,
+  .tablero-print-sheet .tablero-circuits-table,
+  .tablero-print-sheet .tablero-footer-table,
+  .tablero-print-sheet .tablero-photo-box {
+    border: 2px solid #0f172a !important;
+  }
+
+  .tablero-print-sheet td,
+  .tablero-print-sheet th {
+    border-color: #475569 !important;
+    color: #020617 !important;
+  }
+
+  /* Barra Principal de Título y Encabezado de Circuitos (Tono Slate Sistema) */
+  .tablero-print-sheet .tablero-header-bar,
+  .tablero-print-sheet .tablero-header-bar > td,
+  .tablero-print-sheet .tablero-header-bar > th,
+  .tablero-print-sheet .tablero-header-bar div {
+    background-color: #e2e8f0 !important;
+    color: #020617 !important;
+    border-color: #0f172a !important;
+  }
+
+  /* Sub-encabezados y Etiquetas Laterales (Tono Slate Claro) */
+  .tablero-print-sheet .tablero-subheader-row,
+  .tablero-print-sheet .tablero-subheader-row > th,
+  .tablero-print-sheet .tablero-subheader-row > td,
+  .tablero-print-sheet .tablero-label-cell {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+  }
+
+  /* Acento Ámbar Eléctrico del Sistema (Ficha Técnica, Breaker Principal, Polos #) */
+  .tablero-print-sheet .tablero-amber-header {
+    background-color: #fde68a !important;
+    color: #78350f !important;
+    font-weight: 800 !important;
+  }
+
+  .tablero-print-sheet .tablero-amber-cell,
+  .tablero-print-sheet .tablero-amber-cell > div {
+    background-color: #fffbeb !important;
+    color: #020617 !important;
+  }
+
+  /* Acento Azul Técnico del Sistema (Voltajes y Acometida) */
+  .tablero-print-sheet .tablero-sky-header {
+    background-color: #bae6fd !important;
+    color: #0c4a6e !important;
+    font-weight: 800 !important;
+  }
+
+  .tablero-print-sheet .tablero-sky-cell,
+  .tablero-print-sheet .tablero-sky-cell > div {
+    background-color: #f0f9ff !important;
+    color: #020617 !important;
+  }
+
+  /* Columna Central de Barras / Numeración de Polos (#) */
+  .tablero-print-sheet .tablero-pole-header {
+    background-color: #fcd34d !important;
+    color: #451a03 !important;
+    border-color: #0f172a !important;
+    font-weight: 900 !important;
+  }
+
+  .tablero-print-sheet .tablero-pole-cell,
+  .tablero-print-sheet .tablero-pole-cell > div,
+  .tablero-print-sheet .tablero-pole-cell > div > div {
+    background-color: #fef3c7 !important;
+    color: #020617 !important;
+  }
+
+  .tablero-print-sheet .tablero-pole-cell span {
+    color: #78350f !important;
+    font-weight: 900 !important;
+  }
+
+  /* Tarjetas de Ficha Técnica del Tablero */
+  .tablero-print-sheet .tablero-ficha-card {
+    background-color: #f8fafc !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 4px !important;
+  }
+
+  .tablero-print-sheet .tablero-ficha-card .tablero-ficha-label {
+    color: #92400e !important;
+    font-weight: 800 !important;
+  }
+
+  /* Badges de Identificación y Tipo de Destino */
+  .tablero-print-sheet .tablero-badge-amber {
+    background-color: #fef3c7 !important;
+    color: #78350f !important;
+    border: 1px solid #d97706 !important;
+    font-weight: 800 !important;
+  }
+
+  .tablero-print-sheet .tablero-badge-sky {
+    background-color: #e0f2fe !important;
+    color: #0c4a6e !important;
+    border: 1px solid #0284c7 !important;
+    font-weight: 800 !important;
+  }
+
+  .tablero-print-sheet .tablero-badge-slate {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #64748b !important;
+    font-weight: 700 !important;
+  }
+
+  /* Filas pares del directorio de circuitos con tono alterno sutil */
+  .tablero-print-sheet .tablero-circuit-row:nth-child(even) > td:not(.tablero-pole-cell):not(.tablero-amber-cell) {
+    background-color: #f8fafc !important;
+  }
+
+  /* Recuadro de Firmas y Cierre */
+  .tablero-print-sheet .tablero-signatures-box {
+    background-color: #f8fafc !important;
+    border: 1.5px solid #334155 !important;
+  }
+
+  /* ==========================================================================
+     REGLAS UNIFICADAS PARA TODOS LOS ELEMENTOS DEL SISTEMA (.tablero-element-sheet)
+     (Generador, Transformador, Banco Condensadores, SPT, Punto Suministro/Medición,
+      Transferencia ATS/MTS, Centro de Control de Motores CCM y Subestación)
+     ========================================================================== */
+  .tablero-print-sheet input::placeholder,
+  .tablero-print-sheet textarea::placeholder {
+    color: transparent !important;
+    opacity: 0 !important;
+  }
+
+  .tablero-element-sheet {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .tablero-element-sheet > * + * {
+    margin-top: 5px !important;
+  }
+
+  .tablero-element-sheet .rounded-2xl,
+  .tablero-element-sheet .rounded-xl {
+    border-radius: 4px !important;
+  }
+
+  .tablero-element-sheet table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  .tablero-element-sheet td,
+  .tablero-element-sheet th {
+    padding: 2.5px 6px !important;
+    font-size: 9.5px !important;
+    line-height: 1.2 !important;
+    border-color: #475569 !important;
+    color: #020617 !important;
+  }
+
+  .tablero-element-sheet[data-print-density="compact"] td,
+  .tablero-element-sheet[data-print-density="compact"] th {
+    padding: 1.5px 4px !important;
+    font-size: 9px !important;
+    line-height: 1.15 !important;
+  }
+
+  .tablero-element-sheet[data-print-density="ultra"] td,
+  .tablero-element-sheet[data-print-density="ultra"] th {
+    padding: 1px 3px !important;
+    font-size: 8.4px !important;
+    line-height: 1.1 !important;
+  }
+
+  /* Encabezados de sección h3 con acento Ámbar Eléctrico del Sistema */
+  .tablero-element-sheet h3:not(.tablero-subheader-row) {
+    background-color: #fde68a !important;
+    color: #78350f !important;
+    border: 1px solid #0f172a !important;
+    border-radius: 3px !important;
+    padding: 2.5px 7px !important;
+    font-size: 9.5px !important;
+    font-weight: 900 !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Preservar grillas multicolumna en formato Carta vertical sin colapsar a 1 columna */
+  .tablero-element-sheet [class*="lg:grid-cols-5"],
+  .tablero-element-sheet [class*="sm:grid-cols-5"] {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .tablero-element-sheet [class*="lg:grid-cols-4"],
+  .tablero-element-sheet [class*="md:grid-cols-4"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .tablero-element-sheet [class*="lg:grid-cols-3"],
+  .tablero-element-sheet [class*="md:grid-cols-3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .tablero-element-sheet [class*="md:grid-cols-2"]:not([class*="lg:grid-cols-"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  /* Encabezados principales y sub-banners en Fichas Técnicas */
+  .tablero-element-sheet div[class*="print:bg-gray-200"] {
+    background-color: #e2e8f0 !important;
+    color: #020617 !important;
+    border-color: #0f172a !important;
+    padding: 4px 8px !important;
+  }
+
+  .tablero-element-sheet div[class*="print:bg-gray-200"][class*="text-amber-400"],
+  .tablero-element-sheet .tablero-amber-header,
+  .tablero-element-sheet .tablero-amber-header div,
+  .tablero-element-sheet .tablero-amber-header span,
+  .tablero-element-sheet .tablero-amber-header h2,
+  .tablero-element-sheet .tablero-amber-header h3 {
+    background-color: #fde68a !important;
+    color: #78350f !important;
+    border-color: #0f172a !important;
+    font-weight: 800 !important;
+  }
+
+  .tablero-element-sheet .tablero-sky-header,
+  .tablero-element-sheet .tablero-sky-header div,
+  .tablero-element-sheet .tablero-sky-header span,
+  .tablero-element-sheet .tablero-sky-header h2,
+  .tablero-element-sheet .tablero-sky-header h3 {
+    background-color: #bae6fd !important;
+    color: #0c4a6e !important;
+    border-color: #0f172a !important;
+    font-weight: 800 !important;
+  }
+
+  /* Celdas de etiqueta y encabezados de tabla */
+  .tablero-element-sheet thead tr,
+  .tablero-element-sheet thead th,
+  .tablero-element-sheet td[class*="print:bg-gray-100"],
+  .tablero-element-sheet td[class*="print:bg-gray-50"],
+  .tablero-element-sheet th[class*="print:bg-gray-100"],
+  .tablero-element-sheet th[class*="print:bg-gray-200"] {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    border-color: #475569 !important;
+  }
+
+  /* Filas pares en tablas de parámetros o gavetas */
+  .tablero-element-sheet tbody tr:nth-child(even) > td:not([class*="print:bg-gray-100"]):not([class*="print:bg-gray-50"]):not(.tablero-label-cell):not(.tablero-amber-cell):not(.tablero-sky-cell) {
+    background-color: #f8fafc !important;
+  }
+
+  /* Recuadros de Observación General (Tono Ámbar Suave del Sistema) */
+  .tablero-element-sheet div[class*="print:bg-yellow-100"],
+  .tablero-element-sheet .tablero-obs-box {
+    background-color: #fffbeb !important;
+    color: #020617 !important;
+    border-color: #0f172a !important;
+    padding: 5px 8px !important;
+  }
+
+  .tablero-element-sheet div[class*="print:bg-yellow-100"] span,
+  .tablero-element-sheet .tablero-obs-box .tablero-obs-label {
+    color: #78350f !important;
+    font-weight: 900 !important;
+  }
+
+  /* Inputs, selects y textareas compactos y nítidos en impresión */
+  .tablero-element-sheet input,
+  .tablero-element-sheet select {
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 1.5px 5px !important;
+    font-size: 9.5px !important;
+    font-weight: 800 !important;
+    color: #020617 !important;
+    background-color: #ffffff !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 3px !important;
+  }
+
+  .tablero-element-sheet textarea {
+    min-height: 20px !important;
+    height: auto !important;
+    padding: 2px 5px !important;
+    font-size: 9px !important;
+    font-weight: 600 !important;
+    line-height: 1.2 !important;
+    color: #020617 !important;
+    background-color: #ffffff !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 3px !important;
+  }
+
+  /* Botones de selección / Checklists activos vs inactivos con tonalidades del sistema */
+  .tablero-element-sheet button {
+    padding: 1.5px 5px !important;
+    font-size: 8.5px !important;
+    min-height: 0 !important;
+    height: auto !important;
+    border-radius: 3px !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-slate-900"],
+  .tablero-element-sheet button[class*="bg-slate-950"] {
+    background-color: #f8fafc !important;
+    color: #64748b !important;
+    border: 1px solid #cbd5e1 !important;
+    font-weight: 600 !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-emerald-500"],
+  .tablero-element-sheet .tablero-active-emerald {
+    background-color: #dcfce7 !important;
+    color: #064e3b !important;
+    border: 1.5px solid #059669 !important;
+    font-weight: 900 !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-amber-500"],
+  .tablero-element-sheet .tablero-active-amber {
+    background-color: #fef3c7 !important;
+    color: #78350f !important;
+    border: 1.5px solid #d97706 !important;
+    font-weight: 900 !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-red-500"],
+  .tablero-element-sheet .tablero-active-red {
+    background-color: #fee2e2 !important;
+    color: #7f1d1d !important;
+    border: 1.5px solid #dc2626 !important;
+    font-weight: 900 !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-sky-500"],
+  .tablero-element-sheet button[class*="bg-cyan-500"],
+  .tablero-element-sheet .tablero-active-sky {
+    background-color: #e0f2fe !important;
+    color: #0c4a6e !important;
+    border: 1.5px solid #0284c7 !important;
+    font-weight: 900 !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-purple-500"] {
+    background-color: #f3e8ff !important;
+    color: #4c1d95 !important;
+    border: 1.5px solid #7c3aed !important;
+    font-weight: 900 !important;
+  }
+
+  .tablero-element-sheet button[class*="bg-slate-600"] {
+    background-color: #e2e8f0 !important;
+    color: #0f172a !important;
+    border: 1.5px solid #475569 !important;
+    font-weight: 900 !important;
+  }
+
   /* Keep the photo size matching the system / screen layout proportions */
   .print-card img,
   .print-card .max-h-96,
   .print-card .h-96 {
-    max-height: 220px !important;
+    max-height: 150px !important;
     height: auto !important;
     object-fit: cover !important;
   }

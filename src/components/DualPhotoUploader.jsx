@@ -113,15 +113,15 @@ export default function DualPhotoUploader({
   };
 
   return (
-    <div className={`space-y-3 font-sans ${className}`}>
+    <div className={`space-y-3 print:space-y-1 font-sans ${!hasPhoto ? 'no-print' : ''} ${className}`}>
       {label && (
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            <Camera className="w-4 h-4 text-amber-500" />
+          <span className="text-xs print:text-[9px] font-bold text-slate-300 print:text-slate-950 uppercase tracking-wider flex items-center gap-1.5">
+            <Camera className="w-4 h-4 print:w-3 print:h-3 text-amber-500 no-print" />
             {label}
           </span>
           {sublabel && (
-            <span className="text-[10px] text-slate-500 hidden sm:inline">
+            <span className="text-[10px] text-slate-500 hidden sm:inline no-print">
               {sublabel}
             </span>
           )}
@@ -129,17 +129,17 @@ export default function DualPhotoUploader({
       )}
 
       {isProcessing ? (
-        <div className="p-8 border border-slate-800 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-2 text-amber-400">
+        <div className="p-8 border border-slate-800 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-2 text-amber-400 no-print">
           <Loader2 className="w-6 h-6 animate-spin" />
           <span className="text-xs font-bold">Optimizando y convirtiendo imagen...</span>
         </div>
       ) : hasPhoto ? (
-        <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/80 shadow-xl group max-w-md mx-auto">
+        <div className="tablero-photo-frame relative rounded-2xl print:rounded overflow-hidden border border-slate-800 print:border-slate-900 bg-slate-950/80 shadow-xl print:shadow-none group max-w-md mx-auto">
           <SafePreviewImage
             blob={fotoBlob}
             src={activeSrc}
             alt={label}
-            className="w-full h-auto max-h-80 object-cover rounded-2xl"
+            className="w-full h-auto max-h-80 print:max-h-36 object-cover rounded-2xl print:rounded"
           />
 
           {!readOnly && (

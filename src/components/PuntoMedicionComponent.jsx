@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Zap, 
   Building2, 
@@ -144,23 +144,45 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
     });
   };
 
+  const sheetRef = useRef(null);
+
+  const printOptimization = useMemo(() => {
+    return { zoom: 0.86, density: 'compact' };
+  }, []);
+
+  useEffect(() => {
+    const handleBeforePrint = () => {
+      const el = sheetRef.current;
+      if (!el) return;
+      el.style.setProperty('--tablero-print-zoom', String(printOptimization.zoom));
+      const printableHeightPx = 940;
+      const naturalHeight = el.scrollHeight;
+      if (naturalHeight > 0 && naturalHeight * printOptimization.zoom > printableHeightPx) {
+        const fittedZoom = Math.max(0.62, Math.min(printOptimization.zoom, Number((printableHeightPx / naturalHeight).toFixed(3))));
+        el.style.setProperty('--tablero-print-zoom', String(fittedZoom));
+      }
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, [printOptimization.zoom]);
+
   return (
-    <div className={`w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl mx-auto space-y-8 print-card print:bg-white print:text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'opacity-90' : ''}`}>
+    <div
+      ref={sheetRef}
+      data-print-density={printOptimization.density}
+      style={{ '--tablero-print-zoom': printOptimization.zoom }}
+      className={`tablero-print-sheet tablero-element-sheet w-full text-slate-100 bg-slate-900/60 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl backdrop-blur-md select-text max-w-5xl print:max-w-none mx-auto space-y-8 print:space-y-1.5 print-card print:bg-white print:text-slate-950 print:border-none print:shadow-none print:p-0 print:m-0 ${readOnly ? 'opacity-90' : ''}`}
+    >
       
       {/* Encabezado General */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-slate-800 print:border-gray-300">
+      <div className="tablero-header-bar flex flex-col md:flex-row print:flex-row justify-between items-start md:items-center print:items-center gap-4 print:gap-2 pb-6 print:p-2 border-b border-slate-800 print:border-2 print:border-slate-900 print:rounded-xs">
         <div>
-          <span className="text-[10px] text-amber-500 font-extrabold uppercase tracking-widest print:text-amber-700">
+          <span className="text-[10px] print:text-[8.5px] text-amber-500 font-extrabold uppercase tracking-widest print:text-slate-800">
             Formato de Levantamiento
           </span>
-          <h2 className="text-xl md:text-2xl font-extrabold text-slate-100 tracking-wide mt-1 print:text-slate-900">
-            Punto de Medición y Suministro de Energía Eléctrica
+          <h2 className="text-xl md:text-2xl print:text-xs font-extrabold text-slate-100 tracking-wide mt-1 print:mt-0 print:text-slate-950 uppercase">
+            Punto de Medición y Suministro de Energía Eléctrica {nombre ? `— ${nombre}` : ''}
           </h2>
-          {nombre && (
-            <p className="text-xs font-semibold text-slate-400 mt-1 print:text-slate-600">
-              Identificador: <span className="text-amber-400 print:text-slate-900">{nombre}</span>
-            </p>
-          )}
         </div>
         <div className="flex items-center gap-2">
           {!readOnly && (
@@ -181,14 +203,14 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
             <Printer className="w-4 h-4" /> Guardar PDF
           </button>
           <div className="flex items-center gap-1">
-            <span className="inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 text-xs shadow-sm">
+            <span className="tablero-badge-amber inline-flex items-center justify-center font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 print:px-2 print:py-0.5 rounded-lg print:rounded border border-amber-500/30 text-xs print:text-[9.5px] shadow-sm">
               ID: {getElementCode(puntoData, 'PUNTO_MEDICION')}
             </span>
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setIsEditIdModalOpen(true)}
-                className="p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
+                className="no-print p-1 bg-slate-900 hover:bg-amber-500 text-slate-400 hover:text-slate-950 border border-slate-700/80 hover:border-amber-400 rounded-md transition-all shadow-sm cursor-pointer"
                 title="Editar ID del elemento (Solo Administradores)"
               >
                 <Edit3 className="w-3 h-3" />
@@ -199,8 +221,8 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
       </div>
 
       {/* Datos del Inspector y Fecha */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-slate-50 print:border-gray-300">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="tablero-subheader-row bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1 print:border-slate-500">
+        <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 print:gap-2">
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1 print:text-slate-700">
               <User className="w-3.5 h-3.5 text-amber-500" /> Nombre del Inspector
@@ -365,45 +387,57 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
         </div>
 
         {/* Topología y Jerarquía Eléctrica del Punto de Medición */}
-        <div className="pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="pt-4 print:pt-1.5 border-t border-slate-800 print:border-slate-300 grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-5 print:gap-2">
           {/* ALIMENTADO POR */}
           <div>
-            <SelectorAlimentadorJerarquico
-              proyectoId={puntoData?.proyectoId}
-              tableroActualId={puntoData?.id}
-              value={alimentadoPor}
-              disabled={readOnly}
-              multiple={false}
-              tipoElementoActual="PUNTO_MEDICION"
-              direccionRelacion="ALIMENTADO_POR"
-              onChange={(val, selectedObj) => {
-                const upperVal = val ? val.toUpperCase() : '';
-                updateField('alimentadoPor', upperVal);
-                updateField('alimentadoPorId', selectedObj?.id || null);
-              }}
-              label="ALIMENTADO POR (Origen / Red Eléctrica Aguas Arriba)"
-              placeholder="Seleccionar Red CORPOELEC, Acometida Primaria..."
-            />
+            <div className="no-print">
+              <SelectorAlimentadorJerarquico
+                proyectoId={puntoData?.proyectoId}
+                tableroActualId={puntoData?.id}
+                value={alimentadoPor}
+                disabled={readOnly}
+                multiple={false}
+                tipoElementoActual="PUNTO_MEDICION"
+                direccionRelacion="ALIMENTADO_POR"
+                onChange={(val, selectedObj) => {
+                  const upperVal = val ? val.toUpperCase() : '';
+                  updateField('alimentadoPor', upperVal);
+                  updateField('alimentadoPorId', selectedObj?.id || null);
+                }}
+                label="ALIMENTADO POR (Origen / Red Eléctrica Aguas Arriba)"
+                placeholder="Seleccionar Red CORPOELEC, Acometida Primaria..."
+              />
+            </div>
+            <div className="hidden print:block tablero-ficha-card p-1.5">
+              <span className="tablero-ficha-label block text-[8px] font-black uppercase">ALIMENTADO POR (ORIGEN / RED ELÉCTRICA):</span>
+              <span className="text-[9.5px] font-black font-mono text-slate-950">{alimentadoPor || '—'}</span>
+            </div>
           </div>
 
           {/* ALIMENTA A */}
           <div>
-            <SelectorAlimentadorJerarquico
-              proyectoId={puntoData?.proyectoId}
-              tableroActualId={puntoData?.id}
-              value={alimentaA}
-              disabled={readOnly}
-              multiple={true}
-              tipoElementoActual="PUNTO_MEDICION"
-              direccionRelacion="ALIMENTA_A"
-              onChange={(formatted, primaryObj, ids) => {
-                const upperFormatted = formatted ? formatted.toUpperCase() : '';
-                updateField('alimentaA', upperFormatted);
-                updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
-              }}
-              label="ALIMENTA A (Equipos Suministrados Aguas Abajo)"
-              placeholder="Seleccionar Subestación, Tableros Principales o Transformadores..."
-            />
+            <div className="no-print">
+              <SelectorAlimentadorJerarquico
+                proyectoId={puntoData?.proyectoId}
+                tableroActualId={puntoData?.id}
+                value={alimentaA}
+                disabled={readOnly}
+                multiple={true}
+                tipoElementoActual="PUNTO_MEDICION"
+                direccionRelacion="ALIMENTA_A"
+                onChange={(formatted, primaryObj, ids) => {
+                  const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                  updateField('alimentaA', upperFormatted);
+                  updateField('alimentaAIds', Array.isArray(ids) ? ids : []);
+                }}
+                label="ALIMENTA A (Equipos Suministrados Aguas Abajo)"
+                placeholder="Seleccionar Subestación, Tableros Principales o Transformadores..."
+              />
+            </div>
+            <div className="hidden print:block tablero-ficha-card p-1.5">
+              <span className="tablero-ficha-label block text-[8px] font-black uppercase">ALIMENTA A (EQUIPOS SUMINISTRADOS):</span>
+              <span className="text-[9.5px] font-black font-mono text-slate-950">{alimentaA || '—'}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -740,9 +774,9 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
       />
 
       {/* SECCIÓN 5: Anomalías u observaciones */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-white print:border-gray-300">
+      <div className="tablero-obs-box bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1 print:border-slate-500">
         <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500 border-b border-slate-800 pb-2.5 flex items-center gap-2 print:text-slate-900 print:border-gray-300">
-          <AlertCircle className="w-4 h-4 text-amber-500" /> 5. Anomalías u observaciones
+          <AlertCircle className="w-4 h-4 text-amber-500 no-print" /> 5. Anomalías u observaciones
         </h3>
 
         <textarea
@@ -755,15 +789,15 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
       </div>
 
       {/* Cierre y Firmas */}
-      <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4 print:bg-slate-50 print:border-gray-300 print:mt-4">
+      <div className="tablero-signatures-box bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1 print:mt-1 break-inside-avoid">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-900 pb-2.5 print:text-slate-700 print:border-gray-300">
           Cierre del Levantamiento y Validez Técnica
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4">
           {/* Firma Inspector */}
-          <div className="flex flex-col gap-1.5 items-center text-center">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-700">Firma del Inspector / Técnico</span>
+          <div className="flex flex-col gap-1.5 print:gap-0.5 items-center text-center">
+            <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma del Inspector / Técnico</span>
             <input
               type="text"
               value={firmaInspector}
@@ -771,15 +805,15 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
               className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
               placeholder="Nombre / Iniciales del Inspector"
             />
-            <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
-              {firmaInspector || '___________________________'}
+            <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
+            <span className="hidden print:block text-[9.5px] font-black text-slate-950">
+              {firmaInspector || '—'}
             </span>
-            <div className="hidden print:block w-48 border-b border-gray-400 mt-6 h-1"></div>
           </div>
 
           {/* Firma Supervisor */}
-          <div className="flex flex-col gap-1.5 items-center text-center">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-700">Firma / Sello de la Empresa</span>
+          <div className="flex flex-col gap-1.5 print:gap-0.5 items-center text-center">
+            <span className="text-[10px] print:text-[8.5px] font-bold text-slate-500 uppercase tracking-wide print:text-slate-950">Firma / Sello de la Empresa</span>
             <input
               type="text"
               value={firmaSupervisor}
@@ -787,10 +821,10 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
               className="w-full max-w-xs bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none h-10 transition-all text-center no-print"
               placeholder="Nombre / Sello de la Empresa"
             />
-            <span className="hidden print:block text-xs font-bold text-slate-900 mt-1 h-6">
-              {firmaSupervisor || '___________________________'}
+            <div className="hidden print:block w-48 border-b-2 border-slate-900 mt-4 mb-0.5"></div>
+            <span className="hidden print:block text-[9.5px] font-black text-slate-950">
+              {firmaSupervisor || '—'}
             </span>
-            <div className="hidden print:block w-48 border-b border-gray-400 mt-6 h-1"></div>
           </div>
         </div>
       </div>
