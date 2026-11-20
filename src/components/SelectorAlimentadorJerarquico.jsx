@@ -18,8 +18,10 @@ import {
   ArrowRightLeft,
   Flame,
   Plus,
-  Edit3
+  Edit3,
+  Eye
 } from 'lucide-react';
+import ElementQuickPreviewModal from './ElementQuickPreviewModal';
 
 /**
  * Compatibilidad de exportación: arrays vacíos para eliminar fuentes genéricas / SEN
@@ -192,6 +194,7 @@ export default function SelectorAlimentadorJerarquico({
   // Modo de Entrada Manual
   const [isManualMode, setIsManualMode] = useState(false);
   const [manualInput, setManualInput] = useState('');
+  const [previewElement, setPreviewElement] = useState(null);
 
   const containerRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -643,7 +646,7 @@ export default function SelectorAlimentadorJerarquico({
           onClick={() => {
             if (!disabled) setIsOpen(!isOpen);
           }}
-          className={`w-full min-h-[46px] px-3.5 py-2 rounded-xl text-left border flex flex-wrap items-center justify-between gap-2 transition-all duration-200 cursor-pointer ${
+          className={`w-full min-h-[46px] px-3 py-2 rounded-xl text-left border flex items-center justify-between gap-2 min-w-0 overflow-hidden transition-all duration-200 cursor-pointer ${
             isOpen
               ? 'bg-slate-900 border-amber-500 ring-2 ring-amber-500/20 shadow-lg shadow-amber-500/5'
               : 'bg-slate-900 hover:bg-slate-850 border-slate-800 hover:border-slate-750'
@@ -651,41 +654,46 @@ export default function SelectorAlimentadorJerarquico({
         >
           {/* Lista de Chips Seleccionados */}
           {selectedItems.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1 py-0.5">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1 max-w-full py-0.5">
               {selectedItems.map((sel) => {
                 const { icon: ItemIcon, color } = getIconAndColor(sel.tipoElemento);
                 return (
                   <span
                     key={sel.id}
-                    className="inline-flex items-center gap-1.5 bg-slate-950/90 text-slate-100 border border-slate-700/80 hover:border-amber-500/40 rounded-lg px-2.5 py-1 text-xs shadow-xs"
-                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 max-w-full min-w-0 bg-slate-950/90 text-slate-100 border border-slate-700/80 hover:border-amber-400/70 rounded-lg px-2 py-1 text-xs shadow-xs cursor-pointer transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewElement(sel);
+                    }}
+                    title={`Clic para ver ficha rápida de ${sel.nombre}`}
                   >
-                    <span className={`p-0.5 rounded ${color}`}>
+                    <span className={`p-0.5 rounded shrink-0 ${color}`}>
                       <ItemIcon className="w-3 h-3" />
                     </span>
-                    <span className="font-bold text-xs truncate max-w-[180px] sm:max-w-[260px] uppercase">
+                    <span className="font-bold text-xs truncate min-w-0 flex-1 uppercase" title={sel.nombre}>
                       {sel.nombre}
                     </span>
                     {sel.isCorpoelec ? (
-                      <span className="text-[8.5px] font-bold uppercase text-sky-300 bg-sky-500/15 px-1.5 py-0.2 rounded border border-sky-500/30">
+                      <span className="shrink-0 whitespace-nowrap text-[8.5px] font-bold uppercase text-sky-300 bg-sky-500/15 px-1.5 py-0.5 rounded border border-sky-500/30">
                         RED NACIONAL
                       </span>
                     ) : sel.isManual ? (
-                      <span className="text-[8.5px] font-bold uppercase text-amber-300 bg-amber-500/15 px-1.5 py-0.2 rounded border border-amber-500/30">
+                      <span className="shrink-0 whitespace-nowrap text-[8.5px] font-bold uppercase text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
                         Manual
                       </span>
                     ) : (
                       (sel.codigo || sel.tipoElemento) && (
-                        <span className="font-mono lowercase text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                        <span className="shrink-0 whitespace-nowrap font-mono lowercase text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
                           {sel.codigo || getSimpleElementCode(sel, sel.tipoElemento)}
                         </span>
                       )
                     )}
+                    <Eye className="w-3 h-3 text-slate-400 shrink-0" />
                     {!disabled && (
                       <button
                         type="button"
                         onClick={(e) => handleRemoveItem(sel.id, e)}
-                        className="text-slate-400 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                        className="shrink-0 text-slate-400 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
                         title={`Quitar ${sel.nombre}`}
                       >
                         <X className="w-3 h-3" />
@@ -696,12 +704,12 @@ export default function SelectorAlimentadorJerarquico({
               })}
             </div>
           ) : (
-            <span className="text-xs sm:text-sm text-slate-500 truncate font-mono">
+            <span className="text-xs sm:text-sm text-slate-500 truncate min-w-0 flex-1 font-mono">
               {placeholder}
             </span>
           )}
 
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
             {selectedItems.length > 0 && !disabled && (
               <button
                 type="button"
@@ -1146,23 +1154,39 @@ export default function SelectorAlimentadorJerarquico({
 
       {/* Resumen inferior de nodos seleccionados */}
       {selectedItems.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-          <span className="text-slate-500 font-bold uppercase text-[9px] tracking-wide">Topología Vinculada:</span>
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5 min-w-0 max-w-full">
+          <span className="text-slate-500 font-bold uppercase text-[9px] tracking-wide shrink-0">Topología Vinculada:</span>
           {selectedItems.map((item, idx) => (
-            <span key={item.id} className="inline-flex items-center gap-1 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 px-2 py-0.5 rounded-md">
-              <span className="font-semibold text-slate-200 uppercase">{item.nombre}</span>
-              <span className={`font-mono text-[9.5px] ${item.isCorpoelec ? 'text-sky-400 uppercase' : 'text-amber-400 lowercase'}`}>
+            <button
+              key={item.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewElement(item);
+              }}
+              title={`Clic para ver ficha rápida de ${item.nombre}`}
+              className="inline-flex items-center gap-1 max-w-full min-w-0 text-[11px] text-slate-300 bg-slate-900/70 border border-slate-800 hover:border-amber-400/60 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+            >
+              <span className="font-semibold text-slate-200 uppercase truncate min-w-0">{item.nombre}</span>
+              <span className={`font-mono text-[9.5px] shrink-0 whitespace-nowrap ${item.isCorpoelec ? 'text-sky-400 uppercase' : 'text-amber-400 lowercase'}`}>
                 {item.isCorpoelec
                   ? '(CORPOELEC • RED NACIONAL)'
                   : item.isManual
                   ? '(manual)'
                   : `(${item.codigo || getSimpleElementCode(item, item.tipoElemento)})`}
               </span>
-              {idx < selectedItems.length - 1 && <span className="text-slate-600 font-bold">,</span>}
-            </span>
+              <Eye className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+              {idx < selectedItems.length - 1 && <span className="text-slate-600 font-bold shrink-0">,</span>}
+            </button>
           ))}
         </div>
       )}
+
+      <ElementQuickPreviewModal
+        elementRef={previewElement}
+        proyectoId={proyectoId}
+        onClose={() => setPreviewElement(null)}
+      />
     </div>
   );
 }

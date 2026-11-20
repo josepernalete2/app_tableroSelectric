@@ -316,11 +316,13 @@ const TableroWrapper = () => {
             onUpdate={(updatedData) => {
               const projId = targetProyecto?.id || puntoMedicion?.proyectoId || null;
               if (isUnifilarPuntoMedicion) {
+                const { datosTecnicos: incomingDt, ...topFields } = updatedData || {};
                 updateElementoUnifilar(projId, tableroId, {
-                  ...updatedData,
+                  ...topFields,
                   datosTecnicos: {
                     ...(element?.datosTecnicos || {}),
-                    ...updatedData
+                    ...(incomingDt || {}),
+                    ...topFields
                   }
                 });
               } else {

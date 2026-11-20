@@ -22,7 +22,8 @@ import {
   RotateCcw,
   X,
   Link2,
-  Plus
+  Plus,
+  Eye
 } from 'lucide-react';
 import useStore, {
   getElementCode,
@@ -34,6 +35,7 @@ import useStore, {
 import { useConfirm } from '../context/ConfirmContext';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
+import ElementQuickPreviewModal from './ElementQuickPreviewModal';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import DualPhotoUploader from './DualPhotoUploader';
 import { 
@@ -76,6 +78,7 @@ export default function TransferComponent({
   const [salidaQuickOpen, setSalidaQuickOpen] = useState(false);
   const [newSalidaTipo, setNewSalidaTipo] = useState('TABLERO');
   const [newSalidaNombre, setNewSalidaNombre] = useState('');
+  const [previewElement, setPreviewElement] = useState(null);
 
   // Estados locales editables - Sin datos demo quemados
   const [nombre, setNombre] = useState(data?.nombre || '');
@@ -869,9 +872,12 @@ export default function TransferComponent({
                 {autoHierarchy.upstreamBadges.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {autoHierarchy.upstreamBadges.map((b, i) => (
-                      <span
+                      <button
                         key={`${b.id || b.nombre}-${i}`}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-bold ${
+                        type="button"
+                        onClick={() => setPreviewElement(b)}
+                        title={`Clic para ver ficha rápida de ${b.nombre}`}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-bold cursor-pointer hover:ring-1 hover:ring-amber-400/60 transition-all ${
                           b.isCorpoelec
                             ? 'bg-sky-500/15 text-sky-300 border-sky-500/30 print:text-slate-950'
                             : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 print:text-slate-950'
@@ -879,7 +885,8 @@ export default function TransferComponent({
                       >
                         <span className="truncate max-w-[170px]">{b.nombre}</span>
                         {b.code && <span className="text-amber-400 print:text-slate-700 lowercase">({b.code})</span>}
-                      </span>
+                        <Eye className="w-2.5 h-2.5 opacity-75 no-print shrink-0" />
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -893,13 +900,17 @@ export default function TransferComponent({
                 {autoHierarchy.downstreamBadges.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {autoHierarchy.downstreamBadges.map((b, i) => (
-                      <span
+                      <button
                         key={`${b.id || b.nombre}-${i}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border bg-amber-500/15 text-amber-200 border-amber-500/30 print:text-slate-950 font-bold"
+                        type="button"
+                        onClick={() => setPreviewElement(b)}
+                        title={`Clic para ver ficha rápida de ${b.nombre}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border bg-amber-500/15 text-amber-200 border-amber-500/30 print:text-slate-950 font-bold cursor-pointer hover:ring-1 hover:ring-amber-400/60 transition-all"
                       >
                         <span className="truncate max-w-[170px]">{b.nombre}</span>
                         {b.code && <span className="text-amber-400 print:text-slate-700 lowercase">({b.code})</span>}
-                      </span>
+                        <Eye className="w-2.5 h-2.5 opacity-75 no-print shrink-0" />
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -962,16 +973,33 @@ export default function TransferComponent({
                       </p>
                     </>
                   ) : (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteNormalNombre}>
-                        {fuenteNormalNombre || '—'}
-                      </p>
-                      {autoHierarchy.fuenteNormalResolved?.code && (
-                        <span className="no-print px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/15 text-amber-400 border border-emerald-500/30 lowercase">
-                          {autoHierarchy.fuenteNormalResolved.code}
+                    fuenteNormalNombre ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewElement(
+                            autoHierarchy.fuenteNormalResolved || {
+                              id: dt.fuenteNormalId || null,
+                              nombre: fuenteNormalNombre
+                            }
+                          )
+                        }
+                        title={`Clic para ver ficha rápida de ${fuenteNormalNombre}`}
+                        className="inline-flex items-center gap-1.5 flex-wrap text-left px-2 py-1 -mx-2 rounded-lg hover:bg-emerald-500/10 border border-transparent hover:border-emerald-500/30 transition-all cursor-pointer group"
+                      >
+                        <span className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteNormalNombre}>
+                          {fuenteNormalNombre}
                         </span>
-                      )}
-                    </div>
+                        {autoHierarchy.fuenteNormalResolved?.code && (
+                          <span className="no-print px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/15 text-amber-400 border border-emerald-500/30 lowercase">
+                            {autoHierarchy.fuenteNormalResolved.code}
+                          </span>
+                        )}
+                        <Eye className="w-3.5 h-3.5 text-emerald-400/70 group-hover:text-emerald-300 no-print shrink-0" />
+                      </button>
+                    ) : (
+                      <p className="font-bold text-slate-500 text-xs font-mono">—</p>
+                    )
                   )}
                 </div>
 
@@ -1132,16 +1160,33 @@ export default function TransferComponent({
                       </p>
                     </>
                   ) : (
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteEmergenciaNombre}>
-                        {fuenteEmergenciaNombre || '—'}
-                      </p>
-                      {autoHierarchy.fuenteEmergenciaResolved?.code && (
-                        <span className="no-print px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 lowercase">
-                          {autoHierarchy.fuenteEmergenciaResolved.code}
+                    fuenteEmergenciaNombre ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewElement(
+                            autoHierarchy.fuenteEmergenciaResolved || {
+                              id: dt.fuenteEmergenciaId || null,
+                              nombre: fuenteEmergenciaNombre
+                            }
+                          )
+                        }
+                        title={`Clic para ver ficha rápida de ${fuenteEmergenciaNombre}`}
+                        className="inline-flex items-center gap-1.5 flex-wrap text-left px-2 py-1 -mx-2 rounded-lg hover:bg-amber-500/10 border border-transparent hover:border-amber-500/30 transition-all cursor-pointer group"
+                      >
+                        <span className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteEmergenciaNombre}>
+                          {fuenteEmergenciaNombre}
                         </span>
-                      )}
-                    </div>
+                        {autoHierarchy.fuenteEmergenciaResolved?.code && (
+                          <span className="no-print px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 lowercase">
+                            {autoHierarchy.fuenteEmergenciaResolved.code}
+                          </span>
+                        )}
+                        <Eye className="w-3.5 h-3.5 text-amber-400/70 group-hover:text-amber-300 no-print shrink-0" />
+                      </button>
+                    ) : (
+                      <p className="font-bold text-slate-500 text-xs font-mono">—</p>
+                    )
                   )}
                 </div>
 
@@ -1411,13 +1456,17 @@ export default function TransferComponent({
                     {autoHierarchy.downstreamBadges.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
                         {autoHierarchy.downstreamBadges.map((b, i) => (
-                          <span
+                          <button
                             key={`${b.id || b.nombre}-${i}`}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-slate-100 border border-amber-500/30 font-black text-xs"
+                            type="button"
+                            onClick={() => setPreviewElement(b)}
+                            title={`Clic para ver ficha rápida de ${b.nombre}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-slate-100 border border-amber-500/30 hover:border-amber-400 font-black text-xs cursor-pointer transition-all"
                           >
                             <span className="truncate max-w-[180px]">{b.nombre}</span>
                             {b.code && <span className="text-amber-400 lowercase text-[10px] font-mono">({b.code})</span>}
-                          </span>
+                            <Eye className="w-3 h-3 text-amber-300/80 shrink-0" />
+                          </button>
                         ))}
                       </div>
                     ) : (
@@ -1664,6 +1713,12 @@ export default function TransferComponent({
         elemento={data}
         tipoElemento="TRANSFER"
         proyectoId={data?.proyectoId}
+      />
+
+      <ElementQuickPreviewModal
+        elementRef={previewElement}
+        proyectoId={data?.proyectoId || data?.projectId}
+        onClose={() => setPreviewElement(null)}
       />
 
     </div>

@@ -864,6 +864,131 @@ const removeDownstreamLinkFromParent = (parentEl, removedChildId, removedChildLa
   return rebuildParentDownstreamFields(parentEl, nextIds, new Map(), allElementsMap, [rmLabel, knownRmLabel]);
 };
 
+const syncRenamedTargetInTableroCircuits = (tableroEl, renamedId, newLabel, allElementsMap) => {
+  if (!tableroEl || !renamedId || !newLabel) return { nextEl: tableroEl, changed: false };
+  const targetIdStr = String(renamedId);
+  const targetObj = allElementsMap?.get(targetIdStr);
+  const dt = parseDatosTecnicosSafe(tableroEl.datosTecnicos);
+
+  const mapCircuitList = (list) => {
+    if (!Array.isArray(list)) return { nextList: list, changed: false };
+    let listChanged = false;
+    const nextList = list.map((c) => {
+      if (!c) return c;
+      const rawDest = c.elementoDestinoId || c.vinculadoId || '';
+      if (!rawDest) return c;
+      const destIds = String(rawDest).split(',').map((s) => s.trim()).filter(Boolean);
+      if (!destIds.includes(targetIdStr)) return c;
+
+      const updatedNames = destIds.map((did) => {
+        if (did === targetIdStr) {
+          const code = targetObj ? getSimpleElementCode(targetObj, targetObj.tipoElemento || c.tipoElementoDestino || 'TABLERO') : getSimpleElementCode(did, c.tipoElementoDestino || 'TABLERO');
+          return `${newLabel} (${code})`;
+        }
+        const other = allElementsMap?.get(did);
+        if (other) {
+          const code = getSimpleElementCode(other, other.tipoElemento || 'TABLERO');
+          return `${getCleanElementLabel(other)} (${code})`;
+        }
+        return '';
+      }).filter(Boolean);
+
+      const nextEquipo = updatedNames.join(', ');
+      if (!nextEquipo || c.equipo === nextEquipo) return c;
+      listChanged = true;
+      return {
+        ...c,
+        equipo: nextEquipo,
+        ...(c.nombreProvisional ? { nombreProvisional: newLabel } : {})
+      };
+    });
+    return { nextList, changed: listChanged };
+  };
+
+  const topCircRes = mapCircuitList(tableroEl.circuits);
+  const dtCircRes = mapCircuitList(dt.circuits);
+
+  const mapPendingList = (list) => {
+    if (!Array.isArray(list)) return { nextList: list, changed: false };
+    let pChanged = false;
+    const nextList = list.map((p) => {
+      if (p && String(p.id) === targetIdStr && p.nombre !== newLabel) {
+        pChanged = true;
+        return { ...p, nombre: newLabel };
+      }
+      return p;
+    });
+    return { nextList, changed: pChanged };
+  };
+
+  const topPendRes = mapPendingList(tableroEl.elementosPorCrear);
+  const dtPendRes = mapPendingList(dt.elementosPorCrear);
+
+  if (!topCircRes.changed && !dtCircRes.changed && !topPendRes.changed && !dtPendRes.changed) {
+    return { nextEl: tableroEl, changed: false };
+  }
+
+  return {
+    changed: true,
+    nextEl: {
+      ...tableroEl,
+      ...(topCircRes.changed ? { circuits: topCircRes.nextList } : {}),
+      ...(topPendRes.changed ? { elementosPorCrear: topPendRes.nextList } : {}),
+      datosTecnicos: {
+        ...dt,
+        ...(dtCircRes.changed ? { circuits: dtCircRes.nextList } : {}),
+        ...(dtPendRes.changed ? { elementosPorCrear: dtPendRes.nextList } : {})
+      }
+    }
+  };
+};
+
+const applyRenamePropagationToPeer = (peerEl, targetId, prevLabel, nextLabel, targetTipo, allElementsMap, allProjectElements) => {
+  if (!peerEl || !targetId || !nextLabel) return { nextEl: peerEl, changed: false };
+  let currentEl = peerEl;
+  let anyChanged = false;
+  const targetIdStr = String(targetId);
+
+  const parentIds = extractElementParentIds(currentEl, allProjectElements);
+  const isTextOnlyChild =
+    !currentEl.alimentadoPorId &&
+    !isPlaceholderHierarchyValue(currentEl.alimentadoPor) &&
+    prevLabel &&
+    cleanElementName(String(currentEl.alimentadoPor)).toUpperCase().trim() === prevLabel;
+
+  if (parentIds.includes(targetIdStr) || isTextOnlyChild) {
+    const res = applyUpstreamLinkToElement(currentEl, targetIdStr, nextLabel, targetTipo);
+    if (res.changed) {
+      currentEl = res.nextEl;
+      anyChanged = true;
+    }
+  }
+
+  const circRes = syncRenamedTargetInTableroCircuits(currentEl, targetIdStr, nextLabel, allElementsMap);
+  if (circRes.changed) {
+    currentEl = circRes.nextEl;
+    anyChanged = true;
+  }
+
+  if (!isTableroElement(currentEl) && prevLabel) {
+    const dt = parseDatosTecnicosSafe(currentEl.datosTecnicos);
+    const hasIds = (Array.isArray(currentEl.alimentaAIds) && currentEl.alimentaAIds.length > 0) ||
+                   (Array.isArray(dt.alimentaAIds) && dt.alimentaAIds.length > 0);
+    if (!hasIds && !isPlaceholderHierarchyValue(currentEl.alimentaA)) {
+      const tokens = String(currentEl.alimentaA).split(/[,;\n]/).map((s) => cleanElementName(s).toUpperCase().trim());
+      if (tokens.includes(prevLabel)) {
+        const res = applyDownstreamLinkToParent(currentEl, targetIdStr, nextLabel, allElementsMap, prevLabel);
+        if (res.changed) {
+          currentEl = res.nextEl;
+          anyChanged = true;
+        }
+      }
+    }
+  }
+
+  return { nextEl: currentEl, changed: anyChanged };
+};
+
 export const resolveElementUbicacionDisplay = (item) => {
   if (!item || typeof item !== 'object') return '';
   const dt = parseDatosTecnicosSafe(item.datosTecnicos);
@@ -1831,12 +1956,6 @@ const syncRelatedHierarchyFromExternalElement = (set, get, { proyectoId, targetI
           currentItem = res.nextEl;
           changed = true;
         }
-      } else if (nameChanged && extractElementParentIds(currentItem, allProjectElements).includes(String(targetId))) {
-        const res = applyUpstreamLinkToElement(currentItem, targetId, nextLabel, targetTipo);
-        if (res.changed) {
-          currentItem = res.nextEl;
-          changed = true;
-        }
       }
 
       if ((parentTouched || nameChanged) && nextParentIds.has(itemIdStr) && !nextDownIds.has(itemIdStr)) {
@@ -1849,6 +1968,14 @@ const syncRelatedHierarchyFromExternalElement = (set, get, { proyectoId, targetI
         const res = removeDownstreamLinkFromParent(currentItem, targetId, prevLabel, allElementsMap);
         if (res.changed) {
           currentItem = res.nextEl;
+          changed = true;
+        }
+      }
+
+      if (nameChanged) {
+        const renRes = applyRenamePropagationToPeer(currentItem, targetId, prevLabel, nextLabel, targetTipo, allElementsMap, allProjectElements);
+        if (renRes.changed) {
+          currentItem = renRes.nextEl;
           changed = true;
         }
       }
@@ -3676,12 +3803,6 @@ export const useStore = create(
                 currentEl = res.nextEl;
                 changed = true;
               }
-            } else if (nameChanged && extractElementParentIds(currentEl, allProjectElements).includes(String(elementoId))) {
-              const res = applyUpstreamLinkToElement(currentEl, elementoId, effectiveName, mergedTipo);
-              if (res.changed) {
-                currentEl = res.nextEl;
-                changed = true;
-              }
             }
           }
 
@@ -3696,6 +3817,15 @@ export const useStore = create(
             const res = removeDownstreamLinkFromParent(currentEl, elementoId, prevEffectiveName, allElementsMap);
             if (res.changed) {
               currentEl = res.nextEl;
+              changed = true;
+            }
+          }
+
+          // 3. Propagación total de cambio de nombre (hijos, circuitos de tableros y referencias heredadas)
+          if (nameChanged) {
+            const renRes = applyRenamePropagationToPeer(currentEl, elementoId, prevEffectiveName, effectiveName, mergedTipo, allElementsMap, allProjectElements);
+            if (renRes.changed) {
+              currentEl = renRes.nextEl;
               changed = true;
             }
           }

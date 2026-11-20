@@ -7,13 +7,15 @@ import {
   Settings,
   Zap,
   RotateCcw,
-  X
+  X,
+  Eye
 } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
+import ElementQuickPreviewModal from './ElementQuickPreviewModal';
 import TransferComponent from './TransferComponent';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
 import DualPhotoUploader from './DualPhotoUploader';
@@ -114,6 +116,7 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
   const [fotoBlob, setFotoBlob] = useState(elementoData?.fotoBlob || null);
   const [fotoSrc, setFotoSrc] = useState(elementoData?.foto || null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewElement, setPreviewElement] = useState(null);
 
   // datosTecnicos JSON
   const [dt, setDt] = useState(elementoData?.datosTecnicos || {});
@@ -597,7 +600,19 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <span className="hidden print:inline font-bold text-slate-950">{alimentadoPor || '—'}</span>
               </div>
             ) : (
-              alimentadoPor ? renderElementWithId(alimentadoPor, elementoData?.alimentadoPorId) : <span className="text-slate-500 italic">—</span>
+              alimentadoPor ? (
+                <button
+                  type="button"
+                  onClick={() => setPreviewElement({ id: alimentadoPorId || elementoData?.alimentadoPorId || null, nombre: alimentadoPor })}
+                  title={`Clic para ver ficha rápida de ${alimentadoPor}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:border-amber-400 text-amber-300 font-bold cursor-pointer transition-all"
+                >
+                  {renderElementWithId(alimentadoPor, elementoData?.alimentadoPorId)}
+                  <Eye className="w-3.5 h-3.5 text-amber-400 no-print shrink-0" />
+                </button>
+              ) : (
+                <span className="text-slate-500 italic">—</span>
+              )
             )}
           </div>
 
@@ -628,9 +643,29 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <span className="hidden print:inline font-bold text-slate-950">{alimentaA || '—'}</span>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {alimentaA ? (
-                  <span className="font-semibold text-emerald-400 print:text-black">{alimentaA}</span>
+                  String(alimentaA)
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean)
+                    .map((itemName, idx) => (
+                      <button
+                        key={`${itemName}-${idx}`}
+                        type="button"
+                        onClick={() =>
+                          setPreviewElement({
+                            id: (Array.isArray(alimentaAIds) ? alimentaAIds[idx] : null) || null,
+                            nombre: itemName
+                          })
+                        }
+                        title={`Clic para ver ficha rápida de ${itemName}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-emerald-300 print:text-black cursor-pointer transition-all"
+                      >
+                        <span>{itemName}</span>
+                        <Eye className="w-3 h-3 text-emerald-400 no-print shrink-0" />
+                      </button>
+                    ))
                 ) : (
                   <span className="text-slate-500 italic print:text-gray-600">Terminal (Sin cargas secundarias enlazadas)</span>
                 )}
@@ -1350,7 +1385,19 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <span className="hidden print:inline font-bold text-slate-950">{alimentadoPor || '—'}</span>
               </div>
             ) : (
-              <span className="font-semibold text-amber-400 print:text-black">{alimentadoPor || '—'}</span>
+              alimentadoPor ? (
+                <button
+                  type="button"
+                  onClick={() => setPreviewElement({ id: alimentadoPorId || elementoData?.alimentadoPorId || null, nombre: alimentadoPor })}
+                  title={`Clic para ver ficha rápida de ${alimentadoPor}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 hover:border-amber-400 font-semibold text-amber-400 print:text-black cursor-pointer transition-all"
+                >
+                  <span>{alimentadoPor}</span>
+                  <Eye className="w-3.5 h-3.5 text-amber-400 no-print shrink-0" />
+                </button>
+              ) : (
+                <span className="font-semibold text-slate-500 print:text-black">—</span>
+              )
             )}
           </div>
 
@@ -1381,9 +1428,29 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
                 <span className="hidden print:inline font-bold text-slate-950">{alimentaA || 'Sin cargas secundarias enlazadas'}</span>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {alimentaA ? (
-                  <span className="font-semibold text-emerald-400 print:text-black">{alimentaA}</span>
+                  String(alimentaA)
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean)
+                    .map((itemName, idx) => (
+                      <button
+                        key={`${itemName}-${idx}`}
+                        type="button"
+                        onClick={() =>
+                          setPreviewElement({
+                            id: (Array.isArray(alimentaAIds) ? alimentaAIds[idx] : null) || null,
+                            nombre: itemName
+                          })
+                        }
+                        title={`Clic para ver ficha rápida de ${itemName}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-emerald-300 print:text-black cursor-pointer transition-all"
+                      >
+                        <span>{itemName}</span>
+                        <Eye className="w-3 h-3 text-emerald-400 no-print shrink-0" />
+                      </button>
+                    ))
                 ) : (
                   <span className="text-slate-500 italic print:text-gray-600">Sin cargas secundarias enlazadas</span>
                 )}
@@ -3307,6 +3374,12 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         elemento={elementoData}
         tipoElemento={tipoElemento}
         proyectoId={elementoData?.proyectoId}
+      />
+
+      <ElementQuickPreviewModal
+        elementRef={previewElement}
+        proyectoId={elementoData?.proyectoId}
+        onClose={() => setPreviewElement(null)}
       />
 
     </div>
