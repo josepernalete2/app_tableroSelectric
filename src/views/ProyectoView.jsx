@@ -242,9 +242,11 @@ export const ProyectoView = () => {
     setShowEditProyectoModal(true);
   };
 
-  // Estados de pestaña activa
+  // Estados de pestaña activa y filtros rápidos por tipo
   const [activeTab, setActiveTab] = useState('UNIFILAR'); // 'UNIFILAR' | 'ESTRUCTURAL'
   const [searchQuery, setSearchQuery] = useState('');
+  const [elementoTypeFilter, setElementoTypeFilter] = useState('ALL');
+  const [inspeccionTypeFilter, setInspeccionTypeFilter] = useState('ALL');
 
   // Estado para Modal de Edición de ID (Solo Administradores)
   const [editIdModalData, setEditIdModalData] = useState({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' });
@@ -264,6 +266,28 @@ export const ProyectoView = () => {
   const puntosMedicion = useMemo(() => {
     return sortElementsByOrder(proyecto?.puntosMedicion || []);
   }, [proyecto]);
+
+  // Inventario unificado y deduplicado de todos los equipos registrados en el proyecto
+  const equiposRegistrados = useMemo(() => {
+    const seen = new Set();
+    const unified = [];
+    (elementos || []).forEach((e) => {
+      if (!e?.id || seen.has(e.id)) return;
+      seen.add(e.id);
+      unified.push({ ...e, tipoElemento: e.tipoElemento || 'TABLERO', _sourceCollection: 'UNIFILAR' });
+    });
+    (puntosMedicion || []).forEach((p) => {
+      if (!p?.id || seen.has(p.id)) return;
+      seen.add(p.id);
+      unified.push({ ...p, tipoElemento: p.tipoElemento || 'PUNTO_MEDICION', _sourceCollection: 'PUNTO_MEDICION' });
+    });
+    (proyecto?.ccmList || []).forEach((c) => {
+      if (!c?.id || seen.has(c.id)) return;
+      seen.add(c.id);
+      unified.push({ ...c, tipoElemento: c.tipoElemento || 'CCM', _sourceCollection: 'CCM' });
+    });
+    return unified;
+  }, [elementos, puntosMedicion, proyecto?.ccmList]);
 
   // Lista jerárquica sincronizada para selectores de procedencia/alimentador
   const todosElementosJerarquia = useMemo(() => {
@@ -298,28 +322,105 @@ export const ProyectoView = () => {
     return [...unifilares, ...subs, ...puntos, ...ccms];
   }, [elementos, inspecciones, puntosMedicion, proyecto?.ccmList]);
 
+  const getInspeccionFilterKey = (item) => {
+    const raw = String(item?.tipoElemento || item?.tipo || '').trim().toUpperCase();
+    if (!raw || raw === 'AMBIENTAL_FISICA' || raw === 'SUBESTACION') return 'AMBIENTAL_FISICA';
+    if (raw === 'SISTEMA_ATERRAMIENTO' || raw === 'PUESTA_TIERRA') return 'SISTEMA_ATERRAMIENTO';
+    return raw;
+  };
+
+  const elementoFilterChips = useMemo(() => {
+    const normalizeTipo = (el) => String(el?.tipoElemento || 'TABLERO').toUpperCase();
+    const countFor = (matcher) => equiposRegistrados.filter((el) => matcher(normalizeTipo(el))).length;
+    const base = [
+      { id: 'ALL', label: 'Todos', count: equiposRegistrados.length },
+      { id: 'TABLERO', label: 'Paneles Eléctricos', count: countFor((t) => t === 'TABLERO') },
+      { id: 'PUNTO_SUMINISTRO', label: 'Puntos de Suministro / Control', count: countFor((t) => t === 'PUNTO_SUMINISTRO' || t === 'PUNTO_MEDICION') },
+      { id: 'TRANSFORMADOR', label: 'Transformadores', count: countFor((t) => t === 'TRANSFORMADOR') },
+      { id: 'TRANSFER', label: 'Transferencias', count: countFor((t) => t === 'TRANSFER') },
+      { id: 'GENERADOR', label: 'Generadores', count: countFor((t) => t === 'GENERADOR') },
+      { id: 'CCM', label: 'CCM', count: countFor((t) => t === 'CCM') },
+      { id: 'BANCO_CONDENSADOR', label: 'Banco Cond.', count: countFor((t) => t === 'BANCO_CONDENSADOR') }
+    ];
+    const covered = new Set(['TABLERO', 'PUNTO_SUMINISTRO', 'PUNTO_MEDICION', 'TRANSFORMADOR', 'TRANSFER', 'GENERADOR', 'CCM', 'BANCO_CONDENSADOR']);
+    const extraCounts = new Map();
+    equiposRegistrados.forEach((el) => {
+      const t = normalizeTipo(el);
+      if (!covered.has(t)) {
+        extraCounts.set(t, (extraCounts.get(t) || 0) + 1);
+      }
+    });
+    extraCounts.forEach((cnt, t) => {
+      base.push({ id: t, label: t === 'OTRO' ? 'Otros Equipos' : t.replace(/_/g, ' '), count: cnt });
+    });
+    return base;
+  }, [equiposRegistrados]);
+
+  const inspeccionFilterChips = useMemo(() => {
+    const base = [
+      { id: 'ALL', label: 'Todas' },
+      { id: 'AMBIENTAL_FISICA', label: 'Ambiental / Subestación' },
+      { id: 'TERMOGRAFICA', label: 'Termografía' },
+      { id: 'SISTEMA_ATERRAMIENTO', label: 'Aterramiento (SPAT)' },
+      { id: 'TANQUE_COMBUSTIBLE', label: 'Tanque Combustible' }
+    ];
+    const counts = new Map();
+    const extraKeys = [];
+    const baseIds = new Set(base.map((b) => b.id));
+    inspecciones.forEach((item) => {
+      const key = getInspeccionFilterKey(item);
+      counts.set(key, (counts.get(key) || 0) + 1);
+      if (!baseIds.has(key) && !extraKeys.includes(key)) {
+        extraKeys.push(key);
+      }
+    });
+    const chips = base.map((b) => ({
+      ...b,
+      count: b.id === 'ALL' ? inspecciones.length : (counts.get(b.id) || 0)
+    }));
+    extraKeys.forEach((key) => {
+      chips.push({ id: key, label: key.replace(/_/g, ' '), count: counts.get(key) || 0 });
+    });
+    return chips;
+  }, [inspecciones]);
+
   const filteredElementos = useMemo(() => {
-    if (!searchQuery.trim()) return elementos;
-    const q = searchQuery.toLowerCase();
-    return elementos.filter(e => 
-      e.nombre?.toLowerCase().includes(q) || 
-      e.codigo?.toLowerCase().includes(q) || 
-      e.tipoElemento?.toLowerCase().includes(q) ||
-      e.ubicacion?.toLowerCase().includes(q)
-    );
-  }, [elementos, searchQuery]);
+    const q = searchQuery.trim().toLowerCase();
+    return equiposRegistrados.filter((e) => {
+      const tipo = String(e.tipoElemento || 'TABLERO').toUpperCase();
+      if (elementoTypeFilter !== 'ALL') {
+        if (elementoTypeFilter === 'PUNTO_SUMINISTRO') {
+          if (tipo !== 'PUNTO_SUMINISTRO' && tipo !== 'PUNTO_MEDICION') return false;
+        } else if (tipo !== elementoTypeFilter) {
+          return false;
+        }
+      }
+      if (!q) return true;
+      return (
+        e.nombre?.toLowerCase().includes(q) ||
+        e.codigo?.toLowerCase().includes(q) ||
+        e.tipoElemento?.toLowerCase().includes(q) ||
+        e.ubicacion?.toLowerCase().includes(q)
+      );
+    });
+  }, [equiposRegistrados, searchQuery, elementoTypeFilter]);
 
   const filteredInspecciones = useMemo(() => {
-    if (!searchQuery.trim()) return inspecciones;
-    const q = searchQuery.toLowerCase();
-    return inspecciones.filter(i => 
-      i.nombre?.toLowerCase().includes(q) || 
-      i.codigo?.toLowerCase().includes(q) || 
-      i.tipoElemento?.toLowerCase().includes(q) ||
-      i.ubicacion?.toLowerCase().includes(q) ||
-      i.inspector?.toLowerCase().includes(q)
-    );
-  }, [inspecciones, searchQuery]);
+    const q = searchQuery.trim().toLowerCase();
+    return inspecciones.filter((i) => {
+      if (inspeccionTypeFilter !== 'ALL' && getInspeccionFilterKey(i) !== inspeccionTypeFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        i.nombre?.toLowerCase().includes(q) ||
+        i.codigo?.toLowerCase().includes(q) ||
+        i.tipoElemento?.toLowerCase().includes(q) ||
+        i.ubicacion?.toLowerCase().includes(q) ||
+        i.inspector?.toLowerCase().includes(q)
+      );
+    });
+  }, [inspecciones, searchQuery, inspeccionTypeFilter]);
 
   const filteredPuntosMedicion = useMemo(() => {
     if (!searchQuery.trim()) return puntosMedicion;
@@ -336,10 +437,10 @@ export const ProyectoView = () => {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
 
-  // Limpiar selección cuando cambia la pestaña o la búsqueda
+  // Limpiar selección cuando cambia la pestaña, la búsqueda o el filtro rápido
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [activeTab, searchQuery]);
+  }, [activeTab, searchQuery, elementoTypeFilter, inspeccionTypeFilter]);
 
   const handleToggleSelect = (id) => {
     setSelectedIds((prev) => {
@@ -1382,6 +1483,34 @@ export const ProyectoView = () => {
               <p className="text-xs text-slate-500">Inspecciones de obras civiles, termografía, sistema de aterramiento (SPAT) y tanques de combustible.</p>
             </div>
 
+            {/* Barra de Filtros Rápidos por Tipo de Inspección */}
+            {inspecciones.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-5">
+                {inspeccionFilterChips.map((chip) => {
+                  const isActive = inspeccionTypeFilter === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setInspeccionTypeFilter(chip.id)}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        isActive
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-amber-500/40 hover:text-amber-400'
+                      }`}
+                    >
+                      <span>{chip.label}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                        isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
+                      }`}>
+                        {chip.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {filteredInspecciones.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredInspecciones.map((item, index) => {
@@ -1477,7 +1606,7 @@ export const ProyectoView = () => {
                         </div>
                       </div>
 
-                      {/* Barra de Avance y Porcentaje de Completitud (Obs 4) */}
+                      {/* Barra de Avance (Obs 4) */}
                       <div className="mt-4 pt-3 border-t border-slate-900/80">
                         <AvanceProgressBar elemento={item} tipoElemento={item.tipoElemento || 'SUBESTACION'} />
                       </div>
@@ -1511,11 +1640,27 @@ export const ProyectoView = () => {
               <div className="p-16 border-2 border-dashed border-slate-800 rounded-2xl text-center space-y-4 bg-slate-950/20">
                 <Building className="w-12 h-12 text-slate-700 mx-auto" />
                 <div className="space-y-1 font-sans">
-                  <h3 className="text-sm font-bold text-slate-400">No hay inspecciones técnicas</h3>
+                  <h3 className="text-sm font-bold text-slate-400">
+                    {inspecciones.length > 0 ? 'Sin resultados para este filtro' : 'No hay inspecciones técnicas'}
+                  </h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Crea una ficha de Inspección Técnica (Subestación, Termografía, SPAT o Tanque de Combustible).
+                    {inspecciones.length > 0
+                      ? 'Prueba seleccionando otro tipo de inspección o limpia la búsqueda actual.'
+                      : 'Crea una ficha de Inspección Técnica (Subestación, Termografía, SPAT o Tanque de Combustible).'}
                   </p>
                 </div>
+                {(inspeccionTypeFilter !== 'ALL' || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInspeccionTypeFilter('ALL');
+                      setSearchQuery('');
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-amber-400 rounded-xl transition-all cursor-pointer"
+                  >
+                    Ver todas las inspecciones
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1524,10 +1669,10 @@ export const ProyectoView = () => {
         {/* CONTENIDO DE PESTAÑA B: DIAGRAMA UNIFILAR */}
         {activeTab === 'UNIFILAR' && (
           <div>
-            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-md font-bold text-slate-200">Equipos Registrados en el Diagrama Unifilar</h2>
-                <p className="text-xs text-slate-500">Tableros, Transformadores, Generadores, Puntos de Suministro, Mallas de Tierra y Transferencias.</p>
+                <p className="text-xs text-slate-500">Paneles Eléctricos, Puntos de Suministro, Transformadores, Transferencias, Generadores, CCM y Bancos de Condensadores.</p>
               </div>
               <button
                 type="button"
@@ -1538,15 +1683,43 @@ export const ProyectoView = () => {
               </button>
             </div>
 
+            {/* Barra de Filtros Rápidos por Tipo de Equipo */}
+            {equiposRegistrados.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-6">
+                {elementoFilterChips.map((chip) => {
+                  const isActive = elementoTypeFilter === chip.id;
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setElementoTypeFilter(chip.id)}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        isActive
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-amber-500/40 hover:text-amber-400'
+                      }`}
+                    >
+                      <span>{chip.label}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                        isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
+                      }`}>
+                        {chip.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {filteredElementos.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredElementos.map((item, index) => {
-                  const isTablero = item.tipoElemento === 'TABLERO';
+                  const isTablero = !item.tipoElemento || item.tipoElemento === 'TABLERO';
                   const isTrafo = item.tipoElemento === 'TRANSFORMADOR';
                   const isGen = item.tipoElemento === 'GENERADOR';
                   const isPuestaTierra = item.tipoElemento === 'PUESTA_TIERRA';
                   const isTransfer = item.tipoElemento === 'TRANSFER';
-                  const isPuntoSuministro = item.tipoElemento === 'PUNTO_SUMINISTRO';
+                  const isPuntoSuministro = item.tipoElemento === 'PUNTO_SUMINISTRO' || item.tipoElemento === 'PUNTO_MEDICION';
                   const isCcm = item.tipoElemento === 'CCM';
                   const isBanco = item.tipoElemento === 'BANCO_CONDENSADOR';
                   const isDragging = draggedItemId === item.id;
@@ -1766,7 +1939,7 @@ export const ProyectoView = () => {
                           </div>
                         </div>
 
-                        {/* Barra de Avance y Porcentaje de Completitud (Obs 4) */}
+                        {/* Barra de Avance (Obs 4) */}
                         <div className="mt-4 pt-3 border-t border-slate-900/80">
                           <AvanceProgressBar elemento={item} tipoElemento={item.tipoElemento || 'TABLERO'} />
                         </div>
@@ -1775,21 +1948,46 @@ export const ProyectoView = () => {
                         <div className="mt-3">
                           <ElementoCardActions
                             onEdit={() => {
-                              setEditingElemento(item);
-                              setShowElementoModal(true);
+                              if (item._sourceCollection === 'UNIFILAR') {
+                                setEditingElemento(item);
+                                setShowElementoModal(true);
+                              } else {
+                                navigate(`/empresa/${companyId}/tablero/${item.id}`);
+                              }
                             }}
                             onNewInspection={() => navigate(`/empresa/${companyId}/tablero/${item.id}`)}
                             onMoveUp={() => {
+                              if (item._sourceCollection !== 'UNIFILAR') return;
                               moverElemento(companyId, proyectoId, item.id, 'UP', 'UNIFILAR');
                               showToast?.('Posición del equipo actualizada', 'info');
                             }}
                             onMoveDown={() => {
+                              if (item._sourceCollection !== 'UNIFILAR') return;
                               moverElemento(companyId, proyectoId, item.id, 'DOWN', 'UNIFILAR');
                               showToast?.('Posición del equipo actualizada', 'info');
                             }}
-                            canMoveUp={index > 0}
-                            canMoveDown={index < filteredElementos.length - 1}
-                            onDelete={user?.role === 'ADMIN' ? () => handleOpenDeleteElementoModal(item, 'UNIFILAR') : undefined}
+                            canMoveUp={item._sourceCollection === 'UNIFILAR' && index > 0}
+                            canMoveDown={item._sourceCollection === 'UNIFILAR' && index < filteredElementos.length - 1}
+                            onDelete={user?.role === 'ADMIN' ? async () => {
+                              if (item._sourceCollection === 'UNIFILAR') {
+                                handleOpenDeleteElementoModal(item, 'UNIFILAR');
+                                return;
+                              }
+                              const ok = await confirm({
+                                title: 'Eliminar Elemento',
+                                message: `¿Está seguro de eliminar "${item.nombre}" permanentemente?`,
+                                type: 'danger',
+                                confirmText: 'Eliminar'
+                              });
+                              if (ok) {
+                                if (item._sourceCollection === 'CCM') {
+                                  deleteCcm(proyectoId, item.id);
+                                } else {
+                                  deletePuntoMedicion(proyectoId, item.id);
+                                }
+                                showToast?.('Elemento eliminado correctamente', 'success');
+                              }
+                            } : undefined}
                             userRole={user?.role}
                             readOnly={user?.role === 'CLIENT'}
                           />
@@ -1803,11 +2001,27 @@ export const ProyectoView = () => {
               <div className="p-16 border-2 border-dashed border-slate-800 rounded-2xl text-center space-y-4 bg-slate-950/20">
                 <Zap className="w-12 h-12 text-slate-700 mx-auto" />
                 <div className="space-y-1 font-sans">
-                  <h3 className="text-sm font-bold text-slate-400">No hay equipos registrados</h3>
+                  <h3 className="text-sm font-bold text-slate-400">
+                    {equiposRegistrados.length > 0 ? 'Sin equipos para este filtro' : 'No hay equipos registrados'}
+                  </h3>
                   <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Registra un Tablero, Transformador, Generador, Puesta a Tierra o Transfer en este proyecto.
+                    {equiposRegistrados.length > 0
+                      ? 'Prueba seleccionando otro tipo de equipo o limpia la búsqueda actual.'
+                      : 'Registra un Panel Eléctrico, Punto de Suministro, Transformador, Transferencia, Generador, CCM o Banco de Condensadores en este proyecto.'}
                   </p>
                 </div>
+                {(elementoTypeFilter !== 'ALL' || searchQuery.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setElementoTypeFilter('ALL');
+                      setSearchQuery('');
+                    }}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-amber-400 rounded-xl transition-all cursor-pointer"
+                  >
+                    Ver todos los equipos
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1875,8 +2089,7 @@ export const ProyectoView = () => {
                     { id: 'TRANSFORMADOR', label: '🔄 TRANSFORMADOR' },
                     { id: 'TRANSFER', label: '🔀 TRANSFERENCIA' },
                     { id: 'CCM', label: '⚙️ CCM (MOTORES)' },
-                    { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' },
-                    { id: 'PUESTA_TIERRA', label: '🛡️ PUESTA TIERRA' }
+                    { id: 'BANCO_CONDENSADOR', label: '⚡ BANCO COND.' }
                   ].map((t) => (
                     <button
                       key={t.id}

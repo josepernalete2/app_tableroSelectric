@@ -117,8 +117,11 @@ export default function DiagramaUnifilarBlueprint({
       // 3. Para ATS/Transferencia: verificar fuente normal
       const isTransfer = el.tipoElemento === 'TRANSFER' || el.tipo === 'TRANSFER';
       if (isTransfer) {
+        const fuenteNormalId = dt.fuenteNormalId ? String(dt.fuenteNormalId).toLowerCase().trim() : null;
         const fuenteNormal = dt.fuenteNormalNombre || dt.fuenteNormalId || el.fuenteNormal;
-        if (fuenteNormal) {
+        if (fuenteNormalId && idToNodeMap.has(fuenteNormalId)) {
+          resolvedParentId = idToNodeMap.get(fuenteNormalId).id;
+        } else if (fuenteNormal) {
           const idFromNorm = extractIdFromText(fuenteNormal);
           if (idFromNorm && idToNodeMap.has(idFromNorm)) {
             resolvedParentId = idToNodeMap.get(idFromNorm).id;
@@ -129,9 +132,12 @@ export default function DiagramaUnifilarBlueprint({
         }
 
         // Resolución de la fuente de Emergencia (Generador -> ATS) (Observación 18)
+        const fuenteEmergId = (dt.fuenteEmergenciaId || dt.generadorId) ? String(dt.fuenteEmergenciaId || dt.generadorId).toLowerCase().trim() : null;
         const fuenteEmergencia = dt.fuenteEmergenciaNombre || dt.fuenteEmergenciaId || dt.generadorId || dt.alimentacionGenerador1;
         let genNode = null;
-        if (fuenteEmergencia) {
+        if (fuenteEmergId && idToNodeMap.has(fuenteEmergId)) {
+          genNode = idToNodeMap.get(fuenteEmergId);
+        } else if (fuenteEmergencia) {
           const idFromEmerg = extractIdFromText(fuenteEmergencia);
           if (idFromEmerg && idToNodeMap.has(idFromEmerg)) {
             genNode = idToNodeMap.get(idFromEmerg);
@@ -160,15 +166,19 @@ export default function DiagramaUnifilarBlueprint({
         resolvedParentId = circuitFeedsMap.get(el.id.toLowerCase().trim());
       }
 
-      // 5. Bidireccionalidad: Si aún no tiene alimentador, verificar si algún equipo declara este nodo en "alimentaAIds" o "alimentaA"
+      // 5. Bidireccionalidad: Si aún no tiene alimentador, verificar si algún equipo declara este nodo en "alimentaAIds", "salidaCargaId" o "alimentaA"
       if (!resolvedParentId) {
         for (const candidate of elementos) {
           if (candidate.id === el.id) continue;
           const candDt = typeof candidate.datosTecnicos === 'string'
             ? JSON.parse(candidate.datosTecnicos || '{}')
             : (candidate.datosTecnicos || {});
-          const candidateAlimentaIds = candidate.alimentaAIds || candDt.alimentaAIds;
-          if (Array.isArray(candidateAlimentaIds) && candidateAlimentaIds.includes(el.id)) {
+          const candidateAlimentaIds = [
+            ...(Array.isArray(candidate.alimentaAIds) ? candidate.alimentaAIds : []),
+            ...(Array.isArray(candDt.alimentaAIds) ? candDt.alimentaAIds : []),
+            ...(candDt.salidaCargaId ? [candDt.salidaCargaId] : [])
+          ];
+          if (candidateAlimentaIds.includes(el.id)) {
             resolvedParentId = candidate.id;
             break;
           }

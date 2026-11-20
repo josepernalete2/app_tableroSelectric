@@ -3,8 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     <meta name="theme-color" content="#0f172a" />
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem('theme_mode') === 'light' ? 'light' : 'dark';
+          var root = document.documentElement;
+          root.classList.remove('dark', 'light');
+          root.classList.add(mode);
+          root.dataset.theme = mode;
+          root.style.colorScheme = mode;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', mode === 'light' ? '#ffffff' : '#0f172a');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="description" content="Sistema de inspección técnica de tableros eléctricos, diagramas unifilares y sincronización offline" />
     <meta name="application-name" content="Tablero Selectric" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -21,4 +35,3 @@
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-

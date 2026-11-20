@@ -444,11 +444,13 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
       if (isAlimentaSpecified) {
         // Desvincular equipos que antes eran alimentados por finalElementId pero ya no están en safeAlimentaAIds
+        // (Preservar TRANSFER cuyas fuentes múltiples normal/emergencia se sincronizan mediante su propio payload)
         await tx.elementoUnifilar.updateMany({
           where: {
             proyectoId: targetProyectoId,
             deletedAt: null,
             alimentadoPorId: finalElementId,
+            tipoElemento: { not: 'TRANSFER' },
             id: { notIn: safeAlimentaAIds }
           },
           data: {
@@ -463,6 +465,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
             where: {
               proyectoId: targetProyectoId,
               deletedAt: null,
+              tipoElemento: { not: 'TRANSFER' },
               id: { in: safeAlimentaAIds }
             },
             data: {
@@ -477,6 +480,7 @@ export const crearElementoUnifilar = async (req, res, next) => {
           where: {
             proyectoId: targetProyectoId,
             deletedAt: null,
+            tipoElemento: { not: 'TRANSFER' },
             alimentadoPorId: finalElementId
           },
           data: { alimentadoPor: cleanNombre }

@@ -8,7 +8,7 @@ export const AvanceProgressBar = ({ elemento, tipoElemento, className = '', show
     <div className={`space-y-1.5 w-full select-none ${className}`}>
       <div className="flex items-center justify-between text-[10px] gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] shrink-0">Completitud:</span>
+          <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] shrink-0">Avance:</span>
           <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold border font-mono truncate shadow-xs ${badgeClass}`}>
             {statusText}
           </span>

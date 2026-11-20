@@ -20,7 +20,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import DiagramaUnifilarBlueprint from './DiagramaUnifilarBlueprint';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
-import useStore, { getElementCode } from '../store/useStore';
+import useStore, { getElementCode, resolveElementParentDisplay, resolveElementAlimentaADisplay } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 
 export default function ModalDiagramaUnifilar({ 
@@ -47,6 +47,7 @@ export default function ModalDiagramaUnifilar({
   const [editTipo, setEditTipo] = useState('');
   const [editUbicacion, setEditUbicacion] = useState('');
   const [editAlimentadoPor, setEditAlimentadoPor] = useState('');
+  const [editAlimentadoPorId, setEditAlimentadoPorId] = useState(null);
   const [editAlimentaA, setEditAlimentaA] = useState('');
   const [editAlimentaAIds, setEditAlimentaAIds] = useState([]);
   const [editKva, setEditKva] = useState('');
@@ -63,20 +64,22 @@ export default function ModalDiagramaUnifilar({
       setEditNombre(selectedNode.nombre || '');
       setEditTipo(selectedNode.tipoElemento || 'TABLERO');
       setEditUbicacion(selectedNode.ubicacion || '');
-      setEditAlimentadoPor(selectedNode.alimentadoPor || '');
-      const downstream = (elementos || []).filter(el => el.alimentadoPorId === selectedNode.id);
-      const initialAlimentaAIds = downstream.length > 0 
-        ? downstream.map(c => c.id) 
-        : (selectedNode.datosTecnicos?.alimentaAIds || []);
-      const initialAlimentaA = downstream.length > 0 
-        ? downstream.map(c => c.nombre).join(', ') 
-        : (selectedNode.datosTecnicos?.alimentaA || selectedNode.alimentaA || '');
-      setEditAlimentaA(initialAlimentaA);
-      setEditAlimentaAIds(initialAlimentaAIds);
+      const resolvedParentDisplay = resolveElementParentDisplay(selectedNode, elementos);
+      setEditAlimentadoPor(resolvedParentDisplay || selectedNode.alimentadoPor || '');
+      setEditAlimentadoPorId(selectedNode.alimentadoPorId || selectedNode.datosTecnicos?.alimentadoPorId || null);
+
+      const downResolved = resolveElementAlimentaADisplay(selectedNode, elementos);
+      setEditAlimentaA(downResolved.text || selectedNode.datosTecnicos?.alimentaA || selectedNode.alimentaA || '');
+      setEditAlimentaAIds(
+        downResolved.ids.length > 0
+          ? downResolved.ids
+          : (selectedNode.datosTecnicos?.alimentaAIds || selectedNode.alimentaAIds || [])
+      );
       setEditKva(selectedNode.datosTecnicos?.kva || selectedNode.datosTecnicos?.potenciaKva || '');
       setEditFases(selectedNode.datosTecnicos?.fases || selectedNode.maxPoles || '');
       setEditObservaciones(selectedNode.observacionesGenerales || '');
     } else {
+      setEditAlimentadoPorId(null);
       setEditAlimentaA('');
       setEditAlimentaAIds([]);
       resetEditForm();
@@ -100,6 +103,7 @@ export default function ModalDiagramaUnifilar({
     setEditTipo('');
     setEditUbicacion('');
     setEditAlimentadoPor('');
+    setEditAlimentadoPorId(null);
     setEditKva('');
     setEditFases('');
     setEditObservaciones('');
@@ -138,19 +142,6 @@ export default function ModalDiagramaUnifilar({
       icon: <div className="w-7 h-4 border border-emerald-500 rounded text-[7px] font-black text-center text-emerald-400 bg-emerald-950/20 leading-tight">ATS</div> 
     },
     { 
-      type: 'PUESTA_TIERRA', 
-      label: 'Puesta a Tierra', 
-      desc: 'Malla / Electrodo', 
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 20 20" className="stroke-current text-teal-400" fill="none">
-          <line x1="10" y1="2" x2="10" y2="12" strokeWidth="2" />
-          <line x1="4" y1="12" x2="16" y2="12" strokeWidth="2" />
-          <line x1="6" y1="15" x2="14" y2="15" strokeWidth="1.5" />
-          <line x1="8" y1="18" x2="12" y2="18" strokeWidth="1" />
-        </svg>
-      ) 
-    },
-    { 
       type: 'SUBESTACION', 
       label: 'Celda / Subestación', 
       desc: 'Módulo de maniobra', 
@@ -183,7 +174,6 @@ export default function ModalDiagramaUnifilar({
       TRANSFORMADOR: `Transformador Principal ${count}`,
       GENERADOR: `Generador Emergencia ${count}`,
       TRANSFER: `Transferencia (ATS/MTS) ${count}`,
-      PUESTA_TIERRA: `Malla de Tierra ${count}`,
       SUBESTACION: `Celda Subestación ${count}`,
       OTRO: `Equipo Especial ${count}`
     };
@@ -227,6 +217,7 @@ export default function ModalDiagramaUnifilar({
       tipoElemento: editTipo,
       ubicacion: editUbicacion.trim().toUpperCase(),
       alimentadoPor: editAlimentadoPor ? editAlimentadoPor.trim().toUpperCase() : '',
+      alimentadoPorId: editAlimentadoPorId || null,
       ...(!isTableroTipo
         ? {
             alimentaA: cleanAlimentaAText,
@@ -236,6 +227,7 @@ export default function ModalDiagramaUnifilar({
       observacionesGenerales: editObservaciones.trim().toUpperCase(),
       datosTecnicos: {
         ...selectedNode.datosTecnicos,
+        alimentadoPorId: editAlimentadoPorId || null,
         ...(!isTableroTipo
           ? {
               alimentaA: cleanAlimentaAText,
@@ -341,7 +333,11 @@ export default function ModalDiagramaUnifilar({
   const handleDisconnectElement = async () => {
     if (!selectedNode) return;
     setEditAlimentadoPor('');
-    await updateElementoUnifilar(proyectoId || selectedNode.proyectoId, selectedNode.id, { alimentadoPor: '' });
+    setEditAlimentadoPorId(null);
+    await updateElementoUnifilar(proyectoId || selectedNode.proyectoId, selectedNode.id, {
+      alimentadoPor: '',
+      alimentadoPorId: null
+    });
     showToast('Conexión de alimentación removida.', 'info');
   };
 
@@ -362,7 +358,8 @@ export default function ModalDiagramaUnifilar({
         
         // El destino es alimentado por el origen
         updateElementoUnifilar(proyectoId || node.proyectoId, node.id, { 
-          alimentadoPor: connectionSource.nombre 
+          alimentadoPor: connectionSource.nombre,
+          alimentadoPorId: connectionSource.id
         });
 
         showToast(`Conexión establecida: ${connectionSource.nombre} ➔ ${node.nombre}`, 'success');
@@ -553,7 +550,6 @@ export default function ModalDiagramaUnifilar({
                           <option value="TRANSFORMADOR">Transformador</option>
                           <option value="GENERADOR">Generador / Planta</option>
                           <option value="TRANSFER">Transferencia (ATS/MTS)</option>
-                          <option value="PUESTA_TIERRA">Puesta a Tierra</option>
                           <option value="SUBESTACION">Celda Subestación</option>
                           <option value="OTRO">Otro Elemento</option>
                         </select>
@@ -578,7 +574,12 @@ export default function ModalDiagramaUnifilar({
                           elementosList={elementos}
                           value={editAlimentadoPor}
                           multiple={false}
-                          onChange={(val) => setEditAlimentadoPor(val ? val.toUpperCase() : '')}
+                          tipoElementoActual={editTipo}
+                          direccionRelacion="ALIMENTADO_POR"
+                          onChange={(val, primaryObj, ids) => {
+                            setEditAlimentadoPor(val ? val.toUpperCase() : '');
+                            setEditAlimentadoPorId(primaryObj?.id || ids?.[0] || null);
+                          }}
                           label="Alimentado por (Origen de Flujo)"
                           placeholder="Ninguno (Origen del Sistema)..."
                         />

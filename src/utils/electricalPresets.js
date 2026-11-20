@@ -184,6 +184,5 @@ export const PRESET_TIPOS_ELEMENTO = [
   { value: 'CCM', label: '🎛️ Centro de Control de Motores (CCM)' },
   { value: 'PUNTO_SUMINISTRO', label: '🌐 Punto de Suministro / Acometida Eléctrica' },
   { value: 'PUNTO_MEDICION', label: '📊 Punto de Medición / Medidor de Frontera' },
-  { value: 'BANCO_CONDENSADOR', label: '⚡ Banco de Condensadores' },
-  { value: 'PUESTA_TIERRA', label: '🛡️ Sistema de Puesta a Tierra (SPAT)' }
+  { value: 'BANCO_CONDENSADOR', label: '⚡ Banco de Condensadores' }
 ];

@@ -24,7 +24,13 @@ import {
   Link2,
   Plus
 } from 'lucide-react';
-import useStore, { getElementCode } from '../store/useStore';
+import useStore, {
+  getElementCode,
+  getSimpleElementCode,
+  cleanElementName,
+  resolveElementAlimentaADisplay,
+  isPlaceholderHierarchyValue
+} from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
@@ -65,7 +71,38 @@ export default function TransferComponent({
 
   // Modo selector dual para Fuente Emergencia: 'EXISTENTE' o 'NUEVO'
   const [modoFuenteEmergencia, setModoFuenteEmergencia] = useState('EXISTENTE');
-  const [salidaModo, setSalidaModo] = useState('SELECT'); // 'SELECT' | 'CARGA_DIRECTA'
+
+  // Estado para creación rápida de equipo alimentado aguas abajo (Sección 5)
+  const [salidaQuickOpen, setSalidaQuickOpen] = useState(false);
+  const [newSalidaTipo, setNewSalidaTipo] = useState('TABLERO');
+  const [newSalidaNombre, setNewSalidaNombre] = useState('');
+
+  // Estados locales editables - Sin datos demo quemados
+  const [nombre, setNombre] = useState(data?.nombre || '');
+  const [ubicacion, setUbicacion] = useState(data?.ubicacion || '');
+  const [observaciones, setObservaciones] = useState(
+    data?.observacionesGenerales || data?.datosTecnicos?.observacionTransferencia || ''
+  );
+
+  // Datos Técnicos JSON
+  const [dt, setDt] = useState(data?.datosTecnicos || {});
+
+  // Foto
+  const [fotoBlob, setFotoBlob] = useState(data?.fotoBlob || null);
+  const [fotoSrc, setFotoSrc] = useState(data?.foto || null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  // Sincronizar si cambian los props
+  useEffect(() => {
+    if (data) {
+      setNombre(data.nombre || '');
+      setUbicacion(data.ubicacion || '');
+      setObservaciones(data.observacionesGenerales || data.datosTecnicos?.observacionTransferencia || '');
+      setDt(data.datosTecnicos || {});
+      setFotoBlob(data.fotoBlob || null);
+      setFotoSrc(data.foto || null);
+    }
+  }, [data]);
 
   // Lista de elementos de jerarquía del proyecto para alimentar los selectores (filtrado estrictamente por el proyecto activo)
   const projectElements = useMemo(() => {
@@ -110,86 +147,151 @@ export default function TransferComponent({
     });
   }, [companies, data]);
 
-  const tablerosDestino = useMemo(() => projectElements.filter(e => e.tipoElemento === 'TABLERO'), [projectElements]);
-  const ccmsDestino = useMemo(() => projectElements.filter(e => e.tipoElemento === 'CCM'), [projectElements]);
-  const otrosDestino = useMemo(() => projectElements.filter(e => e.tipoElemento !== 'TABLERO' && e.tipoElemento !== 'CCM'), [projectElements]);
+  // Resolución automática y bidireccional de jerarquía (Aguas arriba y Aguas abajo)
+  const autoHierarchy = useMemo(() => {
+    const empty = {
+      fuenteNormalResolved: null,
+      fuenteEmergenciaResolved: null,
+      upstreamBadges: [],
+      alimentaAResolved: { ids: [], items: [], names: [], text: '' },
+      downstreamBadges: []
+    };
+    if (!data) return empty;
 
-  // Handler para guardar nueva fuente rápida
-  const handleCreateQuickSource = async (e, customTipo, customNombre, customCapacidad) => {
-    if (e && e.preventDefault) e.preventDefault();
-    const tipo = customTipo || newSourceTipo;
-    const nombreFuente = (customNombre || newSourceNombre).trim();
-    const capacidad = (customCapacidad || newSourceCapacidad).trim();
-    if (!nombreFuente) {
-      showToast('Por favor introduce un nombre para la fuente.', 'error');
-      return;
-    }
-
-    const targetProjId = data.proyectoId || data.projectId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
-
-    const payload = {
-      nombre: nombreFuente,
-      tipoElemento: tipo,
-      ubicacion: newSourceUbicacion.trim() || 'Sala Eléctrica / Caseta de Generación',
-      datosTecnicos: {
-        kva: capacidad,
-        potenciaKva: capacidad,
-        amperaje: capacidad,
-        tensionNominal: newSourceTension || dt.tensionNominal || '208/120 V',
-        voltajeGeneracion: newSourceTension || dt.tensionNominal || '208/120 V',
-        frecuencia: '60 Hz',
-        hz: '60 Hz',
-        rpm: '1800 RPM',
-        velocidadRpm: '1800 RPM',
-        combustible: 'DIESEL'
+    const findMatch = (rawId, rawName) => {
+      if (rawId) {
+        const byId = projectElements.find((e) => String(e.id) === String(rawId));
+        if (byId) return byId;
       }
+      if (rawName && !isPlaceholderHierarchyValue(rawName)) {
+        const cleanTarget = cleanElementName(String(rawName)).toUpperCase().trim();
+        if (cleanTarget && cleanTarget !== 'CORPOELEC') {
+          return projectElements.find(
+            (e) =>
+              cleanElementName(e.nombre, e.id, e.codigo || e.simpleCode).toUpperCase().trim() === cleanTarget ||
+              String(e.codigo || '').toUpperCase().trim() === cleanTarget
+          ) || null;
+        }
+      }
+      return null;
     };
 
-    const res = await addElementoUnifilar(targetProjId, payload);
-    if (res && res.success) {
-      const createdElem = res.elemento;
-      const createdName = createdElem.nombre || nombreFuente;
-      
-      if (quickCreateTargetField === 'fuenteNormal') {
-        handleDtChange('fuenteNormalNombre', createdName);
-      } else {
-        handleDtChange('fuenteEmergenciaNombre', createdName);
-        setModoFuenteEmergencia('EXISTENTE');
+    const elementCallsSelf = (candidate) => {
+      if (!candidate || !candidate.id || !data?.id) return false;
+      const cDt = candidate.datosTecnicos || {};
+      const cAlimentaIds = [
+        ...(Array.isArray(candidate.alimentaAIds) ? candidate.alimentaAIds : []),
+        ...(Array.isArray(cDt.alimentaAIds) ? cDt.alimentaAIds : [])
+      ].map(String);
+      if (cAlimentaIds.includes(String(data.id))) return true;
+      const circuits = Array.isArray(cDt.circuits) ? cDt.circuits : (Array.isArray(candidate.circuits) ? candidate.circuits : []);
+      return circuits.some((c) => {
+        const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
+        return rawDest && String(rawDest).split(',').map((s) => s.trim()).includes(String(data.id));
+      });
+    };
+
+    const rawNormText = dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || '';
+    const rawEmergText = dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || '';
+
+    const toBadge = (rawId, rawName) => {
+      if (!rawId && isPlaceholderHierarchyValue(rawName)) return null;
+      const cleanRaw = !isPlaceholderHierarchyValue(rawName) ? cleanElementName(String(rawName)).toUpperCase().trim() : '';
+      if (cleanRaw === 'CORPOELEC' && !rawId) {
+        return { id: null, nombre: 'CORPOELEC', code: 'RED', isCorpoelec: true };
       }
+      const el = findMatch(rawId, rawName);
+      if (el) {
+        return {
+          id: el.id,
+          nombre: cleanElementName(el.nombre, el.id, el.codigo || el.simpleCode).toUpperCase().trim(),
+          code: getSimpleElementCode(el, el.tipoElemento || 'TABLERO'),
+          isCorpoelec: false
+        };
+      }
+      if (cleanRaw) {
+        return { id: rawId || null, nombre: cleanRaw, code: null, isCorpoelec: false };
+      }
+      return null;
+    };
 
-      showToast(`Fuente "${createdName}" creada y asignada exitosamente.`, 'success');
-      setQuickCreateOpen(false);
-    } else {
-      showToast(res?.error || 'Error al crear la fuente.', 'error');
+    let fuenteNormalResolved = toBadge(dt.fuenteNormalId, rawNormText);
+    let fuenteEmergenciaResolved = toBadge(dt.fuenteEmergenciaId, rawEmergText);
+
+    // Inferencia automática desde elementos aguas arriba que llaman a esta Transferencia en su ALIMENTA A / circuitos
+    const reverseParents = projectElements.filter(elementCallsSelf);
+    if (!fuenteEmergenciaResolved) {
+      const genParent = reverseParents.find((p) => String(p.tipoElemento || p.tipo || '').toUpperCase() === 'GENERADOR');
+      if (genParent) {
+        fuenteEmergenciaResolved = toBadge(genParent.id, genParent.nombre);
+      } else if (data.alimentadoPorId) {
+        const directParent = projectElements.find((p) => String(p.id) === String(data.alimentadoPorId));
+        if (directParent && String(directParent.tipoElemento || '').toUpperCase() === 'GENERADOR') {
+          fuenteEmergenciaResolved = toBadge(directParent.id, directParent.nombre);
+        }
+      }
     }
-  };
 
-  // Estados locales editables - Sin datos demo quemados
-  const [nombre, setNombre] = useState(data?.nombre || '');
-  const [ubicacion, setUbicacion] = useState(data?.ubicacion || '');
-  const [observaciones, setObservaciones] = useState(
-    data?.observacionesGenerales || data?.datosTecnicos?.observacionTransferencia || ''
-  );
+    if (!fuenteNormalResolved) {
+      const normParent = reverseParents.find((p) => String(p.tipoElemento || p.tipo || '').toUpperCase() !== 'GENERADOR');
+      if (normParent) {
+        fuenteNormalResolved = toBadge(normParent.id, normParent.nombre);
+      } else if (data.alimentadoPorId) {
+        const directParent = projectElements.find((p) => String(p.id) === String(data.alimentadoPorId));
+        if (directParent && String(directParent.tipoElemento || '').toUpperCase() !== 'GENERADOR') {
+          fuenteNormalResolved = toBadge(directParent.id, directParent.nombre);
+        }
+      }
+    }
 
-  // Datos Técnicos JSON
-  const [dt, setDt] = useState(data?.datosTecnicos || {});
+    const upstreamBadges = [fuenteNormalResolved, fuenteEmergenciaResolved].filter(Boolean);
 
-  // Foto
-  const [fotoBlob, setFotoBlob] = useState(data?.fotoBlob || null);
-  const [fotoSrc, setFotoSrc] = useState(data?.foto || null);
-  const [previewUrl, setPreviewUrl] = useState(null);
+    const syntheticSelf = { ...data, nombre, datosTecnicos: dt };
+    const alimentaAResolved = resolveElementAlimentaADisplay(syntheticSelf, [syntheticSelf, ...projectElements]);
+    const downstreamBadges = alimentaAResolved.names.map((nm) => {
+      const matched = alimentaAResolved.items.find(
+        (it) => cleanElementName(it.nombre, it.id, it.codigo || it.simpleCode).toUpperCase().trim() === nm
+      );
+      return {
+        id: matched?.id || null,
+        nombre: nm,
+        code: matched ? getSimpleElementCode(matched, matched.tipoElemento || 'TABLERO') : null
+      };
+    });
 
-  // Sincronizar si cambian los props
+    return {
+      fuenteNormalResolved,
+      fuenteEmergenciaResolved,
+      upstreamBadges,
+      alimentaAResolved,
+      downstreamBadges
+    };
+  }, [data, dt, nombre, projectElements]);
+
+  const sheetRef = React.useRef(null);
+  const hasPhotoAttached = Boolean(fotoBlob || fotoSrc || previewUrl);
+
+  const printOptimization = useMemo(() => {
+    const baseZoom = hasPhotoAttached ? 0.86 : 0.94;
+    const density = hasPhotoAttached ? 'compact' : 'comfortable';
+    return { zoom: baseZoom, density };
+  }, [hasPhotoAttached]);
+
   useEffect(() => {
-    if (data) {
-      setNombre(data.nombre || '');
-      setUbicacion(data.ubicacion || '');
-      setObservaciones(data.observacionesGenerales || data.datosTecnicos?.observacionTransferencia || '');
-      setDt(data.datosTecnicos || {});
-      setFotoBlob(data.fotoBlob || null);
-      setFotoSrc(data.foto || null);
-    }
-  }, [data]);
+    const handleBeforePrint = () => {
+      const el = sheetRef.current;
+      if (!el) return;
+      el.style.setProperty('--tablero-print-zoom', String(printOptimization.zoom));
+      const printableHeightPx = 940;
+      const naturalHeight = el.scrollHeight;
+      if (naturalHeight > 0 && naturalHeight * printOptimization.zoom > printableHeightPx) {
+        const fittedZoom = Math.max(0.62, Math.min(printOptimization.zoom, Number((printableHeightPx / naturalHeight).toFixed(3))));
+        el.style.setProperty('--tablero-print-zoom', String(fittedZoom));
+      }
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, [printOptimization.zoom]);
 
   // Fallback si no hay datos
   if (!data) {
@@ -206,24 +308,204 @@ export default function TransferComponent({
     setDt(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleNestedDtChange = (parentKey, key, value) => {
-    if (readOnly) return;
-    setDt(prev => ({
-      ...prev,
-      [parentKey]: {
-        ...(prev[parentKey] || {}),
-        [key]: value
+  const resolveMatchByIdOrName = (rawId, rawName) => {
+    if (!rawId && isPlaceholderHierarchyValue(rawName)) return { id: null, nombre: '' };
+    const cleanName = !isPlaceholderHierarchyValue(rawName)
+      ? cleanElementName(String(rawName)).toUpperCase().trim()
+      : '';
+    if (cleanName === 'CORPOELEC') return { id: null, nombre: 'CORPOELEC' };
+    if (rawId) {
+      const foundById = projectElements.find((e) => String(e.id) === String(rawId));
+      if (foundById) {
+        return {
+          id: foundById.id,
+          nombre: cleanElementName(foundById.nombre, foundById.id, foundById.codigo || foundById.simpleCode).toUpperCase().trim()
+        };
       }
-    }));
+      return { id: rawId, nombre: cleanName };
+    }
+    if (cleanName) {
+      const foundByName = projectElements.find(
+        (e) =>
+          cleanElementName(e.nombre, e.id, e.codigo || e.simpleCode).toUpperCase().trim() === cleanName ||
+          String(e.codigo || '').toUpperCase().trim() === cleanName
+      );
+      if (foundByName) {
+        return {
+          id: foundByName.id,
+          nombre: cleanElementName(foundByName.nombre, foundByName.id, foundByName.codigo || foundByName.simpleCode).toUpperCase().trim()
+        };
+      }
+    }
+    return { id: null, nombre: cleanName };
+  };
+
+  // Handler para guardar nueva fuente rápida (con enlace bidireccional automático hacia esta Transferencia)
+  const handleCreateQuickSource = async (e, customTipo, customNombre, customCapacidad) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const tipo = customTipo || newSourceTipo;
+    const nombreFuente = (customNombre || newSourceNombre).trim();
+    const capacidad = (customCapacidad || newSourceCapacidad).trim();
+    if (!nombreFuente) {
+      showToast('Por favor introduce un nombre para la fuente.', 'error');
+      return;
+    }
+
+    const targetProjId = data.proyectoId || data.projectId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
+    const transferNombreUpper = String(nombre || data.nombre || 'TRANSFERENCIA').toUpperCase().trim();
+
+    const payload = {
+      nombre: nombreFuente,
+      tipoElemento: tipo,
+      ubicacion: newSourceUbicacion.trim() || 'Sala Eléctrica / Caseta de Generación',
+      alimentaA: transferNombreUpper,
+      alimentaAIds: data?.id ? [data.id] : [],
+      datosTecnicos: {
+        kva: capacidad,
+        potenciaKva: capacidad,
+        amperaje: capacidad,
+        tensionNominal: newSourceTension || dt.tensionNominal || '208/120 V',
+        voltajeGeneracion: newSourceTension || dt.tensionNominal || '208/120 V',
+        frecuencia: '60 Hz',
+        hz: '60 Hz',
+        rpm: '1800 RPM',
+        velocidadRpm: '1800 RPM',
+        combustible: 'DIESEL',
+        alimentaA: transferNombreUpper,
+        alimentaAIds: data?.id ? [data.id] : []
+      }
+    };
+
+    const res = await addElementoUnifilar(targetProjId, payload);
+    if (res && res.success) {
+      const createdElem = res.elemento;
+      const createdName = (createdElem.nombre || nombreFuente).toUpperCase().trim();
+
+      if (quickCreateTargetField === 'fuenteNormal') {
+        setDt(prev => ({ ...prev, fuenteNormalNombre: createdName, fuenteNormalId: createdElem.id }));
+      } else {
+        setDt(prev => ({ ...prev, fuenteEmergenciaNombre: createdName, fuenteEmergenciaId: createdElem.id }));
+        setModoFuenteEmergencia('EXISTENTE');
+      }
+
+      showToast(`Fuente "${createdName}" creada y enlazada automáticamente.`, 'success');
+      setQuickCreateOpen(false);
+    } else {
+      showToast(res?.error || 'Error al crear la fuente.', 'error');
+    }
+  };
+
+  // Handler para creación rápida de equipo alimentado aguas abajo desde Sección 5
+  const handleCreateQuickSalida = async () => {
+    const targetProjId = data.proyectoId || data.projectId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
+    const defaultLabel = newSalidaTipo === 'CCM'
+      ? `CCM Derivado ${projectElements.filter(el => el.tipoElemento === 'CCM').length + 1}`
+      : newSalidaTipo === 'TRANSFER'
+      ? `Transferencia Secundaria ${projectElements.filter(el => el.tipoElemento === 'TRANSFER').length + 1}`
+      : `Sub-Tablero Derivado ${projectElements.filter(el => el.tipoElemento === 'TABLERO').length + 1}`;
+    const finalName = (newSalidaNombre || defaultLabel).trim();
+    const transferNombreUpper = String(nombre || data.nombre || 'TRANSFERENCIA (ATS/MTS)').toUpperCase().trim();
+
+    const payload = {
+      nombre: finalName,
+      tipoElemento: newSalidaTipo,
+      ubicacion: ubicacion || 'Área de Cargas',
+      alimentadoPor: transferNombreUpper,
+      alimentadoPorId: data.id,
+      datosTecnicos: {
+        alimentadoPorId: data.id,
+        amperaje: dt.amperaje || '225',
+        tensionNominal: dt.tensionNominal || '208Y/120 V'
+      }
+    };
+
+    const res = await addElementoUnifilar(targetProjId, payload);
+    if (res && res.success) {
+      const createdElem = res.elemento;
+      const createdName = (createdElem?.nombre || finalName).toUpperCase().trim();
+      setDt((prev) => {
+        const prevIds = Array.isArray(prev.alimentaAIds) ? prev.alimentaAIds.filter(Boolean) : [];
+        const nextIds = Array.from(new Set([...prevIds, createdElem.id].filter(Boolean)));
+        const prevNames = String(prev.salidaCargaNombre || prev.alimentaA || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => !isPlaceholderHierarchyValue(s));
+        const nextNames = Array.from(new Set([...prevNames, createdName]));
+        const nextText = nextNames.join(', ');
+        return {
+          ...prev,
+          salidaCargaNombre: nextText,
+          salidaCargaId: nextIds[0] || createdElem.id,
+          alimentaA: nextText,
+          alimentaAIds: nextIds
+        };
+      });
+      setSalidaQuickOpen(false);
+      setNewSalidaNombre('');
+      showToast(`Elemento "${createdName}" creado y enlazado automáticamente.`, 'success');
+    } else {
+      showToast(res?.error || 'Error al crear el equipo de salida.', 'error');
+    }
+  };
+
+  const handleStartEditing = () => {
+    if (readOnly) return;
+    setDt((prev) => {
+      const next = { ...(prev || {}) };
+      if (isPlaceholderHierarchyValue(next.fuenteNormalNombre) && autoHierarchy.fuenteNormalResolved) {
+        next.fuenteNormalNombre = autoHierarchy.fuenteNormalResolved.nombre;
+        next.fuenteNormalId = autoHierarchy.fuenteNormalResolved.id || null;
+      }
+      if (isPlaceholderHierarchyValue(next.fuenteEmergenciaNombre) && autoHierarchy.fuenteEmergenciaResolved) {
+        next.fuenteEmergenciaNombre = autoHierarchy.fuenteEmergenciaResolved.nombre;
+        next.fuenteEmergenciaId = autoHierarchy.fuenteEmergenciaResolved.id || null;
+      }
+      if (isPlaceholderHierarchyValue(next.salidaCargaNombre) && autoHierarchy.alimentaAResolved?.text) {
+        next.salidaCargaNombre = autoHierarchy.alimentaAResolved.text;
+        next.salidaCargaId = autoHierarchy.alimentaAResolved.ids?.[0] || null;
+        next.alimentaA = autoHierarchy.alimentaAResolved.text;
+        next.alimentaAIds = autoHierarchy.alimentaAResolved.ids || [];
+      }
+      return next;
+    });
+    setIsEditing(true);
   };
 
   const handleSave = () => {
     if (readOnly) return;
-    const resolvedAlimentadoPor = [dt.fuenteNormalNombre, dt.fuenteEmergenciaNombre]
-      .map((v) => String(v || '').trim())
-      .filter(Boolean)
-      .join(' / ') || data.alimentadoPor || '';
-    const resolvedAlimentadoPorId = dt.fuenteNormalId || data.alimentadoPorId || null;
+    const norm = resolveMatchByIdOrName(
+      dt.fuenteNormalId,
+      dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec
+    );
+    const emerg = resolveMatchByIdOrName(
+      dt.fuenteEmergenciaId,
+      dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa
+    );
+
+    const resolvedAlimentadoPorIds = Array.from(new Set([norm.id, emerg.id].filter(Boolean)));
+    const resolvedAlimentadoPor = [norm.nombre, emerg.nombre].filter(Boolean).join(' / ');
+    const resolvedAlimentadoPorId = norm.id || emerg.id || null;
+
+    const rawSalidaText = dt.salidaCargaNombre || dt.alimentaA || dt.carga || '';
+    const explicitSalidaIds = Array.isArray(dt.alimentaAIds)
+      ? dt.alimentaAIds.filter(Boolean)
+      : (dt.salidaCargaId ? [dt.salidaCargaId] : []);
+    const matchedIdsFromText = [];
+    if (explicitSalidaIds.length === 0 && !isPlaceholderHierarchyValue(rawSalidaText)) {
+      String(rawSalidaText)
+        .split(/[,;\n]/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .forEach((tok) => {
+          const m = resolveMatchByIdOrName(null, tok);
+          if (m.id) matchedIdsFromText.push(m.id);
+        });
+    }
+    const finalAlimentaIds = Array.from(new Set([...explicitSalidaIds, ...matchedIdsFromText].filter(Boolean)));
+    const finalAlimentaText = !isPlaceholderHierarchyValue(rawSalidaText)
+      ? String(rawSalidaText).split(/[,;\n]/).map((s) => s.trim().toUpperCase()).filter(Boolean).join(', ')
+      : '';
+    const finalSalidaId = finalAlimentaIds[0] || null;
 
     if (onUpdate) {
       onUpdate({
@@ -232,11 +514,23 @@ export default function TransferComponent({
         ubicacion,
         alimentadoPor: resolvedAlimentadoPor,
         alimentadoPorId: resolvedAlimentadoPorId,
+        alimentaA: finalAlimentaText,
+        alimentaAIds: finalAlimentaIds,
         observacionesGenerales: observaciones,
         fotoBlob,
         foto: fotoSrc,
         datosTecnicos: {
           ...dt,
+          fuenteNormalId: norm.id || null,
+          fuenteNormalNombre: norm.nombre,
+          fuenteEmergenciaId: emerg.id || null,
+          fuenteEmergenciaNombre: emerg.nombre,
+          alimentadoPorId: resolvedAlimentadoPorId,
+          alimentadoPorIds: resolvedAlimentadoPorIds,
+          salidaCargaId: finalSalidaId,
+          salidaCargaNombre: finalAlimentaText,
+          alimentaA: finalAlimentaText,
+          alimentaAIds: finalAlimentaIds,
           observacionTransferencia: observaciones
         }
       });
@@ -263,52 +557,34 @@ export default function TransferComponent({
   const modoOperativo = dt.modoOperativo || dt.tipoTransferenciaOperativa || (dt.tipoTransferencia?.toUpperCase().includes('MANUAL') || dt.tipoTransferencia?.toUpperCase().includes('MTS') ? 'MTS' : 'ATS');
   const estadoServicio = dt.estadoServicio || 'En Servicio'; // 'En Servicio' | 'Fuera de Servicio'
   const tipoTransicion = dt.tipoTransicion || 'ABIERTA'; // 'ABIERTA' | 'CERRADA' | 'RETARDADA'
-  const tipoEnclavamiento = dt.tipoEnclavamiento || 'MECANICO_ELECTRICO';
   const polos = dt.polos || '4P';
   const frecuencia = dt.frecuencia || '60 Hz';
 
-  // Valores de Fuente Normal (Fuente A)
-  const fuenteNormalNombre = dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || '';
+  // Valores de Fuente Normal (Fuente A) - con respaldo automático en modo lectura
+  const rawFuenteNormal = dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || '';
+  const fuenteNormalNombre = !isPlaceholderHierarchyValue(rawFuenteNormal)
+    ? rawFuenteNormal
+    : (!isEditing ? (autoHierarchy.fuenteNormalResolved?.nombre || '') : '');
   const fuenteNormalTension = dt.fuenteNormalTension || '';
   const fuenteNormalAmperaje = dt.fuenteNormalAmperaje || dt.amperaje || '';
   const fuenteNormalConductor = dt.fuenteNormalConductor || dt.conductorFuenteNormal || '';
 
-  // Valores de Fuente Emergencia (Fuente B)
-  const fuenteEmergenciaNombre = dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || '';
+  // Valores de Fuente Emergencia (Fuente B) - con respaldo automático en modo lectura
+  const rawFuenteEmergencia = dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || '';
+  const fuenteEmergenciaNombre = !isPlaceholderHierarchyValue(rawFuenteEmergencia)
+    ? rawFuenteEmergencia
+    : (!isEditing ? (autoHierarchy.fuenteEmergenciaResolved?.nombre || '') : '');
   const fuenteEmergenciaTension = dt.fuenteEmergenciaTension || '';
   const fuenteEmergenciaAmperaje = dt.fuenteEmergenciaAmperaje || dt.amperaje || '';
   const fuenteEmergenciaConductor = dt.fuenteEmergenciaConductor || dt.conductorFuenteEmergencia || '';
 
-  // Salida a Carga y Acometida de Carga (Renombrado técnico)
-  const salidaCargaNombre = dt.salidaCargaNombre || dt.carga || '';
-  const salidaCargaConductor = dt.salidaCargaConductor || '';
+  // Salida a Carga y Acometida de Carga (con respaldo bidireccional automático)
+  const rawSalidaCarga = dt.salidaCargaNombre || dt.alimentaA || dt.carga || '';
+  const salidaCargaNombre = !isPlaceholderHierarchyValue(rawSalidaCarga)
+    ? rawSalidaCarga
+    : (!isEditing ? (autoHierarchy.alimentaAResolved?.text || '') : '');
   const acometidaCargaConductor = dt.acometidaCarga || dt.acometidaCargaConductor || dt.neutroConductor || dt.neutro || '';
   const tierraConductor = dt.tierraConductor || dt.tierra || '';
-
-  const sheetRef = React.useRef(null);
-  const hasPhotoAttached = Boolean(fotoBlob || fotoSrc || previewUrl);
-
-  const printOptimization = useMemo(() => {
-    const baseZoom = hasPhotoAttached ? 0.86 : 0.94;
-    const density = hasPhotoAttached ? 'compact' : 'comfortable';
-    return { zoom: baseZoom, density };
-  }, [hasPhotoAttached]);
-
-  useEffect(() => {
-    const handleBeforePrint = () => {
-      const el = sheetRef.current;
-      if (!el) return;
-      el.style.setProperty('--tablero-print-zoom', String(printOptimization.zoom));
-      const printableHeightPx = 940;
-      const naturalHeight = el.scrollHeight;
-      if (naturalHeight > 0 && naturalHeight * printOptimization.zoom > printableHeightPx) {
-        const fittedZoom = Math.max(0.62, Math.min(printOptimization.zoom, Number((printableHeightPx / naturalHeight).toFixed(3))));
-        el.style.setProperty('--tablero-print-zoom', String(fittedZoom));
-      }
-    };
-    window.addEventListener('beforeprint', handleBeforePrint);
-    return () => window.removeEventListener('beforeprint', handleBeforePrint);
-  }, [printOptimization.zoom]);
 
   return (
     <div
@@ -392,7 +668,7 @@ export default function TransferComponent({
                 </button>
               ) : (
                 <button
-                  onClick={() => setIsEditing(true)}
+                  onClick={handleStartEditing}
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition-all font-black text-xs cursor-pointer flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95"
                 >
                   <Edit3 className="w-4 h-4" /> Editar Transferencia
@@ -574,14 +850,62 @@ export default function TransferComponent({
 
           {/* Columna Derecha: TARJETA SUPERIOR DERECHA - DOBLE FUENTE DE ALIMENTACIÓN (7 columnas) */}
           <div className="lg:col-span-7 print:col-span-7 p-5 print:p-2 space-y-4 print:space-y-1.5 bg-slate-950/60">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider flex items-center gap-2">
                 <Zap className="w-4 h-4 text-emerald-400 no-print" />
                 Doble Fuente de Alimentación • Transferencia (ATS/MTS)
               </h3>
               <span className="tablero-badge-slate text-[10px] print:text-[8px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                Jerarquía Activa
+                Jerarquía Automática Sincronizada
               </span>
+            </div>
+
+            {/* Resumen automático bidireccional (Aguas arriba y Aguas abajo) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-900/70 border border-slate-800/90 print:border-slate-400 rounded-xl p-2.5 print:p-1.5 font-mono text-[10px] print:text-[8.5px]">
+              <div className="space-y-1">
+                <span className="text-slate-400 print:text-slate-800 font-bold uppercase block">
+                  Alimentado por (Entrada automática):
+                </span>
+                {autoHierarchy.upstreamBadges.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {autoHierarchy.upstreamBadges.map((b, i) => (
+                      <span
+                        key={`${b.id || b.nombre}-${i}`}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border font-bold ${
+                          b.isCorpoelec
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30 print:text-slate-950'
+                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 print:text-slate-950'
+                        }`}
+                      >
+                        <span className="truncate max-w-[170px]">{b.nombre}</span>
+                        {b.code && <span className="text-amber-400 print:text-slate-700 lowercase">({b.code})</span>}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-500 italic">Sin alimentador vinculado</span>
+                )}
+              </div>
+              <div className="space-y-1 sm:border-l sm:border-slate-800 sm:pl-2.5">
+                <span className="text-slate-400 print:text-slate-800 font-bold uppercase block">
+                  Alimenta a (Salida automática):
+                </span>
+                {autoHierarchy.downstreamBadges.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {autoHierarchy.downstreamBadges.map((b, i) => (
+                      <span
+                        key={`${b.id || b.nombre}-${i}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border bg-amber-500/15 text-amber-200 border-amber-500/30 print:text-slate-950 font-bold"
+                      >
+                        <span className="truncate max-w-[170px]">{b.nombre}</span>
+                        {b.code && <span className="text-amber-400 print:text-slate-700 lowercase">({b.code})</span>}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-500 italic">Sin cargas vinculadas aguas abajo</span>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-3.5 print:gap-2">
@@ -605,18 +929,21 @@ export default function TransferComponent({
                       <div className="no-print">
                         <SelectorAlimentadorJerarquico
                           value={fuenteNormalNombre}
-                          onChange={(val, selectedObj) => {
+                          onChange={(val, selectedObj, ids) => {
                             if (readOnly) return;
+                            const upperVal = val ? val.toUpperCase() : '';
                             setDt((prev) => ({
                               ...prev,
-                              fuenteNormalNombre: val,
-                              fuenteNormalId: selectedObj?.id || null
+                              fuenteNormalNombre: upperVal,
+                              fuenteNormalId: selectedObj?.id || ids?.[0] || null
                             }));
                           }}
-                          proyectoId={data.proyectoId}
+                          proyectoId={data.proyectoId || data.projectId}
                           tableroActualId={data.id}
                           elementosList={projectElements}
-                          placeholder="Seleccionar Subestación, Transformador..."
+                          tipoElementoActual="TRANSFER"
+                          direccionRelacion="ALIMENTADO_POR"
+                          placeholder="Seleccionar Subestación, Transformador o CORPOELEC..."
                           className="text-xs"
                           label=""
                           allowQuickCreate={true}
@@ -635,9 +962,16 @@ export default function TransferComponent({
                       </p>
                     </>
                   ) : (
-                    <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteNormalNombre}>
-                      {fuenteNormalNombre || '—'}
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteNormalNombre}>
+                        {fuenteNormalNombre || '—'}
+                      </p>
+                      {autoHierarchy.fuenteNormalResolved?.code && (
+                        <span className="no-print px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/15 text-amber-400 border border-emerald-500/30 lowercase">
+                          {autoHierarchy.fuenteNormalResolved.code}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -728,17 +1062,20 @@ export default function TransferComponent({
                         {modoFuenteEmergencia === 'EXISTENTE' ? (
                           <SelectorAlimentadorJerarquico
                             value={fuenteEmergenciaNombre}
-                            onChange={(val, selectedObj) => {
+                            onChange={(val, selectedObj, ids) => {
                               if (readOnly) return;
+                              const upperVal = val ? val.toUpperCase() : '';
                               setDt((prev) => ({
                                 ...prev,
-                                fuenteEmergenciaNombre: val,
-                                fuenteEmergenciaId: selectedObj?.id || null
+                                fuenteEmergenciaNombre: upperVal,
+                                fuenteEmergenciaId: selectedObj?.id || ids?.[0] || null
                               }));
                             }}
                             proyectoId={data.proyectoId || data.projectId}
                             tableroActualId={data.id}
                             elementosList={projectElements}
+                            tipoElementoActual="TRANSFER"
+                            direccionRelacion="ALIMENTADO_POR"
                             placeholder="Seleccionar Generador del proyecto..."
                             className="text-xs"
                             label=""
@@ -795,9 +1132,16 @@ export default function TransferComponent({
                       </p>
                     </>
                   ) : (
-                    <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteEmergenciaNombre}>
-                      {fuenteEmergenciaNombre || '—'}
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-bold text-slate-100 print:text-slate-950 text-xs print:text-[9.5px] font-mono truncate" title={fuenteEmergenciaNombre}>
+                        {fuenteEmergenciaNombre || '—'}
+                      </p>
+                      {autoHierarchy.fuenteEmergenciaResolved?.code && (
+                        <span className="no-print px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 lowercase">
+                          {autoHierarchy.fuenteEmergenciaResolved.code}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -973,130 +1317,120 @@ export default function TransferComponent({
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-4 print:gap-2 font-mono text-xs">
-            {/* LÍNEA DE SALIDA FLEXIBLE (HOMOLOGADA CON CIRCUITOS DE TABLEROS) */}
-            <div className="tablero-ficha-card bg-slate-900/80 p-3.5 print:p-2 rounded-xl border border-slate-800 space-y-1.5 print:space-y-1">
-              <div className="flex items-center justify-between">
+            {/* LÍNEA DE SALIDA FLEXIBLE CON JERARQUÍA BIDIRECCIONAL AUTOMÁTICA */}
+            <div className="tablero-ficha-card bg-slate-900/80 p-3.5 print:p-2 rounded-xl border border-slate-800 space-y-2 print:space-y-1 relative z-20 focus-within:z-40">
+              <div className="flex items-center justify-between gap-2">
                 <span className="tablero-ficha-label text-[10px] print:text-[8.5px] text-slate-400 font-bold uppercase block">
                   CARGA O TABLERO ALIMENTADO:
                 </span>
                 {isEditing && (
                   <button
                     type="button"
-                    onClick={() => setSalidaModo(salidaModo === 'CARGA_DIRECTA' ? 'SELECT' : 'CARGA_DIRECTA')}
-                    className="no-print text-[9px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+                    onClick={() => setSalidaQuickOpen((prev) => !prev)}
+                    className="no-print inline-flex items-center gap-1 text-[9px] text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
                   >
-                    {salidaModo === 'CARGA_DIRECTA' ? 'Ver Lista Proyecto' : 'Escribir Carga Directa'}
+                    <Plus className="w-3 h-3" />
+                    {salidaQuickOpen ? 'Volver al Selector' : 'Crear Destino'}
                   </button>
                 )}
               </div>
 
               {isEditing ? (
-                salidaModo === 'CARGA_DIRECTA' ? (
-                  <input
-                    type="text"
-                    value={salidaCargaNombre}
-                    onChange={(e) => handleDtChange('salidaCargaNombre', e.target.value)}
-                    placeholder="Ej. Bomba Contra Incendio / Chiller 1"
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 text-xs font-mono placeholder-slate-600 focus:border-amber-500"
-                  />
+                salidaQuickOpen ? (
+                  <div className="no-print bg-slate-950/90 p-2.5 rounded-xl border border-amber-500/40 space-y-2">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase block font-mono">
+                      Crear Equipo Alimentado al Vuelo:
+                    </span>
+                    <select
+                      value={newSalidaTipo}
+                      onChange={(e) => setNewSalidaTipo(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs font-bold cursor-pointer"
+                    >
+                      <option value="TABLERO">Sub-Tablero / Panel</option>
+                      <option value="CCM">Centro de Control (CCM)</option>
+                      <option value="TRANSFER">Transferencia Secundaria</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={newSalidaNombre}
+                      onChange={(e) => setNewSalidaNombre(e.target.value)}
+                      placeholder="Nombre opcional (ej. Tablero Hidroneumático)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 text-xs"
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSalidaQuickOpen(false)}
+                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCreateQuickSalida}
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-black rounded transition-all cursor-pointer shadow"
+                      >
+                        Crear y Enlazar
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <select
-                    value={salidaCargaNombre}
-                    onChange={async (e) => {
-                      const val = e.target.value;
-                      if (val === '__CARGA_DIRECTA__') {
-                        setSalidaModo('CARGA_DIRECTA');
-                        handleDtChange('salidaCargaNombre', 'CARGA DIRECTA');
-                      } else if (val.startsWith('__NEW_')) {
-                        const targetProjId = data.proyectoId || data.projectId || (companies.find(c => c.id === (data.empresaId || data.companyId))?.proyectos?.[0]?.id);
-                        let newTipo = 'TABLERO';
-                        let defaultName = 'Sub-Tablero Derivado';
-                        if (val === '__NEW_CCM__') {
-                          newTipo = 'CCM';
-                          defaultName = 'CCM Derivado';
-                        } else if (val === '__NEW_TRANSFER__') {
-                          newTipo = 'TRANSFER';
-                          defaultName = 'Transferencia Secundaria';
-                        }
-                        const nombreSugerido = `${defaultName} ${projectElements.filter(el => el.tipoElemento === newTipo).length + 1}`;
-                        const payload = {
-                          nombre: nombreSugerido,
-                          tipoElemento: newTipo,
-                          ubicacion: ubicacion || 'Área de Cargas',
-                          alimentadoPor: nombre || 'Transferencia (ATS/MTS)',
-                          datosTecnicos: {
-                            amperaje: dt.amperaje || '225',
-                            tensionNominal: dt.tensionNominal || '208Y/120 V'
-                          }
-                        };
-                        const res = await addElementoUnifilar(targetProjId, payload);
-                        if (res && res.success) {
-                          const createdName = res.elemento?.nombre || nombreSugerido;
-                          handleDtChange('salidaCargaNombre', createdName);
-                          showToast(`Elemento "${createdName}" creado y enlazado.`, 'success');
-                        }
-                      } else {
-                        handleDtChange('salidaCargaNombre', val);
-                      }
-                    }}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-medium focus:border-amber-500 cursor-pointer"
-                  >
-                    <option value="">-- Seleccionar Carga / Elemento Destino --</option>
-                    
-                    <optgroup label="⚡ CARGA DIRECTA">
-                      <option value="__CARGA_DIRECTA__">⚡ Escribir Carga Directa (Motor, Bomba, etc.)</option>
-                    </optgroup>
-
-                    <optgroup label="➕ NUEVO ELEMENTO POR CREAR (RESERVA)">
-                      <option value="__NEW_TABLERO__">➕ Crear Nuevo Sub-Tablero / Panel</option>
-                      <option value="__NEW_CCM__">➕ Crear Nuevo Centro de Control (CCM)</option>
-                      <option value="__NEW_TRANSFER__">➕ Crear Nueva Transferencia Secundaria</option>
-                    </optgroup>
-
-                    {tablerosDestino.length > 0 && (
-                      <optgroup label="🏢 Tableros y Sub-Tableros del Proyecto">
-                        {tablerosDestino.map(t => (
-                          <option key={t.id} value={t.nombre}>{t.nombre}</option>
-                        ))}
-                      </optgroup>
-                    )}
-
-                    {ccmsDestino.length > 0 && (
-                      <optgroup label="⚙️ CCMs del Proyecto">
-                        {ccmsDestino.map(c => (
-                          <option key={c.id} value={c.nombre}>{c.nombre}</option>
-                        ))}
-                      </optgroup>
-                    )}
-
-                    {otrosDestino.length > 0 && (
-                      <optgroup label="⚡ Otros Elementos del Proyecto">
-                        {otrosDestino.map(o => (
-                          <option key={o.id} value={o.nombre}>{o.nombre}</option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
+                  <div className="no-print">
+                    <SelectorAlimentadorJerarquico
+                      value={salidaCargaNombre}
+                      multiple={true}
+                      proyectoId={data.proyectoId || data.projectId}
+                      tableroActualId={data.id}
+                      elementosList={projectElements}
+                      tipoElementoActual="TRANSFER"
+                      direccionRelacion="ALIMENTA_A"
+                      label=""
+                      placeholder="Seleccionar Tableros, CCM o escribir carga directa..."
+                      className="text-xs"
+                      onChange={(formatted, primaryObj, ids) => {
+                        if (readOnly) return;
+                        const upperFormatted = formatted ? formatted.toUpperCase() : '';
+                        const cleanIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+                        setDt((prev) => ({
+                          ...prev,
+                          salidaCargaNombre: upperFormatted,
+                          salidaCargaId: cleanIds[0] || null,
+                          alimentaA: upperFormatted,
+                          alimentaAIds: cleanIds
+                        }));
+                      }}
+                    />
+                    <p className="hidden print:block text-slate-950 font-black text-[10px]">
+                      {salidaCargaNombre || '—'}
+                    </p>
+                  </div>
                 )
               ) : (
-                <p className="text-slate-100 print:text-slate-950 font-black text-sm print:text-[10px] truncate" title={salidaCargaNombre}>
-                  {salidaCargaNombre || '—'}
-                </p>
+                <>
+                  <div className="no-print">
+                    {autoHierarchy.downstreamBadges.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {autoHierarchy.downstreamBadges.map((b, i) => (
+                          <span
+                            key={`${b.id || b.nombre}-${i}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-slate-100 border border-amber-500/30 font-black text-xs"
+                          >
+                            <span className="truncate max-w-[180px]">{b.nombre}</span>
+                            {b.code && <span className="text-amber-400 lowercase text-[10px] font-mono">({b.code})</span>}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-100 font-black text-sm truncate" title={salidaCargaNombre}>
+                        {salidaCargaNombre || '—'}
+                      </p>
+                    )}
+                  </div>
+                  <p className="hidden print:block text-slate-950 font-black text-[10px]">
+                    {salidaCargaNombre || '—'}
+                  </p>
+                </>
               )}
-              <div className="pt-1 print:pt-0.5">
-                <span className="text-[10px] print:text-[8px] text-slate-500 print:text-slate-800 block">Conductor Salida:</span>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={salidaCargaConductor}
-                    onChange={(e) => handleDtChange('salidaCargaConductor', e.target.value)}
-                    placeholder="Ej. 2(3X500 MCM)"
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-0.5 text-slate-100 text-xs mt-0.5 font-mono"
-                  />
-                ) : (
-                  <span className="text-slate-300 print:text-slate-950 font-bold text-xs print:text-[9.5px]">{salidaCargaConductor || '—'}</span>
-                )}
-              </div>
             </div>
 
             {/* RENOMBRADO TÉCNICO: ACOMETIDA DE CARGA (ANTES BARRA Y CONDUCTOR DE NEUTRO) */}

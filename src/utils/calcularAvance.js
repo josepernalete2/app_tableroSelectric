@@ -1,5 +1,5 @@
 /**
- * Utilidad avanzada para el cálculo de porcentaje de avance y completitud técnica
+ * Utilidad avanzada para el cálculo de porcentaje de avance técnico
  * de activos y planillas de inspección eléctrica en app_tableroSelectric.
  * 
  * Normativa y Criterios:
@@ -120,7 +120,7 @@ export const calcularPorcentajeAvance = (elemento, tipoElemento) => {
         dt.fuenteNormalNombre || dt.fuente1 || dt.fuenteNormal,
         dt.fuenteEmergenciaNombre || dt.fuente2 || dt.fuenteEmergencia,
         dt.salidaCargaNombre || dt.salidaCarga || dt.cargaAlimentada,
-        dt.fuenteNormalConductor || dt.conductorEntrada || dt.salidaCargaConductor,
+        dt.fuenteNormalConductor || dt.conductorEntrada || dt.acometidaCarga || dt.acometidaCargaConductor,
         elemento.foto || elemento.fotoBlob || dt.fotografia
       ];
       break;

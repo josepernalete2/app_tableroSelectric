@@ -19,6 +19,11 @@
   --color-sec-border: #334155; /* Slate-700 */
 }
 
+html,
+body {
+  touch-action: auto;
+}
+
 body {
   background-color: var(--color-app-bg);
   color: #f1f5f9; /* Slate-100 */
@@ -656,5 +661,253 @@ body {
   .break-inside-avoid {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+}
+
+/* ==========================================================================
+   MODO CLARO GLOBAL (Activado mediante html.light y persistido en theme_mode)
+   Solo aplica en pantalla; los estilos @media print permanecen intactos.
+   ========================================================================== */
+@media screen {
+  html.light {
+    --color-app-bg: #f1f5f9;
+    --color-card-bg: #ffffff;
+    --color-card-border: #cbd5e1;
+    --color-sec-border: #cbd5e1;
+  }
+
+  html.light body {
+    background-color: var(--color-app-bg);
+    color: #0f172a;
+  }
+
+  html.light .btn-secondary {
+    background-color: #ffffff;
+    border-color: #cbd5e1;
+    color: #1e293b;
+  }
+  html.light .btn-secondary:hover {
+    background-color: #e2e8f0;
+    color: #0f172a;
+  }
+
+  html.light .input-search {
+    background-color: #ffffff;
+    border-color: #cbd5e1;
+    color: #0f172a;
+  }
+
+  html.light ::-webkit-scrollbar-track {
+    background: #e2e8f0;
+  }
+  html.light ::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+  }
+  html.light ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+}
+
+@layer utilities {
+  @media screen {
+    /* Fondos principales y tarjetas */
+    :where(html.light) .bg-slate-950,
+    :where(html.light) .bg-slate-950\/95:where(:not(.cursor-grab)),
+    :where(html.light) .bg-slate-950\/90 {
+      background-color: #ffffff;
+    }
+
+    :where(html.light) .bg-slate-950\/80:where(:not(.inset-0):not(.text-white)) {
+      background-color: #ffffff;
+    }
+
+    :where(html.light) .min-h-screen.bg-slate-900 {
+      background-color: #f1f5f9;
+    }
+
+    :where(html.light) .bg-slate-900,
+    :where(html.light) .bg-slate-900\/90,
+    :where(html.light) .bg-slate-900\/80,
+    :where(html.light) .bg-slate-900\/70:where(:not(.inset-0)),
+    :where(html.light) .bg-slate-900\/60:where(:not(.inset-0)),
+    :where(html.light) .bg-slate-900\/50,
+    :where(html.light) .bg-slate-900\/40,
+    :where(html.light) .bg-slate-900\/20,
+    :where(html.light) .bg-slate-950\/75,
+    :where(html.light) .bg-slate-950\/70:where(:not(.inset-0)),
+    :where(html.light) .bg-slate-950\/60,
+    :where(html.light) .bg-slate-950\/50,
+    :where(html.light) .bg-slate-950\/45,
+    :where(html.light) .bg-slate-950\/40,
+    :where(html.light) .bg-slate-950\/30,
+    :where(html.light) .bg-slate-950\/20,
+    :where(html.light) .bg-gray-900 {
+      background-color: #f8fafc;
+    }
+
+    :where(html.light) .bg-slate-800,
+    :where(html.light) .bg-slate-800\/80,
+    :where(html.light) .bg-slate-800\/60,
+    :where(html.light) .bg-slate-800\/50,
+    :where(html.light) .bg-slate-800\/40,
+    :where(html.light) .bg-slate-800\/30,
+    :where(html.light) .bg-slate-700,
+    :where(html.light) .bg-slate-700\/50,
+    :where(html.light) .bg-gray-800 {
+      background-color: #e2e8f0;
+    }
+
+    /* Gradientes de cabecera en tarjetas */
+    :where(html.light) .from-slate-900,
+    :where(html.light) .from-slate-950 {
+      --tw-gradient-from: #f8fafc;
+    }
+    :where(html.light) .to-slate-900\/40,
+    :where(html.light) .to-slate-950,
+    :where(html.light) .to-slate-900 {
+      --tw-gradient-to: #e2e8f0;
+    }
+
+    /* Mantener scrim oscuro en backdrops de modales */
+    :where(html.light) :is(.fixed.inset-0, [class*="z-50"]) > .absolute.inset-0 {
+      background-color: rgba(15, 23, 42, 0.48);
+    }
+
+    /* Fondos pastel suaves para etiquetas y alertas en modo claro */
+    :where(html.light) :is(.bg-amber-950, .bg-amber-950\/20, .bg-amber-950\/40, .bg-amber-950\/50, .bg-amber-950\/60, .bg-amber-950\/80, .bg-amber-950\/90) {
+      background-color: #fef3c7;
+    }
+    :where(html.light) :is(.bg-sky-950, .bg-sky-950\/40, .bg-sky-950\/50, .bg-sky-950\/60, .bg-sky-950\/80) {
+      background-color: #e0f2fe;
+    }
+    :where(html.light) :is(.bg-blue-950\/40, .bg-blue-950\/90) {
+      background-color: #dbeafe;
+    }
+    :where(html.light) :is(.bg-emerald-950, .bg-emerald-950\/20, .bg-emerald-950\/40, .bg-emerald-950\/50, .bg-emerald-950\/60, .bg-emerald-950\/80) {
+      background-color: #d1fae5;
+    }
+    :where(html.light) .bg-teal-950\/40 {
+      background-color: #ccfbf1;
+    }
+    :where(html.light) :is(.bg-purple-950\/40, .bg-purple-950\/80, .bg-violet-950\/20, .bg-indigo-950\/80) {
+      background-color: #ede9fe;
+    }
+    :where(html.light) :is(.bg-red-950, .bg-red-950\/20, .bg-red-950\/40, .bg-red-950\/60, .bg-rose-950\/20, .bg-rose-950\/40, .bg-rose-950\/50, .bg-rose-950\/60) {
+      background-color: #fee2e2;
+    }
+    :where(html.light) :is(.bg-yellow-950, .bg-orange-950\/60) {
+      background-color: #fef9c3;
+    }
+
+    /* Texto de alto contraste */
+    :where(html.light) :is(.text-slate-50, .text-slate-100, .text-slate-200, .text-gray-100, .text-gray-200) {
+      color: #0f172a;
+    }
+    :where(html.light) :is(.text-slate-300, .text-gray-300) {
+      color: #334155;
+    }
+    :where(html.light) :is(.text-slate-400, .text-gray-400) {
+      color: #475569;
+    }
+    :where(html.light) .text-slate-500 {
+      color: #64748b;
+    }
+
+    :where(html.light) .text-white:where(:not(:is([class*="bg-red-"], [class*="bg-rose-"], [class*="bg-emerald-"], [class*="bg-green-"], [class*="bg-blue-"], [class*="bg-sky-"], [class*="bg-indigo-"], [class*="bg-violet-"], [class*="bg-purple-"], [class*="bg-amber-"], [class*="bg-orange-"], [class*="bg-teal-"], [class*="bg-cyan-"], .bg-slate-950\/80) *):not([class*="bg-red-"]):not([class*="bg-rose-"]):not([class*="bg-emerald-"]):not([class*="bg-green-"]):not([class*="bg-blue-"]):not([class*="bg-sky-"]):not([class*="bg-indigo-"]):not([class*="bg-violet-"]):not([class*="bg-purple-"]):not([class*="bg-amber-"]):not([class*="bg-orange-"]):not([class*="bg-teal-"]):not([class*="bg-cyan-"]):not(.bg-slate-950\/80)) {
+      color: #0f172a;
+    }
+
+    :where(html.light) :is(.text-amber-400, .text-amber-300, .text-amber-200, .text-amber-500) {
+      color: #b45309;
+    }
+    :where(html.light) :is(.text-sky-400, .text-sky-300) {
+      color: #0369a1;
+    }
+    :where(html.light) :is(.text-blue-400, .text-blue-300) {
+      color: #1d4ed8;
+    }
+    :where(html.light) :is(.text-cyan-400, .text-cyan-300) {
+      color: #0e7490;
+    }
+    :where(html.light) :is(.text-emerald-400, .text-emerald-300) {
+      color: #047857;
+    }
+    :where(html.light) :is(.text-teal-400, .text-teal-300) {
+      color: #0f766e;
+    }
+    :where(html.light) :is(.text-purple-400, .text-purple-300, .text-violet-400, .text-violet-300) {
+      color: #6d28d9;
+    }
+    :where(html.light) :is(.text-red-400, .text-red-300, .text-rose-400, .text-rose-300) {
+      color: #b91c1c;
+    }
+    :where(html.light) :is(.text-yellow-400, .text-yellow-300) {
+      color: #a16207;
+    }
+
+    /* Bordes y divisores */
+    :where(html.light) :is(.border-slate-900, .border-slate-900\/80, .border-slate-900\/60, .border-slate-900\/50) {
+      border-color: #e2e8f0;
+    }
+    :where(html.light) :is(.border-slate-800, .border-slate-800\/80, .border-slate-800\/60, .border-slate-700, .border-slate-700\/80, .border-slate-700\/60, .border-gray-700, .border-gray-800) {
+      border-color: #cbd5e1;
+    }
+    :where(html.light) :is(.border-amber-800, .border-amber-800\/60, .border-amber-800\/50, .border-amber-800\/40) {
+      border-color: #f59e0b;
+    }
+    :where(html.light) :is(.border-emerald-800, .border-emerald-800\/50, .border-emerald-800\/40) {
+      border-color: #34d399;
+    }
+    :where(html.light) :is(.border-sky-900\/40, .border-sky-800, .border-blue-800\/50) {
+      border-color: #38bdf8;
+    }
+    :where(html.light) :is(.border-purple-900\/40, .border-violet-800\/40) {
+      border-color: #a78bfa;
+    }
+    :where(html.light) :is(.border-red-900\/60, .border-red-900\/40, .border-red-800, .border-red-800\/80, .border-red-800\/40) {
+      border-color: #fca5a5;
+    }
+    :where(html.light) :is(.divide-slate-800, .divide-slate-900) > :not(:last-child) {
+      border-color: #e2e8f0;
+    }
+
+    /* Tablas de TableroComponent en pantalla en Modo Claro */
+    :where(html.light) .tablero-print-sheet :where(table, th, td) {
+      border-color: #94a3b8;
+    }
+    :where(html.light) .tablero-print-sheet .tablero-ficha-card {
+      background-color: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    /* Estados Hover */
+    :where(html.light) :is(.hover\:bg-slate-900, .hover\:bg-slate-900\/40, .hover\:bg-slate-800, .hover\:bg-slate-800\/80, .hover\:bg-slate-800\/50):hover {
+      background-color: #e2e8f0;
+    }
+    :where(html.light) :is(.hover\:text-slate-200, .hover\:text-slate-100, .hover\:text-slate-300, .hover\:text-white):hover {
+      color: #0f172a;
+    }
+    :where(html.light) .hover\:border-slate-700\/60:hover,
+    :where(html.light) .hover\:border-slate-700:hover {
+      border-color: #94a3b8;
+    }
+
+    /* Campos de formulario en Modo Claro */
+    :where(html.light) input:where(:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([class*="bg-amber-50"])),
+    :where(html.light) textarea:where(:not([class*="bg-amber-50"])),
+    :where(html.light) select {
+      background-color: #ffffff;
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
+    :where(html.light) :is(input, textarea)::placeholder {
+      color: #94a3b8;
+    }
+
+    /* Marca de Login en Modo Claro */
+    :where(html.light) .bg-clip-text.text-transparent.from-amber-400 {
+      --tw-gradient-from: #d97706;
+      --tw-gradient-to: #92400e;
+    }
   }
 }

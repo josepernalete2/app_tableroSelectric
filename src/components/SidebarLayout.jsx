@@ -5,6 +5,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import io from 'socket.io-client';
 import { API_BASE_URL } from '../utils/api';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { getStoredTheme, applyTheme, THEME_STORAGE_KEY } from '../utils/theme';
 import { 
   Briefcase, 
   TrendingUp, 
@@ -31,7 +32,9 @@ import {
   Plus,
   HardDrive,
   Eye,
-  EyeOff
+  EyeOff,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export const SidebarLayout = () => {
@@ -91,6 +94,38 @@ export const SidebarLayout = () => {
   const [activeContactId, setActiveContactId] = useState(null);
   const [chatMessageText, setChatMessageText] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Preferencia global de Tema Claro / Oscuro persistida en localStorage ('theme_mode')
+  const [themeMode, setThemeMode] = useState(() => getStoredTheme());
+
+  useEffect(() => {
+    const syncTheme = (e) => {
+      if (e?.detail === 'light' || e?.detail === 'dark') {
+        setThemeMode(e.detail);
+      } else {
+        setThemeMode(getStoredTheme());
+      }
+    };
+    const handleStorage = (e) => {
+      if (!e.key || e.key === THEME_STORAGE_KEY) {
+        const next = getStoredTheme();
+        applyTheme(next);
+        setThemeMode(next);
+      }
+    };
+    window.addEventListener('selectric-theme-change', syncTheme);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('selectric-theme-change', syncTheme);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  const handleToggleTheme = () => {
+    const next = themeMode === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    setThemeMode(next);
+  };
 
   // Inicialización de Sockets
   useEffect(() => {
@@ -322,6 +357,15 @@ export const SidebarLayout = () => {
           <span className="font-extrabold text-sm tracking-widest text-slate-100 font-mono">SELECTRIC</span>
         </Link>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleToggleTheme}
+            aria-label={themeMode === 'dark' ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+            title={themeMode === 'dark' ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+            className="p-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-amber-400 hover:text-amber-300 border border-slate-800 cursor-pointer transition-colors"
+          >
+            {themeMode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           {isInstallable && !isInstalled && (
             <button
               onClick={promptInstall}
@@ -401,6 +445,23 @@ export const SidebarLayout = () => {
             </div>
 
             <div className="space-y-3 border-t border-slate-900 pt-4">
+              <button
+                type="button"
+                onClick={handleToggleTheme}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all cursor-pointer text-xs font-bold text-slate-200"
+              >
+                <span className="flex items-center gap-2">
+                  {themeMode === 'dark' ? (
+                    <Sun className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-amber-500" />
+                  )}
+                  <span>{themeMode === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}</span>
+                </span>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  {themeMode === 'dark' ? 'Oscuro' : 'Claro'}
+                </span>
+              </button>
               {isInstallable && !isInstalled && (
                 <button
                   onClick={() => {
@@ -517,6 +578,35 @@ export const SidebarLayout = () => {
 
         {/* Perfil & Acciones */}
         <div className="space-y-4 border-t border-slate-900 pt-6">
+          {/* Toggle Tema Claro / Oscuro */}
+          <button
+            type="button"
+            onClick={handleToggleTheme}
+            aria-label={themeMode === 'dark' ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+            title={themeMode === 'dark' ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+            className={`w-full flex items-center bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl transition-all cursor-pointer text-xs font-bold text-slate-200 ${
+              isSidebarCollapsed ? 'justify-center p-3' : 'justify-between gap-2 px-3 py-2.5'
+            }`}
+          >
+            <span className="flex items-center gap-2.5 min-w-0">
+              {themeMode === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400 shrink-0" />
+              ) : (
+                <Moon className="w-4 h-4 text-amber-500 shrink-0" />
+              )}
+              {!isSidebarCollapsed && (
+                <span className="animate-in fade-in duration-200 truncate">
+                  {themeMode === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}
+                </span>
+              )}
+            </span>
+            {!isSidebarCollapsed && (
+              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                {themeMode === 'dark' ? 'Oscuro' : 'Claro'}
+              </span>
+            )}
+          </button>
+
           {/* Botón PWA Instalable */}
           {isInstallable && !isInstalled && (
             <button

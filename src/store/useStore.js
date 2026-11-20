@@ -380,6 +380,490 @@ const parseDatosTecnicosSafe = (raw) => {
   return typeof raw === 'object' ? raw : {};
 };
 
+const TRANSFER_TYPES = new Set(['TRANSFER', 'TRANSFERENCIA', 'ATS', 'MTS']);
+const GENERATOR_TYPES = new Set(['GENERADOR', 'PLANTA', 'PLANTA_ELECTRICA', 'GEN']);
+
+const getElementTipoUpper = (el) => {
+  if (!el || typeof el !== 'object') return '';
+  const raw = el.tipoElemento || el.tipo || el.tipoPlantilla || '';
+  if (raw) return String(raw).trim().toUpperCase();
+  if (el.maxPoles !== undefined || Array.isArray(el.circuits)) return 'TABLERO';
+  return '';
+};
+
+const isTransferElement = (el) => TRANSFER_TYPES.has(getElementTipoUpper(el));
+const isGeneratorElement = (el) => GENERATOR_TYPES.has(getElementTipoUpper(el));
+const isTableroElement = (el) => getElementTipoUpper(el) === 'TABLERO';
+
+const getCleanElementLabel = (el) => {
+  if (!el || typeof el !== 'object') return '';
+  return cleanElementName(el.nombre, el.id, el.codigo || el.simpleCode).toUpperCase().trim();
+};
+
+const findElementMatchInList = (textOrCode, allElements = [], excludeId = null) => {
+  if (!textOrCode) return null;
+  const raw = String(textOrCode).trim();
+  if (!raw || isPlaceholderHierarchyValue(raw) || raw.toUpperCase() === 'CORPOELEC') return null;
+
+  const extractedMatch = raw.match(/\((?:ID:\s*)?([A-Z0-9_-]+)\)/i);
+  const extractedCode = extractedMatch ? extractedMatch[1].trim().toLowerCase() : null;
+  const rawLower = raw.toLowerCase();
+  const cleanRawLabel = cleanElementName(raw).toUpperCase().trim();
+
+  for (const cand of (allElements || [])) {
+    if (!cand || !cand.id || (excludeId && String(cand.id) === String(excludeId))) continue;
+    const candIdLower = String(cand.id).trim().toLowerCase();
+    const candCodeLower = cand.codigo ? String(cand.codigo).trim().toLowerCase() : '';
+    const candSimpleLower = cand.simpleCode ? String(cand.simpleCode).trim().toLowerCase() : '';
+    const candLabel = getCleanElementLabel(cand);
+
+    if (
+      candIdLower === rawLower ||
+      (extractedCode && (candIdLower === extractedCode || candCodeLower === extractedCode || candSimpleLower === extractedCode)) ||
+      (candCodeLower && candCodeLower === rawLower) ||
+      (candSimpleLower && candSimpleLower === rawLower) ||
+      (candLabel && cleanRawLabel && candLabel === cleanRawLabel)
+    ) {
+      return cand;
+    }
+  }
+  return null;
+};
+
+const getTransferSourceSlots = (el) => {
+  const dt = parseDatosTecnicosSafe(el?.datosTecnicos);
+  const normId = sanitizeParentId(dt.fuenteNormalId, el?.id);
+  const rawNorm = dt.fuenteNormalNombre || dt.alimentacionGenerador1 || dt.alimentacionCorpoelec || '';
+  const normName = !isPlaceholderHierarchyValue(rawNorm) ? cleanElementName(String(rawNorm)).toUpperCase().trim() : '';
+
+  const emergId = sanitizeParentId(dt.fuenteEmergenciaId, el?.id);
+  const rawEmerg = dt.fuenteEmergenciaNombre || dt.alimentacionGenerador2 || dt.alimentacionTransfDomosa || '';
+  const emergName = !isPlaceholderHierarchyValue(rawEmerg) ? cleanElementName(String(rawEmerg)).toUpperCase().trim() : '';
+
+  return { dt, normId, normName, emergId, emergName };
+};
+
+const extractCircuitDestIds = (el) => {
+  if (!el || typeof el !== 'object') return [];
+  const dt = parseDatosTecnicosSafe(el.datosTecnicos);
+  const circuits = Array.isArray(el.circuits) ? el.circuits : (Array.isArray(dt.circuits) ? dt.circuits : []);
+  const ids = new Set();
+  circuits.forEach((c) => {
+    const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
+    if (!rawDest) return;
+    String(rawDest)
+      .split(',')
+      .map((s) => sanitizeParentId(s, el.id))
+      .filter(Boolean)
+      .forEach((cid) => ids.add(cid));
+  });
+  return Array.from(ids);
+};
+
+const extractElementParentIds = (el, allElements = []) => {
+  if (!el || typeof el !== 'object' || isGeneratorElement(el)) return [];
+  const dt = parseDatosTecnicosSafe(el.datosTecnicos);
+  const ids = new Set();
+  const pushValid = (rawId) => {
+    const clean = sanitizeParentId(rawId, el.id);
+    if (clean) ids.add(clean);
+  };
+
+  if (isTransferElement(el)) {
+    pushValid(dt.fuenteNormalId);
+    pushValid(dt.fuenteEmergenciaId);
+    if (!sanitizeParentId(dt.fuenteNormalId, el.id) && !isPlaceholderHierarchyValue(dt.fuenteNormalNombre)) {
+      const m = findElementMatchInList(dt.fuenteNormalNombre, allElements, el.id);
+      if (m) ids.add(String(m.id));
+    }
+    if (!sanitizeParentId(dt.fuenteEmergenciaId, el.id) && !isPlaceholderHierarchyValue(dt.fuenteEmergenciaNombre)) {
+      const m = findElementMatchInList(dt.fuenteEmergenciaNombre, allElements, el.id);
+      if (m) ids.add(String(m.id));
+    }
+    if (Array.isArray(dt.alimentadoPorIds)) {
+      dt.alimentadoPorIds.forEach(pushValid);
+    }
+    if (ids.size === 0) {
+      pushValid(el.alimentadoPorId);
+      pushValid(dt.alimentadoPorId);
+      pushValid(dt.alimentadorId);
+      pushValid(el.origenId);
+    }
+  } else {
+    pushValid(el.alimentadoPorId);
+    pushValid(dt.alimentadoPorId);
+    pushValid(dt.alimentadorId);
+    pushValid(el.origenId);
+    if (ids.size === 0 && !isPlaceholderHierarchyValue(el.alimentadoPor)) {
+      const m = findElementMatchInList(el.alimentadoPor, allElements, el.id);
+      if (m) ids.add(String(m.id));
+    }
+  }
+
+  return Array.from(ids);
+};
+
+const extractElementDownstreamIds = (el, allElements = []) => {
+  if (!el || typeof el !== 'object') return [];
+  const dt = parseDatosTecnicosSafe(el.datosTecnicos);
+  const ids = new Set();
+  const pushValid = (rawId) => {
+    const clean = sanitizeParentId(rawId, el.id);
+    if (clean) ids.add(clean);
+  };
+
+  (Array.isArray(el.alimentaAIds) ? el.alimentaAIds : []).forEach(pushValid);
+  (Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []).forEach(pushValid);
+
+  if (isTransferElement(el)) {
+    pushValid(dt.salidaCargaId);
+    if (ids.size === 0 && !isPlaceholderHierarchyValue(dt.salidaCargaNombre)) {
+      String(dt.salidaCargaNombre)
+        .split(/[,;\n]/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .forEach((tok) => {
+          const m = findElementMatchInList(tok, allElements, el.id);
+          if (m) ids.add(String(m.id));
+        });
+    }
+  }
+
+  extractCircuitDestIds(el).forEach((cid) => ids.add(cid));
+  return Array.from(ids);
+};
+
+const applyUpstreamLinkToElement = (targetEl, parentId, parentLabel, parentTipo) => {
+  if (!targetEl || !targetEl.id || !parentId || String(targetEl.id) === String(parentId)) {
+    return { nextEl: targetEl, changed: false };
+  }
+  if (isGeneratorElement(targetEl)) {
+    return { nextEl: targetEl, changed: false };
+  }
+
+  const cleanParentId = String(parentId).trim();
+  const cleanLabel = String(parentLabel || '').trim().toUpperCase();
+  const dt = parseDatosTecnicosSafe(targetEl.datosTecnicos);
+
+  if (isTransferElement(targetEl)) {
+    let { normId, normName, emergId, emergName } = getTransferSourceSlots(targetEl);
+    const parentIsGen = GENERATOR_TYPES.has(String(parentTipo || '').trim().toUpperCase());
+
+    if (parentIsGen) {
+      if (normId === cleanParentId) {
+        normId = null;
+        normName = '';
+      }
+      emergId = cleanParentId;
+      if (cleanLabel) emergName = cleanLabel;
+    } else if (normId === cleanParentId) {
+      if (cleanLabel) normName = cleanLabel;
+    } else if (emergId === cleanParentId) {
+      if (cleanLabel) emergName = cleanLabel;
+    } else if (!normId) {
+      normId = cleanParentId;
+      if (cleanLabel) normName = cleanLabel;
+    } else if (!emergId && isPlaceholderHierarchyValue(emergName)) {
+      emergId = cleanParentId;
+      if (cleanLabel) emergName = cleanLabel;
+    } else {
+      normId = cleanParentId;
+      if (cleanLabel) normName = cleanLabel;
+    }
+
+    const nextAlimentadoPorIds = Array.from(new Set([normId, emergId].filter(Boolean)));
+    const nextAlimentadoPor = [normName, emergName].filter(Boolean).join(' / ');
+    const nextPrimaryParentId = normId || emergId || null;
+
+    const prevIds = Array.isArray(dt.alimentadoPorIds) ? dt.alimentadoPorIds : [];
+    const sameState =
+      (dt.fuenteNormalId || null) === (normId || null) &&
+      (dt.fuenteNormalNombre || '') === normName &&
+      (dt.fuenteEmergenciaId || null) === (emergId || null) &&
+      (dt.fuenteEmergenciaNombre || '') === emergName &&
+      (targetEl.alimentadoPorId || null) === nextPrimaryParentId &&
+      (dt.alimentadoPorId || null) === nextPrimaryParentId &&
+      (targetEl.alimentadoPor || '') === nextAlimentadoPor &&
+      prevIds.length === nextAlimentadoPorIds.length &&
+      nextAlimentadoPorIds.every((idVal, idx) => prevIds[idx] === idVal);
+
+    if (sameState) {
+      return { nextEl: targetEl, changed: false };
+    }
+
+    return {
+      changed: true,
+      nextEl: {
+        ...targetEl,
+        alimentadoPorId: nextPrimaryParentId,
+        alimentadoPor: nextAlimentadoPor,
+        datosTecnicos: {
+          ...dt,
+          fuenteNormalId: normId || null,
+          fuenteNormalNombre: normName,
+          fuenteEmergenciaId: emergId || null,
+          fuenteEmergenciaNombre: emergName,
+          alimentadoPorId: nextPrimaryParentId,
+          alimentadoPorIds: nextAlimentadoPorIds
+        }
+      }
+    };
+  }
+
+  const nextLabel = cleanLabel || (isPlaceholderHierarchyValue(targetEl.alimentadoPor) ? '' : String(targetEl.alimentadoPor).trim().toUpperCase());
+  const sameState =
+    targetEl.alimentadoPorId === cleanParentId &&
+    dt.alimentadoPorId === cleanParentId &&
+    (targetEl.alimentadoPor || '') === nextLabel;
+
+  if (sameState) {
+    return { nextEl: targetEl, changed: false };
+  }
+
+  return {
+    changed: true,
+    nextEl: {
+      ...targetEl,
+      alimentadoPorId: cleanParentId,
+      alimentadoPor: nextLabel,
+      datosTecnicos: {
+        ...dt,
+        alimentadoPorId: cleanParentId
+      }
+    }
+  };
+};
+
+const removeUpstreamLinkFromElement = (targetEl, removedParentId, removedParentLabel = '') => {
+  if (!targetEl || !removedParentId) {
+    return { nextEl: targetEl, changed: false };
+  }
+  const rmId = String(removedParentId).trim();
+  const rmLabel = String(removedParentLabel || '').trim().toUpperCase();
+  const dt = parseDatosTecnicosSafe(targetEl.datosTecnicos);
+
+  if (isTransferElement(targetEl)) {
+    let { normId, normName, emergId, emergName } = getTransferSourceSlots(targetEl);
+    let touched = false;
+
+    if (normId === rmId || (!normId && rmLabel && normName === rmLabel)) {
+      normId = null;
+      normName = '';
+      touched = true;
+    }
+    if (emergId === rmId || (!emergId && rmLabel && emergName === rmLabel)) {
+      emergId = null;
+      emergName = '';
+      touched = true;
+    }
+    if (!touched) {
+      const hadInIds = Array.isArray(dt.alimentadoPorIds) && dt.alimentadoPorIds.includes(rmId);
+      if (targetEl.alimentadoPorId !== rmId && dt.alimentadoPorId !== rmId && !hadInIds) {
+        return { nextEl: targetEl, changed: false };
+      }
+      touched = true;
+    }
+
+    const nextAlimentadoPorIds = Array.from(new Set([normId, emergId].filter(Boolean)));
+    const nextAlimentadoPor = [normName, emergName].filter(Boolean).join(' / ');
+    const nextPrimaryParentId = normId || emergId || null;
+
+    return {
+      changed: true,
+      nextEl: {
+        ...targetEl,
+        alimentadoPorId: nextPrimaryParentId,
+        alimentadoPor: nextAlimentadoPor,
+        datosTecnicos: {
+          ...dt,
+          fuenteNormalId: normId || null,
+          fuenteNormalNombre: normName,
+          fuenteEmergenciaId: emergId || null,
+          fuenteEmergenciaNombre: emergName,
+          alimentadoPorId: nextPrimaryParentId,
+          alimentadoPorIds: nextAlimentadoPorIds
+        }
+      }
+    };
+  }
+
+  const isLinked =
+    targetEl.alimentadoPorId === rmId ||
+    dt.alimentadoPorId === rmId ||
+    dt.alimentadorId === rmId ||
+    (!targetEl.alimentadoPorId && rmLabel && String(targetEl.alimentadoPor || '').trim().toUpperCase() === rmLabel);
+
+  if (!isLinked) {
+    return { nextEl: targetEl, changed: false };
+  }
+
+  return {
+    changed: true,
+    nextEl: {
+      ...targetEl,
+      alimentadoPorId: null,
+      alimentadoPor: '',
+      datosTecnicos: {
+        ...dt,
+        alimentadoPorId: null,
+        ...(dt.alimentadorId === rmId ? { alimentadorId: null } : {})
+      }
+    }
+  };
+};
+
+const rebuildParentDownstreamFields = (parentEl, nextIds, childLabelOverrideMap, allElementsMap, removedLabels = []) => {
+  const dt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
+  const transferFlag = isTransferElement(parentEl);
+
+  const knownLinkedSet = new Set();
+  const excludedSet = new Set(removedLabels.map((s) => String(s || '').trim().toUpperCase()).filter(Boolean));
+  const linkedLabels = [];
+
+  nextIds.forEach((cid) => {
+    const childObj = allElementsMap?.get(String(cid));
+    const lbl = childLabelOverrideMap?.get(String(cid)) || (childObj ? getCleanElementLabel(childObj) : '');
+    if (lbl) {
+      knownLinkedSet.add(lbl);
+      if (!linkedLabels.includes(lbl)) linkedLabels.push(lbl);
+    }
+    if (childObj) {
+      const origLbl = getCleanElementLabel(childObj);
+      if (origLbl) knownLinkedSet.add(origLbl);
+      if (childObj.codigo) knownLinkedSet.add(String(childObj.codigo).trim().toUpperCase());
+      if (childObj.simpleCode) knownLinkedSet.add(String(childObj.simpleCode).trim().toUpperCase());
+    }
+  });
+
+  const rawPrevText = !isPlaceholderHierarchyValue(parentEl.alimentaA)
+    ? String(parentEl.alimentaA)
+    : (!isPlaceholderHierarchyValue(dt.alimentaA)
+        ? String(dt.alimentaA)
+        : (transferFlag && !isPlaceholderHierarchyValue(dt.salidaCargaNombre) ? String(dt.salidaCargaNombre) : ''));
+
+  const allKnownLabelsSet = new Set();
+  if (allElementsMap) {
+    allElementsMap.forEach((el) => {
+      const lbl = getCleanElementLabel(el);
+      if (lbl) allKnownLabelsSet.add(lbl);
+    });
+  }
+
+  const manualTokens = [];
+  if (rawPrevText) {
+    rawPrevText
+      .split(/[,;\n]/)
+      .map((t) => cleanElementName(t).toUpperCase().trim())
+      .filter((t) => !isPlaceholderHierarchyValue(t))
+      .forEach((tok) => {
+        const isKnownRemoved = excludedSet.has(tok) || knownLinkedSet.has(tok) || allKnownLabelsSet.has(tok);
+        if (!isKnownRemoved && !linkedLabels.includes(tok) && !manualTokens.includes(tok)) {
+          manualTokens.push(tok);
+        }
+      });
+  }
+
+  const nextAlimentaA = [...linkedLabels, ...manualTokens].join(', ');
+  const nextSalidaId = nextIds[0] || null;
+
+  const prevIds = Array.isArray(parentEl.alimentaAIds)
+    ? parentEl.alimentaAIds
+    : (Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []);
+  const prevAlimentaA = String(parentEl.alimentaA || '');
+  const prevDtAlimentaA = String(dt.alimentaA || '');
+  const prevDtIds = Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : [];
+
+  const sameIds =
+    prevIds.length === nextIds.length &&
+    nextIds.every((idVal, idx) => String(prevIds[idx]) === String(idVal)) &&
+    prevDtIds.length === nextIds.length &&
+    nextIds.every((idVal, idx) => String(prevDtIds[idx]) === String(idVal));
+
+  const sameTransferSalida = !transferFlag || (
+    (dt.salidaCargaId || null) === nextSalidaId &&
+    String(dt.salidaCargaNombre || '') === nextAlimentaA
+  );
+
+  if (sameIds && prevAlimentaA === nextAlimentaA && prevDtAlimentaA === nextAlimentaA && sameTransferSalida) {
+    return { nextEl: parentEl, changed: false };
+  }
+
+  return {
+    changed: true,
+    nextEl: {
+      ...parentEl,
+      alimentaA: nextAlimentaA,
+      alimentaAIds: nextIds,
+      datosTecnicos: {
+        ...dt,
+        alimentaA: nextAlimentaA,
+        alimentaAIds: nextIds,
+        ...(transferFlag ? { salidaCargaId: nextSalidaId, salidaCargaNombre: nextAlimentaA } : {})
+      }
+    }
+  };
+};
+
+const applyDownstreamLinkToParent = (parentEl, childId, childLabel, allElementsMap, prevChildLabel = '') => {
+  if (!parentEl || !parentEl.id || !childId || String(parentEl.id) === String(childId)) {
+    return { nextEl: parentEl, changed: false };
+  }
+  if (isTableroElement(parentEl)) {
+    return { nextEl: parentEl, changed: false };
+  }
+
+  const dt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
+  const transferFlag = isTransferElement(parentEl);
+  const cleanChildId = String(childId).trim();
+
+  const existingIds = Array.from(new Set([
+    ...(Array.isArray(parentEl.alimentaAIds) ? parentEl.alimentaAIds : []),
+    ...(Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []),
+    ...(transferFlag && dt.salidaCargaId ? [dt.salidaCargaId] : [])
+  ]
+    .map((idVal) => sanitizeParentId(idVal, parentEl.id))
+    .filter(Boolean)));
+
+  const nextIds = existingIds.includes(cleanChildId) ? existingIds : [...existingIds, cleanChildId];
+  const overrideMap = new Map();
+  if (childLabel) overrideMap.set(cleanChildId, String(childLabel).trim().toUpperCase());
+
+  return rebuildParentDownstreamFields(parentEl, nextIds, overrideMap, allElementsMap, prevChildLabel ? [prevChildLabel] : []);
+};
+
+const removeDownstreamLinkFromParent = (parentEl, removedChildId, removedChildLabel = '', allElementsMap) => {
+  if (!parentEl || !parentEl.id || !removedChildId || isTableroElement(parentEl)) {
+    return { nextEl: parentEl, changed: false };
+  }
+
+  const dt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
+  const transferFlag = isTransferElement(parentEl);
+  const rmId = String(removedChildId).trim();
+  const rmLabel = String(removedChildLabel || '').trim().toUpperCase();
+
+  const existingIds = Array.from(new Set([
+    ...(Array.isArray(parentEl.alimentaAIds) ? parentEl.alimentaAIds : []),
+    ...(Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []),
+    ...(transferFlag && dt.salidaCargaId ? [dt.salidaCargaId] : [])
+  ]
+    .map((idVal) => sanitizeParentId(idVal, parentEl.id))
+    .filter(Boolean)));
+
+  const rawText = String(parentEl.alimentaA || dt.alimentaA || (transferFlag ? dt.salidaCargaNombre : '') || '').toUpperCase();
+  const hasId = existingIds.includes(rmId);
+  const hasLabel = rmLabel && rawText.split(/[,;\n]/).map((s) => cleanElementName(s).toUpperCase().trim()).includes(rmLabel);
+
+  if (!hasId && !hasLabel) {
+    return { nextEl: parentEl, changed: false };
+  }
+
+  const nextIds = existingIds.filter((cid) => cid !== rmId);
+  const childObj = allElementsMap?.get(rmId);
+  const knownRmLabel = childObj ? getCleanElementLabel(childObj) : '';
+
+  return rebuildParentDownstreamFields(parentEl, nextIds, new Map(), allElementsMap, [rmLabel, knownRmLabel]);
+};
+
 export const resolveElementUbicacionDisplay = (item) => {
   if (!item || typeof item !== 'object') return '';
   const dt = parseDatosTecnicosSafe(item.datosTecnicos);
@@ -412,8 +896,7 @@ export const resolveElementUbicacionDisplay = (item) => {
 
 export const resolveElementParentDisplay = (item, allProjectElements = []) => {
   if (!item || typeof item !== 'object') return '';
-  const tipo = String(item.tipoElemento || item.tipo || '').toUpperCase();
-  if (tipo === 'GENERADOR') return 'FUENTE PRIMARIA INDEPENDIENTE';
+  if (isGeneratorElement(item)) return 'FUENTE PRIMARIA INDEPENDIENTE';
 
   const dt = parseDatosTecnicosSafe(item.datosTecnicos);
   const elements = Array.isArray(allProjectElements) ? allProjectElements : [];
@@ -426,10 +909,60 @@ export const resolveElementParentDisplay = (item, allProjectElements = []) => {
     if (code) byCode.set(String(code).trim().toLowerCase(), el);
   });
 
-  const formatParentLabel = (parentEl) => {
-    if (!parentEl) return '';
-    return cleanElementName(parentEl.nombre, parentEl.id, parentEl.codigo || parentEl.simpleCode).toUpperCase().trim();
+  const formatParentLabel = (parentEl) => getCleanElementLabel(parentEl);
+
+  const resolveSlotTextOrId = (slotId, slotName) => {
+    const cleanId = sanitizeParentId(slotId, item.id);
+    if (cleanId) {
+      const parentEl = byId.get(String(cleanId)) || byCode.get(String(cleanId).toLowerCase());
+      if (parentEl && parentEl.id !== item.id) return formatParentLabel(parentEl);
+    }
+    if (!isPlaceholderHierarchyValue(slotName)) {
+      const str = String(slotName).trim();
+      if (str.toUpperCase() === 'CORPOELEC') return 'CORPOELEC';
+      const matched = findElementMatchInList(str, elements, item.id);
+      if (matched) return formatParentLabel(matched);
+      return cleanElementName(str).toUpperCase().trim();
+    }
+    return '';
   };
+
+  // Búsqueda inversa en el árbol (alimentaAIds o circuitos de tableros padres)
+  const reverseParents = [];
+  const itemIdStr = String(item.id || '');
+  elements.forEach((parentEl) => {
+    if (!parentEl || !parentEl.id || String(parentEl.id) === itemIdStr) return;
+    const downIds = extractElementDownstreamIds(parentEl, elements);
+    if (downIds.includes(itemIdStr)) {
+      reverseParents.push(parentEl);
+    }
+  });
+
+  // Caso Transferencia: combinar Fuente Normal + Fuente Emergencia + enlaces inversos
+  if (isTransferElement(item)) {
+    const { normId, normName, emergId, emergName } = getTransferSourceSlots(item);
+    const labels = [];
+    const normLbl = resolveSlotTextOrId(normId, normName);
+    const emergLbl = resolveSlotTextOrId(emergId, emergName);
+    if (normLbl) labels.push(normLbl);
+    if (emergLbl && !labels.includes(emergLbl)) labels.push(emergLbl);
+
+    if (Array.isArray(dt.alimentadoPorIds)) {
+      dt.alimentadoPorIds.forEach((pid) => {
+        const lbl = resolveSlotTextOrId(pid, '');
+        if (lbl && !labels.includes(lbl)) labels.push(lbl);
+      });
+    }
+
+    reverseParents.forEach((pEl) => {
+      const lbl = formatParentLabel(pEl);
+      if (lbl && !labels.includes(lbl)) labels.push(lbl);
+    });
+
+    if (labels.length > 0) {
+      return labels.join(' / ');
+    }
+  }
 
   const rawTextTop = !isPlaceholderHierarchyValue(item.alimentadoPor)
     ? String(item.alimentadoPor).trim()
@@ -456,63 +989,23 @@ export const resolveElementParentDisplay = (item, allProjectElements = []) => {
     }
   }
 
-  // 2. Campo de texto explícito no placeholder (resolviendo si trae UUID crudo)
+  // 2. Campo de texto explícito no placeholder (resolviendo si trae UUID crudo o nombre de elemento)
   if (rawTextTop) {
-    const byIdMatch = byId.get(rawTextTop);
+    const byIdMatch = byId.get(rawTextTop) || findElementMatchInList(rawTextTop, elements, item.id);
     if (byIdMatch && byIdMatch.id !== item.id) {
       return formatParentLabel(byIdMatch);
     }
     return cleanElementName(rawTextTop).toUpperCase().trim();
   }
 
-  // 3. Caso Transferencia: fuentes normal / emergencia
-  if (tipo === 'TRANSFER') {
-    const srcLabels = [dt.fuenteNormalNombre, dt.fuenteEmergenciaNombre]
-      .filter((s) => !isPlaceholderHierarchyValue(s))
-      .map((s) => cleanElementName(String(s)).toUpperCase().trim())
-      .filter(Boolean);
-    if (srcLabels.length > 0) {
-      return Array.from(new Set(srcLabels)).join(' / ');
-    }
+  // 3. Resultado de búsqueda inversa en el árbol
+  if (reverseParents.length > 0) {
+    const revNames = Array.from(new Set(reverseParents.map(formatParentLabel).filter(Boolean)));
+    if (revNames.length > 0) return revNames.join(', ');
   }
 
-  // 4. Búsqueda inversa en el árbol (alimentaAIds o circuitos de tableros padres)
-  const reverseNames = [];
-  const itemIdStr = String(item.id || '');
-  elements.forEach((parentEl) => {
-    if (!parentEl || !parentEl.id || String(parentEl.id) === itemIdStr) return;
-    const pDt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
-    const pAlimentaIds = [
-      ...(Array.isArray(parentEl.alimentaAIds) ? parentEl.alimentaAIds : []),
-      ...(Array.isArray(pDt.alimentaAIds) ? pDt.alimentaAIds : [])
-    ].map((x) => String(x));
-
-    let isLinked = pAlimentaIds.includes(itemIdStr);
-    if (!isLinked) {
-      const circuits = Array.isArray(pDt.circuits)
-        ? pDt.circuits
-        : (Array.isArray(parentEl.circuits) ? parentEl.circuits : []);
-      isLinked = circuits.some((c) => {
-        const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
-        if (!rawDest) return false;
-        return String(rawDest)
-          .split(',')
-          .map((s) => s.trim())
-          .includes(itemIdStr);
-      });
-    }
-
-    if (isLinked) {
-      const lbl = formatParentLabel(parentEl);
-      if (lbl && !reverseNames.includes(lbl)) reverseNames.push(lbl);
-    }
-  });
-
-  if (reverseNames.length > 0) {
-    return reverseNames.join(', ');
-  }
-
-  // 5. Fallback para Punto de Suministro vinculado a red eléctrica
+  // 4. Fallback para Punto de Suministro vinculado a red eléctrica
+  const tipo = getElementTipoUpper(item);
   if (tipo === 'PUNTO_SUMINISTRO' || tipo === 'PUNTO_MEDICION') {
     if (!isPlaceholderHierarchyValue(dt.empresaDistribuidora)) {
       return String(dt.empresaDistribuidora).trim().toUpperCase();
@@ -525,66 +1018,293 @@ export const resolveElementParentDisplay = (item, allProjectElements = []) => {
   return '';
 };
 
+export const resolveElementAlimentaADisplay = (item, allProjectElements = []) => {
+  if (!item || typeof item !== 'object' || !item.id) {
+    return { ids: [], items: [], names: [], text: '' };
+  }
+
+  const dt = parseDatosTecnicosSafe(item.datosTecnicos);
+  const elements = Array.isArray(allProjectElements) ? allProjectElements : [];
+  const itemIdStr = String(item.id);
+  const byId = new Map();
+  elements.forEach((el) => {
+    if (el && el.id) byId.set(String(el.id), el);
+  });
+
+  const collectedIds = new Set();
+  const pushValid = (rawId) => {
+    const clean = sanitizeParentId(rawId, itemIdStr);
+    if (clean) collectedIds.add(clean);
+  };
+
+  // 1. Declaraciones explícitas en el propio elemento y sus circuitos
+  (Array.isArray(item.alimentaAIds) ? item.alimentaAIds : []).forEach(pushValid);
+  (Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []).forEach(pushValid);
+  if (isTransferElement(item)) {
+    pushValid(dt.salidaCargaId);
+  }
+  extractCircuitDestIds(item).forEach((cid) => collectedIds.add(cid));
+
+  // 2. Búsqueda inversa: cualquier elemento que tenga a este elemento en su "ALIMENTADO POR" / fuentes
+  const selfLabel = getCleanElementLabel(item);
+  elements.forEach((cand) => {
+    if (!cand || !cand.id || String(cand.id) === itemIdStr) return;
+    const candParents = extractElementParentIds(cand, elements);
+    if (candParents.includes(itemIdStr)) {
+      collectedIds.add(String(cand.id));
+      return;
+    }
+    if (selfLabel && !cand.alimentadoPorId && !isPlaceholderHierarchyValue(cand.alimentadoPor)) {
+      const tokens = String(cand.alimentadoPor).split(/[,;\n/]/).map((s) => cleanElementName(s).toUpperCase().trim());
+      if (tokens.includes(selfLabel)) {
+        collectedIds.add(String(cand.id));
+      }
+    }
+  });
+
+  // 3. Texto explícito/manual (cuando no tenga IDs o represente carga directa)
+  const rawAlimentaText = !isPlaceholderHierarchyValue(item.alimentaA)
+    ? String(item.alimentaA)
+    : (!isPlaceholderHierarchyValue(dt.alimentaA)
+        ? String(dt.alimentaA)
+        : (isTransferElement(item) && !isPlaceholderHierarchyValue(dt.salidaCargaNombre) ? String(dt.salidaCargaNombre) : ''));
+
+  const manualNames = [];
+  if (rawAlimentaText) {
+    rawAlimentaText
+      .split(/[,;\n]/)
+      .map((s) => cleanElementName(s).toUpperCase().trim())
+      .filter((s) => !isPlaceholderHierarchyValue(s))
+      .forEach((tok) => {
+        const matched = findElementMatchInList(tok, elements, itemIdStr);
+        if (matched) {
+          if (collectedIds.size === 0 || collectedIds.has(String(matched.id))) {
+            collectedIds.add(String(matched.id));
+          }
+        } else if (!manualNames.includes(tok)) {
+          manualNames.push(tok);
+        }
+      });
+  }
+
+  const ids = Array.from(collectedIds);
+  const resolvedItems = [];
+  const names = [];
+
+  ids.forEach((cid) => {
+    const childEl = byId.get(String(cid));
+    if (childEl) {
+      resolvedItems.push(childEl);
+      const lbl = getCleanElementLabel(childEl);
+      if (lbl && !names.includes(lbl)) names.push(lbl);
+    }
+  });
+
+  manualNames.forEach((m) => {
+    if (!names.includes(m)) names.push(m);
+  });
+
+  return {
+    ids,
+    items: resolvedItems,
+    names,
+    text: names.join(', ')
+  };
+};
+
 export const hydrateProjectHierarchyLinks = (elements = []) => {
   if (!Array.isArray(elements) || elements.length === 0) return [];
 
-  const reverseParentIds = new Map();
-  elements.forEach((parentEl) => {
-    if (!parentEl || !parentEl.id) return;
-    const pDt = parseDatosTecnicosSafe(parentEl.datosTecnicos);
-    const childIds = new Set([
-      ...(Array.isArray(parentEl.alimentaAIds) ? parentEl.alimentaAIds : []),
-      ...(Array.isArray(pDt.alimentaAIds) ? pDt.alimentaAIds : [])
-    ].filter(Boolean).map((x) => String(x)));
+  const byId = new Map();
+  elements.forEach((el) => {
+    if (el && el.id) byId.set(String(el.id), el);
+  });
 
-    const circuits = Array.isArray(pDt.circuits)
-      ? pDt.circuits
-      : (Array.isArray(parentEl.circuits) ? parentEl.circuits : []);
-    circuits.forEach((c) => {
-      const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
-      if (!rawDest) return;
-      String(rawDest)
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .forEach((cid) => childIds.add(cid));
+  // Pasada 1: Mapear relaciones bidireccionales existentes en ambas direcciones
+  const reverseParentMap = new Map(); // childId -> [parentEl]
+  const reverseChildMap = new Map();  // parentId -> [childEl]
+
+  elements.forEach((el) => {
+    if (!el || !el.id) return;
+    const elIdStr = String(el.id);
+
+    extractElementDownstreamIds(el, elements).forEach((cid) => {
+      if (cid === elIdStr || !byId.has(cid)) return;
+      if (!reverseParentMap.has(cid)) reverseParentMap.set(cid, []);
+      if (!reverseParentMap.get(cid).some((p) => String(p.id) === elIdStr)) {
+        reverseParentMap.get(cid).push(el);
+      }
     });
 
-    childIds.forEach((cid) => {
-      if (cid === String(parentEl.id)) return;
-      if (!reverseParentIds.has(cid)) reverseParentIds.set(cid, []);
-      reverseParentIds.get(cid).push(parentEl.id);
+    extractElementParentIds(el, elements).forEach((pid) => {
+      if (pid === elIdStr || !byId.has(pid)) return;
+      if (!reverseChildMap.has(pid)) reverseChildMap.set(pid, []);
+      if (!reverseChildMap.get(pid).some((c) => String(c.id) === elIdStr)) {
+        reverseChildMap.get(pid).push(el);
+      }
     });
   });
 
+  // Pasada 2: Reconciliar atributos locales y campos específicos de TRANSFER
   return elements.map((el) => {
     if (!el || !el.id) return el;
+    const elIdStr = String(el.id);
     const dt = parseDatosTecnicosSafe(el.datosTecnicos);
-    const currentId = sanitizeParentId(
-      el.alimentadoPorId || dt.alimentadoPorId || dt.alimentadorId || el.origenId,
-      el.id
-    );
-    const revParents = reverseParentIds.get(String(el.id)) || [];
-    const nextParentId = currentId || (isPlaceholderHierarchyValue(el.alimentadoPor) && revParents.length === 1 ? revParents[0] : null);
-
-    const candidateEl = nextParentId !== el.alimentadoPorId
-      ? { ...el, alimentadoPorId: nextParentId }
-      : el;
-
-    const resolvedParent = resolveElementParentDisplay(candidateEl, elements);
+    const revParents = reverseParentMap.get(elIdStr) || [];
+    const revChildren = reverseChildMap.get(elIdStr) || [];
     const resolvedUbic = resolveElementUbicacionDisplay(el);
-
-    const nextAlimentadoPor = !isPlaceholderHierarchyValue(el.alimentadoPor)
-      ? el.alimentadoPor
-      : (resolvedParent || '');
     const nextUbicacion = !isPlaceholderHierarchyValue(el.ubicacion)
       ? el.ubicacion
       : (resolvedUbic || '');
 
+    if (isTransferElement(el)) {
+      let { normId, normName, emergId, emergName } = getTransferSourceSlots(el);
+
+      if (!normId && normName && normName !== 'CORPOELEC') {
+        const m = findElementMatchInList(normName, elements, elIdStr);
+        if (m) {
+          normId = String(m.id);
+          normName = getCleanElementLabel(m);
+        }
+      } else if (normId && byId.has(normId)) {
+        normName = getCleanElementLabel(byId.get(normId)) || normName;
+      }
+
+      if (!emergId && emergName) {
+        const m = findElementMatchInList(emergName, elements, elIdStr);
+        if (m) {
+          emergId = String(m.id);
+          emergName = getCleanElementLabel(m);
+        }
+      } else if (emergId && byId.has(emergId)) {
+        emergName = getCleanElementLabel(byId.get(emergId)) || emergName;
+      }
+
+      // Hydratar desde padres que declararon esta Transferencia en su ALIMENTA A / circuitos
+      revParents.forEach((pEl) => {
+        const pId = String(pEl.id);
+        const pLabel = getCleanElementLabel(pEl);
+        if (isGeneratorElement(pEl)) {
+          if (!emergId) {
+            emergId = pId;
+            emergName = pLabel;
+          }
+        } else if (!normId && isPlaceholderHierarchyValue(normName)) {
+          normId = pId;
+          normName = pLabel;
+        } else if (normId !== pId && emergId !== pId && !emergId && isPlaceholderHierarchyValue(emergName)) {
+          emergId = pId;
+          emergName = pLabel;
+        }
+      });
+
+      const nextAlimentadoPorIds = Array.from(new Set([normId, emergId].filter(Boolean)));
+      const nextPrimaryParentId = normId || emergId || sanitizeParentId(el.alimentadoPorId || dt.alimentadoPorId, elIdStr);
+      const computedParentText = [normName, emergName].filter(Boolean).join(' / ');
+      const nextAlimentadoPor = computedParentText || (!isPlaceholderHierarchyValue(el.alimentadoPor) ? el.alimentadoPor : resolveElementParentDisplay({ ...el, datosTecnicos: dt }, elements));
+
+      const downResolved = resolveElementAlimentaADisplay(el, elements);
+      const mergedDownIds = Array.from(new Set([
+        ...downResolved.ids,
+        ...revChildren.map((c) => String(c.id))
+      ].filter((cid) => cid && cid !== elIdStr)));
+
+      const nextDownRes = rebuildParentDownstreamFields(
+        { ...el, datosTecnicos: { ...dt, salidaCargaId: dt.salidaCargaId || mergedDownIds[0] || null } },
+        mergedDownIds,
+        new Map(),
+        byId
+      );
+
+      const nextTransferDt = {
+        ...(nextDownRes.nextEl.datosTecnicos || dt),
+        fuenteNormalId: normId || null,
+        fuenteNormalNombre: normName,
+        fuenteEmergenciaId: emergId || null,
+        fuenteEmergenciaNombre: emergName,
+        alimentadoPorId: nextPrimaryParentId || null,
+        alimentadoPorIds: nextAlimentadoPorIds
+      };
+
+      const changedDt = JSON.stringify(dt) !== JSON.stringify(nextTransferDt);
+      if (
+        !changedDt &&
+        nextPrimaryParentId === (el.alimentadoPorId || null) &&
+        nextAlimentadoPor === (el.alimentadoPor || '') &&
+        nextUbicacion === (el.ubicacion || '') &&
+        nextDownRes.nextEl.alimentaA === (el.alimentaA || '') &&
+        JSON.stringify(nextDownRes.nextEl.alimentaAIds || []) === JSON.stringify(el.alimentaAIds || [])
+      ) {
+        return el;
+      }
+
+      return {
+        ...el,
+        alimentadoPorId: nextPrimaryParentId || null,
+        alimentadoPor: nextAlimentadoPor,
+        alimentaA: nextDownRes.nextEl.alimentaA,
+        alimentaAIds: nextDownRes.nextEl.alimentaAIds,
+        ubicacion: nextUbicacion,
+        datosTecnicos: nextTransferDt
+      };
+    }
+
+    // Elementos regulares (no Transfer)
+    let nextParentId = sanitizeParentId(
+      el.alimentadoPorId || dt.alimentadoPorId || dt.alimentadorId || el.origenId,
+      elIdStr
+    );
+    if (!nextParentId && !isPlaceholderHierarchyValue(el.alimentadoPor) && String(el.alimentadoPor).trim().toUpperCase() !== 'CORPOELEC') {
+      const m = findElementMatchInList(el.alimentadoPor, elements, elIdStr);
+      if (m) nextParentId = String(m.id);
+    }
+    if (!nextParentId && isPlaceholderHierarchyValue(el.alimentadoPor) && revParents.length === 1) {
+      nextParentId = String(revParents[0].id);
+    }
+
+    const candidateEl = nextParentId !== el.alimentadoPorId
+      ? { ...el, alimentadoPorId: nextParentId }
+      : el;
+    const resolvedParent = isGeneratorElement(el)
+      ? 'FUENTE PRIMARIA INDEPENDIENTE'
+      : resolveElementParentDisplay(candidateEl, elements);
+
+    const nextAlimentadoPor = isGeneratorElement(el)
+      ? (el.alimentadoPor || 'FUENTE PRIMARIA INDEPENDIENTE')
+      : (!isPlaceholderHierarchyValue(el.alimentadoPor) && (!nextParentId || String(el.alimentadoPor).trim().toUpperCase() === 'CORPOELEC')
+          ? el.alimentadoPor
+          : (resolvedParent || el.alimentadoPor || ''));
+
+    let nextAlimentaA = el.alimentaA || '';
+    let nextAlimentaAIds = Array.isArray(el.alimentaAIds) ? el.alimentaAIds : (Array.isArray(dt.alimentaAIds) ? dt.alimentaAIds : []);
+    let nextRegularDt = nextParentId !== (dt.alimentadoPorId || null) ? { ...dt, alimentadoPorId: nextParentId } : dt;
+    let downstreamChanged = false;
+
+    if (!isTableroElement(el) && revChildren.length > 0) {
+      const mergedChildIds = Array.from(new Set([
+        ...nextAlimentaAIds.map(String),
+        ...revChildren.map((c) => String(c.id))
+      ].filter((cid) => cid && cid !== elIdStr)));
+      const rebuilt = rebuildParentDownstreamFields(
+        { ...el, datosTecnicos: nextRegularDt },
+        mergedChildIds,
+        new Map(),
+        byId
+      );
+      if (rebuilt.changed) {
+        nextAlimentaA = rebuilt.nextEl.alimentaA;
+        nextAlimentaAIds = rebuilt.nextEl.alimentaAIds;
+        nextRegularDt = rebuilt.nextEl.datosTecnicos;
+        downstreamChanged = true;
+      }
+    }
+
     if (
+      !downstreamChanged &&
       nextParentId === (el.alimentadoPorId || null) &&
       nextAlimentadoPor === (el.alimentadoPor || '') &&
-      nextUbicacion === (el.ubicacion || '')
+      nextUbicacion === (el.ubicacion || '') &&
+      nextRegularDt === dt
     ) {
       return el;
     }
@@ -593,7 +1313,10 @@ export const hydrateProjectHierarchyLinks = (elements = []) => {
       ...el,
       alimentadoPorId: nextParentId,
       alimentadoPor: nextAlimentadoPor,
-      ubicacion: nextUbicacion
+      alimentaA: nextAlimentaA,
+      alimentaAIds: nextAlimentaAIds,
+      ubicacion: nextUbicacion,
+      datosTecnicos: nextRegularDt
     };
   });
 };
@@ -781,6 +1504,400 @@ const mergePayloadDeep = (existingPayload = {}, incomingPayload = {}) => {
     };
   }
   return merged;
+};
+
+const collectProjectElementsInStore = (state, proyectoId = null, companyId = null) => {
+  const byId = new Map();
+  const kindById = new Map();
+  const list = [];
+
+  const pushItem = (item, queueTipo, fallbackTipo, compId, projId) => {
+    if (!item || !item.id) return;
+    const idStr = String(item.id);
+    if (byId.has(idStr)) return;
+    const enriched = {
+      ...item,
+      tipoElemento: item.tipoElemento || item.tipo || fallbackTipo,
+      empresaId: item.empresaId || item.companyId || compId || null,
+      proyectoId: item.proyectoId || projId || null
+    };
+    byId.set(idStr, enriched);
+    kindById.set(idStr, queueTipo);
+    list.push(enriched);
+  };
+
+  for (const c of (state?.companies || [])) {
+    if (proyectoId) {
+      const p = (c.proyectos || []).find((pr) => pr.id === proyectoId);
+      if (p) {
+        (p.elementosUnifilares || p.tableros || []).forEach((el) => pushItem(el, 'ELEMENTO_UNIFILAR', el?.tipoElemento || 'TABLERO', c.id, p.id));
+        (p.tableros || []).forEach((t) => pushItem(t, 'ELEMENTO_UNIFILAR', 'TABLERO', c.id, p.id));
+        (p.puntosMedicion || []).forEach((pm) => pushItem(pm, 'PUNTO_MEDICION', 'PUNTO_MEDICION', c.id, p.id));
+        (p.ccmList || p.ccms || []).forEach((ccm) => pushItem(ccm, 'CCM', 'CCM', c.id, p.id));
+        (p.inspeccionesSubestacion || p.subestaciones || []).forEach((s) => pushItem(s, 'SUBESTACION', s?.tipoElemento || 'SUBESTACION', c.id, p.id));
+        break;
+      }
+    } else if (!companyId || c.id === companyId) {
+      (c.elementosUnifilares || []).forEach((el) => pushItem(el, 'ELEMENTO_UNIFILAR', el?.tipoElemento || 'TABLERO', c.id, el?.proyectoId || null));
+    }
+  }
+
+  const matchesScope = (item) => {
+    if (!item) return false;
+    if (proyectoId) return String(item.proyectoId || '') === String(proyectoId);
+    if (companyId) return String(item.empresaId || item.companyId || '') === String(companyId);
+    return true;
+  };
+
+  (state?.elementosLocales || []).filter(matchesScope).forEach((el) => pushItem(el, 'ELEMENTO_UNIFILAR', el?.tipoElemento || 'TABLERO', el?.empresaId || el?.companyId, el?.proyectoId));
+  (state?.puntosMedicionLocales || []).filter(matchesScope).forEach((pm) => pushItem(pm, 'PUNTO_MEDICION', 'PUNTO_MEDICION', pm?.empresaId || pm?.companyId, pm?.proyectoId));
+  (state?.ccmLocales || []).filter(matchesScope).forEach((ccm) => pushItem(ccm, 'CCM', 'CCM', ccm?.empresaId || ccm?.companyId, ccm?.proyectoId));
+  (state?.subestacionesLocales || []).filter(matchesScope).forEach((s) => pushItem(s, 'SUBESTACION', s?.tipoElemento || 'SUBESTACION', s?.empresaId || s?.companyId, s?.proyectoId));
+
+  return { list, byId, kindById };
+};
+
+const upsertSyncQueueEntries = (currentQueue = [], entries = []) => {
+  const nextQueue = [...(Array.isArray(currentQueue) ? currentQueue : [])];
+  entries.forEach((entry) => {
+    if (!entry || !entry.id || !entry.payload) return;
+    const idx = nextQueue.findIndex(
+      (q) => (q?.id === entry.id || q?.payload?.id === entry.id) &&
+             (q?.tipo === entry.tipo || (entry.tipo === 'ELEMENTO_UNIFILAR' && q?.tipo === 'TABLERO'))
+    );
+    if (idx >= 0) {
+      nextQueue[idx] = {
+        ...nextQueue[idx],
+        ...entry,
+        payload: mergePayloadDeep(nextQueue[idx]?.payload, entry.payload)
+      };
+    } else {
+      nextQueue.push(entry);
+    }
+  });
+  return nextQueue;
+};
+
+const applyHierarchyMapperAcrossState = (state, proyectoId, parentCompanyId, mapFn) => {
+  const matchesProject = (p) => (proyectoId ? p.id === proyectoId : true);
+
+  const updatedCompanies = (state.companies || []).map((c) => {
+    if (parentCompanyId && proyectoId && c.id !== parentCompanyId) return c;
+    return {
+      ...c,
+      ...(!proyectoId && Array.isArray(c.elementosUnifilares)
+        ? { elementosUnifilares: c.elementosUnifilares.map((item) => mapFn(item, 'ELEMENTO_UNIFILAR', c.id, item?.proyectoId || null)) }
+        : {}),
+      proyectos: (c.proyectos || []).map((p) => {
+        if (!matchesProject(p)) return p;
+        const baseElements = p.elementosUnifilares || p.tableros || [];
+        return {
+          ...p,
+          elementosUnifilares: baseElements.map((item) => mapFn(item, 'ELEMENTO_UNIFILAR', c.id, p.id)),
+          ...(p.tableros ? { tableros: p.tableros.map((item) => mapFn(item, 'ELEMENTO_UNIFILAR', c.id, p.id)) } : {}),
+          ...(p.puntosMedicion ? { puntosMedicion: p.puntosMedicion.map((item) => mapFn(item, 'PUNTO_MEDICION', c.id, p.id)) } : {}),
+          ...(p.ccmList ? { ccmList: p.ccmList.map((item) => mapFn(item, 'CCM', c.id, p.id)) } : {}),
+          ...(p.inspeccionesSubestacion ? { inspeccionesSubestacion: p.inspeccionesSubestacion.map((item) => mapFn(item, 'SUBESTACION', c.id, p.id)) } : {}),
+          ...(p.subestaciones ? { subestaciones: p.subestaciones.map((item) => mapFn(item, 'SUBESTACION', c.id, p.id)) } : {})
+        };
+      })
+    };
+  });
+
+  const mapLocalIfScope = (arr, qTipo) =>
+    (arr || []).map((item) => {
+      if (proyectoId && item?.proyectoId && String(item.proyectoId) !== String(proyectoId)) return item;
+      return mapFn(item, qTipo, item?.empresaId || item?.companyId || parentCompanyId, item?.proyectoId || proyectoId);
+    });
+
+  return {
+    updatedCompanies,
+    updatedElementosLocales: mapLocalIfScope(state.elementosLocales, 'ELEMENTO_UNIFILAR'),
+    updatedPuntosLocales: mapLocalIfScope(state.puntosMedicionLocales, 'PUNTO_MEDICION'),
+    updatedCcmLocales: mapLocalIfScope(state.ccmLocales, 'CCM'),
+    updatedSubestacionesLocales: mapLocalIfScope(state.subestacionesLocales, 'SUBESTACION')
+  };
+};
+
+const normalizeTransferUpdatePayload = (existingEl, cleanUpdatedData, allElements, elementoId) => {
+  const prevDt = parseDatosTecnicosSafe(existingEl?.datosTecnicos);
+  const hasIncomingDt = cleanUpdatedData.datosTecnicos !== undefined && cleanUpdatedData.datosTecnicos !== null;
+  const incomingDt = hasIncomingDt ? parseDatosTecnicosSafe(cleanUpdatedData.datosTecnicos) : {};
+  const mergedDt = { ...prevDt, ...incomingDt };
+
+  const prevNormId = sanitizeParentId(prevDt.fuenteNormalId, elementoId);
+  const prevEmergId = sanitizeParentId(prevDt.fuenteEmergenciaId, elementoId);
+  const prevNormName = !isPlaceholderHierarchyValue(prevDt.fuenteNormalNombre) ? String(prevDt.fuenteNormalNombre).trim().toUpperCase() : '';
+  const prevEmergName = !isPlaceholderHierarchyValue(prevDt.fuenteEmergenciaNombre) ? String(prevDt.fuenteEmergenciaNombre).trim().toUpperCase() : '';
+  const prevJoined = [prevNormName, prevEmergName].filter(Boolean).join(' / ');
+
+  const slotsExplicitlyEdited = hasIncomingDt && (
+    (incomingDt.fuenteNormalId ?? null) !== (prevDt.fuenteNormalId ?? null) ||
+    String(incomingDt.fuenteNormalNombre || '').trim().toUpperCase() !== prevNormName ||
+    (incomingDt.fuenteEmergenciaId ?? null) !== (prevDt.fuenteEmergenciaId ?? null) ||
+    String(incomingDt.fuenteEmergenciaNombre || '').trim().toUpperCase() !== prevEmergName
+  );
+
+  let normId = sanitizeParentId(mergedDt.fuenteNormalId, elementoId);
+  let normName = !isPlaceholderHierarchyValue(mergedDt.fuenteNormalNombre)
+    ? cleanElementName(String(mergedDt.fuenteNormalNombre)).toUpperCase().trim()
+    : '';
+  let emergId = sanitizeParentId(mergedDt.fuenteEmergenciaId, elementoId);
+  let emergName = !isPlaceholderHierarchyValue(mergedDt.fuenteEmergenciaNombre)
+    ? cleanElementName(String(mergedDt.fuenteEmergenciaNombre)).toUpperCase().trim()
+    : '';
+
+  if (normName === 'CORPOELEC') {
+    normId = null;
+  } else if (!normId && normName) {
+    const m = findElementMatchInList(normName, allElements, elementoId);
+    if (m) {
+      normId = String(m.id);
+      normName = getCleanElementLabel(m);
+    }
+  } else if (normId) {
+    const m = allElements.find((x) => String(x.id) === String(normId));
+    if (m) normName = getCleanElementLabel(m);
+  }
+
+  if (!emergId && emergName) {
+    const m = findElementMatchInList(emergName, allElements, elementoId);
+    if (m) {
+      emergId = String(m.id);
+      emergName = getCleanElementLabel(m);
+    }
+  } else if (emergId) {
+    const m = allElements.find((x) => String(x.id) === String(emergId));
+    if (m) emergName = getCleanElementLabel(m);
+  }
+
+  const topParentChanged =
+    ('alimentadoPor' in cleanUpdatedData || 'alimentadoPorId' in cleanUpdatedData) && !slotsExplicitlyEdited;
+
+  if (topParentChanged) {
+    const topText = 'alimentadoPor' in cleanUpdatedData
+      ? cleanUpdatedData.alimentadoPor
+      : (existingEl?.alimentadoPor || '');
+    const topId = 'alimentadoPorId' in cleanUpdatedData
+      ? cleanUpdatedData.alimentadoPorId
+      : (existingEl?.alimentadoPorId || null);
+
+    const clearedExplicitly =
+      'alimentadoPor' in cleanUpdatedData &&
+      isPlaceholderHierarchyValue(topText) &&
+      !topId &&
+      (!isPlaceholderHierarchyValue(existingEl?.alimentadoPor) || prevNormId || prevEmergId || prevNormName || prevEmergName);
+
+    if (clearedExplicitly) {
+      normId = null;
+      normName = '';
+      emergId = null;
+      emergName = '';
+    } else if (topId && topId !== (existingEl?.alimentadoPorId || null)) {
+      const parentObj = allElements.find((x) => String(x.id) === String(topId));
+      const applied = applyUpstreamLinkToElement(
+        { ...existingEl, id: elementoId, tipoElemento: 'TRANSFER', datosTecnicos: mergedDt },
+        topId,
+        parentObj ? getCleanElementLabel(parentObj) : topText,
+        parentObj ? getElementTipoUpper(parentObj) : ''
+      );
+      const aDt = applied.nextEl.datosTecnicos || {};
+      normId = aDt.fuenteNormalId || null;
+      normName = aDt.fuenteNormalNombre || '';
+      emergId = aDt.fuenteEmergenciaId || null;
+      emergName = aDt.fuenteEmergenciaNombre || '';
+    } else if (!topId && topText && topText !== (existingEl?.alimentadoPor || '') && topText !== prevJoined) {
+      if (topText === 'CORPOELEC' || !normId) {
+        normId = null;
+        normName = topText;
+      }
+    }
+  }
+
+  const nextAlimentadoPorIds = Array.from(new Set([normId, emergId].filter(Boolean)));
+  const computedParentJoined = [normName, emergName].filter(Boolean).join(' / ');
+  const nextPrimaryParentId = normId || emergId || sanitizeParentId(cleanUpdatedData.alimentadoPorId, elementoId) || null;
+  const nextAlimentadoPor = slotsExplicitlyEdited
+    ? computedParentJoined
+    : (computedParentJoined || (cleanUpdatedData.alimentadoPor !== undefined ? cleanUpdatedData.alimentadoPor : (existingEl?.alimentadoPor || '')));
+
+  mergedDt.fuenteNormalId = normId || null;
+  mergedDt.fuenteNormalNombre = normName;
+  mergedDt.fuenteEmergenciaId = emergId || null;
+  mergedDt.fuenteEmergenciaNombre = emergName;
+  mergedDt.alimentadoPorId = nextPrimaryParentId;
+  mergedDt.alimentadoPorIds = nextAlimentadoPorIds;
+  if (nextPrimaryParentId === null) {
+    mergedDt.alimentadorId = null;
+  }
+
+  cleanUpdatedData.alimentadoPor = nextAlimentadoPor;
+  cleanUpdatedData.alimentadoPorId = nextPrimaryParentId;
+
+  const prevSalidaName = !isPlaceholderHierarchyValue(prevDt.salidaCargaNombre) ? String(prevDt.salidaCargaNombre).trim().toUpperCase() : '';
+  const prevSalidaId = sanitizeParentId(prevDt.salidaCargaId, elementoId);
+  const incomingSalidaName = hasIncomingDt && incomingDt.salidaCargaNombre !== undefined
+    ? String(incomingDt.salidaCargaNombre || '').trim().toUpperCase()
+    : prevSalidaName;
+  const incomingSalidaId = hasIncomingDt && incomingDt.salidaCargaId !== undefined
+    ? sanitizeParentId(incomingDt.salidaCargaId, elementoId)
+    : prevSalidaId;
+
+  const salidaChanged = hasIncomingDt && (
+    incomingSalidaName !== prevSalidaName ||
+    incomingSalidaId !== prevSalidaId
+  );
+
+  const incomingAlimentaIds = cleanUpdatedData.alimentaAIds !== undefined
+    ? cleanUpdatedData.alimentaAIds
+    : (hasIncomingDt && incomingDt.alimentaAIds !== undefined ? incomingDt.alimentaAIds : undefined);
+
+  if (salidaChanged && cleanUpdatedData.alimentaAIds === undefined) {
+    const resolvedSalidaIds = incomingSalidaId ? [incomingSalidaId] : (() => {
+      const m = findElementMatchInList(incomingSalidaName, allElements, elementoId);
+      return m ? [String(m.id)] : [];
+    })();
+    cleanUpdatedData.alimentaA = incomingSalidaName;
+    cleanUpdatedData.alimentaAIds = resolvedSalidaIds;
+    mergedDt.alimentaA = incomingSalidaName;
+    mergedDt.alimentaAIds = resolvedSalidaIds;
+    mergedDt.salidaCargaNombre = incomingSalidaName;
+    mergedDt.salidaCargaId = resolvedSalidaIds[0] || null;
+  } else if (incomingAlimentaIds !== undefined || cleanUpdatedData.alimentaA !== undefined) {
+    const safeOutIds = Array.isArray(incomingAlimentaIds)
+      ? Array.from(new Set(incomingAlimentaIds.map((x) => sanitizeParentId(x, elementoId)).filter(Boolean)))
+      : (Array.isArray(prevDt.alimentaAIds) ? prevDt.alimentaAIds : []);
+    const outText = cleanUpdatedData.alimentaA !== undefined
+      ? cleanUpdatedData.alimentaA
+      : (hasIncomingDt && incomingDt.alimentaA !== undefined ? String(incomingDt.alimentaA).trim().toUpperCase() : (existingEl?.alimentaA || ''));
+    cleanUpdatedData.alimentaA = outText;
+    cleanUpdatedData.alimentaAIds = safeOutIds;
+    mergedDt.alimentaA = outText;
+    mergedDt.alimentaAIds = safeOutIds;
+    mergedDt.salidaCargaNombre = outText;
+    mergedDt.salidaCargaId = safeOutIds[0] || null;
+  }
+
+  cleanUpdatedData.datosTecnicos = mergedDt;
+};
+
+const syncRelatedHierarchyFromExternalElement = (set, get, { proyectoId, targetId, prevEl, updatedEl, updatedData, queueTipo, skipNetworkSync }) => {
+  if (!updatedEl || !targetId) return;
+  const touchedHierarchy =
+    'alimentadoPor' in updatedData ||
+    'alimentadoPorId' in updatedData ||
+    'alimentaA' in updatedData ||
+    'alimentaAIds' in updatedData ||
+    'nombre' in updatedData;
+
+  if (!touchedHierarchy) return;
+
+  const { list: allProjectElements, byId: allElementsMap } = collectProjectElementsInStore(get(), proyectoId);
+  allElementsMap.set(String(targetId), updatedEl);
+
+  const prevParentIds = new Set(prevEl ? extractElementParentIds(prevEl, allProjectElements) : []);
+  const nextParentIds = new Set(extractElementParentIds(updatedEl, allProjectElements));
+  const prevDownIds = new Set(prevEl ? extractElementDownstreamIds(prevEl, allProjectElements) : []);
+  const nextDownIds = new Set(extractElementDownstreamIds(updatedEl, allProjectElements));
+
+  const prevLabel = prevEl ? getCleanElementLabel(prevEl) : '';
+  const nextLabel = getCleanElementLabel(updatedEl);
+  const targetTipo = getElementTipoUpper(updatedEl) || queueTipo;
+  const parentTouched = 'alimentadoPor' in updatedData || 'alimentadoPorId' in updatedData;
+  const downTouched = 'alimentaA' in updatedData || 'alimentaAIds' in updatedData;
+  const nameChanged = Boolean(nextLabel && prevLabel && nextLabel !== prevLabel);
+
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  const { token } = get();
+  const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+  const modifiedMap = new Map();
+
+  set((state) => {
+    const mapFn = (item, qTipo, compId, projId) => {
+      if (!item || !item.id || String(item.id) === String(targetId)) return item;
+      const itemIdStr = String(item.id);
+      let currentItem = item;
+      let changed = false;
+
+      if (downTouched && nextDownIds.has(itemIdStr)) {
+        const res = applyUpstreamLinkToElement(currentItem, targetId, nextLabel, targetTipo);
+        if (res.changed) {
+          currentItem = res.nextEl;
+          changed = true;
+        }
+      } else if (downTouched && (prevDownIds.has(itemIdStr) || (!nextDownIds.has(itemIdStr) && extractElementParentIds(currentItem, allProjectElements).includes(String(targetId))))) {
+        const res = removeUpstreamLinkFromElement(currentItem, targetId, prevLabel);
+        if (res.changed) {
+          currentItem = res.nextEl;
+          changed = true;
+        }
+      } else if (nameChanged && extractElementParentIds(currentItem, allProjectElements).includes(String(targetId))) {
+        const res = applyUpstreamLinkToElement(currentItem, targetId, nextLabel, targetTipo);
+        if (res.changed) {
+          currentItem = res.nextEl;
+          changed = true;
+        }
+      }
+
+      if ((parentTouched || nameChanged) && nextParentIds.has(itemIdStr) && !nextDownIds.has(itemIdStr)) {
+        const res = applyDownstreamLinkToParent(currentItem, targetId, nextLabel, allElementsMap, nameChanged ? prevLabel : '');
+        if (res.changed) {
+          currentItem = res.nextEl;
+          changed = true;
+        }
+      } else if (parentTouched && prevParentIds.has(itemIdStr) && !nextParentIds.has(itemIdStr)) {
+        const res = removeDownstreamLinkFromParent(currentItem, targetId, prevLabel, allElementsMap);
+        if (res.changed) {
+          currentItem = res.nextEl;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        const enrichedModified = {
+          ...currentItem,
+          empresaId: currentItem.empresaId || currentItem.companyId || compId || null,
+          proyectoId: currentItem.proyectoId || projId || proyectoId || null
+        };
+        modifiedMap.set(itemIdStr, { item: enrichedModified, tipo: qTipo });
+        return currentItem;
+      }
+      return item;
+    };
+
+    const mapped = applyHierarchyMapperAcrossState(state, proyectoId, null, mapFn);
+    if (modifiedMap.size === 0) return {};
+
+    let nextQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+    if (!skipNetworkSync && (!isOnline || !hasActiveSession)) {
+      nextQueue = upsertSyncQueueEntries(
+        nextQueue,
+        Array.from(modifiedMap.entries()).map(([mid, entry]) => ({
+          id: mid,
+          tipo: entry.tipo,
+          companyId: entry.item.empresaId || entry.item.companyId || (state.companies[0]?.id || null),
+          payload: entry.item
+        }))
+      );
+    }
+
+    return {
+      companies: mapped.updatedCompanies,
+      elementosLocales: mapped.updatedElementosLocales,
+      puntosMedicionLocales: mapped.updatedPuntosLocales,
+      ccmLocales: mapped.updatedCcmLocales,
+      subestacionesLocales: mapped.updatedSubestacionesLocales,
+      syncQueue: nextQueue
+    };
+  });
+
+  if (!skipNetworkSync && isOnline && hasActiveSession && modifiedMap.size > 0) {
+    modifiedMap.forEach((entry, mid) => {
+      if (entry.tipo === 'ELEMENTO_UNIFILAR') {
+        scheduleDebouncedElementoSync(get, mid, proyectoId, entry.item);
+      }
+    });
+  }
 };
 
 const scheduleDebouncedElementoSync = (get, elementoId, proyectoId, fallbackEl) => {
@@ -1537,100 +2654,23 @@ export const useStore = create(
       },
 
       updateTableroAlimentador: (proyectoId, tableroId, alimentadorId) => {
-        let resolvedPayload = null;
         const cleanParentId = sanitizeParentId(alimentadorId, tableroId);
-
-        set((state) => {
-          const updateElement = (e) => {
-            if (e.id === tableroId) {
-              return {
-                ...e,
-                alimentadoPorId: cleanParentId,
-                datosTecnicos: {
-                  ...(e.datosTecnicos || {}),
-                  alimentadorId: cleanParentId,
-                  alimentadoPorId: cleanParentId
-                }
-              };
-            }
-            return e;
-          };
-
-          const updatedCompanies = state.companies.map((c) => {
-            if (!proyectoId) {
-              const list = c.elementosUnifilares || [];
-              return { ...c, elementosUnifilares: list.map(updateElement) };
-            }
-            return {
-              ...c,
-              proyectos: (c.proyectos || []).map((p) => {
-                if (p.id === proyectoId) {
-                  const list = p.elementosUnifilares || p.tableros || [];
-                  const updatedList = list.map(updateElement);
-                  return {
-                    ...p,
-                    elementosUnifilares: updatedList,
-                    ...(p.tableros ? { tableros: (p.tableros || []).map(updateElement) } : {})
-                  };
-                }
-                return p;
-              })
-            };
-          });
-
-          const updatedElementosLocales = (state.elementosLocales || []).map(updateElement);
-
-          // Buscar primero en companies (proyectos[].elementosUnifilares y tableros), con fallback a elementosLocales
-          let updatedElement = findElementoInStore(
-            { companies: updatedCompanies, elementosLocales: updatedElementosLocales },
-            tableroId,
-            proyectoId
-          );
-
-          let payload = null;
-          if (updatedElement) {
-            payload = {
-              ...updatedElement,
-              alimentadoPorId: cleanParentId,
-              datosTecnicos: {
-                ...(updatedElement.datosTecnicos || {}),
-                alimentadorId: cleanParentId,
-                alimentadoPorId: cleanParentId
-              }
-            };
-            resolvedPayload = payload;
-          }
-
-          const currentQueue = Array.isArray(state.syncQueue) ? [...state.syncQueue] : [];
-          let updatedSyncQueue = currentQueue;
-          if (payload) {
-            const existingIdx = currentQueue.findIndex(
-              (item) => item?.id === tableroId || item?.payload?.id === tableroId
-            );
-            const queueEntry = {
-              id: tableroId,
-              tipo: 'ELEMENTO_UNIFILAR',
-              companyId: payload.companyId || payload.empresaId || null,
-              payload: existingIdx >= 0 ? mergePayloadDeep(currentQueue[existingIdx].payload, payload) : payload
-            };
-            if (existingIdx >= 0) {
-              updatedSyncQueue[existingIdx] = { ...currentQueue[existingIdx], ...queueEntry };
-            } else {
-              updatedSyncQueue.push(queueEntry);
-            }
-          }
-
-          return {
-            companies: updatedCompanies,
-            elementosLocales: updatedElementosLocales,
-            syncQueue: updatedSyncQueue
-          };
-        });
-
-        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-        if (isOnline && resolvedPayload) {
-          scheduleDebouncedElementoSync(get, tableroId, proyectoId, resolvedPayload);
+        const existing = findElementoInStore(get(), tableroId, proyectoId);
+        let nextAlimentadoPor = existing?.alimentadoPor;
+        if (cleanParentId && isPlaceholderHierarchyValue(nextAlimentadoPor)) {
+          const { byId } = collectProjectElementsInStore(get(), proyectoId);
+          const parentObj = byId.get(String(cleanParentId));
+          if (parentObj) nextAlimentadoPor = getCleanElementLabel(parentObj);
         }
+        return get().updateElementoUnifilar(proyectoId, tableroId, {
+          alimentadoPorId: cleanParentId,
+          ...(nextAlimentadoPor !== undefined ? { alimentadoPor: nextAlimentadoPor } : {}),
+          datosTecnicos: {
+            ...(existing?.datosTecnicos || {}),
+            alimentadorId: cleanParentId,
+            alimentadoPorId: cleanParentId
+          }
+        });
       },
 
       addCompany: async (companyData) => {
@@ -2247,6 +3287,8 @@ export const useStore = create(
           ? String(elementoData.nombre).trim().toUpperCase()
           : `${codigo.toUpperCase()} - ${tipoElemento.toUpperCase()}`;
 
+        const { list: allProjectElements, byId: allElementsMap } = collectProjectElementsInStore(get(), proyectoId, parentCompanyId);
+
         const rawParentId = elementoData.alimentadoPorId || elementoData.datosTecnicos?.alimentadoPorId || elementoData.datosTecnicos?.alimentadorId || null;
         const cleanParentId = sanitizeParentId(rawParentId, uuidId);
         let cleanAlimentadoPorText = !isPlaceholderHierarchyValue(elementoData.alimentadoPor)
@@ -2254,15 +3296,19 @@ export const useStore = create(
           : '';
 
         if (!cleanAlimentadoPorText && cleanParentId) {
-          const parentFound = existingElements.find((e) => e.id === cleanParentId) || findElementoInStore(get(), cleanParentId, proyectoId);
+          const parentFound = allElementsMap.get(String(cleanParentId)) || existingElements.find((e) => e.id === cleanParentId) || findElementoInStore(get(), cleanParentId, proyectoId);
           if (parentFound) {
-            cleanAlimentadoPorText = cleanElementName(parentFound.nombre, parentFound.id, parentFound.codigo).toUpperCase().trim();
+            cleanAlimentadoPorText = getCleanElementLabel(parentFound);
           }
         }
 
         const cleanUbicacionText = resolveElementUbicacionDisplay(elementoData);
+        const rawAlimentaIds = Array.isArray(elementoData.alimentaAIds)
+          ? elementoData.alimentaAIds
+          : (Array.isArray(elementoData.datosTecnicos?.alimentaAIds) ? elementoData.datosTecnicos.alimentaAIds : []);
+        const cleanAlimentaA = elementoData.alimentaA ? String(elementoData.alimentaA).trim().toUpperCase() : '';
 
-        const nuevoElemento = {
+        let nuevoElemento = {
           id: uuidId,
           codigo: codigo.toUpperCase(),
           nombre: nombreFinal,
@@ -2271,8 +3317,8 @@ export const useStore = create(
           ubicacion: cleanUbicacionText,
           alimentadoPor: cleanAlimentadoPorText,
           alimentadoPorId: cleanParentId,
-          alimentaA: elementoData.alimentaA ? String(elementoData.alimentaA).trim().toUpperCase() : '',
-          alimentaAIds: Array.isArray(elementoData.alimentaAIds) ? elementoData.alimentaAIds : (Array.isArray(elementoData.datosTecnicos?.alimentaAIds) ? elementoData.datosTecnicos.alimentaAIds : []),
+          alimentaA: cleanAlimentaA,
+          alimentaAIds: rawAlimentaIds.map((x) => sanitizeParentId(x, uuidId)).filter(Boolean),
           foto: elementoData.foto || null,
           fotoBlob: elementoData.fotoBlob || null,
           observacionesGenerales: elementoData.observacionesGenerales ? String(elementoData.observacionesGenerales).trim().toUpperCase() : '',
@@ -2286,104 +3332,126 @@ export const useStore = create(
           createdAt: new Date().toISOString()
         };
 
+        if (isTransferElement(nuevoElemento)) {
+          const dtCopy = { ...(nuevoElemento.datosTecnicos || {}) };
+          if (cleanParentId && !dtCopy.fuenteNormalId && !dtCopy.fuenteEmergenciaId && !dtCopy.fuenteNormalNombre && !dtCopy.fuenteEmergenciaNombre) {
+            const pObj = allElementsMap.get(String(cleanParentId));
+            const applied = applyUpstreamLinkToElement(
+              { ...nuevoElemento, datosTecnicos: dtCopy },
+              cleanParentId,
+              pObj ? getCleanElementLabel(pObj) : cleanAlimentadoPorText,
+              pObj ? getElementTipoUpper(pObj) : ''
+            );
+            nuevoElemento = applied.nextEl;
+          } else {
+            const transferPatch = { ...nuevoElemento };
+            normalizeTransferUpdatePayload(null, transferPatch, allProjectElements, uuidId);
+            nuevoElemento = { ...nuevoElemento, ...transferPatch };
+          }
+          if (nuevoElemento.alimentaA || (nuevoElemento.alimentaAIds && nuevoElemento.alimentaAIds.length > 0)) {
+            nuevoElemento.datosTecnicos = {
+              ...(nuevoElemento.datosTecnicos || {}),
+              alimentaA: nuevoElemento.alimentaA,
+              alimentaAIds: nuevoElemento.alimentaAIds,
+              salidaCargaNombre: nuevoElemento.datosTecnicos?.salidaCargaNombre || nuevoElemento.alimentaA,
+              salidaCargaId: nuevoElemento.datosTecnicos?.salidaCargaId || nuevoElemento.alimentaAIds?.[0] || null
+            };
+          }
+        }
+
         const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
         const { token } = get();
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
-        const safeNewAlimentaAIds = (nuevoElemento.alimentaAIds || []).filter(cid => cid && cid !== uuidId);
-        const modifiedChildMap = new Map();
+        const safeNewAlimentaAIds = extractElementDownstreamIds(nuevoElemento, allProjectElements).filter((cid) => cid && cid !== uuidId);
+        const newParentIds = extractElementParentIds(nuevoElemento, allProjectElements).filter((pid) => pid && pid !== uuidId && !safeNewAlimentaAIds.includes(pid));
+        const modifiedRelatedMap = new Map();
+
+        allElementsMap.set(uuidId, nuevoElemento);
 
         set((state) => {
-          const updatedCompanies = state.companies.map((c) => {
-            if (c.id === parentCompanyId) {
-              if (proyectoId) {
-                return {
-                  ...c,
-                  proyectos: c.proyectos.map((p) => {
-                    if (p.id === proyectoId) {
-                      const elementos = (p.elementosUnifilares || p.tableros || []).map(e => {
-                        if (safeNewAlimentaAIds.includes(e.id)) {
-                          const updatedChild = {
-                            ...e,
-                            alimentadoPorId: uuidId,
-                            alimentadoPor: nombreFinal,
-                            datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: uuidId }
-                          };
-                          modifiedChildMap.set(e.id, updatedChild);
-                          return updatedChild;
-                        }
-                        return e;
-                      });
-                      return {
-                        ...p,
-                        elementosUnifilares: [...elementos, nuevoElemento]
-                      };
-                    }
-                    return p;
-                  })
-                };
-              } else {
-                const elementosComp = (c.elementosUnifilares || []).map(e => {
-                  if (safeNewAlimentaAIds.includes(e.id)) {
-                    const updatedChild = {
-                      ...e,
-                      alimentadoPorId: uuidId,
-                      alimentadoPor: nombreFinal,
-                      datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: uuidId }
-                    };
-                    modifiedChildMap.set(e.id, updatedChild);
-                    return updatedChild;
-                  }
-                  return e;
-                });
-                return {
-                  ...c,
-                  elementosUnifilares: [...elementosComp, nuevoElemento]
-                };
+          const mapRelated = (e, qTipo, compId, projId) => {
+            if (!e || !e.id) return e;
+            const eIdStr = String(e.id);
+            let nextEl = e;
+            let changed = false;
+
+            if (safeNewAlimentaAIds.includes(eIdStr)) {
+              const res = applyUpstreamLinkToElement(nextEl, uuidId, nombreFinal, tipoElemento);
+              if (res.changed) {
+                nextEl = res.nextEl;
+                changed = true;
+              }
+            } else if (newParentIds.includes(eIdStr)) {
+              const res = applyDownstreamLinkToParent(nextEl, uuidId, nombreFinal, allElementsMap);
+              if (res.changed) {
+                nextEl = res.nextEl;
+                changed = true;
               }
             }
-            return c;
+
+            if (changed) {
+              modifiedRelatedMap.set(eIdStr, {
+                tipo: qTipo,
+                item: {
+                  ...nextEl,
+                  empresaId: nextEl.empresaId || nextEl.companyId || compId || parentCompanyId,
+                  proyectoId: nextEl.proyectoId || projId || proyectoId || null
+                }
+              });
+              return nextEl;
+            }
+            return e;
+          };
+
+          const mapped = applyHierarchyMapperAcrossState(state, proyectoId, parentCompanyId, mapRelated);
+
+          const updatedCompanies = mapped.updatedCompanies.map((c) => {
+            if (c.id !== parentCompanyId) return c;
+            if (proyectoId) {
+              return {
+                ...c,
+                proyectos: (c.proyectos || []).map((p) => {
+                  if (p.id !== proyectoId) return p;
+                  const currList = p.elementosUnifilares || p.tableros || [];
+                  return {
+                    ...p,
+                    elementosUnifilares: [...currList, nuevoElemento]
+                  };
+                })
+              };
+            }
+            return {
+              ...c,
+              elementosUnifilares: [...(c.elementosUnifilares || []), nuevoElemento]
+            };
           });
 
-          const updatedElementosLocales = [
-            ...(state.elementosLocales || []).map(e => {
-              if (safeNewAlimentaAIds.includes(e.id)) {
-                const updatedChild = {
-                  ...e,
-                  alimentadoPorId: uuidId,
-                  alimentadoPor: nombreFinal,
-                  datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: uuidId }
-                };
-                modifiedChildMap.set(e.id, updatedChild);
-                return updatedChild;
-              }
-              return e;
-            }),
-            nuevoElemento
-          ];
+          const updatedElementosLocales = [...mapped.updatedElementosLocales, nuevoElemento];
 
           let nextSyncQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           if (!isOnline || !hasActiveSession) {
-            const excludedIds = new Set([uuidId, ...modifiedChildMap.keys()]);
-            nextSyncQueue = [
-              ...nextSyncQueue.filter((q) => !excludedIds.has(q?.id)),
+            nextSyncQueue = upsertSyncQueueEntries(nextSyncQueue, [
               {
                 id: uuidId,
                 tipo: 'ELEMENTO_UNIFILAR',
                 companyId: parentCompanyId,
                 payload: nuevoElemento
               },
-              ...Array.from(modifiedChildMap.values()).map((childEl) => ({
-                id: childEl.id,
-                tipo: 'ELEMENTO_UNIFILAR',
-                companyId: childEl.empresaId || childEl.companyId || parentCompanyId,
-                payload: childEl
+              ...Array.from(modifiedRelatedMap.entries()).map(([rid, entry]) => ({
+                id: rid,
+                tipo: entry.tipo,
+                companyId: entry.item.empresaId || entry.item.companyId || parentCompanyId,
+                payload: entry.item
               }))
-            ];
+            ]);
           }
 
           return {
             companies: updatedCompanies,
             elementosLocales: updatedElementosLocales,
+            puntosMedicionLocales: mapped.updatedPuntosLocales,
+            ccmLocales: mapped.updatedCcmLocales,
+            subestacionesLocales: mapped.updatedSubestacionesLocales,
             syncQueue: nextSyncQueue
           };
         });
@@ -2392,8 +3460,10 @@ export const useStore = create(
         // Si hay internet y sesión activa, enviar DIRECTAMENTE al servidor en tiempo real (con fallback automático a syncQueue si falla)
         if (isOnline && hasActiveSession) {
           directPromise = get().enviarElementoDirectoServidor?.(parentCompanyId, nuevoElemento);
-          modifiedChildMap.forEach((childEl, childId) => {
-            scheduleDebouncedElementoSync(get, childId, proyectoId, childEl);
+          modifiedRelatedMap.forEach((entry, relId) => {
+            if (entry.tipo === 'ELEMENTO_UNIFILAR') {
+              scheduleDebouncedElementoSync(get, relId, proyectoId, entry.item);
+            }
           });
         }
 
@@ -2427,7 +3497,8 @@ export const useStore = create(
         const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
         const skipNetworkSync = Boolean(options?.skipNetworkSync);
 
-        const existingEl = findElementoInStore(get(), elementoId, proyectoId);
+        const { list: allProjectElements, byId: allElementsMap } = collectProjectElementsInStore(get(), proyectoId);
+        const existingEl = allElementsMap.get(String(elementoId)) || findElementoInStore(get(), elementoId, proyectoId);
         const cleanUpdatedData = { ...updatedData };
         if (cleanUpdatedData.nombre) cleanUpdatedData.nombre = String(cleanUpdatedData.nombre).trim().toUpperCase();
         if ('ubicacion' in cleanUpdatedData) {
@@ -2444,9 +3515,9 @@ export const useStore = create(
           const sanitizedPid = sanitizeParentId(cleanUpdatedData.alimentadoPorId, elementoId);
           cleanUpdatedData.alimentadoPorId = sanitizedPid;
           if (sanitizedPid && isPlaceholderHierarchyValue(cleanUpdatedData.alimentadoPor)) {
-            const parentFound = findElementoInStore(get(), sanitizedPid, proyectoId);
+            const parentFound = allElementsMap.get(String(sanitizedPid)) || findElementoInStore(get(), sanitizedPid, proyectoId);
             if (parentFound) {
-              cleanUpdatedData.alimentadoPor = cleanElementName(parentFound.nombre, parentFound.id, parentFound.codigo).toUpperCase().trim();
+              cleanUpdatedData.alimentadoPor = getCleanElementLabel(parentFound);
             }
           }
           if (cleanUpdatedData.datosTecnicos && typeof cleanUpdatedData.datosTecnicos === 'object') {
@@ -2469,181 +3540,236 @@ export const useStore = create(
         if (cleanUpdatedData.circuitoOrigen) cleanUpdatedData.circuitoOrigen = String(cleanUpdatedData.circuitoOrigen).trim().toUpperCase();
         if (cleanUpdatedData.observacionesGenerales) cleanUpdatedData.observacionesGenerales = String(cleanUpdatedData.observacionesGenerales).trim().toUpperCase();
         if (cleanUpdatedData.codigo) cleanUpdatedData.codigo = String(cleanUpdatedData.codigo).trim().toUpperCase();
-        if (cleanUpdatedData.alimentaA) cleanUpdatedData.alimentaA = String(cleanUpdatedData.alimentaA).trim().toUpperCase();
-
-        const explicitAlimentaAIds = cleanUpdatedData.alimentaAIds !== undefined 
-          ? cleanUpdatedData.alimentaAIds 
-          : cleanUpdatedData.datosTecnicos?.alimentaAIds;
-        const hasExplicitAlimentaA = Array.isArray(explicitAlimentaAIds);
-        const safeAlimentaAIds = hasExplicitAlimentaA ? explicitAlimentaAIds.filter(cid => cid && cid !== elementoId) : [];
-        const effectiveParentName = cleanUpdatedData.nombre || existingEl?.nombre || '';
-
-        const updatedCircuitsSource = Array.isArray(cleanUpdatedData.circuits)
-          ? cleanUpdatedData.circuits
-          : (Array.isArray(cleanUpdatedData.datosTecnicos?.circuits) ? cleanUpdatedData.datosTecnicos.circuits : null);
-        const circuitLinkedChildIds = new Set();
-        if (updatedCircuitsSource) {
-          updatedCircuitsSource.forEach((c) => {
-            const rawDest = c?.elementoDestinoId || c?.vinculadoId || '';
-            if (!rawDest) return;
-            String(rawDest)
-              .split(',')
-              .map((s) => s.trim())
-              .filter((cid) => cid && cid !== elementoId)
-              .forEach((cid) => circuitLinkedChildIds.add(cid));
-          });
+        if (cleanUpdatedData.alimentaA !== undefined) {
+          cleanUpdatedData.alimentaA = isPlaceholderHierarchyValue(cleanUpdatedData.alimentaA)
+            ? ''
+            : String(cleanUpdatedData.alimentaA).trim().toUpperCase();
         }
 
-        const modifiedChildIds = new Set();
+        const mergedTipo = cleanUpdatedData.tipoElemento || existingEl?.tipoElemento || 'TABLERO';
+        const isSelfTransfer = isTransferElement({ ...existingEl, ...cleanUpdatedData, tipoElemento: mergedTipo });
 
-        const syncElementBidirectional = (e) => {
-          if (e.id === elementoId) {
-            const nextCircuits = cleanUpdatedData.circuits !== undefined 
-              ? cleanUpdatedData.circuits 
-              : (cleanUpdatedData.datosTecnicos?.circuits !== undefined 
-                  ? cleanUpdatedData.datosTecnicos.circuits 
+        if (isSelfTransfer) {
+          normalizeTransferUpdatePayload(existingEl, cleanUpdatedData, allProjectElements, elementoId);
+        }
+
+        const prevCircuits = Array.isArray(existingEl?.circuits)
+          ? existingEl.circuits
+          : (Array.isArray(existingEl?.datosTecnicos?.circuits) ? existingEl.datosTecnicos.circuits : []);
+        const prevCircuitChildIds = new Set(extractCircuitDestIds(existingEl));
+        const nextCircuitsResolved = cleanUpdatedData.circuits !== undefined
+          ? cleanUpdatedData.circuits
+          : (cleanUpdatedData.datosTecnicos?.circuits !== undefined ? cleanUpdatedData.datosTecnicos.circuits : prevCircuits);
+        const mergedDatosTecnicosPreview = cleanUpdatedData.datosTecnicos !== undefined
+          ? { ...(existingEl?.datosTecnicos || {}), ...cleanUpdatedData.datosTecnicos, ...(nextCircuitsResolved !== undefined ? { circuits: nextCircuitsResolved } : {}) }
+          : (existingEl?.datosTecnicos || {});
+        const updatedPreviewEl = {
+          ...(existingEl || {}),
+          ...cleanUpdatedData,
+          id: elementoId,
+          tipoElemento: mergedTipo,
+          ...(nextCircuitsResolved !== undefined ? { circuits: nextCircuitsResolved } : {}),
+          datosTecnicos: mergedDatosTecnicosPreview
+        };
+        allElementsMap.set(String(elementoId), updatedPreviewEl);
+
+        const isSelfTablero = isTableroElement(updatedPreviewEl);
+        const explicitAlimentaAIds = cleanUpdatedData.alimentaAIds !== undefined
+          ? cleanUpdatedData.alimentaAIds
+          : cleanUpdatedData.datosTecnicos?.alimentaAIds;
+        const hasExplicitAlimentaA = Array.isArray(explicitAlimentaAIds) && (!isSelfTablero || explicitAlimentaAIds.length > 0);
+        const safeAlimentaAIds = hasExplicitAlimentaA
+          ? Array.from(new Set(explicitAlimentaAIds.map((cid) => sanitizeParentId(cid, elementoId)).filter(Boolean)))
+          : [];
+
+        const prevExplicitAlimentaIds = new Set(
+          existingEl
+            ? [
+                ...(Array.isArray(existingEl.alimentaAIds) ? existingEl.alimentaAIds : []),
+                ...(Array.isArray(existingEl.datosTecnicos?.alimentaAIds) ? existingEl.datosTecnicos.alimentaAIds : []),
+                ...(isTransferElement(existingEl) && existingEl.datosTecnicos?.salidaCargaId ? [existingEl.datosTecnicos.salidaCargaId] : [])
+              ]
+                .map((cid) => sanitizeParentId(cid, elementoId))
+                .filter(Boolean)
+            : []
+        );
+
+        const circuitsTouched = Array.isArray(cleanUpdatedData.circuits) || Array.isArray(cleanUpdatedData.datosTecnicos?.circuits);
+        const nextCircuitChildIds = new Set(
+          circuitsTouched ? extractCircuitDestIds(updatedPreviewEl) : Array.from(prevCircuitChildIds)
+        );
+        const nextDownstreamSet = new Set([
+          ...(hasExplicitAlimentaA ? safeAlimentaAIds : Array.from(prevExplicitAlimentaIds)),
+          ...nextCircuitChildIds
+        ]);
+
+        const prevParentIds = new Set(existingEl ? extractElementParentIds(existingEl, allProjectElements) : []);
+        const nextParentIds = new Set(extractElementParentIds(updatedPreviewEl, allProjectElements));
+        const parentFieldsTouched =
+          ('alimentadoPor' in cleanUpdatedData) ||
+          ('alimentadoPorId' in cleanUpdatedData) ||
+          Boolean(
+            cleanUpdatedData.datosTecnicos && (
+              'alimentadoPorId' in cleanUpdatedData.datosTecnicos ||
+              'alimentadorId' in cleanUpdatedData.datosTecnicos ||
+              'fuenteNormalId' in cleanUpdatedData.datosTecnicos ||
+              'fuenteNormalNombre' in cleanUpdatedData.datosTecnicos ||
+              'fuenteEmergenciaId' in cleanUpdatedData.datosTecnicos ||
+              'fuenteEmergenciaNombre' in cleanUpdatedData.datosTecnicos ||
+              'alimentadoPorIds' in cleanUpdatedData.datosTecnicos
+            )
+          );
+
+        const prevEffectiveName = existingEl ? getCleanElementLabel(existingEl) : '';
+        const effectiveName = getCleanElementLabel(updatedPreviewEl) || cleanUpdatedData.nombre || existingEl?.nombre || '';
+        const nameChanged = Boolean(effectiveName && prevEffectiveName && effectiveName !== prevEffectiveName);
+
+        const modifiedRelatedMap = new Map();
+
+        const syncElementBidirectional = (e, qTipo, compId, projId) => {
+          if (!e || !e.id) return e;
+          const eIdStr = String(e.id);
+          if (eIdStr === String(elementoId)) {
+            const nextCircuits = cleanUpdatedData.circuits !== undefined
+              ? cleanUpdatedData.circuits
+              : (cleanUpdatedData.datosTecnicos?.circuits !== undefined
+                  ? cleanUpdatedData.datosTecnicos.circuits
                   : e.circuits);
-            const mergedDatosTecnicos = cleanUpdatedData.datosTecnicos !== undefined 
+            const mergedDatosTecnicos = cleanUpdatedData.datosTecnicos !== undefined
               ? { ...(e.datosTecnicos || {}), ...cleanUpdatedData.datosTecnicos, ...(nextCircuits !== undefined ? { circuits: nextCircuits } : {}) }
               : (e.datosTecnicos || {});
-            return { 
-              ...e, 
+            return {
+              ...e,
               ...cleanUpdatedData,
               ...(nextCircuits !== undefined ? { circuits: nextCircuits } : {}),
               datosTecnicos: mergedDatosTecnicos
             };
           }
-          if (hasExplicitAlimentaA) {
-            if (safeAlimentaAIds.includes(e.id)) {
-              const nextParentName = effectiveParentName || (isPlaceholderHierarchyValue(e.alimentadoPor) ? '' : e.alimentadoPor);
-              if (e.alimentadoPorId !== elementoId || e.alimentadoPor !== nextParentName) {
-                modifiedChildIds.add(e.id);
+
+          let currentEl = e;
+          let changed = false;
+
+          // 1. Padre -> Hijos (desde alimentaA / salidaCarga y/o circuitos de tablero)
+          const isExplicitChildNow = hasExplicitAlimentaA && safeAlimentaAIds.includes(eIdStr);
+          const isCircuitChildNow = circuitsTouched && nextCircuitChildIds.has(eIdStr);
+
+          if (isExplicitChildNow || isCircuitChildNow) {
+            const res = applyUpstreamLinkToElement(currentEl, elementoId, effectiveName, mergedTipo);
+            if (res.changed) {
+              currentEl = res.nextEl;
+              changed = true;
+            }
+          } else {
+            const wasExplicitRemoved =
+              hasExplicitAlimentaA &&
+              !nextCircuitChildIds.has(eIdStr) &&
+              (prevExplicitAlimentaIds.has(eIdStr) || extractElementParentIds(currentEl, allProjectElements).includes(String(elementoId)));
+            const wasCircuitRemoved =
+              circuitsTouched &&
+              prevCircuitChildIds.has(eIdStr) &&
+              !nextCircuitChildIds.has(eIdStr) &&
+              (!hasExplicitAlimentaA || !safeAlimentaAIds.includes(eIdStr));
+
+            if (wasExplicitRemoved || wasCircuitRemoved) {
+              const res = removeUpstreamLinkFromElement(currentEl, elementoId, prevEffectiveName);
+              if (res.changed) {
+                currentEl = res.nextEl;
+                changed = true;
               }
-              return {
-                ...e,
-                alimentadoPorId: elementoId,
-                alimentadoPor: nextParentName,
-                datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: elementoId }
-              };
-            }
-            if (e.alimentadoPorId === elementoId && !safeAlimentaAIds.includes(e.id)) {
-              modifiedChildIds.add(e.id);
-              return {
-                ...e,
-                alimentadoPorId: null,
-                alimentadoPor: '',
-                datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: null }
-              };
-            }
-          } else if (circuitLinkedChildIds.has(e.id)) {
-            if (!e.alimentadoPorId || e.alimentadoPorId === elementoId || isPlaceholderHierarchyValue(e.alimentadoPor)) {
-              const nextParentName = effectiveParentName || e.alimentadoPor;
-              if (e.alimentadoPorId !== elementoId || e.alimentadoPor !== nextParentName) {
-                modifiedChildIds.add(e.id);
+            } else if (nameChanged && extractElementParentIds(currentEl, allProjectElements).includes(String(elementoId))) {
+              const res = applyUpstreamLinkToElement(currentEl, elementoId, effectiveName, mergedTipo);
+              if (res.changed) {
+                currentEl = res.nextEl;
+                changed = true;
               }
-              return {
-                ...e,
-                alimentadoPorId: elementoId,
-                alimentadoPor: nextParentName,
-                datosTecnicos: { ...(e.datosTecnicos || {}), alimentadoPorId: elementoId }
-              };
             }
-          } else if (e.alimentadoPorId === elementoId && effectiveParentName && e.alimentadoPor !== effectiveParentName) {
-            modifiedChildIds.add(e.id);
-            return { ...e, alimentadoPor: effectiveParentName };
           }
+
+          // 2. Hijo -> Padres (actualiza automáticamente alimentaA y Transfer.salidaCarga del padre)
+          if ((parentFieldsTouched || nameChanged) && nextParentIds.has(eIdStr) && !nextDownstreamSet.has(eIdStr)) {
+            const res = applyDownstreamLinkToParent(currentEl, elementoId, effectiveName, allElementsMap, nameChanged ? prevEffectiveName : '');
+            if (res.changed) {
+              currentEl = res.nextEl;
+              changed = true;
+            }
+          } else if (parentFieldsTouched && prevParentIds.has(eIdStr) && !nextParentIds.has(eIdStr)) {
+            const res = removeDownstreamLinkFromParent(currentEl, elementoId, prevEffectiveName, allElementsMap);
+            if (res.changed) {
+              currentEl = res.nextEl;
+              changed = true;
+            }
+          }
+
+          if (changed) {
+            modifiedRelatedMap.set(eIdStr, {
+              tipo: qTipo,
+              item: {
+                ...currentEl,
+                empresaId: currentEl.empresaId || currentEl.companyId || compId || null,
+                proyectoId: currentEl.proyectoId || projId || proyectoId || null
+              }
+            });
+            return currentEl;
+          }
+
           return e;
         };
 
         set((state) => {
-          const updatedCompanies = state.companies.map((c) => {
-            if (!proyectoId) {
-              const list = c.elementosUnifilares || [];
-              return {
-                ...c,
-                elementosUnifilares: list.map(syncElementBidirectional),
-                proyectos: (c.proyectos || []).map((p) => {
-                  const pList = p.elementosUnifilares || p.tableros || [];
-                  const updatedPList = pList.map(syncElementBidirectional);
-                  return {
-                    ...p,
-                    elementosUnifilares: updatedPList,
-                    ...(p.tableros ? { tableros: (p.tableros || []).map(syncElementBidirectional) } : {})
-                  };
-                })
-              };
-            }
-            return {
-              ...c,
-              proyectos: (c.proyectos || []).map((p) => {
-                if (p.id === proyectoId) {
-                  const list = p.elementosUnifilares || p.tableros || [];
-                  const updatedList = list.map(syncElementBidirectional);
-                  return {
-                    ...p,
-                    elementosUnifilares: updatedList,
-                    ...(p.tableros ? { tableros: (p.tableros || []).map(syncElementBidirectional) } : {})
-                  };
-                }
-                return p;
-              })
-            };
-          });
-
-          const updatedElementosLocales = (state.elementosLocales || []).map(syncElementBidirectional);
+          const mapped = applyHierarchyMapperAcrossState(state, proyectoId, null, syncElementBidirectional);
 
           const currentQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
           let updatedSyncQueue = [...currentQueue];
 
           if (!skipNetworkSync && (!isOnline || !hasActiveSession)) {
-            const idsToQueue = [elementoId, ...modifiedChildIds];
-            idsToQueue.forEach((targetId) => {
-              const updatedTarget = findElementoInStore(
-                { companies: updatedCompanies, elementosLocales: updatedElementosLocales },
-                targetId,
-                proyectoId
-              );
-              let inQueue = false;
-              updatedSyncQueue = updatedSyncQueue.map((item) => {
-                if ((item?.id === targetId || item?.payload?.id === targetId) && (item?.tipo === 'ELEMENTO_UNIFILAR' || item?.tipo === 'TABLERO')) {
-                  inQueue = true;
-                  const mergedPayload = updatedTarget
-                    ? mergePayloadDeep(item?.payload, updatedTarget)
-                    : (targetId === elementoId ? mergePayloadDeep(item?.payload, cleanUpdatedData) : item?.payload);
-                  return { ...item, payload: mergedPayload };
-                }
-                return item;
+            const updatedPrimary = findElementoInStore(
+              { companies: mapped.updatedCompanies, elementosLocales: mapped.updatedElementosLocales },
+              elementoId,
+              proyectoId
+            );
+            const entriesToQueue = [];
+            if (updatedPrimary) {
+              entriesToQueue.push({
+                id: elementoId,
+                tipo: 'ELEMENTO_UNIFILAR',
+                companyId: updatedPrimary.empresaId || updatedPrimary.companyId || (state.companies[0]?.id || null),
+                payload: updatedPrimary
               });
-
-              if (!inQueue && updatedTarget) {
-                updatedSyncQueue.push({
-                  id: targetId,
-                  tipo: 'ELEMENTO_UNIFILAR',
-                  companyId: updatedTarget.empresaId || updatedTarget.companyId || (state.companies[0]?.id || null),
-                  payload: updatedTarget
-                });
-              }
+            }
+            modifiedRelatedMap.forEach((entry, rid) => {
+              entriesToQueue.push({
+                id: rid,
+                tipo: entry.tipo,
+                companyId: entry.item.empresaId || entry.item.companyId || (state.companies[0]?.id || null),
+                payload: entry.item
+              });
             });
+            updatedSyncQueue = upsertSyncQueueEntries(updatedSyncQueue, entriesToQueue);
           }
 
           return {
-            companies: updatedCompanies,
-            elementosLocales: updatedElementosLocales,
+            companies: mapped.updatedCompanies,
+            elementosLocales: mapped.updatedElementosLocales,
+            puntosMedicionLocales: mapped.updatedPuntosLocales,
+            ccmLocales: mapped.updatedCcmLocales,
+            subestacionesLocales: mapped.updatedSubestacionesLocales,
             syncQueue: updatedSyncQueue
           };
         });
 
-        // Si está ONLINE: Buscar el elemento actualizado (y sus hijos vinculados modificados) y sincronizar con debounce por ID
+        // Si está ONLINE: Buscar el elemento actualizado y todos los padres/hijos relacionados modificados y sincronizar
         let directPromise = null;
         if (!skipNetworkSync && isOnline && hasActiveSession) {
           const el = findElementoInStore(get(), elementoId, proyectoId);
           if (el) {
             directPromise = scheduleDebouncedElementoSync(get, elementoId, proyectoId, el);
           }
-          modifiedChildIds.forEach((childId) => {
-            const childEl = findElementoInStore(get(), childId, proyectoId);
-            if (childEl) {
-              scheduleDebouncedElementoSync(get, childId, proyectoId, childEl);
+          modifiedRelatedMap.forEach((entry, relId) => {
+            if (entry.tipo === 'ELEMENTO_UNIFILAR') {
+              const latestRel = findElementoInStore(get(), relId, proyectoId) || entry.item;
+              if (latestRel) {
+                scheduleDebouncedElementoSync(get, relId, proyectoId, latestRel);
+              }
             }
           });
         }
@@ -2835,6 +3961,9 @@ export const useStore = create(
 
       updateSubestacion: (proyectoId, subestacionId, updatedData, options = {}) => {
         const skipNetworkSync = Boolean(options?.skipNetworkSync);
+        const { byId: prevById } = collectProjectElementsInStore(get(), proyectoId);
+        const prevSub = prevById.get(String(subestacionId)) || null;
+        let updatedSub = null;
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
@@ -2845,6 +3974,7 @@ export const useStore = create(
                   ...p,
                   inspeccionesSubestacion: subestaciones.map((s) => {
                     if (s.id === subestacionId) {
+                      updatedSub = { ...s, ...updatedData, tipoElemento: s.tipoElemento || 'SUBESTACION', empresaId: s.empresaId || c.id, proyectoId: s.proyectoId || p.id };
                       return { ...s, ...updatedData };
                     }
                     return s;
@@ -2857,6 +3987,7 @@ export const useStore = create(
 
           const updatedSubestacionesLocales = (state.subestacionesLocales || []).map((s) => {
             if (s.id === subestacionId) {
+              if (!updatedSub) updatedSub = { ...s, ...updatedData, tipoElemento: s.tipoElemento || 'SUBESTACION' };
               return { ...s, ...updatedData };
             }
             return s;
@@ -2880,26 +4011,13 @@ export const useStore = create(
             return item;
           });
 
-          if (!inQueue) {
-            let updatedSub = updatedSubestacionesLocales.find((s) => s.id === subestacionId);
-            if (!updatedSub) {
-              for (const c of updatedCompanies) {
-                const proj = (c.proyectos || []).find((p) => p.id === proyectoId);
-                const found = (proj?.inspeccionesSubestacion || proj?.subestaciones || []).find((s) => s.id === subestacionId);
-                if (found) {
-                  updatedSub = found;
-                  break;
-                }
-              }
-            }
-            if (updatedSub) {
-              updatedSyncQueue.push({
-                id: subestacionId,
-                tipo: 'SUBESTACION',
-                companyId: updatedSub.empresaId || (state.companies[0]?.id || null),
-                payload: updatedSub
-              });
-            }
+          if (!inQueue && updatedSub) {
+            updatedSyncQueue.push({
+              id: subestacionId,
+              tipo: 'SUBESTACION',
+              companyId: updatedSub.empresaId || (state.companies[0]?.id || null),
+              payload: updatedSub
+            });
           }
 
           return {
@@ -2908,6 +4026,18 @@ export const useStore = create(
             syncQueue: updatedSyncQueue
           };
         });
+
+        if (updatedSub) {
+          syncRelatedHierarchyFromExternalElement(set, get, {
+            proyectoId,
+            targetId: subestacionId,
+            prevEl: prevSub,
+            updatedEl: updatedSub,
+            updatedData,
+            queueTipo: 'SUBESTACION',
+            skipNetworkSync
+          });
+        }
       },
 
       deleteSubestacion: async (proyectoId, subestacionId, adminPassword) => {
@@ -3038,12 +4168,17 @@ export const useStore = create(
 
       updatePuntoMedicion: (proyectoId, puntoId, updatedData, options = {}) => {
         const skipNetworkSync = Boolean(options?.skipNetworkSync);
+        const { byId: prevById } = collectProjectElementsInStore(get(), proyectoId);
+        const prevPunto = prevById.get(String(puntoId)) || null;
+        let updatedPunto = null;
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
             elementosUnifilares: (c.elementosUnifilares || []).map((item) => {
               if (item.id === puntoId) {
-                return { ...item, ...updatedData };
+                const next = { ...item, ...updatedData };
+                if (!updatedPunto) updatedPunto = { ...next, tipoElemento: next.tipoElemento || 'PUNTO_MEDICION', empresaId: next.empresaId || c.id };
+                return next;
               }
               return item;
             }),
@@ -3055,13 +4190,17 @@ export const useStore = create(
                 ...p,
                 puntosMedicion: puntos.map((item) => {
                   if (item.id === puntoId) {
-                    return { ...item, ...updatedData };
+                    const next = { ...item, ...updatedData };
+                    updatedPunto = { ...next, tipoElemento: next.tipoElemento || 'PUNTO_MEDICION', empresaId: next.empresaId || c.id, proyectoId: next.proyectoId || p.id };
+                    return next;
                   }
                   return item;
                 }),
                 elementosUnifilares: matchesProj ? elementos.map((item) => {
                   if (item.id === puntoId) {
-                    return { ...item, ...updatedData };
+                    const next = { ...item, ...updatedData };
+                    if (!updatedPunto) updatedPunto = { ...next, tipoElemento: next.tipoElemento || 'PUNTO_MEDICION', empresaId: next.empresaId || c.id, proyectoId: next.proyectoId || p.id };
+                    return next;
                   }
                   return item;
                 }) : elementos
@@ -3071,7 +4210,9 @@ export const useStore = create(
 
           const updatedPuntosLocales = (state.puntosMedicionLocales || []).map((item) => {
             if (item.id === puntoId) {
-              return { ...item, ...updatedData };
+              const next = { ...item, ...updatedData };
+              if (!updatedPunto) updatedPunto = { ...next, tipoElemento: next.tipoElemento || 'PUNTO_MEDICION' };
+              return next;
             }
             return item;
           });
@@ -3094,28 +4235,13 @@ export const useStore = create(
             return item;
           });
 
-          if (!inQueue) {
-            let updatedPunto = updatedPuntosLocales.find((p) => p.id === puntoId);
-            if (!updatedPunto) {
-              for (const c of updatedCompanies) {
-                for (const proj of (c.proyectos || [])) {
-                  const found = (proj.puntosMedicion || []).find((p) => p.id === puntoId);
-                  if (found) {
-                    updatedPunto = found;
-                    break;
-                  }
-                }
-                if (updatedPunto) break;
-              }
-            }
-            if (updatedPunto) {
-              updatedSyncQueue.push({
-                id: puntoId,
-                tipo: 'PUNTO_MEDICION',
-                companyId: updatedPunto.empresaId || (state.companies[0]?.id || null),
-                payload: updatedPunto
-              });
-            }
+          if (!inQueue && updatedPunto) {
+            updatedSyncQueue.push({
+              id: puntoId,
+              tipo: 'PUNTO_MEDICION',
+              companyId: updatedPunto.empresaId || (state.companies[0]?.id || null),
+              payload: updatedPunto
+            });
           }
 
           return {
@@ -3124,6 +4250,18 @@ export const useStore = create(
             syncQueue: updatedSyncQueue
           };
         });
+
+        if (updatedPunto) {
+          syncRelatedHierarchyFromExternalElement(set, get, {
+            proyectoId,
+            targetId: puntoId,
+            prevEl: prevPunto,
+            updatedEl: updatedPunto,
+            updatedData,
+            queueTipo: 'PUNTO_MEDICION',
+            skipNetworkSync
+          });
+        }
       },
 
       deletePuntoMedicion: async (proyectoId, puntoId, adminPassword) => {
@@ -3254,6 +4392,9 @@ export const useStore = create(
 
       updateCcm: (proyectoId, ccmId, updatedData, options = {}) => {
         const skipNetworkSync = Boolean(options?.skipNetworkSync);
+        const { byId: prevById } = collectProjectElementsInStore(get(), proyectoId);
+        const prevCcm = prevById.get(String(ccmId)) || null;
+        let updatedCcmItem = null;
         set((state) => {
           const updatedCompanies = state.companies.map((c) => ({
             ...c,
@@ -3264,7 +4405,9 @@ export const useStore = create(
                   ...p,
                   ccmList: ccmItems.map((item) => {
                     if (item.id === ccmId) {
-                      return { ...item, ...updatedData };
+                      const next = { ...item, ...updatedData };
+                      updatedCcmItem = { ...next, tipoElemento: next.tipoElemento || 'CCM', empresaId: next.empresaId || c.id, proyectoId: next.proyectoId || p.id };
+                      return next;
                     }
                     return item;
                   })
@@ -3276,7 +4419,9 @@ export const useStore = create(
 
           const updatedCcmLocales = (state.ccmLocales || []).map((item) => {
             if (item.id === ccmId) {
-              return { ...item, ...updatedData };
+              const next = { ...item, ...updatedData };
+              if (!updatedCcmItem) updatedCcmItem = { ...next, tipoElemento: next.tipoElemento || 'CCM' };
+              return next;
             }
             return item;
           });
@@ -3299,26 +4444,13 @@ export const useStore = create(
             return item;
           });
 
-          if (!inQueue) {
-            let updatedCcmItem = updatedCcmLocales.find((c) => c.id === ccmId);
-            if (!updatedCcmItem) {
-              for (const c of updatedCompanies) {
-                const proj = (c.proyectos || []).find((p) => p.id === proyectoId);
-                const found = (proj?.ccmList || []).find((item) => item.id === ccmId);
-                if (found) {
-                  updatedCcmItem = found;
-                  break;
-                }
-              }
-            }
-            if (updatedCcmItem) {
-              updatedSyncQueue.push({
-                id: ccmId,
-                tipo: 'CCM',
-                companyId: updatedCcmItem.empresaId || (state.companies[0]?.id || null),
-                payload: updatedCcmItem
-              });
-            }
+          if (!inQueue && updatedCcmItem) {
+            updatedSyncQueue.push({
+              id: ccmId,
+              tipo: 'CCM',
+              companyId: updatedCcmItem.empresaId || (state.companies[0]?.id || null),
+              payload: updatedCcmItem
+            });
           }
 
           return {
@@ -3327,6 +4459,18 @@ export const useStore = create(
             syncQueue: updatedSyncQueue
           };
         });
+
+        if (updatedCcmItem) {
+          syncRelatedHierarchyFromExternalElement(set, get, {
+            proyectoId,
+            targetId: ccmId,
+            prevEl: prevCcm,
+            updatedEl: updatedCcmItem,
+            updatedData,
+            queueTipo: 'CCM',
+            skipNetworkSync
+          });
+        }
       },
 
       deleteCcm: async (proyectoId, ccmId, adminPassword) => {
@@ -4250,114 +5394,197 @@ export const useStore = create(
       },
 
       vincularJerarquia: (proyectoId, padreId, hijoId, datosEnlace = {}) => {
-        let updatedHijo = null;
+        const cleanParentId = sanitizeParentId(padreId, hijoId);
+        if (!cleanParentId || !hijoId) return;
+
+        const { byId: allElementsMap } = collectProjectElementsInStore(get(), proyectoId);
+        const padreEl = allElementsMap.get(String(cleanParentId)) || null;
+        const hijoEl = allElementsMap.get(String(hijoId)) || null;
+        const nombrePadre = padreEl ? getCleanElementLabel(padreEl) : '';
+        const tipoPadre = padreEl ? getElementTipoUpper(padreEl) : '';
+        const nombreHijo = hijoEl ? getCleanElementLabel(hijoEl) : '';
+
+        const cOrigen = datosEnlace.circuitoOrigen ? String(datosEnlace.circuitoOrigen).trim().toUpperCase() : 'SALIDA';
+        const cCalibre = datosEnlace.calibreConductor ? String(datosEnlace.calibreConductor).trim().toUpperCase() : '';
+        const cMarca = datosEnlace.breakerMarca ? String(datosEnlace.breakerMarca).trim().toUpperCase() : '';
+        const cTipo = datosEnlace.breakerTipo ? String(datosEnlace.breakerTipo).trim().toUpperCase() : '';
+
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        const { token } = get();
+        const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+        const modifiedMap = new Map();
+
         set((state) => {
-          let nombrePadre = '';
-          const newCompanies = (state.companies || []).map((c) => ({
-            ...c,
-            proyectos: (c.proyectos || []).map((p) => {
-              if (p.id !== proyectoId) return p;
-
-              // Buscar nombre del padre si existe en cualquier colección eléctrica
-              const allCandidates = [
-                ...(p.elementosUnifilares || p.tableros || []),
-                ...(p.inspeccionesSubestacion || p.subestaciones || []),
-                ...(p.puntosMedicion || []),
-                ...(p.ccmList || p.ccms || [])
-              ];
-              const padre = allCandidates.find((e) => e.id === padreId);
-              if (padre) nombrePadre = String(padre.nombre || '').trim().toUpperCase();
-
-              const cOrigen = datosEnlace.circuitoOrigen ? String(datosEnlace.circuitoOrigen).trim().toUpperCase() : 'SALIDA';
-              const cCalibre = datosEnlace.calibreConductor ? String(datosEnlace.calibreConductor).trim().toUpperCase() : '';
-              const cMarca = datosEnlace.breakerMarca ? String(datosEnlace.breakerMarca).trim().toUpperCase() : '';
-              const cTipo = datosEnlace.breakerTipo ? String(datosEnlace.breakerTipo).trim().toUpperCase() : '';
-
-              return {
-                ...p,
-                elementosUnifilares: (p.elementosUnifilares || []).map((e) => {
-                  if (e.id === hijoId) {
-                    const nextEl = {
-                      ...e,
-                      alimentadoPorId: padreId,
-                      alimentadoPor: nombrePadre ? `${nombrePadre} (${cOrigen})` : e.alimentadoPor,
-                      circuitoOrigen: cOrigen || e.circuitoOrigen,
-                      calibreConductor: cCalibre || e.calibreConductor,
-                      breakerAmperaje: datosEnlace.breakerAmperaje || e.breakerAmperaje,
-                      breakerMarca: cMarca || e.breakerMarca,
-                      breakerTipo: cTipo || e.breakerTipo,
-                      estadoVinculo: 'ACTIVO',
-                      datosTecnicos: {
-                        ...(e.datosTecnicos || {}),
-                        alimentadoPorId: padreId
-                      }
-                    };
-                    updatedHijo = { ...nextEl, empresaId: nextEl.empresaId || nextEl.companyId || c.id, proyectoId };
-                    return nextEl;
+          const mapFn = (e, qTipo, compId, projId) => {
+            if (!e || !e.id) return e;
+            const eIdStr = String(e.id);
+            if (eIdStr === String(hijoId)) {
+              let nextEl;
+              if (isTransferElement(e)) {
+                const res = applyUpstreamLinkToElement(e, cleanParentId, nombrePadre, tipoPadre);
+                nextEl = {
+                  ...res.nextEl,
+                  circuitoOrigen: cOrigen || e.circuitoOrigen,
+                  calibreConductor: cCalibre || e.calibreConductor,
+                  breakerAmperaje: datosEnlace.breakerAmperaje || e.breakerAmperaje,
+                  breakerMarca: cMarca || e.breakerMarca,
+                  breakerTipo: cTipo || e.breakerTipo,
+                  estadoVinculo: 'ACTIVO'
+                };
+              } else {
+                const dt = parseDatosTecnicosSafe(e.datosTecnicos);
+                nextEl = {
+                  ...e,
+                  alimentadoPorId: cleanParentId,
+                  alimentadoPor: nombrePadre ? (datosEnlace.circuitoOrigen ? `${nombrePadre} (${cOrigen})` : nombrePadre) : e.alimentadoPor,
+                  circuitoOrigen: cOrigen || e.circuitoOrigen,
+                  calibreConductor: cCalibre || e.calibreConductor,
+                  breakerAmperaje: datosEnlace.breakerAmperaje || e.breakerAmperaje,
+                  breakerMarca: cMarca || e.breakerMarca,
+                  breakerTipo: cTipo || e.breakerTipo,
+                  estadoVinculo: 'ACTIVO',
+                  datosTecnicos: {
+                    ...dt,
+                    alimentadoPorId: cleanParentId
                   }
-                  return e;
-                })
-              };
-            })
-          }));
-          return { companies: newCompanies };
+                };
+              }
+              modifiedMap.set(eIdStr, {
+                tipo: qTipo,
+                item: { ...nextEl, empresaId: nextEl.empresaId || nextEl.companyId || compId || null, proyectoId: nextEl.proyectoId || projId || proyectoId }
+              });
+              return nextEl;
+            }
+            if (eIdStr === String(cleanParentId)) {
+              const res = applyDownstreamLinkToParent(e, hijoId, nombreHijo, allElementsMap);
+              if (res.changed) {
+                modifiedMap.set(eIdStr, {
+                  tipo: qTipo,
+                  item: { ...res.nextEl, empresaId: res.nextEl.empresaId || res.nextEl.companyId || compId || null, proyectoId: res.nextEl.proyectoId || projId || proyectoId }
+                });
+                return res.nextEl;
+              }
+            }
+            return e;
+          };
+
+          const mapped = applyHierarchyMapperAcrossState(state, proyectoId, null, mapFn);
+          let nextQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          if (!isOnline || !hasActiveSession) {
+            nextQueue = upsertSyncQueueEntries(
+              nextQueue,
+              Array.from(modifiedMap.entries()).map(([mid, entry]) => ({
+                id: mid,
+                tipo: entry.tipo,
+                companyId: entry.item.empresaId || entry.item.companyId || (state.companies[0]?.id || null),
+                payload: entry.item
+              }))
+            );
+          }
+
+          return {
+            companies: mapped.updatedCompanies,
+            elementosLocales: mapped.updatedElementosLocales,
+            puntosMedicionLocales: mapped.updatedPuntosLocales,
+            ccmLocales: mapped.updatedCcmLocales,
+            subestacionesLocales: mapped.updatedSubestacionesLocales,
+            syncQueue: nextQueue
+          };
         });
 
-        // Persistir cambio hacia el backend o syncQueue
-        const targetEl = updatedHijo || findElementoInStore(get(), hijoId, proyectoId);
-        if (targetEl) {
-          const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-          const { token } = get();
-          if (isOnline && token && token !== 'mock-offline-token') {
-            scheduleDebouncedElementoSync(get, hijoId, proyectoId, targetEl);
-          } else {
-            get().enqueueOfflineItem?.('ELEMENTO_UNIFILAR', targetEl.empresaId || targetEl.companyId, targetEl);
-          }
+        if (isOnline && hasActiveSession) {
+          modifiedMap.forEach((entry, mid) => {
+            if (entry.tipo === 'ELEMENTO_UNIFILAR') {
+              scheduleDebouncedElementoSync(get, mid, proyectoId, entry.item);
+            }
+          });
         }
       },
 
       desvincularJerarquia: (proyectoId, hijoId) => {
-        let updatedHijo = null;
+        if (!hijoId) return;
+        const { list: allProjectElements, byId: allElementsMap } = collectProjectElementsInStore(get(), proyectoId);
+        const hijoEl = allElementsMap.get(String(hijoId)) || findElementoInStore(get(), hijoId, proyectoId);
+        const prevParentIds = new Set(hijoEl ? extractElementParentIds(hijoEl, allProjectElements) : []);
+        const nombreHijo = hijoEl ? getCleanElementLabel(hijoEl) : '';
+
+        const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        const { token } = get();
+        const hasActiveSession = Boolean(token && token !== 'mock-offline-token');
+        const modifiedMap = new Map();
+
         set((state) => {
-          const newCompanies = (state.companies || []).map((c) => ({
-            ...c,
-            proyectos: (c.proyectos || []).map((p) => {
-              if (p.id !== proyectoId) return p;
-              return {
-                ...p,
-                elementosUnifilares: (p.elementosUnifilares || []).map((e) => {
-                  if (e.id === hijoId) {
-                    const nextDatosTecnicos = { ...(e.datosTecnicos || {}) };
-                    delete nextDatosTecnicos.alimentadoPorId;
-                    const nextEl = {
-                      ...e,
-                      alimentadoPorId: null,
-                      alimentadoPor: null,
-                      circuitoOrigen: null,
-                      estadoVinculo: 'ACTIVO',
-                      datosTecnicos: nextDatosTecnicos
-                    };
-                    updatedHijo = { ...nextEl, empresaId: nextEl.empresaId || nextEl.companyId || c.id, proyectoId };
-                    return nextEl;
-                  }
-                  return e;
-                })
+          const mapFn = (e, qTipo, compId, projId) => {
+            if (!e || !e.id) return e;
+            const eIdStr = String(e.id);
+            if (eIdStr === String(hijoId)) {
+              const dt = { ...(parseDatosTecnicosSafe(e.datosTecnicos)) };
+              delete dt.alimentadoPorId;
+              delete dt.alimentadorId;
+              if (isTransferElement(e)) {
+                dt.fuenteNormalId = null;
+                dt.fuenteNormalNombre = '';
+                dt.fuenteEmergenciaId = null;
+                dt.fuenteEmergenciaNombre = '';
+                dt.alimentadoPorIds = [];
+              }
+              const nextEl = {
+                ...e,
+                alimentadoPorId: null,
+                alimentadoPor: null,
+                circuitoOrigen: null,
+                estadoVinculo: 'ACTIVO',
+                datosTecnicos: dt
               };
-            })
-          }));
-          return { companies: newCompanies };
+              modifiedMap.set(eIdStr, {
+                tipo: qTipo,
+                item: { ...nextEl, empresaId: nextEl.empresaId || nextEl.companyId || compId || null, proyectoId: nextEl.proyectoId || projId || proyectoId }
+              });
+              return nextEl;
+            }
+            if (prevParentIds.has(eIdStr)) {
+              const res = removeDownstreamLinkFromParent(e, hijoId, nombreHijo, allElementsMap);
+              if (res.changed) {
+                modifiedMap.set(eIdStr, {
+                  tipo: qTipo,
+                  item: { ...res.nextEl, empresaId: res.nextEl.empresaId || res.nextEl.companyId || compId || null, proyectoId: res.nextEl.proyectoId || projId || proyectoId }
+                });
+                return res.nextEl;
+              }
+            }
+            return e;
+          };
+
+          const mapped = applyHierarchyMapperAcrossState(state, proyectoId, null, mapFn);
+          let nextQueue = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+          if (!isOnline || !hasActiveSession) {
+            nextQueue = upsertSyncQueueEntries(
+              nextQueue,
+              Array.from(modifiedMap.entries()).map(([mid, entry]) => ({
+                id: mid,
+                tipo: entry.tipo,
+                companyId: entry.item.empresaId || entry.item.companyId || (state.companies[0]?.id || null),
+                payload: entry.item
+              }))
+            );
+          }
+
+          return {
+            companies: mapped.updatedCompanies,
+            elementosLocales: mapped.updatedElementosLocales,
+            puntosMedicionLocales: mapped.updatedPuntosLocales,
+            ccmLocales: mapped.updatedCcmLocales,
+            subestacionesLocales: mapped.updatedSubestacionesLocales,
+            syncQueue: nextQueue
+          };
         });
 
-        // Persistir cambio hacia el backend o syncQueue
-        const targetEl = updatedHijo || findElementoInStore(get(), hijoId, proyectoId);
-        if (targetEl) {
-          const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
-          const { token } = get();
-          if (isOnline && token && token !== 'mock-offline-token') {
-            scheduleDebouncedElementoSync(get, hijoId, proyectoId, targetEl);
-          } else {
-            get().enqueueOfflineItem?.('ELEMENTO_UNIFILAR', targetEl.empresaId || targetEl.companyId, targetEl);
-          }
+        if (isOnline && hasActiveSession) {
+          modifiedMap.forEach((entry, mid) => {
+            if (entry.tipo === 'ELEMENTO_UNIFILAR') {
+              scheduleDebouncedElementoSync(get, mid, proyectoId, entry.item);
+            }
+          });
         }
       },
 
@@ -4426,7 +5653,16 @@ export const useStore = create(
             return cleanedItem;
           });
           state.elementosLocales = state.elementosLocales.map((el) => stripAllImagePayloads(el));
-          state.companies = state.companies.map((c) => stripAllImagePayloads(c));
+          state.companies = state.companies.map((c) => {
+            const stripped = stripAllImagePayloads(c);
+            return {
+              ...stripped,
+              proyectos: (stripped?.proyectos || []).map((p) => ({
+                ...p,
+                elementosUnifilares: hydrateProjectHierarchyLinks(p.elementosUnifilares || p.tableros || [])
+              }))
+            };
+          });
 
           // Depurar posibles datos mock residuales ('c-1', 'c-2') de la caché local (IndexedDB)
           const legacyMockCompanyIds = new Set(['c-1', 'c-2']);
