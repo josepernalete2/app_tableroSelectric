@@ -16,14 +16,27 @@ import { recopilarDatosCompletos, obtenerEstadoRespaldoEmpresa, vincularTelegram
  * Recibe y procesa actualizaciones y comandos desde la API de Telegram.
  */
 export async function procesarWebhookTelegram(req, res) {
-  // 1. Responder de inmediato 200 OK a Telegram para evitar reintentos duplicados
-  res.status(200).json({ ok: true });
+  // 1. Validar Secret Token si TELEGRAM_WEBHOOK_SECRET está configurado
+  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET
+    ? process.env.TELEGRAM_WEBHOOK_SECRET.trim()
+    : '';
+  if (webhookSecret) {
+    const incomingSecret = String(req.headers['x-telegram-bot-api-secret-token'] || '').trim();
+    if (incomingSecret !== webhookSecret) {
+      console.warn('⚠️ [TelegramWebhook] Petición rechazada: x-telegram-bot-api-secret-token inválido o ausente.');
+      return res.status(401).json({ ok: false, error: 'No autorizado: secret token inválido' });
+    }
+  }
 
   const update = req.body;
-  if (!update) return;
+  if (!update) {
+    return res.status(200).json({ ok: true });
+  }
 
   const message = update.message || update.channel_post || update.edited_message;
-  if (!message || !message.text) return;
+  if (!message || !message.text) {
+    return res.status(200).json({ ok: true });
+  }
 
   const chatId = message.chat?.id?.toString();
   const rawText = message.text.trim();
@@ -36,7 +49,7 @@ export async function procesarWebhookTelegram(req, res) {
 
   console.log(`📩 [TelegramWebhook] Mensaje recibido de ${chatId} (${esAdminMaestro ? 'ADMIN' : 'USUARIO'}): "${rawText}"`);
 
-  try {
+  const ejecutarFlujoComando = async () => {
     // =========================================================================
     // 1. COMANDO DE VINCULACIÓN POR PIN (Disponible para cualquier chat)
     // =========================================================================
@@ -102,7 +115,7 @@ export async function procesarWebhookTelegram(req, res) {
       if (command === '/status' || command === '/estado') {
         const { metadata } = await recopilarDatosCompletos();
         const counts = metadata.counts || {};
-        const fechaHora = new Date().toLocaleString('es-VE', { 
+        const fechaHora = new Date().toLocaleString('es-VE', {
           timeZone: 'America/Caracas',
           dateStyle: 'medium',
           timeStyle: 'medium'
@@ -161,7 +174,7 @@ export async function procesarWebhookTelegram(req, res) {
           return;
         }
 
-        const fechaHora = ficha.empresa.ultimoBackupAt 
+        const fechaHora = ficha.empresa.ultimoBackupAt
           ? new Date(ficha.empresa.ultimoBackupAt).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'medium', timeStyle: 'short' })
           : 'En proceso';
 
@@ -208,7 +221,6 @@ export async function procesarWebhookTelegram(req, res) {
         return;
       }
 
-      // Comando no reconocido para empresa
       await enviarMensajeTextoTelegram(
         chatId,
         '❓ *Comando no reconocido.*\nEscribe `/mi_estado` para ver el certificado de resguardo de tus tableros o `/help` para ayuda.'
@@ -235,13 +247,24 @@ export async function procesarWebhookTelegram(req, res) {
     ].join('\n');
 
     await enviarMensajeTextoTelegram(chatId, mensajeBienvenida);
+  };
+
+  try {
+    await ejecutarFlujoComando();
   } catch (error) {
     console.error('❌ [TelegramWebhook] Error al procesar mensaje:', error);
-    await enviarMensajeTextoTelegram(
-      chatId,
-      `⚠️ *Ocurrió un error al procesar tu solicitud:* \`${error.message}\``
-    );
+    try {
+      await enviarMensajeTextoTelegram(
+        chatId,
+        `⚠️ *Ocurrió un error al procesar tu solicitud:* \`${error.message}\``
+      );
+    } catch {
+      // Silenciar fallo secundario de notificación
+    }
   }
+
+  // Responder 200 OK únicamente después de finalizar todo el procesamiento (compatible con Vercel Serverless)
+  return res.status(200).json({ ok: true });
 }
 
 /**

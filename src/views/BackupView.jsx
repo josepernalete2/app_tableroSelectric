@@ -30,7 +30,13 @@ import {
   Info,
   X,
   Lock,
-  Cpu
+  Cpu,
+  Trash2,
+  RotateCcw,
+  Cloud,
+  Server,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export const BackupView = () => {
@@ -59,6 +65,19 @@ export const BackupView = () => {
   // Estados de Datos de Empresas (Resumen)
   const [empresasResumen, setEmpresasResumen] = useState([]);
   const [isLoadingEmpresas, setIsLoadingEmpresas] = useState(false);
+
+  // Estados de Diagnóstico del Sistema e Historial en Nube
+  const [systemStatus, setSystemStatus] = useState(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+  const [cloudBackups, setCloudBackups] = useState([]);
+  const [isLoadingCloud, setIsLoadingCloud] = useState(false);
+
+  // Modal de Confirmación con Contraseña de Administrador (acciones destructivas)
+  const [adminConfirmModal, setAdminConfirmModal] = useState(null);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminActionError, setAdminActionError] = useState('');
+  const [isSubmittingAdminAction, setIsSubmittingAdminAction] = useState(false);
 
   // Estados de Modales
   const [selectedPinModal, setSelectedPinModal] = useState(null); // { empresa, pin, isGenerating }
@@ -188,8 +207,56 @@ export const BackupView = () => {
     }
   };
 
-  useEffect(() => {
+  const fetchSystemStatus = async () => {
+    setIsLoadingStatus(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/backup/status`, {
+        headers: getAuthHeaders()
+      });
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return;
+      }
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setSystemStatus(data.data || null);
+      }
+    } catch (err) {
+      console.error('Error al cargar diagnóstico del sistema:', err);
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  };
+
+  const fetchCloudBackups = async () => {
+    setIsLoadingCloud(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/backup/cloud`, {
+        headers: getAuthHeaders()
+      });
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return;
+      }
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setCloudBackups(data.data || []);
+      }
+    } catch (err) {
+      console.error('Error al cargar historial de respaldos:', err);
+    } finally {
+      setIsLoadingCloud(false);
+    }
+  };
+
+  const refreshAllBackupData = () => {
     fetchEmpresasResumen();
+    fetchSystemStatus();
+    fetchCloudBackups();
+  };
+
+  useEffect(() => {
+    refreshAllBackupData();
   }, [token]);
 
   // Cálculos consolidados para KPIs
@@ -282,7 +349,7 @@ export const BackupView = () => {
       if (showToast) {
         showToast('Respaldo en la nube generado exitosamente.', 'success');
       }
-      fetchEmpresasResumen();
+      refreshAllBackupData();
     } catch (error) {
       console.error('Error en respaldo servidor:', error);
       const isNetworkError = error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError');
@@ -453,8 +520,119 @@ export const BackupView = () => {
     }
   };
 
+  const openAdminConfirmModal = ({ title, description, confirmLabel, danger = true, onSubmit }) => {
+    setAdminPasswordInput('');
+    setShowAdminPassword(false);
+    setAdminActionError('');
+    setIsSubmittingAdminAction(false);
+    setAdminConfirmModal({ title, description, confirmLabel, danger, onSubmit });
+  };
+
+  const handleConfirmAdminModal = async (e) => {
+    e.preventDefault();
+    if (!adminPasswordInput.trim()) {
+      setAdminActionError('Debes ingresar tu contraseña de administrador.');
+      return;
+    }
+    setAdminActionError('');
+    setIsSubmittingAdminAction(true);
+    try {
+      await adminConfirmModal.onSubmit(adminPasswordInput);
+      setAdminConfirmModal(null);
+      setAdminPasswordInput('');
+    } catch (err) {
+      setAdminActionError(err.message || 'Error al validar la acción');
+    } finally {
+      setIsSubmittingAdminAction(false);
+    }
+  };
+
   /**
-   * Manejador de importación y restauración de base de datos
+   * Descargar un respaldo específico desde la nube
+   */
+  const handleDownloadCloudBackup = async (backup) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/backup/cloud/${backup.id}/download`, {
+        headers: getAuthHeaders()
+      });
+      if (response.status === 401 || response.status === 403) {
+        useStore.getState().handleAuthError?.(response.status);
+        return;
+      }
+      const resData = await response.json();
+      if (!response.ok || !resData.ok) {
+        throw new Error(resData.error || 'No se pudo descargar el respaldo');
+      }
+      const payload = resData.data || resData;
+      const jsonStr = JSON.stringify(payload, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${(backup.nombre || 'backup_nube').toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      if (showToast) showToast('Respaldo en la nube descargado.', 'success');
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Error al descargar respaldo', 'error');
+    }
+  };
+
+  /**
+   * Restaurar un respaldo desde la nube (protegido con adminPassword)
+   */
+  const handleRestoreCloudBackup = (backup) => {
+    openAdminConfirmModal({
+      title: 'Restaurar Respaldo desde la Nube',
+      description: `Esta acción reemplazará TODA la base de datos actual con el snapshot "${backup.nombre}". Ingresa tu contraseña de administrador para continuar.`,
+      confirmLabel: 'Confirmar Restauración',
+      danger: true,
+      onSubmit: async (adminPassword) => {
+        const response = await fetch(`${API_BASE_URL}/api/backup/cloud/${backup.id}/restore`, {
+          method: 'POST',
+          headers: getAuthHeaders({ 'x-admin-password': adminPassword }),
+          body: JSON.stringify({ adminPassword })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || (!result.ok && !result.success)) {
+          throw new Error(result.error || 'Error al restaurar respaldo');
+        }
+        if (showToast) showToast(result.message || 'Base de datos restaurada con éxito.', 'success');
+        refreshAllBackupData();
+      }
+    });
+  };
+
+  /**
+   * Eliminar un respaldo en la nube (protegido con adminPassword)
+   */
+  const handleDeleteCloudBackup = (backup) => {
+    openAdminConfirmModal({
+      title: 'Eliminar Respaldo en la Nube',
+      description: `Se eliminará permanentemente el respaldo "${backup.nombre}" de PostgreSQL y Cloudflare R2. Ingresa tu contraseña de administrador para confirmar.`,
+      confirmLabel: 'Eliminar Respaldo',
+      danger: true,
+      onSubmit: async (adminPassword) => {
+        const response = await fetch(`${API_BASE_URL}/api/backup/cloud/${backup.id}`, {
+          method: 'DELETE',
+          headers: getAuthHeaders({ 'x-admin-password': adminPassword }),
+          body: JSON.stringify({ adminPassword })
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || (!result.ok && !result.success)) {
+          throw new Error(result.error || 'Error al eliminar respaldo');
+        }
+        if (showToast) showToast('Respaldo eliminado con éxito.', 'success');
+        fetchCloudBackups();
+        fetchSystemStatus();
+      }
+    });
+  };
+
+  /**
+   * Manejador de importación y restauración de base de datos (protegido con adminPassword)
    */
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -466,53 +644,57 @@ export const BackupView = () => {
       return;
     }
 
-    const confirmRestore = window.confirm(
-      `⚠️ ¿Estás seguro de que deseas restaurar la base de datos con "${file.name}"?\n\nEsta acción reemplazará la información existente en la base de datos.`
-    );
-    if (!confirmRestore) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
-    setIsImporting(true);
-    setImportStats(null);
-
     try {
       const text = await file.text();
       const parsedData = JSON.parse(text);
-      const payloadData = Array.isArray(parsedData) 
-        ? parsedData 
+      const payloadData = Array.isArray(parsedData)
+        ? parsedData
         : (parsedData.data || parsedData.empresas || []);
 
       if (!Array.isArray(payloadData) || payloadData.length === 0) {
         throw new Error('El archivo no contiene registros válidos de empresas o proyectos.');
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/backup/import`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ data: payloadData })
+      const fileNameCopy = file.name;
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+      openAdminConfirmModal({
+        title: 'Restaurar Base de Datos desde JSON',
+        description: `¿Confirmas restaurar la base de datos con "${fileNameCopy}" (${payloadData.length} empresas)? Esta acción reemplazará los datos existentes.`,
+        confirmLabel: 'Restaurar Base de Datos',
+        danger: true,
+        onSubmit: async (adminPassword) => {
+          setIsImporting(true);
+          setImportStats(null);
+          try {
+            const response = await fetch(`${API_BASE_URL}/api/backup/import`, {
+              method: 'POST',
+              headers: getAuthHeaders({ 'x-admin-password': adminPassword }),
+              body: JSON.stringify({ data: payloadData, adminPassword })
+            });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || (!result.ok && !result.success)) {
+              throw new Error(result.error || 'Error al restaurar datos en el servidor.');
+            }
+
+            if (importCompanies) importCompanies(payloadData);
+
+            setImportStats({
+              filename: fileNameCopy,
+              empresasRestauradas: payloadData.length,
+              timestamp: new Date().toLocaleTimeString('es-VE')
+            });
+
+            if (showToast) showToast('Base de datos restaurada correctamente.', 'success');
+            refreshAllBackupData();
+          } finally {
+            setIsImporting(false);
+          }
+        }
       });
-
-      const result = await response.json();
-      if (!response.ok || (!result.ok && !result.success)) {
-        throw new Error(result.error || 'Error al restaurar datos en el servidor.');
-      }
-
-      if (importCompanies) importCompanies(payloadData);
-
-      setImportStats({
-        filename: file.name,
-        empresasRestauradas: payloadData.length,
-        timestamp: new Date().toLocaleTimeString('es-VE')
-      });
-
-      if (showToast) showToast('Base de datos restaurada correctamente.', 'success');
-      fetchEmpresasResumen();
     } catch (err) {
-      if (showToast) showToast(err.message || 'Error al restaurar', 'error');
-    } finally {
-      setIsImporting(false);
+      if (showToast) showToast(err.message || 'Error al leer el archivo JSON', 'error');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -587,12 +769,12 @@ export const BackupView = () => {
             </div>
 
             <button
-              onClick={fetchEmpresasResumen}
-              disabled={isLoadingEmpresas || isAnyProcessing}
+              onClick={refreshAllBackupData}
+              disabled={isLoadingEmpresas || isLoadingStatus || isAnyProcessing}
               className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl border border-slate-700 transition-all cursor-pointer disabled:opacity-50 mt-0.5"
-              title="Refrescar métricas"
+              title="Refrescar métricas y diagnóstico"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoadingEmpresas ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isLoadingEmpresas || isLoadingStatus ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -646,6 +828,107 @@ export const BackupView = () => {
             <span className="text-[11px] text-slate-400 mt-1">
               Nightly Cron + On-Demand
             </span>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* PANEL DE DIAGNÓSTICO DE CONEXIÓN EN TIEMPO REAL */}
+        {/* ========================================================================= */}
+        <div className="mt-5 p-4 bg-slate-950/70 border border-slate-800/90 rounded-2xl">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+              <Server className="w-4 h-4 text-amber-400" />
+              Diagnóstico de Conexión e Infraestructura
+            </span>
+            {systemStatus?.entorno?.serverless && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">
+                Vercel Serverless (Zero-Disk)
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            {/* PostgreSQL */}
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-cyan-400" />
+                  PostgreSQL
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  systemStatus?.database?.ok
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                }`}>
+                  {isLoadingStatus ? 'Verificando...' : systemStatus?.database?.ok ? 'Conectado' : 'Sin conexión'}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                {systemStatus?.database?.ok
+                  ? `${systemStatus.database.empresas} emp • ${systemStatus.database.proyectos} proy • ${systemStatus.database.totalElementos} elem`
+                  : 'Esperando diagnóstico'}
+              </span>
+            </div>
+
+            {/* Cloudflare R2 */}
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <Cloud className="w-3.5 h-3.5 text-amber-400" />
+                  Cloudflare R2
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  systemStatus?.r2?.configurado
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                }`}>
+                  {systemStatus?.r2?.configurado ? 'Activo' : 'No configurado'}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono truncate">
+                Bucket: {systemStatus?.r2?.bucket || 'tableros-backups'}
+              </span>
+            </div>
+
+            {/* Telegram Bot */}
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <Send className="w-3.5 h-3.5 text-indigo-400" />
+                  Telegram Bot
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  systemStatus?.telegram?.configurado
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                }`}>
+                  {systemStatus?.telegram?.configurado ? 'Configurado' : 'Pendiente'}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono">
+                {systemStatus?.telegram?.chatIdVinculado ? 'Chat Admin Vinculado' : 'Sin Chat Admin'}
+              </span>
+            </div>
+
+            {/* Último Respaldo */}
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+                  Último Respaldo
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                  {systemStatus?.ultimoBackup?.tamanoBytes
+                    ? `${(systemStatus.ultimoBackup.tamanoBytes / 1024).toFixed(1)} KB`
+                    : '—'}
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono truncate" title={systemStatus?.ultimoBackup?.destino || ''}>
+                {systemStatus?.ultimoBackup?.fecha
+                  ? `${new Date(systemStatus.ultimoBackup.fecha).toLocaleString('es-VE')} • ${systemStatus.ultimoBackup.destino}`
+                  : 'Sin respaldos registrados'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1007,6 +1290,99 @@ export const BackupView = () => {
             </div>
           </div>
 
+          {/* Historial de Respaldos en la Nube (Restaurar / Descargar / Eliminar) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Cloud className="w-5 h-5 text-amber-400" />
+                  Historial de Respaldos en la Nube
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Snapshots registrados en PostgreSQL / Cloudflare R2. Restaurar o eliminar requiere contraseña de administrador.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchCloudBackups}
+                disabled={isLoadingCloud}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCloud ? 'animate-spin' : ''}`} />
+                Actualizar
+              </button>
+            </div>
+
+            {isLoadingCloud ? (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                <Loader2 className="w-6 h-6 text-amber-400 animate-spin mx-auto mb-2" />
+                Cargando historial de respaldos...
+              </div>
+            ) : cloudBackups.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl">
+                Aún no hay respaldos registrados en la nube. Usa &ldquo;Respaldo Servidor / Nube&rdquo; para crear el primero.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {cloudBackups.map((bk) => (
+                  <div
+                    key={bk.id}
+                    className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-white truncate">{bk.nombre}</span>
+                        {bk.r2Subido && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                            R2
+                          </span>
+                        )}
+                        {bk.telegramEnviado && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                            Telegram
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-mono">
+                        {new Date(bk.createdAt).toLocaleString('es-VE')} • {((bk.tamanoBytes || 0) / 1024).toFixed(1)} KB • Por: {bk.creadoPor || 'Sistema'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadCloudBackup(bk)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        title="Descargar respaldo JSON"
+                      >
+                        <Download className="w-3.5 h-3.5 text-amber-400" />
+                        Descargar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreCloudBackup(bk)}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        title="Restaurar base de datos desde este snapshot (requiere contraseña ADMIN)"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Restaurar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCloudBackup(bk)}
+                        className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        title="Eliminar respaldo (requiere contraseña ADMIN)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Información de Arquitectura Híbrida */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 text-xs text-slate-400 flex items-start gap-4">
             <Sparkles className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
@@ -1239,6 +1615,100 @@ export const BackupView = () => {
               </div>
             ) : null}
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: CONFIRMACIÓN CON CONTRASEÑA DE ADMINISTRADOR */}
+      {/* ========================================================================= */}
+      {adminConfirmModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+          <form
+            onSubmit={handleConfirmAdminModal}
+            className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 md:p-7 max-w-md w-full shadow-2xl space-y-5 relative"
+          >
+            <button
+              type="button"
+              onClick={() => setAdminConfirmModal(null)}
+              disabled={isSubmittingAdminAction}
+              className="absolute right-5 top-5 text-slate-500 hover:text-white p-1 rounded-xl bg-slate-800/50 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">{adminConfirmModal.title}</h3>
+                <span className="text-[11px] font-mono text-rose-400 uppercase font-bold">
+                  Acción Crítica • Requiere Contraseña ADMIN
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {adminConfirmModal.description}
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Contraseña de Administrador
+              </label>
+              <div className="relative">
+                <input
+                  type={showAdminPassword ? 'text' : 'password'}
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="Ingresa tu contraseña de administrador..."
+                  autoFocus
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                >
+                  {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {adminActionError && (
+                <p className="text-xs text-rose-400 font-semibold flex items-center gap-1.5 pt-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {adminActionError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setAdminConfirmModal(null)}
+                disabled={isSubmittingAdminAction}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingAdminAction}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingAdminAction ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    {adminConfirmModal.confirmLabel}
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

@@ -4,25 +4,30 @@
  * Diseñado para entornos Serverless (Vercel con FS Read-Only) y Contenedores (Railway).
  */
 
-import fs from 'fs';
+import fs from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import prisma from '../db.js';
 
-const BACKUPS_DIR = path.resolve(process.cwd(), 'backups');
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const BACKUPS_DIR = IS_VERCEL
+  ? path.join(os.tmpdir(), 'selectric-backups')
+  : path.resolve(process.cwd(), 'backups');
 
 /**
- * Intenta asegurar la existencia del directorio local backups/ de forma tolerante a fallos.
- * En entornos Read-Only (Vercel) no lanzará excepción.
+ * Intenta asegurar la existencia del directorio de respaldos de forma asíncrona y tolerante a fallos.
+ * En entornos Serverless (Vercel) nunca intenta escribir en la carpeta del proyecto.
  */
-export function asegurarDirectorioBackups() {
+export async function asegurarDirectorioBackups() {
+  if (IS_VERCEL) {
+    return null;
+  }
   try {
-    if (!fs.existsSync(BACKUPS_DIR)) {
-      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
-    }
+    await fs.mkdir(BACKUPS_DIR, { recursive: true });
     return BACKUPS_DIR;
   } catch (err) {
-    console.warn('⚠️ [BackupService] Sistema de archivos de solo lectura detectado (EROFS), no se puede crear directorio local:', err.message);
+    console.warn('⚠️ [BackupService] Sistema de archivos de solo lectura detectado, omitiendo directorio local:', err.message);
     return null;
   }
 }
@@ -150,7 +155,7 @@ export async function recopilarDatosCompletos() {
  * Genera el snapshot global completo en memoria (Buffer / JSON) sin depender del disco.
  */
 export async function generarSnapshotMemoria(opciones = {}) {
-  const { filenamePrefix = 'backup_auto', usuario = null } = opciones;
+  const { filenamePrefix = 'backup_auto', usuario = null, compact = false } = opciones;
   const snapshot = await recopilarDatosCompletos();
 
   if (usuario) {
@@ -163,7 +168,9 @@ export async function generarSnapshotMemoria(opciones = {}) {
 
   const isoTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filename = `${filenamePrefix}_${isoTimestamp}.json`;
-  const jsonString = JSON.stringify(snapshot, null, 2);
+  // Evitar indentación pesada si se solicita modo compacto o si el total de registros es alto
+  const useCompact = compact || (snapshot.metadata?.totalRecords || 0) > 500;
+  const jsonString = useCompact ? JSON.stringify(snapshot) : JSON.stringify(snapshot, null, 2);
   const buffer = Buffer.from(jsonString, 'utf-8');
   const tamanoBytes = buffer.length;
 
@@ -524,20 +531,26 @@ export async function generarBackupEmpresaJson(empresaId) {
 }
 
 /**
- * Intenta guardar una copia en disco local de manera tolerante a fallos (solo en entornos con FS escribible).
+ * Intenta guardar una copia en disco local de manera asíncrona y tolerante a fallos.
+ * En Vercel Serverless trabaja 100% en memoria sin escribir en ./backups.
  */
-export function guardarBackupLocalEnDisco(data, filenameCustom = null) {
+export async function guardarBackupLocalEnDisco(data, filenameCustom = null) {
+  if (IS_VERCEL) {
+    return { guardado: false, motivo: 'SERVERLESS_MEMORY_ONLY', error: 'Entorno Vercel Serverless: operación 100% en memoria.' };
+  }
+
   try {
-    const dir = asegurarDirectorioBackups();
+    const dir = await asegurarDirectorioBackups();
     if (!dir) return { guardado: false, error: 'Directorio no disponible (Read-Only)' };
 
     const isoTimestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
-    const filename = filenameCustom || `backup_selectric_${isoTimestamp}.json`;
-    const filepath = path.resolve(BACKUPS_DIR, filename);
+    const safeName = path.basename(filenameCustom || `backup_selectric_${isoTimestamp}.json`);
+    const filepath = path.resolve(dir, safeName);
 
-    fs.writeFileSync(filepath, typeof data === 'string' ? data : JSON.stringify(data, null, 2), 'utf-8');
+    const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    await fs.writeFile(filepath, content, 'utf-8');
     console.log(`💾 Respaldo guardado en disco local: ${filepath}`);
-    return { guardado: true, filename, filepath };
+    return { guardado: true, filename: safeName, filepath };
   } catch (fsErr) {
     console.warn(`⚠️ [BackupService] No se pudo guardar en disco local (${fsErr.code || fsErr.message}). Omitiendo escritura local de forma segura.`);
     return { guardado: false, error: fsErr.message };
@@ -545,18 +558,24 @@ export function guardarBackupLocalEnDisco(data, filenameCustom = null) {
 }
 
 /**
- * Lee y lista los respaldos JSON presentes en la carpeta local backups/ si está disponible.
+ * Lee y lista los respaldos JSON presentes en la carpeta local backups/ si está disponible (asíncrono).
  */
-export function listarBackupsLocalesEnDisco() {
-  try {
-    asegurarDirectorioBackups();
-    if (!fs.existsSync(BACKUPS_DIR)) return [];
+export async function listarBackupsLocalesEnDisco() {
+  if (IS_VERCEL) {
+    return [];
+  }
 
-    const files = fs.readdirSync(BACKUPS_DIR)
-      .filter(f => f.endsWith('.json'))
-      .map(filename => {
-        const filepath = path.resolve(BACKUPS_DIR, filename);
-        const stats = fs.statSync(filepath);
+  try {
+    const dir = await asegurarDirectorioBackups();
+    if (!dir) return [];
+
+    const entries = await fs.readdir(dir);
+    const jsonFiles = entries.filter((f) => f.endsWith('.json'));
+
+    const files = await Promise.all(
+      jsonFiles.map(async (filename) => {
+        const filepath = path.resolve(dir, filename);
+        const stats = await fs.stat(filepath);
         return {
           filename,
           filepath,
@@ -565,9 +584,9 @@ export function listarBackupsLocalesEnDisco() {
           mtime: stats.mtime
         };
       })
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    );
 
-    return files;
+    return files.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
   } catch (err) {
     console.warn('⚠️ [BackupService] No se pudieron listar respaldos locales:', err.message);
     return [];
@@ -581,7 +600,8 @@ export function listarBackupsLocalesEnDisco() {
 export async function exportarBackupStream(res, usuario = {}) {
   const { buffer, filename } = await generarSnapshotMemoria({
     filenamePrefix: 'backup_selectric',
-    usuario
+    usuario,
+    compact: true
   });
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');

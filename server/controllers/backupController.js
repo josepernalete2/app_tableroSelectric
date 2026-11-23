@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import prisma from '../db.js';
 import { 
   exportarBackupStream, 
@@ -9,8 +10,57 @@ import {
   generarPinResguardoEmpresa,
   generarBackupEmpresaJson
 } from '../services/backup.service.js';
-import { subirBackupAR2, descargarBackupDeR2 } from '../services/r2Backup.service.js';
+import {
+  subirBackupAR2,
+  descargarBackupDeR2,
+  eliminarBackupDeR2,
+  getR2ConfigStatus
+} from '../services/r2Backup.service.js';
 import { enviarBackupTelegram } from '../services/telegramBackup.service.js';
+
+/**
+ * Valida estrictamente que el usuario sea ADMIN y su contraseña de administrador coincida.
+ */
+async function verificarAdminPassword(req, res) {
+  if (!req.user || String(req.user.role || '').toUpperCase() !== 'ADMIN') {
+    res.status(403).json({
+      ok: false,
+      success: false,
+      error: 'Acción permitida únicamente para administradores.'
+    });
+    return false;
+  }
+
+  const rawBody = typeof req.body?.adminPassword === 'string' ? req.body.adminPassword : '';
+  const rawHeader = typeof req.headers['x-admin-password'] === 'string' ? req.headers['x-admin-password'] : '';
+  const rawQuery = typeof req.query?.adminPassword === 'string' ? req.query.adminPassword : '';
+  const adminPassword = rawBody || rawHeader || rawQuery;
+
+  if (!adminPassword) {
+    res.status(401).json({
+      ok: false,
+      success: false,
+      error: 'Se requiere contraseña de administrador para ejecutar esta acción.'
+    });
+    return false;
+  }
+
+  const adminUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+  const passwordOk = adminUser && String(adminUser.role || '').toUpperCase() === 'ADMIN'
+    ? await bcrypt.compare(adminPassword, adminUser.password).catch(() => false)
+    : false;
+
+  if (!passwordOk) {
+    res.status(401).json({
+      ok: false,
+      success: false,
+      error: 'Contraseña de administrador incorrecta.'
+    });
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Función auxiliar para generar el volcado completo y limpio de la base de datos (compatibilidad hacia atrás).
@@ -82,8 +132,8 @@ export async function ejecutarPipelineBackup({ origen = 'MANUAL', usuario = null
         ? telegramSettled.value 
         : { enviado: false, error: telegramSettled.reason?.message || 'Error desconocido en Telegram' };
 
-      // 3. Intento de respaldo local condicional en disco (fail-safe)
-      const localResult = guardarBackupLocalEnDisco(payload, filename);
+      // 3. Intento de respaldo local condicional en disco (fail-safe asíncrono)
+      const localResult = await guardarBackupLocalEnDisco(payload, filename);
 
       // 4. Registrar únicamente metadatos livianos en la tabla `backups` de PostgreSQL
       const creadoPor = usuario?.username || usuario?.email || origen;
@@ -569,6 +619,8 @@ export const exportDatabase = async (req, res) => {
 export const importDatabase = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   try {
+    if (!(await verificarAdminPassword(req, res))) return;
+
     const { data } = req.body || {};
     await restaurarDesdeDatos(data);
 
@@ -601,17 +653,33 @@ export const listarBackupsEnNube = async (req, res) => {
         descripcion: true,
         tamanoBytes: true,
         creadoPor: true,
-        createdAt: true
+        createdAt: true,
+        data: true
       },
       orderBy: {
         createdAt: 'desc'
       }
     });
 
+    const formatted = backups.map((b) => {
+      const meta = b.data && !Array.isArray(b.data) ? b.data : {};
+      return {
+        id: b.id,
+        nombre: b.nombre,
+        descripcion: b.descripcion,
+        tamanoBytes: b.tamanoBytes,
+        creadoPor: b.creadoPor,
+        createdAt: b.createdAt,
+        origen: meta.origen || 'MANUAL',
+        r2Subido: Boolean(meta.cloudStorage?.r2?.subido),
+        telegramEnviado: Boolean(meta.notificaciones?.telegram?.enviado)
+      };
+    });
+
     return res.status(200).json({
       ok: true,
       success: true,
-      data: backups
+      data: formatted
     });
   } catch (error) {
     console.error('Error al listar respaldos en la nube:', error);
@@ -710,6 +778,8 @@ export const descargarBackupEnNube = async (req, res) => {
 export const restaurarBackupEnNube = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   try {
+    if (!(await verificarAdminPassword(req, res))) return;
+
     const { id } = req.params;
     const backup = await prisma.backup.findUnique({
       where: { id }
@@ -762,7 +832,28 @@ export const restaurarBackupEnNube = async (req, res) => {
 export const eliminarBackupEnNube = async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   try {
+    if (!(await verificarAdminPassword(req, res))) return;
+
     const { id } = req.params;
+    const backup = await prisma.backup.findUnique({
+      where: { id },
+      select: { id: true, data: true }
+    });
+
+    if (!backup) {
+      return res.status(404).json({
+        ok: false,
+        success: false,
+        error: 'Respaldo no encontrado.'
+      });
+    }
+
+    const r2Key = backup.data?.cloudStorage?.r2?.key;
+    const r2Bucket = backup.data?.cloudStorage?.r2?.bucket;
+    if (r2Key) {
+      await eliminarBackupDeR2(r2Key, r2Bucket);
+    }
+
     await prisma.backup.delete({
       where: { id }
     });
@@ -901,6 +992,108 @@ export const descargarBackupEmpresaController = async (req, res) => {
       });
     }
     return res.end();
+  }
+};
+
+/**
+ * GET /api/backup/status
+ * Devuelve el diagnóstico real de conexión (PostgreSQL, Cloudflare R2, Telegram Bot y último respaldo).
+ */
+export const obtenerEstadoSistemaBackup = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  const r2 = getR2ConfigStatus();
+  const telegram = {
+    configurado: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+    chatIdVinculado: Boolean(process.env.TELEGRAM_CHAT_ID),
+    webhookSecretConfigurado: Boolean(process.env.TELEGRAM_WEBHOOK_SECRET)
+  };
+  const entorno = {
+    serverless: Boolean(process.env.VERCEL),
+    nodeEnv: process.env.NODE_ENV || 'development'
+  };
+
+  let database = {
+    ok: false,
+    empresas: 0,
+    proyectos: 0,
+    tableros: 0,
+    elementosUnifilares: 0,
+    totalElementos: 0
+  };
+  let ultimoBackup = null;
+
+  try {
+    const [empresas, proyectos, tableros, elementosUnifilares, subestaciones, puntosMedicion, ccm, lastRow] = await Promise.all([
+      prisma.empresa.count(),
+      prisma.proyecto.count(),
+      prisma.tablero.count(),
+      prisma.elementoUnifilar.count(),
+      prisma.subestacion.count(),
+      prisma.puntoMedicion.count(),
+      prisma.ccm.count(),
+      prisma.backup.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          nombre: true,
+          tamanoBytes: true,
+          createdAt: true,
+          data: true
+        }
+      })
+    ]);
+
+    database = {
+      ok: true,
+      empresas,
+      proyectos,
+      tableros,
+      elementosUnifilares,
+      totalElementos: tableros + elementosUnifilares + subestaciones + puntosMedicion + ccm
+    };
+
+    if (lastRow) {
+      const meta = lastRow.data && !Array.isArray(lastRow.data) ? lastRow.data : {};
+      const destinos = ['PostgreSQL'];
+      if (meta.cloudStorage?.r2?.subido) destinos.push('Cloudflare R2');
+      if (meta.notificaciones?.telegram?.enviado) destinos.push('Telegram');
+      if (meta.guardadoLocal) destinos.push('Local');
+
+      ultimoBackup = {
+        id: lastRow.id,
+        nombre: lastRow.nombre,
+        fecha: lastRow.createdAt,
+        tamanoBytes: lastRow.tamanoBytes || meta.tamanoBytes || 0,
+        destino: destinos.join(' + '),
+        r2Subido: Boolean(meta.cloudStorage?.r2?.subido),
+        telegramEnviado: Boolean(meta.notificaciones?.telegram?.enviado)
+      };
+    }
+
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: {
+        database,
+        r2,
+        telegram,
+        ultimoBackup,
+        entorno
+      }
+    });
+  } catch (error) {
+    console.error('❌ [BackupController] Error en diagnóstico de estado:', error);
+    return res.status(200).json({
+      ok: true,
+      success: true,
+      data: {
+        database: { ...database, ok: false, error: error.message },
+        r2,
+        telegram,
+        ultimoBackup,
+        entorno
+      }
+    });
   }
 };
 

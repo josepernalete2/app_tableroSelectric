@@ -32,7 +32,8 @@ import {
   obtenerEstadoEmpresaController,
   generarPinEmpresaController,
   ejecutarBackupEmpresaController,
-  descargarBackupEmpresaController
+  descargarBackupEmpresaController,
+  obtenerEstadoSistemaBackup
 } from '../controllers/backupController.js';
 import { obtenerMensajesUsuario, guardarMensaje, marcarMensajesComoLeidos } from '../controllers/messageController.js';
 import { vincularElemento, desvincularElemento, crearProvisional, obtenerArbolProyecto, obtenerPotencialesAlimentadores } from '../controllers/jerarquiaController.js';
@@ -144,6 +145,7 @@ router.post('/backup/import', requireRoles('ADMIN'), importDatabase);
 router.post('/backups/import', requireRoles('ADMIN'), importDatabase);
 
 // Endpoints de Respaldo en la Nube (PostgreSQL / Sin Tokens)
+router.get('/backup/status', requireRoles('ADMIN', 'WORKER'), obtenerEstadoSistemaBackup);
 router.get('/backup', requireRoles('ADMIN', 'WORKER'), listarBackupsEnNube);
 router.post('/backup', requireRoles('ADMIN', 'WORKER'), crearBackupEnNube);
 router.get('/backups', requireRoles('ADMIN', 'WORKER'), listarBackupsEnNube);

@@ -148,8 +148,17 @@ export async function registrarWebhookTelegram(urlWebhook) {
     throw new Error('TELEGRAM_BOT_TOKEN no configurado en variables de entorno');
   }
 
-  const endpoint = `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(urlWebhook)}`;
-  const response = await fetch(endpoint);
+  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET ? process.env.TELEGRAM_WEBHOOK_SECRET.trim() : '';
+  const body = { url: urlWebhook };
+  if (webhookSecret) {
+    body.secret_token = webhookSecret;
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
   const result = await response.json();
   return result;
 }

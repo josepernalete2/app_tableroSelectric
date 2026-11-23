@@ -4,7 +4,18 @@
  * para respaldos de la base de datos de tableros eléctricos.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+
+/**
+ * Devuelve el estado de configuración de Cloudflare R2 sin exponer credenciales.
+ */
+export function getR2ConfigStatus() {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME } = process.env;
+  return {
+    configurado: Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY),
+    bucket: R2_BUCKET_NAME || 'tableros-backups'
+  };
+}
 
 /**
  * Obtiene el cliente de S3 configurado para Cloudflare R2 si las credenciales están disponibles.
@@ -112,5 +123,25 @@ export async function descargarBackupDeR2(key, bucketNameOverride = null) {
   } catch (error) {
     console.error(`❌ [Cloudflare R2] Error al descargar respaldo "${key}" de R2:`, error.message);
     return null;
+  }
+}
+
+/**
+ * Elimina un objeto de respaldo de Cloudflare R2 de forma tolerante a fallos.
+ */
+export async function eliminarBackupDeR2(key, bucketNameOverride = null) {
+  const bucketName = bucketNameOverride || process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const client = getR2Client();
+
+  if (!client || !key) {
+    return { eliminado: false, motivo: 'NO_CONFIGURADO_O_SIN_KEY' };
+  }
+
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
+    return { eliminado: true, bucket: bucketName, key };
+  } catch (error) {
+    console.warn(`⚠️ [Cloudflare R2] No se pudo eliminar "${key}" de R2:`, error.message);
+    return { eliminado: false, error: error.message };
   }
 }
