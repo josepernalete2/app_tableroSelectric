@@ -3,6 +3,17 @@ import { precacheAndRoute } from 'workbox-precaching'
 // Precargar y enrutar los assets estáticos generados por la build de Vite
 precacheAndRoute(self.__WB_MANIFEST || [])
 
+// Nunca interceptar peticiones /api/ (evita falsos 503 Offline en subida/lectura R2)
+self.addEventListener('fetch', (event) => {
+  if (
+    event.request.url.includes('/api/') ||
+    event.request.url.includes('/socket.io') ||
+    event.request.method !== 'GET'
+  ) {
+    return
+  }
+})
+
 // Capturar eventos Push nativos
 self.addEventListener('push', (event) => {
   console.log('[Service Worker] Evento Push recibido:', event)

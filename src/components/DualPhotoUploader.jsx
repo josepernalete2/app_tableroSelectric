@@ -85,6 +85,7 @@ export default function DualPhotoUploader({
 }) {
   const { alert: customAlert } = useConfirm();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
 
   // Determinar la fuente activa de imagen
   const activeSrc = value || foto || fotoSrc || previewUrl || null;
@@ -108,6 +109,7 @@ export default function DualPhotoUploader({
     }
 
     try {
+      setUploadError(null);
       setIsProcessing(true);
       // 1. Comprimir en navegador a máximo 1200px y calidad 0.72 (~120 KB - 250 KB)
       const compressedDataUrl = await compressImageToBase64(file, 1200, 1200, 0.72);
@@ -131,9 +133,21 @@ export default function DualPhotoUploader({
         body: formData
       });
 
-      const result = await response.json().catch(() => ({}));
+      const rawText = await response.text();
+      let result = {};
+      try {
+        result = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        result = {};
+      }
+
       if (!response.ok || !result.ok || !result.url) {
-        throw new Error(result.error || `Error del servidor al subir fotografía (${response.status})`);
+        const serverMessage =
+          result.error ||
+          result.message ||
+          (rawText && rawText.length < 200 ? rawText : '') ||
+          `Error del servidor al subir fotografía (HTTP ${response.status})`;
+        throw new Error(serverMessage);
       }
 
       // 3. Guardar únicamente la URL corta (/api/sync/image/...) sin Base64 ni fotoBlob
@@ -142,8 +156,10 @@ export default function DualPhotoUploader({
       onImageSelected?.(null, shortUrl);
       onChange?.(shortUrl);
     } catch (err) {
+      const msg = err?.message || 'Ocurrió un error al subir la fotografía al servidor.';
       console.error('Error al subir fotografía a Cloudflare R2:', err);
-      customAlert(err.message || 'Ocurrió un error al subir la fotografía al servidor.');
+      setUploadError(msg);
+      customAlert(msg);
     } finally {
       setIsProcessing(false);
       // Resetear valor para permitir seleccionar el mismo archivo consecutivamente
@@ -265,6 +281,12 @@ export default function DualPhotoUploader({
                 />
               </label>
             </div>
+          )}
+
+          {uploadError && (
+            <p className="text-xs text-rose-400 font-semibold bg-rose-950/40 border border-rose-500/30 rounded-xl px-3 py-2">
+              {uploadError}
+            </p>
           )}
         </div>
       )}

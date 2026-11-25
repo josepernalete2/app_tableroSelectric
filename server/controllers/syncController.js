@@ -15,6 +15,7 @@ export function sanitizeFotoServer(foto) {
   if (
     trimmed.startsWith('http://') ||
     trimmed.startsWith('https://') ||
+    trimmed.startsWith('/api/sync/image?key=') ||
     trimmed.startsWith('/api/sync/image/') ||
     trimmed.startsWith('/uploads/') ||
     trimmed.startsWith('blob:')
@@ -1298,14 +1299,14 @@ export const subirImagenR2Controller = async (req, res) => {
       });
     }
 
-    const url = `/api/sync/image/${encodeURIComponent(key)}`;
+    const url = `/api/sync/image?key=${encodeURIComponent(key)}`;
     return res.status(200).json({
       ok: true,
       url,
       key
     });
   } catch (error) {
-    console.error('❌ [SyncController] Error en subirImagenR2Controller:', error);
+    console.error('❌ [SyncController] Error en subirImagenR2Controller:', error?.name, error?.message);
     return res.status(500).json({
       ok: false,
       error: error.message || 'Error interno al subir imagen a Cloudflare R2.'
@@ -1314,15 +1315,24 @@ export const subirImagenR2Controller = async (req, res) => {
 };
 
 /**
- * GET /api/sync/image/*key
- * Lee la imagen desde Cloudflare R2 y la devuelve con su Content-Type y caché pública inmutable.
+ * GET /api/sync/image?key=... (y compatibilidad /api/sync/image/*key)
+ * Lee la imagen desde Cloudflare R2 y la devuelve como Buffer con su Content-Type y caché pública inmutable.
  */
 export const obtenerImagenR2Controller = async (req, res) => {
   try {
-    const rawParam = Array.isArray(req.params.key)
+    const queryKey = typeof req.query?.key === 'string' ? req.query.key.trim() : '';
+    const rawParam = Array.isArray(req.params?.key)
       ? req.params.key.join('/')
-      : (req.params.key || req.params[0] || '');
-    const decodedKey = decodeURIComponent(rawParam).replace(/^\/+/, '');
+      : (req.params?.key || req.params?.[0] || '');
+    const rawKey = queryKey || String(rawParam || '').trim();
+
+    let decodedKey = rawKey;
+    try {
+      decodedKey = decodeURIComponent(rawKey);
+    } catch {
+      decodedKey = rawKey;
+    }
+    decodedKey = decodedKey.replace(/^\/+/, '').trim();
 
     if (!decodedKey || decodedKey.includes('..') || !decodedKey.startsWith('imagenes/')) {
       return res.status(400).json({ ok: false, error: 'Clave de imagen inválida.' });
@@ -1330,7 +1340,7 @@ export const obtenerImagenR2Controller = async (req, res) => {
 
     const imageObj = await obtenerImagenDeR2(decodedKey);
     if (!imageObj || !imageObj.buffer) {
-      return res.status(404).json({ ok: false, error: 'Imagen no encontrada.' });
+      return res.status(404).json({ ok: false, error: 'Imagen no encontrada en Cloudflare R2.' });
     }
 
     res.setHeader('Content-Type', imageObj.contentType || 'image/jpeg');
@@ -1338,8 +1348,8 @@ export const obtenerImagenR2Controller = async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     return res.status(200).send(imageObj.buffer);
   } catch (error) {
-    console.error('❌ [SyncController] Error en obtenerImagenR2Controller:', error);
-    return res.status(500).json({ ok: false, error: 'Error al leer imagen desde R2.' });
+    console.error('❌ [SyncController] Error en obtenerImagenR2Controller:', error?.name, error?.message);
+    return res.status(500).json({ ok: false, error: error?.message || 'Error al leer imagen desde R2.' });
   }
 };
 

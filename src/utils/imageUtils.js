@@ -56,15 +56,42 @@ export const compressImageToBase64 = (fileOrBase64, maxWidth = MAX_DIMENSION_DEF
       return resolve(fileOrBase64);
     }
 
-    const processImageElement = (imgSrc) => {
+    // Detectar formatos HEIC/HEIF no decodificables en navegadores estándar
+    if (typeof Blob !== 'undefined' && fileOrBase64 instanceof Blob) {
+      const fileName = typeof fileOrBase64.name === 'string' ? fileOrBase64.name.toLowerCase() : '';
+      const mimeType = typeof fileOrBase64.type === 'string' ? fileOrBase64.type.toLowerCase() : '';
+      if (
+        fileName.endsWith('.heic') ||
+        fileName.endsWith('.heif') ||
+        mimeType === 'image/heic' ||
+        mimeType === 'image/heif'
+      ) {
+        return reject(new Error('Formato de imagen no compatible en este navegador (usa JPG o PNG)'));
+      }
+    }
+
+    const processImageElement = (imgSrc, { isObjectUrl = false, allowFileReaderFallback = false } = {}) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      if (typeof imgSrc === 'string' && (imgSrc.startsWith('http://') || imgSrc.startsWith('https://'))) {
+        img.crossOrigin = 'anonymous';
+      }
+
+      const cleanupObjectUrl = () => {
+        if (isObjectUrl && typeof imgSrc === 'string' && imgSrc.startsWith('blob:')) {
+          try {
+            URL.revokeObjectURL(imgSrc);
+          } catch {
+            // ignorar
+          }
+        }
+      };
 
       img.onload = () => {
         try {
           let { width, height } = img;
           if (!width || !height) {
-            return resolve(imgSrc);
+            cleanupObjectUrl();
+            return reject(new Error('La imagen no tiene dimensiones válidas.'));
           }
 
           // Redimensionar manteniendo proporción (aspect ratio)
@@ -79,7 +106,8 @@ export const compressImageToBase64 = (fileOrBase64, maxWidth = MAX_DIMENSION_DEF
           canvas.height = height;
           const ctx = canvas.getContext('2d', { alpha: false });
           if (!ctx) {
-            return resolve(imgSrc);
+            cleanupObjectUrl();
+            return reject(new Error('No se pudo inicializar el lienzo de compresión de imagen.'));
           }
 
           // Fondo blanco para evitar fondos negros en PNG transparentes al convertir a JPEG
@@ -111,16 +139,33 @@ export const compressImageToBase64 = (fileOrBase64, maxWidth = MAX_DIMENSION_DEF
             }
           }
 
+          cleanupObjectUrl();
           resolve(compressedDataUrl);
         } catch (canvasErr) {
-          console.warn('[IMAGE COMPRESS] ⚠️ Error en canvas al comprimir, usando original:', canvasErr);
-          resolve(imgSrc);
+          cleanupObjectUrl();
+          console.warn('[IMAGE COMPRESS] ⚠️ Error en canvas al comprimir:', canvasErr);
+          reject(new Error('No se pudo procesar la imagen seleccionada (usa JPG o PNG).'));
         }
       };
 
       img.onerror = (err) => {
+        cleanupObjectUrl();
         console.warn('[IMAGE COMPRESS] ⚠️ Error al cargar imagen en elemento Image:', err);
-        resolve(imgSrc);
+
+        // Fallback con FileReader.readAsDataURL si falló con ObjectURL sobre un File/Blob
+        if (allowFileReaderFallback && typeof Blob !== 'undefined' && fileOrBase64 instanceof Blob) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            processImageElement(ev.target.result, { isObjectUrl: false, allowFileReaderFallback: false });
+          };
+          reader.onerror = () => {
+            reject(new Error('Formato de imagen no compatible en este navegador (usa JPG o PNG)'));
+          };
+          reader.readAsDataURL(fileOrBase64);
+          return;
+        }
+
+        reject(new Error('Formato de imagen no compatible en este navegador (usa JPG o PNG)'));
       };
 
       img.src = imgSrc;
@@ -131,15 +176,19 @@ export const compressImageToBase64 = (fileOrBase64, maxWidth = MAX_DIMENSION_DEF
       return processImageElement(fileOrBase64);
     }
 
-    // Si es File o Blob
+    // Si es File o Blob: usar ObjectURL primero (con revocación dentro de onload/onerror) y fallback a FileReader
     if (typeof Blob !== 'undefined' && fileOrBase64 instanceof Blob) {
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        const objectUrl = URL.createObjectURL(fileOrBase64);
+        return processImageElement(objectUrl, { isObjectUrl: true, allowFileReaderFallback: true });
+      }
       const reader = new FileReader();
       reader.onload = (e) => {
-        processImageElement(e.target.result);
+        processImageElement(e.target.result, { isObjectUrl: false, allowFileReaderFallback: false });
       };
       reader.onerror = (err) => {
         console.warn('[IMAGE COMPRESS] ⚠️ Error en FileReader al leer Blob:', err);
-        reject(err);
+        reject(new Error('Formato de imagen no compatible en este navegador (usa JPG o PNG)'));
       };
       reader.readAsDataURL(fileOrBase64);
     } else {
@@ -157,7 +206,12 @@ export const getCleanImageUrl = (src, apiBaseUrl = '') => {
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('/api/')) {
+  if (
+    trimmed.startsWith('/api/sync/image?key=') ||
+    trimmed.startsWith('/api/sync/image/') ||
+    trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith('/api/')
+  ) {
     return apiBaseUrl ? `${apiBaseUrl}${trimmed}` : trimmed;
   }
   return trimmed;

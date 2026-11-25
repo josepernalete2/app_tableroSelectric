@@ -227,7 +227,7 @@ export async function obtenerImagenDeR2(key) {
       contentType: response.ContentType || 'image/jpeg'
     };
   } catch (error) {
-    console.warn(`⚠️ [Cloudflare R2] No se pudo obtener imagen "${key}":`, error.message);
+    console.error(`❌ [Cloudflare R2] Error al obtener imagen "${key}": [${error?.name || 'Error'}] ${error?.message}`);
     return null;
   }
 }

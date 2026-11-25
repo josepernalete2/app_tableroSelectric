@@ -217,6 +217,7 @@ export function stripAllImagePayloads(obj) {
   if (typeof obj === 'string') {
     const trimmed = obj.trim();
     if (
+      trimmed.startsWith('/api/sync/image?key=') ||
       trimmed.startsWith('/api/sync/image/') ||
       trimmed.startsWith('/uploads/') ||
       trimmed.startsWith('http://') ||

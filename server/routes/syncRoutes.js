@@ -34,6 +34,7 @@ router.post(
   uploadImagenR2.fields([{ name: 'foto', maxCount: 1 }, { name: 'image', maxCount: 1 }]),
   subirImagenR2Controller
 );
+router.get('/image', obtenerImagenR2Controller);
 router.get('/image/*key', obtenerImagenR2Controller);
 
 // ENDPOINT LOCAL BACKUP: Generar backup JSON para descarga local

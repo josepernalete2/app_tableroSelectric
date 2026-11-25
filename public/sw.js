@@ -1,6 +1,6 @@
 // Service Worker para TableroSelectric PWA
-// Versión: celectrik-v2 - Resiliencia Multidispositivo, Manifest y Cache Invalidation
-const CACHE_NAME = 'celectrik-v2';
+// Versión: celectrik-v3 - Bypass estricto de /api/ y WebSockets
+const CACHE_NAME = 'celectrik-v3';
 
 // Inyección de manifiesto de precache de Workbox (VitePWA injectManifest)
 const wbManifest = self.__WB_MANIFEST || [];
@@ -46,10 +46,17 @@ self.addEventListener('activate', (event) => {
 // - Para llamadas /api/* y /socket.io: NETWORK ONLY (NUNCA cachear peticiones de API para evitar datos obsoletos o fallos de CORS)
 // - Para assets estáticos y navegación: Network-first con fallback a cache
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  // Bypass total e inmediato de cualquier petición /api/, /socket.io o distinta de GET
+  if (
+    event.request.url.includes('/api/') ||
+    event.request.url.includes('/socket.io') ||
+    event.request.method !== 'GET'
+  ) {
+    return;
+  }
 
-  // Bypass total de peticiones de API y WebSockets
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/socket.io') || event.request.method !== 'GET') {
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api')) {
     return;
   }
 
