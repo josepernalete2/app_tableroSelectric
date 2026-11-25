@@ -17,7 +17,9 @@ import {
   CheckSquare, 
   FileText,
   Settings,
-  Edit3
+  Edit3,
+  Save,
+  Loader2
 } from 'lucide-react';
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
@@ -25,7 +27,38 @@ import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
 import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCreados = [] }) {
-  const { companies, crearElementoProvisional } = useStore();
+  const { companies, crearElementoProvisional, showToast } = useStore();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveCambios = async () => {
+    if (readOnly || isSaving) return;
+    setIsSaving(true);
+    try {
+      const latestPhoto =
+        typeof ccmData?.foto === 'string' && !ccmData.foto.startsWith('data:image/')
+          ? ccmData.foto
+          : null;
+      const res = await Promise.resolve(
+        onUpdate({
+          ...ccmData,
+          foto: latestPhoto,
+          fotoBlob: null
+        })
+      );
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      if (res && res.ok === false) {
+        showToast?.(res.error || 'Error al guardar cambios del CCM en el servidor.', 'error');
+      } else if (!isOnline) {
+        showToast?.('Guardado localmente (pendiente de sincronizar)', 'info');
+      } else {
+        showToast?.('Cambios guardados en el servidor', 'success');
+      }
+    } catch (err) {
+      showToast?.(err?.message || 'Error al guardar los cambios del CCM.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   const resolvedElementosCreados = React.useMemo(() => {
     if (Array.isArray(elementosCreados) && elementosCreados.length > 0) {
       return elementosCreados.filter(e => e.id !== ccmData?.id);
@@ -279,7 +312,19 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
             Centro de Control de Motores (CCM) Industrial {nombre ? `— ${nombre}` : ''}
           </h2>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleSaveCambios}
+              disabled={isSaving}
+              className="no-print bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-black px-4 py-2 rounded-xl flex items-center gap-2 text-xs transition-all cursor-pointer shadow-md"
+              title="Guardar todos los cambios del CCM en el servidor"
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSaving ? 'Guardando...' : 'Guardar Cambios'}</span>
+            </button>
+          )}
           <button
             onClick={() => window.print()}
             className="no-print bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl flex items-center gap-2 text-xs transition-all cursor-pointer shadow-md"

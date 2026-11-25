@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import EditableCell from './EditableCell';
 import EditablePoleCell from './EditablePoleCell';
-import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3, Trash2, Loader2, Shield, Layers, Box } from 'lucide-react';
+import { Plus, Minus, Grid, Columns, Settings, RefreshCw, Zap, Image, ClipboardList, Camera, X, Printer, Pencil, Download, Edit3, Trash2, Loader2, Shield, Layers, Box, Save } from 'lucide-react';
 import useStore, { getElementCode, getSimpleElementCode, assignSimpleHierarchyCodes, cleanElementName } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import { API_BASE_URL } from '../utils/api';
@@ -454,42 +454,114 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
     });
   };
 
-  // Manejo de fotografía robusto con compresión Base64 y soporte offline multipart
+  const [isSaving, setIsSaving] = useState(false);
+
+  const dataUrlToBlob = (dataUrl) => {
+    const [header, base64] = String(dataUrl || '').split(',');
+    const mimeMatch = header.match(/data:([^;]+);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const binary = atob(base64 || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+  };
+
+  // Manejador explícito de Guardar Cambios completos hacia PostgreSQL / Cola Offline
+  const handleSaveCambios = async () => {
+    if (readOnly || isSaving) return;
+    setIsSaving(true);
+    try {
+      const latestPhoto =
+        typeof tableroData?.foto === 'string' && !tableroData.foto.startsWith('data:image/')
+          ? tableroData.foto
+          : null;
+
+      const payloadCompleto = {
+        ...tableroData,
+        foto: latestPhoto,
+        fotoBlob: null,
+        eliminarFoto: tableroData?.eliminarFoto ?? (!latestPhoto && tableroData?.foto === null)
+      };
+
+      const res = await Promise.resolve(onUpdateTablero(payloadCompleto));
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+      if (res && res.ok === false) {
+        showToast?.(res.error || 'Error al guardar cambios en el servidor.', 'error');
+      } else if (!isOnline) {
+        showToast?.('Guardado localmente (pendiente de sincronizar)', 'info');
+      } else {
+        showToast?.('Cambios guardados en el servidor', 'success');
+      }
+    } catch (err) {
+      showToast?.(err?.message || 'Error al guardar los cambios del tablero.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Subida en modo online hacia Cloudflare R2 (con compresión y conversión automática HEIC -> JPEG)
   const handlePhotoSelected = async (file) => {
     if (effectivelyReadOnly || !file) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      customAlert('Conéctate a internet para subir fotografías al servidor');
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       customAlert("La imagen seleccionada supera los 10MB. Por favor elija un archivo más liviano.");
       return;
     }
     setIsUploadingPhoto(true);
     try {
-      // 1. Compresión instantánea a Base64 para almacenamiento serializable seguro en localforage
-      const base64DataUrl = await compressImageToBase64(file);
+      const compressedDataUrl = await compressImageToBase64(file, 1200, 1200, 0.72);
+      if (!compressedDataUrl || !compressedDataUrl.startsWith('data:image/')) {
+        throw new Error('No se pudo procesar la fotografía seleccionada.');
+      }
+
+      const jpegBlob = dataUrlToBlob(compressedDataUrl);
+      const formData = new FormData();
+      formData.append('foto', jpegBlob, `tablero_${Date.now()}.jpg`);
+
+      const freshToken =
+        useStore.getState().token ||
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+        '';
+
+      const response = await fetch(`${API_BASE_URL}/api/sync/upload-image`, {
+        method: 'POST',
+        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : {},
+        body: formData
+      });
+
+      const rawText = await response.text();
+      let result = {};
+      try {
+        result = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        result = {};
+      }
+
+      if (!response.ok || !result.ok || !result.url) {
+        const serverMessage =
+          result.error ||
+          result.message ||
+          (rawText && rawText.length < 200 ? rawText : '') ||
+          `Error del servidor al subir fotografía (HTTP ${response.status})`;
+        throw new Error(serverMessage);
+      }
+
       onUpdateTablero({
         ...tableroData,
-        fotoBlob: file,
-        foto: base64DataUrl,
+        fotoBlob: null,
+        foto: result.url,
         eliminarFoto: false
       });
-      showToast?.("Fotografía del tablero adjuntada con éxito.", "success");
+      showToast?.("Fotografía del tablero guardada en la nube.", "success");
     } catch (err) {
-      console.error("Error al procesar fotografía Base64:", err);
-      // Fallback seguro usando FileReader nativo
-      try {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          onUpdateTablero({
-            ...tableroData,
-            fotoBlob: file,
-            foto: e.target.result,
-            eliminarFoto: false
-          });
-          showToast?.("Fotografía adjuntada.", "success");
-        };
-        reader.readAsDataURL(file);
-      } catch (fallbackErr) {
-        customAlert("No se pudo procesar la imagen seleccionada.");
-      }
+      console.error("Error al subir fotografía del tablero:", err);
+      customAlert(err?.message || "No se pudo subir la fotografía seleccionada.");
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -1147,6 +1219,23 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
                   </div>
                 </div>
                 <div className="flex items-center gap-2 no-print">
+                  {/* Botón Guardar Cambios explícito */}
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={handleSaveCambios}
+                      disabled={isSaving}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+                      title="Guardar todos los cambios y sincronizar con el servidor"
+                    >
+                      {isSaving ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      <span>{isSaving ? 'Guardando...' : 'Guardar Cambios'}</span>
+                    </button>
+                  )}
                   {/* Botón Modo Seguro / Editar Planilla (Obs Fase 2) */}
                   {!readOnly && (
                     <button
@@ -1744,7 +1833,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <span>Cámara en Vivo</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 capture="environment"
                 disabled={effectivelyReadOnly}
                 onChange={(e) => {
@@ -1759,7 +1848,7 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
               <span>Galería / Archivos</span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 disabled={effectivelyReadOnly}
                 onChange={(e) => {
                   const file = e.target.files && e.target.files[0];

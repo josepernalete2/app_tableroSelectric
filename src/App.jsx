@@ -396,7 +396,7 @@ const TableroWrapper = () => {
             onUpdate={(updatedData) => {
               const projId = targetProyecto?.id || ccmItem?.proyectoId || null;
               if (isUnifilarCcm) {
-                updateElementoUnifilar(projId, tableroId, {
+                return updateElementoUnifilar(projId, tableroId, {
                   ...updatedData,
                   datosTecnicos: {
                     ...(element?.datosTecnicos || {}),
@@ -404,7 +404,7 @@ const TableroWrapper = () => {
                   }
                 });
               } else {
-                updateCcm(projId, tableroId, updatedData);
+                return updateCcm(projId, tableroId, updatedData);
               }
             }}
             readOnly={user?.role === 'CLIENT'}
@@ -579,7 +579,7 @@ const TableroWrapper = () => {
           ? datosTecnicos.alimentadoPorId
           : (datosTecnicos.alimentadorId !== undefined ? datosTecnicos.alimentadorId : (element?.alimentadoPorId ?? null)));
 
-    updateElementoUnifilar(targetProyecto?.id || element?.proyectoId || null, tableroId, {
+    return updateElementoUnifilar(targetProyecto?.id || element?.proyectoId || null, tableroId, {
       nombre,
       ubicacion,
       alimentadoPor,

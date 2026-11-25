@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw, Edit3, Layers } from 'lucide-react';
+import { Shield, Hammer, Activity, Compass, Home, Save, User, Calendar, Clock, Zap, Printer, RotateCcw, Edit3, Layers, Loader2 } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import MetrologiaElectricaSection from './MetrologiaElectricaSection';
@@ -12,9 +12,41 @@ import TensionNominalInput from './TensionNominalInput';
 export default function SubestacionComponent({ subestacionData, onUpdate, readOnly }) {
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
   const user = useStore((state) => state.user);
+  const showToast = useStore((state) => state.showToast);
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'admin';
   const [isEditIdModalOpen, setIsEditIdModalOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveCambios = async () => {
+    if (readOnly || isSaving || !subestacionData) return;
+    setIsSaving(true);
+    try {
+      const latestPhoto =
+        typeof subestacionData?.foto === 'string' && !subestacionData.foto.startsWith('data:image/')
+          ? subestacionData.foto
+          : null;
+      const res = await Promise.resolve(
+        onUpdate({
+          ...subestacionData,
+          foto: latestPhoto,
+          fotoBlob: null
+        })
+      );
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      if (res && res.ok === false) {
+        showToast?.(res.error || 'Error al guardar cambios de la subestación en el servidor.', 'error');
+      } else if (!isOnline) {
+        showToast?.('Guardado localmente (pendiente de sincronizar)', 'info');
+      } else {
+        showToast?.('Cambios guardados en el servidor', 'success');
+      }
+    } catch (err) {
+      showToast?.(err?.message || 'Error al guardar los cambios de la subestación.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   if (!subestacionData) return <div className="text-center p-8 text-slate-400">No hay datos de subestación seleccionados.</div>;
 
   const {
@@ -200,7 +232,19 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           <span className="text-[10px] print:text-[8.5px] text-amber-500 font-extrabold uppercase tracking-widest print:text-slate-800">Inspección de Subestación Eléctrica</span>
           <h2 className="text-xl md:text-2xl print:text-xs font-extrabold text-slate-100 tracking-wide mt-1 print:mt-0 print:text-slate-950 uppercase">{nombre || 'Subestación Eléctrica'}</h2>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleSaveCambios}
+              disabled={isSaving}
+              className="no-print bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-black px-3.5 py-2 rounded-lg flex items-center gap-1.5 text-xs transition-all cursor-pointer shadow-sm"
+              title="Guardar todos los cambios de la subestación en el servidor"
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{isSaving ? 'Guardando...' : 'Guardar Cambios'}</span>
+            </button>
+          )}
           {!readOnly && (
             <button
               type="button"
