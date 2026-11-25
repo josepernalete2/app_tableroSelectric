@@ -192,7 +192,7 @@ export default function DualPhotoUploader({
       {isProcessing ? (
         <div className="p-8 border border-slate-800 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-2 text-amber-400 no-print">
           <Loader2 className="w-6 h-6 animate-spin" />
-          <span className="text-xs font-bold">Optimizando y convirtiendo imagen...</span>
+          <span className="text-xs font-bold">Procesando y subiendo imagen...</span>
         </div>
       ) : hasPhoto ? (
         <div className="tablero-photo-frame relative rounded-2xl print:rounded overflow-hidden border border-slate-800 print:border-slate-900 bg-slate-950/80 shadow-xl print:shadow-none group max-w-md mx-auto">
@@ -262,7 +262,7 @@ export default function DualPhotoUploader({
                 <span>Tomar Foto (Cámara)</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   capture="environment"
                   onChange={handleFileChange}
                   className="hidden"
@@ -275,7 +275,7 @@ export default function DualPhotoUploader({
                 <span>Subir Archivo / Galería</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   onChange={handleFileChange}
                   className="hidden"
                 />
