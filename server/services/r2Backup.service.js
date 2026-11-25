@@ -10,9 +10,9 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } fro
  * Devuelve el estado de configuración de Cloudflare R2 sin exponer credenciales.
  */
 export function getR2ConfigStatus() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME } = process.env;
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_ENDPOINT } = process.env;
   return {
-    configurado: Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY),
+    configurado: Boolean((R2_ACCOUNT_ID || R2_ENDPOINT) && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY),
     bucket: R2_BUCKET_NAME || 'tableros-backups'
   };
 }
@@ -22,15 +22,15 @@ export function getR2ConfigStatus() {
  * @returns {S3Client|null}
  */
 function getR2Client() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = process.env;
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT } = process.env;
 
-  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+  if ((!R2_ACCOUNT_ID && !R2_ENDPOINT) || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
     return null;
   }
 
   return new S3Client({
     region: 'auto',
-    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint: R2_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId: R2_ACCESS_KEY_ID,
       secretAccessKey: R2_SECRET_ACCESS_KEY
@@ -143,5 +143,91 @@ export async function eliminarBackupDeR2(key, bucketNameOverride = null) {
   } catch (error) {
     console.warn(`⚠️ [Cloudflare R2] No se pudo eliminar "${key}" de R2:`, error.message);
     return { eliminado: false, error: error.message };
+  }
+}
+
+/**
+ * Sube una imagen comprimida (Buffer) directamente a Cloudflare R2.
+ *
+ * @param {Buffer} buffer Contenido binario de la imagen
+ * @param {string} mimeType Tipo MIME (ej. image/jpeg)
+ * @param {string} key Ruta/Key del objeto en R2 (ej. imagenes/1732550000-abc123.jpg)
+ * @returns {Promise<{ subido: boolean, bucket?: string, key?: string, error?: string }>}
+ */
+export async function subirImagenAR2(buffer, mimeType, key) {
+  const bucketName = process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const client = getR2Client();
+
+  if (!client) {
+    return {
+      subido: false,
+      error: 'Cloudflare R2 no está configurado en el servidor.'
+    };
+  }
+
+  try {
+    await client.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType || 'image/jpeg',
+      CacheControl: 'public, max-age=31536000'
+    }));
+
+    return {
+      subido: true,
+      bucket: bucketName,
+      key
+    };
+  } catch (error) {
+    console.error(`❌ [Cloudflare R2] Error al subir imagen "${key}":`, error.message);
+    return {
+      subido: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Obtiene una imagen almacenada en Cloudflare R2 como Buffer junto a su Content-Type.
+ *
+ * @param {string} key Key del objeto en R2
+ * @returns {Promise<{ buffer: Buffer, contentType: string }|null>}
+ */
+export async function obtenerImagenDeR2(key) {
+  const bucketName = process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const client = getR2Client();
+
+  if (!client || !key) {
+    return null;
+  }
+
+  try {
+    const response = await client.send(new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key
+    }));
+
+    if (!response || !response.Body) return null;
+
+    let buffer;
+    if (typeof response.Body.transformToByteArray === 'function') {
+      const byteArray = await response.Body.transformToByteArray();
+      buffer = Buffer.from(byteArray);
+    } else {
+      const chunks = [];
+      for await (const chunk of response.Body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      buffer = Buffer.concat(chunks);
+    }
+
+    return {
+      buffer,
+      contentType: response.ContentType || 'image/jpeg'
+    };
+  } catch (error) {
+    console.warn(`⚠️ [Cloudflare R2] No se pudo obtener imagen "${key}":`, error.message);
+    return null;
   }
 }

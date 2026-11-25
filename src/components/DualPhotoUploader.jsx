@@ -1,10 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext';
+import useStore from '../store/useStore';
+import { API_BASE_URL } from '../utils/api';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
 
-// Pausar temporalmente la carga de fotografías para garantizar sincronización ligera 100% JSON
-export const PHOTO_UPLOAD_PAUSED = true;
+// Carga de fotografías reactivada (Modo Online directo hacia Cloudflare R2)
+export const PHOTO_UPLOAD_PAUSED = false;
+
+const dataUrlToBlob = (dataUrl) => {
+  const [header, base64] = String(dataUrl || '').split(',');
+  const mimeMatch = header.match(/data:([^;]+);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const binary = atob(base64 || '');
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mime });
+};
 
 // Renderizado seguro de imágenes con soporte para File / Blob / Data URL / URL remota
 export const SafePreviewImage = ({ blob, src, alt, className, onError }) => {
@@ -36,7 +50,7 @@ export const SafePreviewImage = ({ blob, src, alt, className, onError }) => {
   }, [blob, src]);
 
   const rawSrc = objectUrl || (typeof src === 'string' ? src : null);
-  const finalSrc = getCleanImageUrl(rawSrc);
+  const finalSrc = getCleanImageUrl(rawSrc, API_BASE_URL);
 
   if (!finalSrc || imgError) return null;
 
@@ -60,6 +74,7 @@ export default function DualPhotoUploader({
   value,
   foto,
   onImageSelected,
+  onPhotoChange,
   onChange,
   onRemove,
   readOnly = false,
@@ -80,25 +95,55 @@ export default function DualPhotoUploader({
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      customAlert('Conéctate a internet para subir fotografías al servidor');
+      e.target.value = '';
+      return;
+    }
+
     if (file.size > maxSizeMB * 1024 * 1024) {
       customAlert(`La imagen seleccionada supera los ${maxSizeMB}MB. Por favor elija un archivo más liviano.`);
+      e.target.value = '';
       return;
     }
 
     try {
       setIsProcessing(true);
-      // Conversión y compresión automática a Base64 en el navegador (Zero-Disk serverless safe)
-      const base64DataUrl = await compressImageToBase64(file);
+      // 1. Comprimir en navegador a máximo 1200px y calidad 0.72 (~120 KB - 250 KB)
+      const compressedDataUrl = await compressImageToBase64(file, 1200, 1200, 0.72);
+      if (!compressedDataUrl || !compressedDataUrl.startsWith('data:image/')) {
+        throw new Error('No se pudo comprimir la imagen seleccionada.');
+      }
 
-      if (onImageSelected) {
-        onImageSelected(file, base64DataUrl);
+      // 2. Convertir a Blob JPEG y subir inmediatamente a Cloudflare R2
+      const jpegBlob = dataUrlToBlob(compressedDataUrl);
+      const formData = new FormData();
+      formData.append('foto', jpegBlob, `foto_${Date.now()}.jpg`);
+
+      const freshToken =
+        useStore.getState().token ||
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+        '';
+
+      const response = await fetch(`${API_BASE_URL}/api/sync/upload-image`, {
+        method: 'POST',
+        headers: freshToken ? { Authorization: `Bearer ${freshToken}` } : {},
+        body: formData
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok || !result.url) {
+        throw new Error(result.error || `Error del servidor al subir fotografía (${response.status})`);
       }
-      if (onChange) {
-        onChange(base64DataUrl);
-      }
+
+      // 3. Guardar únicamente la URL corta (/api/sync/image/...) sin Base64 ni fotoBlob
+      const shortUrl = result.url;
+      onPhotoChange?.(shortUrl, null);
+      onImageSelected?.(null, shortUrl);
+      onChange?.(shortUrl);
     } catch (err) {
-      console.error('Error al procesar fotografía en Base64:', err);
-      customAlert('Ocurrió un error al procesar la imagen seleccionada.');
+      console.error('Error al subir fotografía a Cloudflare R2:', err);
+      customAlert(err.message || 'Ocurrió un error al subir la fotografía al servidor.');
     } finally {
       setIsProcessing(false);
       // Resetear valor para permitir seleccionar el mismo archivo consecutivamente

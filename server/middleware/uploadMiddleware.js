@@ -23,4 +23,12 @@ export const uploadFotoInspeccion = multer({
   }
 });
 
+export const uploadImagenR2 = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 3 * 1024 * 1024 // Límite 3MB para subida directa a Cloudflare R2
+  }
+});
+
 export default uploadFotoInspeccion;

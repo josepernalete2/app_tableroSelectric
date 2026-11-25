@@ -157,7 +157,7 @@ export const getCleanImageUrl = (src, apiBaseUrl = '') => {
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-  if (trimmed.startsWith('/uploads/')) {
+  if (trimmed.startsWith('/uploads/') || trimmed.startsWith('/api/')) {
     return apiBaseUrl ? `${apiBaseUrl}${trimmed}` : trimmed;
   }
   return trimmed;

@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import prisma from '../db.js';
 import { calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador.js';
+import { subirImagenAR2, obtenerImagenDeR2 } from '../services/r2Backup.service.js';
 
 /**
  * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
@@ -13,6 +15,7 @@ export function sanitizeFotoServer(foto) {
   if (
     trimmed.startsWith('http://') ||
     trimmed.startsWith('https://') ||
+    trimmed.startsWith('/api/sync/image/') ||
     trimmed.startsWith('/uploads/') ||
     trimmed.startsWith('blob:')
   ) {
@@ -1260,5 +1263,83 @@ const contarRegistros = (data) => {
     });
   }
   return count;
+};
+
+/**
+ * POST /api/sync/upload-image
+ * Recibe una imagen comprimida (máx 3MB), la sube a Cloudflare R2 bajo imagenes/<ts>-<rand>.jpg
+ * y devuelve la URL corta persistente (/api/sync/image/...).
+ */
+export const subirImagenR2Controller = async (req, res) => {
+  try {
+    const file =
+      req.file ||
+      req.files?.foto?.[0] ||
+      req.files?.image?.[0] ||
+      null;
+
+    if (!file || !file.buffer) {
+      return res.status(400).json({
+        ok: false,
+        error: 'No se recibió ninguna imagen para subir.'
+      });
+    }
+
+    const randomId = crypto.randomBytes(6).toString('hex');
+    const mimeType = file.mimetype || 'image/jpeg';
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const key = `imagenes/${Date.now()}-${randomId}.${ext}`;
+
+    const uploadRes = await subirImagenAR2(file.buffer, mimeType, key);
+    if (!uploadRes.subido) {
+      return res.status(503).json({
+        ok: false,
+        error: uploadRes.error || 'No se pudo almacenar la imagen en Cloudflare R2.'
+      });
+    }
+
+    const url = `/api/sync/image/${encodeURIComponent(key)}`;
+    return res.status(200).json({
+      ok: true,
+      url,
+      key
+    });
+  } catch (error) {
+    console.error('❌ [SyncController] Error en subirImagenR2Controller:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message || 'Error interno al subir imagen a Cloudflare R2.'
+    });
+  }
+};
+
+/**
+ * GET /api/sync/image/*key
+ * Lee la imagen desde Cloudflare R2 y la devuelve con su Content-Type y caché pública inmutable.
+ */
+export const obtenerImagenR2Controller = async (req, res) => {
+  try {
+    const rawParam = Array.isArray(req.params.key)
+      ? req.params.key.join('/')
+      : (req.params.key || req.params[0] || '');
+    const decodedKey = decodeURIComponent(rawParam).replace(/^\/+/, '');
+
+    if (!decodedKey || decodedKey.includes('..') || !decodedKey.startsWith('imagenes/')) {
+      return res.status(400).json({ ok: false, error: 'Clave de imagen inválida.' });
+    }
+
+    const imageObj = await obtenerImagenDeR2(decodedKey);
+    if (!imageObj || !imageObj.buffer) {
+      return res.status(404).json({ ok: false, error: 'Imagen no encontrada.' });
+    }
+
+    res.setHeader('Content-Type', imageObj.contentType || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.status(200).send(imageObj.buffer);
+  } catch (error) {
+    console.error('❌ [SyncController] Error en obtenerImagenR2Controller:', error);
+    return res.status(500).json({ ok: false, error: 'Error al leer imagen desde R2.' });
+  }
 };
 

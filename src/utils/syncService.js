@@ -208,14 +208,23 @@ export function dataURLtoBlob(dataUrl) {
 
 /**
  * Limpia recursivamente cualquier payload de imagen pesada (fotoBlob, previewUrl, objetos Blob/File y cadenas Base64 data:image/*),
- * reemplazándolas por null y conservando únicamente URLs cortas HTTP/HTTPS o rutas /uploads/... existentes en el servidor.
+ * reemplazándolas por null y conservando únicamente URLs válidas (/api/sync/image/..., /uploads/... o http(s)://...).
  */
 export function stripAllImagePayloads(obj) {
   if (obj === null || obj === undefined) return obj;
   if (typeof Blob !== 'undefined' && obj instanceof Blob) return null;
   if (typeof File !== 'undefined' && obj instanceof File) return null;
   if (typeof obj === 'string') {
-    return obj.trim().startsWith('data:image/') ? null : obj;
+    const trimmed = obj.trim();
+    if (
+      trimmed.startsWith('/api/sync/image/') ||
+      trimmed.startsWith('/uploads/') ||
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://')
+    ) {
+      return obj;
+    }
+    return trimmed.startsWith('data:image/') ? null : obj;
   }
   if (Array.isArray(obj)) {
     return obj.map((item) => stripAllImagePayloads(item));
