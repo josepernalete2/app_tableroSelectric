@@ -888,6 +888,11 @@ export const BackupView = () => {
               <span className="text-[11px] text-slate-400 font-mono truncate">
                 Bucket: {systemStatus?.r2?.bucket || 'tableros-backups'}
               </span>
+              {!systemStatus?.r2?.configurado && Array.isArray(systemStatus?.r2?.missingVars) && systemStatus.r2.missingVars.length > 0 && (
+                <span className="text-[10px] text-amber-400/90 font-mono truncate" title={systemStatus.r2.missingVars.join(', ')}>
+                  Falta: {systemStatus.r2.missingVars.join(', ')}
+                </span>
+              )}
             </div>
 
             {/* Telegram Bot */}

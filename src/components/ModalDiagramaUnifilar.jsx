@@ -431,6 +431,203 @@ export default function ModalDiagramaUnifilar({
   // Lista de posibles alimentadores (excluye al nodo mismo para evitar bucles)
   const potentialFeeders = elementos.filter(el => selectedNode && el.id !== selectedNode.id);
 
+  // Imprimir / Exportar Diagrama Unifilar en EXACTAMENTE 1 página horizontal (A4 Landscape)
+  const handlePrintDiagrama = () => {
+    const liveSvg = document.querySelector('svg[data-unifilar-svg="true"]');
+    if (!liveSvg) {
+      window.print();
+      return;
+    }
+
+    const clonedSvg = liveSvg.cloneNode(true);
+    clonedSvg.removeAttribute('width');
+    clonedSvg.removeAttribute('height');
+    clonedSvg.removeAttribute('style');
+    clonedSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    // Eliminar rectángulo de rejilla oscura CAD si existe
+    clonedSvg.querySelectorAll('rect').forEach((r) => {
+      const fill = String(r.getAttribute('fill') || '');
+      if (fill.includes('cad-grid')) {
+        r.remove();
+      }
+    });
+
+    // Calcular bounding box real del contenido del diagrama
+    let minX = 0;
+    let minY = 0;
+    let bboxW = 1600;
+    let bboxH = 1000;
+    try {
+      const liveBBox = liveSvg.getBBox();
+      if (liveBBox && liveBBox.width > 10 && liveBBox.height > 10) {
+        const pad = 60;
+        minX = Math.floor(liveBBox.x - pad);
+        minY = Math.floor(liveBBox.y - pad);
+        bboxW = Math.ceil(liveBBox.width + pad * 2);
+        bboxH = Math.ceil(liveBBox.height + pad * 2);
+      }
+    } catch {
+      const vb = String(liveSvg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+      if (vb.length === 4 && vb.every(Number.isFinite)) {
+        [minX, minY, bboxW, bboxH] = vb;
+      }
+    }
+    clonedSvg.setAttribute('viewBox', `${minX} ${minY} ${bboxW} ${bboxH}`);
+
+    // Forzar colores de alto contraste aptos para hoja blanca
+    clonedSvg.querySelectorAll('text').forEach((t) => {
+      const curFill = String(t.getAttribute('fill') || '').toLowerCase();
+      if (!curFill || curFill === '#cbd5e1' || curFill === '#e2e8f0' || curFill === '#f8fafc' || curFill === '#64748b' || curFill === '#94a3b8' || curFill === 'white' || curFill === '#ffffff') {
+        t.setAttribute('fill', '#0f172a');
+      }
+    });
+    clonedSvg.querySelectorAll('path, line, polyline, polygon, rect, circle').forEach((el) => {
+      const stroke = String(el.getAttribute('stroke') || '').toLowerCase();
+      const fill = String(el.getAttribute('fill') || '').toLowerCase();
+      if (stroke === '#cbd5e1' || stroke === '#94a3b8' || stroke === '#64748b' || stroke === '#334155' || stroke === '#475569') {
+        el.setAttribute('stroke', '#1e293b');
+      }
+      if (fill === '#0f172a' || fill === '#020617' || fill === '#1e293b' || fill === '#082f49' || fill === '#1e1b4b' || fill === '#022c22' || fill === '#311042' || fill === '#083344') {
+        el.setAttribute('fill', '#f8fafc');
+      }
+    });
+
+    const serializer = new XMLSerializer();
+    const svgMarkup = serializer.serializeToString(clonedSvg);
+    const fechaStr = new Date().toLocaleDateString('es-ES');
+    const safeCompany = String(companyName || 'EMPRESA').replace(/</g, '&lt;');
+    const safeProject = String(projectName || 'PROYECTO').replace(/</g, '&lt;');
+
+    const htmlDoc = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Diagrama Unifilar - ${safeProject}</title>
+  <style>
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      color: #0f172a;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      overflow: hidden;
+    }
+    .sheet {
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 4mm;
+      border: 1.5px solid #0f172a;
+      overflow: hidden;
+      page-break-after: avoid;
+      page-break-inside: avoid;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 3mm;
+      margin-bottom: 2mm;
+      flex-shrink: 0;
+    }
+    .header-title { font-size: 13pt; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+    .header-meta { font-size: 8.5pt; color: #334155; text-align: right; line-height: 1.35; }
+    .canvas-wrap {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .canvas-wrap svg {
+      width: 100%;
+      height: 100%;
+      max-height: 175mm;
+      object-fit: contain;
+      display: block;
+    }
+    .footer {
+      border-top: 1px solid #cbd5e1;
+      padding-top: 2mm;
+      margin-top: 2mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 7.5pt;
+      color: #334155;
+      flex-shrink: 0;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <div>
+        <div class="header-title">DIAGRAMA UNIFILAR</div>
+        <div style="font-size: 9pt; font-weight: 700; color: #1e293b;">${safeCompany} — ${safeProject}</div>
+      </div>
+      <div class="header-meta">
+        <div><strong>Fecha:</strong> ${fechaStr}</div>
+        <div><strong>Plano:</strong> IE-01 • Escala: Ajuste Automático</div>
+      </div>
+    </div>
+    <div class="canvas-wrap">${svgMarkup}</div>
+    <div class="footer">
+      <span><strong>Leyenda:</strong> ⚡ Tablero/Panel • 🔄 Transformador • 🔋 Generador • 🔀 Transferencia (ATS) • 🏢 Subestación • 🛡️ Puesta a Tierra</span>
+      <span>Generado por Selectric CAD</span>
+    </div>
+  </div>
+  <script>
+    window.onload = function () {
+      setTimeout(function () {
+        window.focus();
+        window.print();
+      }, 150);
+    };
+  </script>
+</body>
+</html>`;
+
+    const printWin = window.open('', '_blank', 'width=1200,height=820');
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(htmlDoc);
+      printWin.document.close();
+      return;
+    }
+
+    // Fallback con iframe oculto si el navegador bloqueó popups
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentWindow?.document;
+    if (idoc) {
+      idoc.open();
+      idoc.write(htmlDoc);
+      idoc.close();
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => iframe.remove(), 2000);
+      }, 200);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -522,10 +719,11 @@ export default function ModalDiagramaUnifilar({
               </button>
 
               <button
-                onClick={() => window.print()}
+                type="button"
+                onClick={handlePrintDiagrama}
                 className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-slate-355 hover:text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:border-slate-700 min-h-[34px]"
               >
-                Imprimir
+                Imprimir / PDF
               </button>
               
               <button 

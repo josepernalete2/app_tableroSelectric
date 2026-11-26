@@ -731,6 +731,7 @@ export default function DiagramaUnifilarBlueprint({
             className="flex items-center justify-center"
           >
             <svg 
+              data-unifilar-svg="true"
               viewBox={`0 0 ${width} ${height}`} 
               width={isDarkTheme ? width : '100%'}
               height={isDarkTheme ? height : '100%'}

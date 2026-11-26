@@ -30,31 +30,50 @@ const extractStackLocation = (err) => {
 };
 
 const normalizeR2Endpoint = (rawEndpoint, accountId) => {
-  const ep = cleanEnv(rawEndpoint);
+  let ep = cleanEnv(rawEndpoint);
   const acc = cleanEnv(accountId)
     .replace(/^https?:\/\//i, '')
     .replace(/\/.*$/, '')
     .replace(/\s+/g, '');
 
-  if (!ep && !acc) {
-    throw new Error('Faltan variables en Vercel: R2_ENDPOINT y R2_ACCOUNT_ID están vacíos en runtime');
+  // Si R2_ENDPOINT contiene un enlace Markdown [https://...](https://...), extraer la URL R2 válida
+  if (ep) {
+    const r2UrlMatch = ep.match(/https?:\/\/[^\s)\]"'<>]*r2\.cloudflarestorage\.com/i);
+    if (r2UrlMatch) {
+      ep = r2UrlMatch[0];
+    } else {
+      const anyUrlMatch = ep.match(/https?:\/\/[^\s)\]"'<>]+/i);
+      if (anyUrlMatch) {
+        ep = anyUrlMatch[0];
+      }
+    }
   }
 
-  const candidate = ep
-    ? (/^https?:\/\//i.test(ep) ? ep : `https://${ep}`)
-    : `https://${acc}.r2.cloudflarestorage.com`;
-
-  let parsed;
-  try {
-    parsed = new URL(candidate);
-  } catch (urlErr) {
-    throw new Error(`Endpoint R2 inválido ("${candidate}"): ${urlErr?.message || 'Invalid URL'}`);
+  if (ep) {
+    const candidate = /^https?:\/\//i.test(ep) ? ep : `https://${ep}`;
+    try {
+      const parsed = new URL(candidate);
+      const normalized = `${parsed.protocol}//${parsed.host}`;
+      new URL(normalized);
+      return normalized;
+    } catch (urlErr) {
+      // Si R2_ENDPOINT es inválido pero R2_ACCOUNT_ID es válido, usar fallback automático
+      if (acc) {
+        const fallback = `https://${acc}.r2.cloudflarestorage.com`;
+        new URL(fallback);
+        return fallback;
+      }
+      throw new Error(`Endpoint R2 inválido ("${candidate}"): ${urlErr?.message || 'Invalid URL'}`);
+    }
   }
 
-  const normalized = `${parsed.protocol}//${parsed.host}`;
-  // Validación explícita final con new URL()
-  new URL(normalized);
-  return normalized;
+  if (acc) {
+    const fallback = `https://${acc}.r2.cloudflarestorage.com`;
+    new URL(fallback);
+    return fallback;
+  }
+
+  throw new Error('Faltan variables en Vercel: R2_ENDPOINT y R2_ACCOUNT_ID están vacíos en runtime');
 };
 
 /**
@@ -72,11 +91,17 @@ export function getR2ConfigStatus() {
     endpoint = '';
   }
 
+  const missingVars = [];
+  if (!endpoint) missingVars.push('R2_ENDPOINT / R2_ACCOUNT_ID');
+  if (!accessKeyId) missingVars.push('R2_ACCESS_KEY_ID');
+  if (!secretAccessKey) missingVars.push('R2_SECRET_ACCESS_KEY');
+
   return {
     configurado: Boolean(endpoint && accessKeyId && secretAccessKey),
     bucket: bucketName,
     endpoint,
-    env: getR2EnvSummary()
+    env: getR2EnvSummary(),
+    missingVars
   };
 }
 

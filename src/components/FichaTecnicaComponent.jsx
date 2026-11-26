@@ -3330,8 +3330,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         modo={wizardModo}
         tipoOrigen={tipoElemento}
         elementosCreados={allFeeders}
-        proyectoId={proyectoId || elemento?.proyectoId || dt?.proyectoId}
-        parentElement={elemento ? { id: elemento.id, nombre: dt?.nombre || elemento.nombre, proyectoId: proyectoId || elemento.proyectoId, empresaId: elemento.empresaId } : null}
+        proyectoId={elementoData?.proyectoId || dt?.proyectoId}
+        parentElement={elementoData ? { id: elementoData.id, nombre: dt?.nombre || elementoData.nombre, proyectoId: elementoData.proyectoId || dt?.proyectoId, empresaId: elementoData.empresaId } : null}
         onSave={(idSalida, updated) => {
           const isEntradaOrPrimaria = wizardModo === 'ENTRADA' || wizardModo === 'PRIMARIA' || idSalida.includes('PRIMARIA');
 
