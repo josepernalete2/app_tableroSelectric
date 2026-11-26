@@ -3,23 +3,11 @@ import { Camera, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext';
 import useStore from '../store/useStore';
 import { API_BASE_URL } from '../utils/api';
-import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+import { procesarImagenParaSubida, inspeccionarArchivoImagen, getCleanImageUrl } from '../utils/imageUtils';
 import { eliminarImagenEnR2Cliente } from '../utils/syncService';
 
 // Carga de fotografías reactivada (Modo Online directo hacia Cloudflare R2)
 export const PHOTO_UPLOAD_PAUSED = false;
-
-const dataUrlToBlob = (dataUrl) => {
-  const [header, base64] = String(dataUrl || '').split(',');
-  const mimeMatch = header.match(/data:([^;]+);/);
-  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-  const binary = atob(base64 || '');
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: mime });
-};
 
 // Renderizado seguro de imágenes con soporte para File / Blob / Data URL / URL remota
 export const SafePreviewImage = ({ blob, src, alt, className, onError }) => {
@@ -93,35 +81,66 @@ export default function DualPhotoUploader({
   const hasPhoto = !!(fotoBlob || activeSrc);
 
   const handleFileChange = async (e) => {
-    if (readOnly || PHOTO_UPLOAD_PAUSED) return;
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      customAlert('Conéctate a internet para subir fotografías al servidor');
-      e.target.value = '';
+    const inputEl = e.target;
+    const selectedFile = inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
+    if (readOnly || PHOTO_UPLOAD_PAUSED || !selectedFile) {
+      if (inputEl) inputEl.value = '';
       return;
     }
 
-    if (file.size > maxSizeMB * 1024 * 1024) {
-      customAlert(`La imagen seleccionada supera los ${maxSizeMB}MB. Por favor elija un archivo más liviano.`);
-      e.target.value = '';
-      return;
-    }
+    // Copiar metadatos y referencia inmediata antes de cualquier operación asíncrona (evita pérdida en Android)
+    const fileSnapshot = selectedFile;
+    let diagSnapshot = {
+      name: fileSnapshot.name || 'sin-nombre',
+      mime: fileSnapshot.type || '',
+      sizeMB: Number(((fileSnapshot.size || 0) / (1024 * 1024)).toFixed(2)),
+      detectedFormat: 'unknown'
+    };
+    let currentEtapa = 'LECTURA';
 
     try {
       setUploadError(null);
-      setIsProcessing(true);
-      // 1. Comprimir en navegador a máximo 1200px y calidad 0.72 (~120 KB - 250 KB)
-      const compressedDataUrl = await compressImageToBase64(file, 1200, 1200, 0.72);
-      if (!compressedDataUrl || !compressedDataUrl.startsWith('data:image/')) {
-        throw new Error('No se pudo comprimir la imagen seleccionada.');
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw Object.assign(new Error('Sin conexión a internet para subir fotografías.'), { etapa: 'UPLOAD_HTTP' });
       }
 
-      // 2. Convertir a Blob JPEG y subir inmediatamente a Cloudflare R2
-      const jpegBlob = dataUrlToBlob(compressedDataUrl);
+      if (fileSnapshot.size > maxSizeMB * 1024 * 1024) {
+        throw Object.assign(
+          new Error(`La imagen supera el máximo permitido de ${maxSizeMB} MB.`),
+          { etapa: 'LECTURA' }
+        );
+      }
+
+      setIsProcessing(true);
+
+      // 1. Inspeccionar y procesar con pipeline Tablet-First en cascada
+      diagSnapshot = await inspeccionarArchivoImagen(fileSnapshot);
+      currentEtapa = diagSnapshot.detectedFormat === 'heic' || diagSnapshot.detectedFormat === 'heif'
+        ? 'HEIC_CONVERT'
+        : 'CANVAS';
+
+      const processed = await procesarImagenParaSubida(fileSnapshot, {
+        maxDimension: 1200,
+        quality: 0.72
+      });
+      if (processed?.diagnostico) {
+        diagSnapshot = processed.diagnostico;
+      }
+
+      const outBlob = processed?.blob;
+      if (!outBlob || outBlob.size === 0) {
+        throw Object.assign(new Error('El procesador devolvió una imagen vacía.'), { etapa: 'CANVAS' });
+      }
+
+      // 2. Crear File explícito JPEG y subir a Cloudflare R2
+      currentEtapa = 'UPLOAD_HTTP';
+      const uploadMime = processed?.mimeType || outBlob.type || 'image/jpeg';
+      const uploadExt = uploadMime.includes('png') ? 'png' : uploadMime.includes('webp') ? 'webp' : 'jpg';
+      const uploadFile = new File([outBlob], `foto.${uploadExt}`, { type: uploadMime });
+
       const formData = new FormData();
-      formData.append('foto', jpegBlob, `foto_${Date.now()}.jpg`);
+      formData.append('foto', uploadFile, `foto.${uploadExt}`);
 
       const freshToken =
         useStore.getState().token ||
@@ -148,23 +167,26 @@ export default function DualPhotoUploader({
           result.message ||
           (rawText && rawText.length < 200 ? rawText : '') ||
           `Error del servidor al subir fotografía (HTTP ${response.status})`;
-        throw new Error(serverMessage);
+        throw Object.assign(new Error(serverMessage), { etapa: 'UPLOAD_HTTP' });
       }
 
-      // 3. Guardar únicamente la URL corta (/api/sync/image/...) sin Base64 ni fotoBlob
+      // 3. Guardar únicamente la URL corta (/api/sync/image?key=...)
       const shortUrl = result.url;
       onPhotoChange?.(shortUrl, null);
       onImageSelected?.(null, shortUrl);
       onChange?.(shortUrl);
     } catch (err) {
-      const msg = err?.message || 'Ocurrió un error al subir la fotografía al servidor.';
-      console.error('Error al subir fotografía a Cloudflare R2:', err);
-      setUploadError(msg);
-      customAlert(msg);
+      const etapa = err?.etapa || currentEtapa || 'LECTURA';
+      const diag = err?.diagnostico || diagSnapshot;
+      const msg = err?.message || 'Ocurrió un error al subir la fotografía.';
+      const diagnosticText = `Etapa: ${etapa} | Archivo: ${diag.name} (${diag.sizeMB} MB) | MIME: ${diag.mime || 'vacío'} | Firma: ${diag.detectedFormat} | Error: ${msg}`;
+      console.error('Error al procesar/subir fotografía:', diagnosticText, err);
+      setUploadError(diagnosticText);
     } finally {
       setIsProcessing(false);
-      // Resetear valor para permitir seleccionar el mismo archivo consecutivamente
-      e.target.value = '';
+      if (inputEl) {
+        inputEl.value = '';
+      }
     }
   };
 
@@ -233,7 +255,7 @@ export default function DualPhotoUploader({
                 <span>Cambiar</span>
                 <input
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept="image/*,.heic,.heif,.webp,.avif"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -295,7 +317,7 @@ export default function DualPhotoUploader({
                 <span>Tomar Foto (Cámara)</span>
                 <input
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept="image/*"
                   capture="environment"
                   onChange={handleFileChange}
                   className="hidden"
@@ -308,19 +330,27 @@ export default function DualPhotoUploader({
                 <span>Subir Archivo / Galería</span>
                 <input
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept="image/*,.heic,.heif,.webp,.avif"
                   onChange={handleFileChange}
                   className="hidden"
                 />
               </label>
             </div>
           )}
+        </div>
+      )}
 
-          {uploadError && (
-            <p className="text-xs text-rose-400 font-semibold bg-rose-950/40 border border-rose-500/30 rounded-xl px-3 py-2">
-              {uploadError}
-            </p>
-          )}
+      {uploadError && (
+        <div className="no-print flex items-start justify-between gap-2 text-[11px] font-mono text-rose-300 bg-rose-950/60 border border-rose-500/40 rounded-xl px-3 py-2.5 text-left break-words">
+          <span className="leading-relaxed">{uploadError}</span>
+          <button
+            type="button"
+            onClick={() => setUploadError(null)}
+            className="shrink-0 p-1 rounded-lg hover:bg-rose-900/60 text-rose-300 hover:text-white cursor-pointer"
+            title="Cerrar diagnóstico"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>

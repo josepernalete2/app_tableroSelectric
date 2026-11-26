@@ -5,13 +5,26 @@ import multer from 'multer';
 // sin depender de escrituras en el sistema de archivos local.
 const storage = multer.memoryStorage();
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+  'application/octet-stream'
+];
+
+const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|avif|heic|heif)$/i;
 
 const fileFilter = (req, file, cb) => {
-  if (ALLOWED_MIME_TYPES.includes(file.mimetype.toLowerCase())) {
+  const mime = String(file?.mimetype || '').trim().toLowerCase();
+  const originalName = String(file?.originalname || '').trim();
+  if (ALLOWED_MIME_TYPES.includes(mime) || (!mime && IMAGE_EXT_REGEX.test(originalName))) {
     cb(null, true);
   } else {
-    cb(new Error('Tipo de archivo no permitido. Solo se aceptan imágenes JPG, PNG y WEBP.'), false);
+    cb(new Error(`Tipo de archivo no permitido (${mime || 'sin MIME'}). Se aceptan imágenes JPG, PNG, WEBP, AVIF, HEIC o HEIF.`), false);
   }
 };
 
@@ -27,7 +40,7 @@ export const uploadImagenR2 = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 3 * 1024 * 1024 // Límite 3MB para subida directa a Cloudflare R2
+    fileSize: 4 * 1024 * 1024 // Límite 4MB seguro debajo del límite de 4.5MB de Vercel
   }
 });
 

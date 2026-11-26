@@ -1583,7 +1583,17 @@ export const subirImagenR2Controller = async (req, res) => {
 
     const randomId = crypto.randomBytes(6).toString('hex');
     const mimeType = file.mimetype || 'image/jpeg';
-    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const ext = mimeType.includes('png')
+      ? 'png'
+      : mimeType.includes('webp')
+        ? 'webp'
+        : mimeType.includes('avif')
+          ? 'avif'
+          : mimeType.includes('heic')
+            ? 'heic'
+            : mimeType.includes('heif')
+              ? 'heif'
+              : 'jpg';
     const key = `imagenes/${Date.now()}-${randomId}.${ext}`;
 
     const uploadRes = await subirImagenAR2(file.buffer, mimeType, key);
@@ -1611,6 +1621,22 @@ export const subirImagenR2Controller = async (req, res) => {
       httpStatus: error?.$metadata?.httpStatusCode || 500
     });
   }
+};
+
+export const manejarErrorMulterImagenR2 = (err, req, res, next) => {
+  if (!err) return next();
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      ok: false,
+      error: 'La imagen excede el límite máximo permitido de 4 MB.',
+      code: 'LIMIT_FILE_SIZE'
+    });
+  }
+  return res.status(400).json({
+    ok: false,
+    error: err.message || 'Error al procesar el archivo de imagen recibido.',
+    code: err.code || 'UPLOAD_VALIDATION_ERROR'
+  });
 };
 
 /**

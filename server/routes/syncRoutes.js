@@ -6,6 +6,7 @@ import {
   generarBackupLocal,
   sincronizarElementoMultipart,
   subirImagenR2Controller,
+  manejarErrorMulterImagenR2,
   obtenerImagenR2Controller,
   eliminarImagenR2Controller,
   diagnosticarR2Controller
@@ -34,7 +35,8 @@ router.post(
   verificarToken,
   requireRoles('ADMIN', 'INSPECTOR', 'WORKER'),
   uploadImagenR2.fields([{ name: 'foto', maxCount: 1 }, { name: 'image', maxCount: 1 }]),
-  subirImagenR2Controller
+  subirImagenR2Controller,
+  manejarErrorMulterImagenR2
 );
 router.get('/image', obtenerImagenR2Controller);
 router.get('/image/*key', obtenerImagenR2Controller);
