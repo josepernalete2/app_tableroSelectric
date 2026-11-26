@@ -74,6 +74,7 @@ export default function DualPhotoUploader({
 }) {
   const { alert: customAlert, confirm: customConfirm } = useConfirm();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('Leyendo imagen...');
   const [uploadError, setUploadError] = useState(null);
 
   // Determinar la fuente activa de imagen
@@ -113,12 +114,23 @@ export default function DualPhotoUploader({
       }
 
       setIsProcessing(true);
+      setProcessingStep('Leyendo imagen...');
 
       // 1. Inspeccionar y procesar con pipeline Tablet-First en cascada
       diagSnapshot = await inspeccionarArchivoImagen(fileSnapshot);
-      currentEtapa = diagSnapshot.detectedFormat === 'heic' || diagSnapshot.detectedFormat === 'heif'
-        ? 'HEIC_CONVERT'
-        : 'CANVAS';
+      const isHeicInput =
+        diagSnapshot.detectedFormat === 'heic' ||
+        diagSnapshot.detectedFormat === 'heif' ||
+        /\.(heic|heif)$/i.test(diagSnapshot.name) ||
+        /heic|heif/i.test(diagSnapshot.mime);
+
+      if (isHeicInput) {
+        currentEtapa = 'HEIC_CONVERT';
+        setProcessingStep('Convirtiendo formato HEIC...');
+      } else {
+        currentEtapa = 'CANVAS';
+        setProcessingStep('Comprimiendo foto...');
+      }
 
       const processed = await procesarImagenParaSubida(fileSnapshot, {
         maxDimension: 1200,
@@ -135,6 +147,7 @@ export default function DualPhotoUploader({
 
       // 2. Crear File explícito JPEG y subir a Cloudflare R2
       currentEtapa = 'UPLOAD_HTTP';
+      setProcessingStep('Subiendo a la nube...');
       const uploadMime = processed?.mimeType || outBlob.type || 'image/jpeg';
       const uploadExt = uploadMime.includes('png') ? 'png' : uploadMime.includes('webp') ? 'webp' : 'jpg';
       const uploadFile = new File([outBlob], `foto.${uploadExt}`, { type: uploadMime });
@@ -234,7 +247,7 @@ export default function DualPhotoUploader({
       {isProcessing ? (
         <div className="p-8 border border-slate-800 bg-slate-950/80 rounded-2xl flex flex-col items-center justify-center gap-2 text-amber-400 no-print">
           <Loader2 className="w-6 h-6 animate-spin" />
-          <span className="text-xs font-bold">Procesando y subiendo imagen...</span>
+          <span className="text-xs font-bold">{processingStep || 'Procesando y subiendo imagen...'}</span>
         </div>
       ) : hasPhoto ? (
         <div className="tablero-photo-frame relative rounded-2xl print:rounded overflow-hidden border border-slate-800 print:border-slate-900 bg-slate-950/80 shadow-xl print:shadow-none group max-w-md mx-auto">

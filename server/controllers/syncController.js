@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import prisma from '../db.js';
 import { calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador.js';
-import { subirImagenAR2, obtenerImagenDeR2, diagnosticarR2, eliminarImagenDeR2, extraerR2KeyDeUrl } from '../services/r2Backup.service.js';
+import { subirImagenAR2, obtenerImagenDeR2, diagnosticarR2, eliminarImagenDeR2, extraerR2KeyDeUrl, getR2ConfigStatus } from '../services/r2Backup.service.js';
 
 /**
  * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
@@ -1613,10 +1613,18 @@ export const subirImagenR2Controller = async (req, res) => {
       key
     });
   } catch (error) {
-    console.error('❌ [SyncController] Error en subirImagenR2Controller:', error?.name, error?.message);
+    const stackLine = String(error?.stack || '')
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.startsWith('at '))
+      ?.replace(/^at\s+/, '')
+      .slice(0, 120) || 'sin-stack';
+    const r2Status = getR2ConfigStatus();
+    const safeDetail = `${error.message || 'Error interno al subir imagen a Cloudflare R2.'} [endpoint="${r2Status.endpoint || ''}", bucket="${r2Status.bucket || ''}", env=${JSON.stringify(r2Status.env || {})}, at=${stackLine}]`;
+    console.error('❌ [SyncController] Error en subirImagenR2Controller:', error?.name, safeDetail);
     return res.status(500).json({
       ok: false,
-      error: error.message || 'Error interno al subir imagen a Cloudflare R2.',
+      error: safeDetail,
       code: error?.Code || error?.name || 'SYNC_UPLOAD_ERROR',
       httpStatus: error?.$metadata?.httpStatusCode || 500
     });

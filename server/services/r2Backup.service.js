@@ -6,21 +6,55 @@
 
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 
-const cleanEnv = (val) => String(val || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+const cleanEnv = (val) =>
+  String(val || '')
+    .replace(/[\r\n\t]+/g, '')
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .trim();
+
+const getR2EnvSummary = () => ({
+  ep: Boolean(cleanEnv(process.env.R2_ENDPOINT)),
+  acc: Boolean(cleanEnv(process.env.R2_ACCOUNT_ID)),
+  bkt: Boolean(cleanEnv(process.env.R2_BUCKET_NAME) || cleanEnv(process.env.R2_BUCKET)),
+  key: Boolean(cleanEnv(process.env.R2_ACCESS_KEY_ID)),
+  sec: Boolean(cleanEnv(process.env.R2_SECRET_ACCESS_KEY))
+});
+
+const extractStackLocation = (err) => {
+  const lines = String(err?.stack || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('at '));
+  return lines[0] ? lines[0].replace(/^at\s+/, '').slice(0, 120) : 'sin-stack';
+};
 
 const normalizeR2Endpoint = (rawEndpoint, accountId) => {
   const ep = cleanEnv(rawEndpoint);
-  const acc = cleanEnv(accountId);
-  if (ep) {
-    const withScheme = /^https?:\/\//i.test(ep) ? ep : `https://${ep}`;
-    try {
-      const parsed = new URL(withScheme);
-      return `${parsed.protocol}//${parsed.host}`;
-    } catch {
-      return withScheme.replace(/\/+$/, '');
-    }
+  const acc = cleanEnv(accountId)
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/\s+/g, '');
+
+  if (!ep && !acc) {
+    throw new Error('Faltan variables en Vercel: R2_ENDPOINT y R2_ACCOUNT_ID están vacíos en runtime');
   }
-  return acc ? `https://${acc}.r2.cloudflarestorage.com` : '';
+
+  const candidate = ep
+    ? (/^https?:\/\//i.test(ep) ? ep : `https://${ep}`)
+    : `https://${acc}.r2.cloudflarestorage.com`;
+
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch (urlErr) {
+    throw new Error(`Endpoint R2 inválido ("${candidate}"): ${urlErr?.message || 'Invalid URL'}`);
+  }
+
+  const normalized = `${parsed.protocol}//${parsed.host}`;
+  // Validación explícita final con new URL()
+  new URL(normalized);
+  return normalized;
 };
 
 /**
@@ -30,34 +64,42 @@ export function getR2ConfigStatus() {
   const accountId = cleanEnv(process.env.R2_ACCOUNT_ID);
   const accessKeyId = cleanEnv(process.env.R2_ACCESS_KEY_ID);
   const secretAccessKey = cleanEnv(process.env.R2_SECRET_ACCESS_KEY);
-  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || 'tableros-backups';
-  const endpoint = normalizeR2Endpoint(process.env.R2_ENDPOINT, accountId);
+  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || cleanEnv(process.env.R2_BUCKET) || 'tableros-backups';
+  let endpoint = '';
+  try {
+    endpoint = normalizeR2Endpoint(process.env.R2_ENDPOINT, accountId);
+  } catch {
+    endpoint = '';
+  }
 
   return {
     configurado: Boolean(endpoint && accessKeyId && secretAccessKey),
     bucket: bucketName,
-    endpoint
+    endpoint,
+    env: getR2EnvSummary()
   };
 }
 
 /**
  * Obtiene el contexto S3 configurado para Cloudflare R2 si las credenciales están disponibles.
- * @returns {{ client: S3Client, bucketName: string, endpoint: string }|null}
+ * Nunca cachea un cliente mal instanciado.
+ * @returns {{ client: S3Client, bucketName: string, endpoint: string }}
  */
 function getR2Context() {
   const accountId = cleanEnv(process.env.R2_ACCOUNT_ID);
   const accessKeyId = cleanEnv(process.env.R2_ACCESS_KEY_ID);
   const secretAccessKey = cleanEnv(process.env.R2_SECRET_ACCESS_KEY);
-  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || 'tableros-backups';
+  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || cleanEnv(process.env.R2_BUCKET) || 'tableros-backups';
   const endpoint = normalizeR2Endpoint(process.env.R2_ENDPOINT, accountId);
 
-  if (!endpoint || !accessKeyId || !secretAccessKey) {
-    return null;
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('Faltan variables en Vercel: R2_ACCESS_KEY_ID o R2_SECRET_ACCESS_KEY están vacíos en runtime');
   }
 
   const client = new S3Client({
     region: 'auto',
     endpoint,
+    forcePathStyle: true,
     credentials: {
       accessKeyId,
       secretAccessKey
@@ -73,7 +115,11 @@ function getR2Context() {
  * @returns {S3Client|null}
  */
 function getR2Client() {
-  return getR2Context()?.client || null;
+  try {
+    return getR2Context()?.client || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -84,7 +130,7 @@ function getR2Client() {
  * @returns {Promise<{ subido: boolean, motivo?: string, bucket?: string, key?: string, tamanoBytes?: number, error?: string }>}
  */
 export async function subirBackupAR2(buffer, filename) {
-  const bucketName = process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || cleanEnv(process.env.R2_BUCKET) || 'tableros-backups';
   const client = getR2Client();
 
   if (!client) {
@@ -130,7 +176,7 @@ export async function subirBackupAR2(buffer, filename) {
  * @returns {Promise<object|null>}
  */
 export async function descargarBackupDeR2(key, bucketNameOverride = null) {
-  const bucketName = bucketNameOverride || process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const bucketName = cleanEnv(bucketNameOverride) || cleanEnv(process.env.R2_BUCKET_NAME) || cleanEnv(process.env.R2_BUCKET) || 'tableros-backups';
   const client = getR2Client();
 
   if (!client || !key) {
@@ -168,7 +214,7 @@ export async function descargarBackupDeR2(key, bucketNameOverride = null) {
  * Elimina un objeto de respaldo de Cloudflare R2 de forma tolerante a fallos.
  */
 export async function eliminarBackupDeR2(key, bucketNameOverride = null) {
-  const bucketName = bucketNameOverride || process.env.R2_BUCKET_NAME || 'tableros-backups';
+  const bucketName = cleanEnv(bucketNameOverride) || cleanEnv(process.env.R2_BUCKET_NAME) || cleanEnv(process.env.R2_BUCKET) || 'tableros-backups';
   const client = getR2Client();
 
   if (!client || !key) {
@@ -193,18 +239,11 @@ export async function eliminarBackupDeR2(key, bucketNameOverride = null) {
  * @returns {Promise<{ subido: boolean, bucket?: string, key?: string, error?: string }>}
  */
 export async function subirImagenAR2(buffer, mimeType, key) {
-  const ctx = getR2Context();
-
-  if (!ctx) {
-    return {
-      subido: false,
-      code: 'R2_NOT_CONFIGURED',
-      httpStatus: 503,
-      error: 'Cloudflare R2 no está configurado en el servidor.'
-    };
-  }
+  const status = getR2ConfigStatus();
+  let ctx = null;
 
   try {
+    ctx = getR2Context();
     await ctx.client.send(new PutObjectCommand({
       Bucket: ctx.bucketName,
       Key: key,
@@ -219,12 +258,19 @@ export async function subirImagenAR2(buffer, mimeType, key) {
       key
     };
   } catch (error) {
-    console.error(`❌ [Cloudflare R2] Error al subir imagen "${key}": [${error?.Code || error?.name}]`, error?.message);
+    const diagEndpoint = ctx?.endpoint || status.endpoint || cleanEnv(process.env.R2_ENDPOINT) || '';
+    const diagBucket = ctx?.bucketName || status.bucket || '';
+    const envFlags = getR2EnvSummary();
+    const at = extractStackLocation(error);
+    const baseMsg = error?.message || 'Error al subir imagen a Cloudflare R2';
+    const detailedError = `${baseMsg} [endpoint="${diagEndpoint}", bucket="${diagBucket}", env=${JSON.stringify(envFlags)}, at=${at}]`;
+
+    console.error(`❌ [Cloudflare R2] Error al subir imagen "${key}": [${error?.Code || error?.name}]`, detailedError);
     return {
       subido: false,
       code: error?.Code || error?.name || 'R2_UPLOAD_ERROR',
-      httpStatus: error?.$metadata?.httpStatusCode || 502,
-      error: error?.message || 'Error al subir imagen a Cloudflare R2'
+      httpStatus: error?.$metadata?.httpStatusCode || 503,
+      error: detailedError
     };
   }
 }
@@ -233,34 +279,26 @@ export async function subirImagenAR2(buffer, mimeType, key) {
  * Ejecuta un diagnóstico real contra Cloudflare R2 mediante HeadBucketCommand.
  */
 export async function diagnosticarR2() {
-  const ctx = getR2Context();
   const status = getR2ConfigStatus();
 
-  if (!ctx) {
-    return {
-      ok: false,
-      bucket: status.bucket,
-      endpoint: status.endpoint,
-      code: 'R2_NOT_CONFIGURED',
-      error: 'Faltan variables R2_ACCOUNT_ID/R2_ENDPOINT, R2_ACCESS_KEY_ID o R2_SECRET_ACCESS_KEY.'
-    };
-  }
-
   try {
+    const ctx = getR2Context();
     await ctx.client.send(new HeadBucketCommand({ Bucket: ctx.bucketName }));
     return {
       ok: true,
       bucket: ctx.bucketName,
-      endpoint: ctx.endpoint
+      endpoint: ctx.endpoint,
+      env: status.env
     };
   } catch (error) {
     return {
       ok: false,
-      bucket: ctx.bucketName,
-      endpoint: ctx.endpoint,
+      bucket: status.bucket,
+      endpoint: status.endpoint,
+      env: status.env,
       code: error?.Code || error?.name || 'R2_HEAD_BUCKET_ERROR',
       httpStatus: error?.$metadata?.httpStatusCode || 502,
-      error: error?.message || 'Error al verificar bucket en Cloudflare R2'
+      error: `${error?.message || 'Error al verificar bucket en Cloudflare R2'} [at=${extractStackLocation(error)}]`
     };
   }
 }
@@ -272,13 +310,10 @@ export async function diagnosticarR2() {
  * @returns {Promise<{ buffer: Buffer, contentType: string }|null>}
  */
 export async function obtenerImagenDeR2(key) {
-  const ctx = getR2Context();
-
-  if (!ctx || !key) {
-    return null;
-  }
+  if (!key) return null;
 
   try {
+    const ctx = getR2Context();
     const response = await ctx.client.send(new GetObjectCommand({
       Bucket: ctx.bucketName,
       Key: key
