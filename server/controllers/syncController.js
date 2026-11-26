@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import prisma from '../db.js';
 import { calcularCorrientesTrafo, normalizarTipoConexion } from '../utils/calculoTransformador.js';
-import { subirImagenAR2, obtenerImagenDeR2 } from '../services/r2Backup.service.js';
+import { subirImagenAR2, obtenerImagenDeR2, diagnosticarR2, eliminarImagenDeR2, extraerR2KeyDeUrl } from '../services/r2Backup.service.js';
 
 /**
  * Validador y sanitizador de fotos en el servidor para evitar que Prisma falle
@@ -317,6 +317,19 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           continue;
         }
 
+        // Si el registro ya fue eliminado por otro dispositivo (soft-delete o hard-delete),
+        // NO resucitarlo ni lanzar error 500: informar deletedOnServer para limpiar el fantasma en el cliente.
+        if (existingRecord && 'deletedAt' in existingRecord && existingRecord.deletedAt !== null) {
+          applied.push({ id, entity, operation: 'UPDATE', deletedOnServer: true });
+          console.log(`[SYNC SERVER] 🧹 ${entity} (${id}) ya estaba eliminado en servidor; evitando resurrección.`);
+          continue;
+        }
+        if (operation === 'UPDATE' && !existingRecord) {
+          applied.push({ id, entity, operation: 'UPDATE', deletedOnServer: true });
+          console.log(`[SYNC SERVER] 🧹 UPDATE ignorado para ${entity} (${id}): no existe en servidor (eliminado).`);
+          continue;
+        }
+
         // Sanitización y normalización del payload
         const rawData = { ...(data || {}) };
         FORBIDDEN_MUTATION_FIELDS.forEach((field) => delete rawData[field]);
@@ -443,6 +456,11 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           if (rawData.companyId && !rawData.empresaId) {
             rawData.empresaId = rawData.companyId;
           }
+          if (rawData.pendiente !== undefined || dt.pendiente !== undefined) {
+            dt.pendiente = rawData.pendiente !== undefined ? Boolean(rawData.pendiente) : Boolean(dt.pendiente);
+          } else if (existingRecord?.datosTecnicos?.pendiente !== undefined && dt.pendiente === undefined) {
+            dt.pendiente = Boolean(existingRecord.datosTecnicos.pendiente);
+          }
         } else if (modelName === 'subestacion') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
           if (!rawData.nombre) rawData.nombre = 'Subestación Principal';
@@ -451,7 +469,18 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           if (!rawData.hora) rawData.hora = '08:00';
           if (!rawData.inspector) rawData.inspector = 'Inspector';
           if (!rawData.nivelTension) rawData.nivelTension = '13.8 kV';
-          rawData.estadoEntorno = typeof rawData.estadoEntorno === 'object' && rawData.estadoEntorno !== null ? rawData.estadoEntorno : {};
+          const prevEstadoEntorno = (existingRecord && typeof existingRecord.estadoEntorno === 'object' && existingRecord.estadoEntorno !== null)
+            ? existingRecord.estadoEntorno
+            : {};
+          const nextEstadoEntorno = typeof rawData.estadoEntorno === 'object' && rawData.estadoEntorno !== null
+            ? { ...prevEstadoEntorno, ...rawData.estadoEntorno }
+            : { ...prevEstadoEntorno };
+          if (rawData.pendiente !== undefined || rawData.estadoEntorno?.__pendiente !== undefined) {
+            nextEstadoEntorno.__pendiente = rawData.pendiente !== undefined
+              ? Boolean(rawData.pendiente)
+              : Boolean(rawData.estadoEntorno?.__pendiente);
+          }
+          rawData.estadoEntorno = nextEstadoEntorno;
           rawData.obrasCiviles = typeof rawData.obrasCiviles === 'object' && rawData.obrasCiviles !== null ? rawData.obrasCiviles : {};
           rawData.equiposPrincipales = typeof rawData.equiposPrincipales === 'object' && rawData.equiposPrincipales !== null ? rawData.equiposPrincipales : {};
           rawData.puestaTierra = typeof rawData.puestaTierra === 'object' && rawData.puestaTierra !== null ? rawData.puestaTierra : {};
@@ -459,9 +488,35 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
         } else if (modelName === 'puntoMedicion') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
           if (!rawData.nombre) rawData.nombre = 'Punto de Medición';
+          const prevObs = typeof existingRecord?.observaciones === 'string' ? existingRecord.observaciones : '';
+          const hadPendiente = prevObs.includes('[[PENDIENTE]]');
+          const hasExplicitPendiente = rawData.pendiente !== undefined;
+          const nextPendiente = hasExplicitPendiente ? Boolean(rawData.pendiente) : hadPendiente;
+          if (hasExplicitPendiente || rawData.observaciones !== undefined) {
+            const baseObs = (rawData.observaciones !== undefined ? String(rawData.observaciones || '') : prevObs)
+              .replace(/\s*\[\[PENDIENTE\]\]/g, '')
+              .trim();
+            rawData.observaciones = nextPendiente
+              ? (baseObs ? `${baseObs} [[PENDIENTE]]` : '[[PENDIENTE]]')
+              : baseObs;
+          }
         } else if (modelName === 'ccm') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
           if (!rawData.nombre) rawData.nombre = 'CCM Principal';
+          if (rawData.pendiente !== undefined || rawData.parametrosElectricos?.__pendiente !== undefined || existingRecord?.parametrosElectricos) {
+            const prevParams = (existingRecord && typeof existingRecord.parametrosElectricos === 'object' && existingRecord.parametrosElectricos !== null)
+              ? existingRecord.parametrosElectricos
+              : {};
+            const nextParams = (typeof rawData.parametrosElectricos === 'object' && rawData.parametrosElectricos !== null)
+              ? { ...prevParams, ...rawData.parametrosElectricos }
+              : { ...prevParams };
+            if (rawData.pendiente !== undefined || rawData.parametrosElectricos?.__pendiente !== undefined) {
+              nextParams.__pendiente = rawData.pendiente !== undefined
+                ? Boolean(rawData.pendiente)
+                : Boolean(rawData.parametrosElectricos?.__pendiente);
+            }
+            rawData.parametrosElectricos = nextParams;
+          }
         } else if (modelName === 'tablero') {
           if (rawData.companyId && !rawData.empresaId) rawData.empresaId = rawData.companyId;
           if (!rawData.nombre) rawData.nombre = 'Tablero Principal';
@@ -511,7 +566,14 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
           }
         }
 
-        // Manejo seguro de eliminación de fotos (solo borrar si viene explícitamente eliminarFoto o __DELETE__)
+        // Manejo seguro de eliminación o persistencia de fotos (incluye URLs R2 en JSON para modelos sin columna foto)
+        const incomingFotoCandidate =
+          rawData.foto ||
+          rawData.fotoUrl ||
+          rawData.imagen ||
+          rawData.datos?.foto ||
+          rawData.datosTecnicos?.foto ||
+          null;
         const isPhotoRemoval = (
           rawData.foto === '__DELETE__' ||
           rawData.fotoUrl === '__DELETE__' ||
@@ -522,10 +584,37 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
         );
         if (isPhotoRemoval) {
           rawData.foto = null;
-        } else if (!rawData.foto) {
+          const prevFoto =
+            existingRecord?.foto ||
+            existingRecord?.estadoEntorno?.__foto ||
+            existingRecord?.parametrosElectricos?.__foto ||
+            null;
+          const oldR2Key = extraerR2KeyDeUrl(prevFoto);
+          if (oldR2Key) {
+            await eliminarImagenDeR2(oldR2Key);
+          }
+          if (modelName === 'subestacion') {
+            rawData.estadoEntorno = { ...(rawData.estadoEntorno || {}), __foto: null };
+          } else if (modelName === 'ccm') {
+            rawData.parametrosElectricos = { ...(rawData.parametrosElectricos || {}), __foto: null };
+          }
+        } else if (typeof incomingFotoCandidate === 'string' && incomingFotoCandidate.trim()) {
+          const sanitizedFoto = sanitizeFotoServer(incomingFotoCandidate);
+          if (sanitizedFoto) {
+            rawData.foto = sanitizedFoto;
+            if (modelName === 'subestacion') {
+              rawData.estadoEntorno = { ...(rawData.estadoEntorno || {}), __foto: sanitizedFoto };
+            } else if (modelName === 'ccm') {
+              rawData.parametrosElectricos = { ...(rawData.parametrosElectricos || {}), __foto: sanitizedFoto };
+            }
+          } else {
+            delete rawData.foto;
+          }
+        } else {
           delete rawData.foto;
         }
         delete rawData.fotoUrl;
+        delete rawData.imagen;
         delete rawData.deletePhoto;
         delete rawData.eliminarFoto;
 
@@ -572,27 +661,58 @@ export const procesarSincronizacionBatch = async (req, res, next) => {
             rawData.empresaId = targetProj.empresaId;
           }
 
-          // Para alimentadoPorId autorreferencial, resolución en dos fases para no perder jerarquía si el padre viene en el mismo lote o en el paso multipart
+          // Para alimentadoPorId autorreferencial: distinguir explícitamente entre undefined vs null/"" (vaciado)
           if (modelName === 'elementoUnifilar') {
-            const desiredParentId = rawData.alimentadoPorId || rawData.datosTecnicos?.alimentadoPorId || null;
-            if (desiredParentId && desiredParentId !== id) {
+            const explicitClearParent =
+              rawData.alimentadoPorId === null ||
+              rawData.alimentadoPorId === '' ||
+              rawData.limpiarAlimentadores === true ||
+              rawData.limpiarAlimentadores === 'true' ||
+              (('alimentadoPor' in rawData) && (rawData.alimentadoPor === null || String(rawData.alimentadoPor).trim() === ''));
+
+            if (explicitClearParent && !rawData.alimentadoPorId) {
+              rawData.alimentadoPorId = null;
+              rawData.alimentadoPor = typeof rawData.alimentadoPor === 'string' ? rawData.alimentadoPor : '';
               rawData.datosTecnicos = {
                 ...(rawData.datosTecnicos || {}),
-                alimentadoPorId: desiredParentId
+                alimentadoPorId: null,
+                alimentadorId: null,
+                alimentadoPor: rawData.alimentadoPor
               };
-              const parentElementCheck = await prisma.elementoUnifilar.findUnique({ where: { id: desiredParentId } });
-              if (!parentElementCheck) {
-                pendingHierarchyLinks.push({
-                  childId: id,
-                  parentId: desiredParentId,
-                  alimentadoPor: rawData.alimentadoPor || ''
-                });
-                rawData.alimentadoPorId = null;
+            } else {
+              const desiredParentId = rawData.alimentadoPorId !== undefined
+                ? (rawData.alimentadoPorId || null)
+                : (rawData.datosTecnicos?.alimentadoPorId || null);
+
+              if (desiredParentId && desiredParentId !== id) {
+                rawData.datosTecnicos = {
+                  ...(rawData.datosTecnicos || {}),
+                  alimentadoPorId: desiredParentId
+                };
+                const parentElementCheck = await prisma.elementoUnifilar.findUnique({ where: { id: desiredParentId } });
+                if (!parentElementCheck) {
+                  pendingHierarchyLinks.push({
+                    childId: id,
+                    parentId: desiredParentId,
+                    alimentadoPor: rawData.alimentadoPor || ''
+                  });
+                  rawData.alimentadoPorId = null;
+                } else {
+                  rawData.alimentadoPorId = desiredParentId;
+                }
               } else {
-                rawData.alimentadoPorId = desiredParentId;
+                rawData.alimentadoPorId = null;
+                if (rawData.datosTecnicos && typeof rawData.datosTecnicos === 'object') {
+                  rawData.datosTecnicos = {
+                    ...rawData.datosTecnicos,
+                    alimentadoPorId: null
+                  };
+                }
               }
-            } else if (rawData.alimentadoPorId === id) {
-              rawData.alimentadoPorId = null;
+            }
+
+            if (existingRecord?.alimentadoPorId && existingRecord.alimentadoPorId !== rawData.alimentadoPorId) {
+              await limpiarReferenciaHijoEnPadreAnterior(existingRecord.alimentadoPorId, id, existingRecord.nombre);
             }
           }
         }
@@ -820,38 +940,84 @@ export const pullData = async (req, res) => {
       }
     });
 
-    // Formatear datos para el frontend
+    // Formatear datos para el frontend asegurando que foto y fotoUrl viajen en todos los tipos
     const formattedCompanies = companies.map(company => ({
       ...company,
-      proyectos: (company.proyectos || []).map(proyecto => ({
-        ...proyecto,
-        tableros: (proyecto.tableros || []).map(tablero => ({
-          ...tablero,
-          circuitos: tablero.circuitos || []
-        })),
-        elementosUnifilares: (proyecto.elementosUnifilares || []).map(elem => ({
-          ...elem,
-          foto: elem.foto || null,
-          fotoBlob: null
-        })),
-        inspeccionesSubestacion: (proyecto.subestaciones || []).map(sub => ({
-          ...sub,
-          foto: sub.foto || null
-        })),
-        subestaciones: (proyecto.subestaciones || []),
-        puntosMedicion: (proyecto.puntosMedicion || []).map(pm => ({
-          ...pm,
-          foto: pm.foto || null
-        })),
-        ccmList: (proyecto.ccmList || []).map(ccm => ({
-          ...ccm,
-          foto: ccm.foto || null
-        })),
-        alimentadores: proyecto.alimentadores || [],
-        inspeccionesTermograficas: proyecto.inspeccionesTermograficas || [],
-        inspeccionesAterramiento: proyecto.inspeccionesAterramiento || [],
-        inspeccionesTanquesCombustible: proyecto.inspeccionesTanquesCombustible || []
-      }))
+      proyectos: (company.proyectos || []).map(proyecto => {
+        const elemFotoMap = new Map(
+          (proyecto.elementosUnifilares || [])
+            .filter(e => e?.id && e?.foto)
+            .map(e => [String(e.id), e.foto])
+        );
+        const elemPendienteMap = new Map(
+          (proyecto.elementosUnifilares || [])
+            .filter(e => e?.id)
+            .map(e => [String(e.id), Boolean(e.datosTecnicos?.pendiente)])
+        );
+
+        const formattedSubs = (proyecto.subestaciones || []).map(sub => {
+          const resolvedSubFoto = sub.estadoEntorno?.__foto || sub.foto || elemFotoMap.get(String(sub.id)) || null;
+          const resolvedSubPendiente = Boolean(sub.estadoEntorno?.__pendiente || elemPendienteMap.get(String(sub.id)));
+          return {
+            ...sub,
+            foto: resolvedSubFoto,
+            fotoUrl: resolvedSubFoto,
+            pendiente: resolvedSubPendiente
+          };
+        });
+
+        return {
+          ...proyecto,
+          tableros: (proyecto.tableros || []).map(tablero => {
+            const resolvedTabFoto = tablero.foto || elemFotoMap.get(String(tablero.id)) || null;
+            return {
+              ...tablero,
+              foto: resolvedTabFoto,
+              fotoUrl: resolvedTabFoto,
+              pendiente: Boolean(tablero.datosTecnicos?.pendiente || elemPendienteMap.get(String(tablero.id))),
+              circuitos: tablero.circuitos || []
+            };
+          }),
+          elementosUnifilares: (proyecto.elementosUnifilares || []).map(elem => {
+            const resolvedElemFoto = elem.foto || elem.datosTecnicos?.foto || null;
+            return {
+              ...elem,
+              foto: resolvedElemFoto,
+              fotoUrl: resolvedElemFoto,
+              fotoBlob: null,
+              pendiente: Boolean(elem.datosTecnicos?.pendiente)
+            };
+          }),
+          inspeccionesSubestacion: formattedSubs,
+          subestaciones: formattedSubs,
+          puntosMedicion: (proyecto.puntosMedicion || []).map(pm => {
+            const resolvedPmFoto = pm.foto || elemFotoMap.get(String(pm.id)) || null;
+            const rawObs = typeof pm.observaciones === 'string' ? pm.observaciones : '';
+            const hasPendienteTag = rawObs.includes('[[PENDIENTE]]');
+            const cleanObs = rawObs ? rawObs.replace(/\s*\[\[PENDIENTE\]\]/g, '').trim() : pm.observaciones;
+            return {
+              ...pm,
+              observaciones: cleanObs,
+              foto: resolvedPmFoto,
+              fotoUrl: resolvedPmFoto,
+              pendiente: Boolean(hasPendienteTag || elemPendienteMap.get(String(pm.id)))
+            };
+          }),
+          ccmList: (proyecto.ccmList || []).map(ccm => {
+            const resolvedCcmFoto = ccm.parametrosElectricos?.__foto || ccm.foto || elemFotoMap.get(String(ccm.id)) || null;
+            return {
+              ...ccm,
+              foto: resolvedCcmFoto,
+              fotoUrl: resolvedCcmFoto,
+              pendiente: Boolean(ccm.parametrosElectricos?.__pendiente || elemPendienteMap.get(String(ccm.id)))
+            };
+          }),
+          alimentadores: proyecto.alimentadores || [],
+          inspeccionesTermograficas: (proyecto.inspeccionesTermograficas || []).map(i => ({ ...i, pendiente: Boolean(i.pendiente || elemPendienteMap.get(String(i.id))) })),
+          inspeccionesAterramiento: (proyecto.inspeccionesAterramiento || []).map(i => ({ ...i, pendiente: Boolean(i.pendiente || elemPendienteMap.get(String(i.id))) })),
+          inspeccionesTanquesCombustible: (proyecto.inspeccionesTanquesCombustible || []).map(i => ({ ...i, pendiente: Boolean(i.pendiente || elemPendienteMap.get(String(i.id))) }))
+        };
+      })
     }));
 
     return res.status(200).json({
@@ -944,6 +1110,9 @@ export const sincronizarElementoMultipart = async (req, res) => {
     if (req.body.tag && !parsedDatosTecnicos.tag) {
       parsedDatosTecnicos.tag = req.body.tag;
     }
+    if (req.body.pendiente !== undefined) {
+      parsedDatosTecnicos.pendiente = req.body.pendiente === true || req.body.pendiente === 'true';
+    }
     // Rescatar campos legados en raíz
     if (req.body.tension && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.tension;
     if (req.body.voltaje && !parsedDatosTecnicos.tension) parsedDatosTecnicos.tension = req.body.voltaje;
@@ -1018,14 +1187,38 @@ export const sincronizarElementoMultipart = async (req, res) => {
 
     const resolvedEmpresaId = targetProj.empresaId;
 
-    // 4. Verificar alimentadoPorId para evitar fallo de FK autorreferencial, conservando la referencia en datosTecnicos si el padre aún no se ha sincronizado
-    const requestedParentId = alimentadoPorId || parsedDatosTecnicos.alimentadoPorId || null;
-    let validAlimentadoPorId = requestedParentId && requestedParentId !== elementId ? requestedParentId : null;
-    if (validAlimentadoPorId) {
-      parsedDatosTecnicos.alimentadoPorId = validAlimentadoPorId;
-      const parentElCheck = await prisma.elementoUnifilar.findUnique({ where: { id: validAlimentadoPorId } });
-      if (!parentElCheck) {
-        validAlimentadoPorId = null;
+    // 4. Verificar alimentadoPorId distinguiendo explícitamente undefined vs null/"" (vaciado intencional)
+    const explicitClearParent =
+      alimentadoPorId === null ||
+      alimentadoPorId === '' ||
+      alimentadoPorId === 'null' ||
+      req.body.limpiarAlimentadores === true ||
+      req.body.limpiarAlimentadores === 'true' ||
+      (('alimentadoPor' in req.body) && (req.body.alimentadoPor === null || String(req.body.alimentadoPor).trim() === ''));
+
+    let validAlimentadoPorId = null;
+    let finalAlimentadoPorText = alimentadoPor || '';
+
+    if (explicitClearParent && (!alimentadoPorId || alimentadoPorId === 'null')) {
+      validAlimentadoPorId = null;
+      finalAlimentadoPorText = typeof alimentadoPor === 'string' ? alimentadoPor.trim() : '';
+      parsedDatosTecnicos.alimentadoPorId = null;
+      parsedDatosTecnicos.alimentadorId = null;
+      parsedDatosTecnicos.alimentadoPor = finalAlimentadoPorText;
+    } else {
+      const requestedParentId = alimentadoPorId !== undefined
+        ? (alimentadoPorId && alimentadoPorId !== 'null' ? alimentadoPorId : null)
+        : (parsedDatosTecnicos.alimentadoPorId || null);
+      validAlimentadoPorId = requestedParentId && requestedParentId !== elementId ? requestedParentId : null;
+      if (validAlimentadoPorId) {
+        parsedDatosTecnicos.alimentadoPorId = validAlimentadoPorId;
+        const parentElCheck = await prisma.elementoUnifilar.findUnique({ where: { id: validAlimentadoPorId } });
+        if (!parentElCheck) {
+          validAlimentadoPorId = null;
+        }
+      } else {
+        parsedDatosTecnicos.alimentadoPorId = null;
+        parsedDatosTecnicos.alimentadorId = null;
       }
     }
 
@@ -1047,7 +1240,7 @@ export const sincronizarElementoMultipart = async (req, res) => {
       nombre: cleanNombre,
       tipoElemento: cleanTipo,
       ubicacion: ubicacion || '',
-      alimentadoPor: alimentadoPor || '',
+      alimentadoPor: finalAlimentadoPorText,
       observacionesGenerales: observacionesGenerales || '',
       datosTecnicos: parsedDatosTecnicos,
       proyectoId: resolvedProyectoId,
@@ -1067,6 +1260,28 @@ export const sincronizarElementoMultipart = async (req, res) => {
     // 6. Upsert en ElementoUnifilar
     const existingElement = await prisma.elementoUnifilar.findUnique({ where: { id: elementId } });
     let savedElement;
+
+    if (existingElement && existingElement.deletedAt !== null) {
+      return res.status(200).json({
+        ok: true,
+        success: true,
+        deletedOnServer: true,
+        data: existingElement,
+        localId: elementId,
+        mensaje: 'El elemento ya había sido eliminado en el servidor.'
+      });
+    }
+
+    if (isPhotoRemoval) {
+      const oldKey = extraerR2KeyDeUrl(existingElement?.foto || req.body.previousFotoUrl || '');
+      if (oldKey) {
+        await eliminarImagenDeR2(oldKey);
+      }
+    }
+
+    if (existingElement && existingElement.alimentadoPorId && existingElement.alimentadoPorId !== validAlimentadoPorId) {
+      await limpiarReferenciaHijoEnPadreAnterior(existingElement.alimentadoPorId, elementId, existingElement.nombre);
+    }
 
     if (existingElement) {
       const updateElementData = { ...elementData };
@@ -1267,6 +1482,86 @@ const contarRegistros = (data) => {
 };
 
 /**
+ * Limpia la referencia inversa de un elemento hijo en su padre anterior dentro de PostgreSQL
+ * (datosTecnicos.alimentaAIds, alimentaA, salidaCargaId y circuitos vinculados) para evitar
+ * que pullData o la hidratación bidireccional resuciten el vínculo viejo tras guardar o recargar.
+ */
+async function limpiarReferenciaHijoEnPadreAnterior(prevParentId, childId, childName = '') {
+  if (!prevParentId || !childId || prevParentId === childId) return;
+  try {
+    const prevParent = await prisma.elementoUnifilar.findUnique({
+      where: { id: String(prevParentId) },
+      select: { id: true, datosTecnicos: true, version: true }
+    });
+    if (!prevParent) return;
+
+    const dt = prevParent.datosTecnicos && typeof prevParent.datosTecnicos === 'object'
+      ? { ...prevParent.datosTecnicos }
+      : {};
+    let changed = false;
+
+    if (Array.isArray(dt.alimentaAIds)) {
+      const nextIds = dt.alimentaAIds.filter((cid) => String(cid) !== String(childId));
+      if (nextIds.length !== dt.alimentaAIds.length) {
+        dt.alimentaAIds = nextIds;
+        changed = true;
+      }
+    }
+    if (dt.salidaCargaId && String(dt.salidaCargaId) === String(childId)) {
+      dt.salidaCargaId = null;
+      dt.salidaCargaNombre = '';
+      changed = true;
+    }
+    if (typeof dt.alimentaA === 'string' && dt.alimentaA.trim()) {
+      const cleanChildUpper = String(childName || '').trim().toUpperCase();
+      const parts = dt.alimentaA.split(',').map((s) => s.trim()).filter(Boolean);
+      const nextParts = parts.filter((p) => {
+        const up = p.toUpperCase();
+        if (cleanChildUpper && up === cleanChildUpper) return false;
+        if (up.includes(String(childId).toUpperCase())) return false;
+        return true;
+      });
+      if (nextParts.length !== parts.length) {
+        dt.alimentaA = nextParts.join(', ');
+        changed = true;
+      }
+    }
+    if (Array.isArray(dt.circuits)) {
+      const nextCircuits = dt.circuits.map((c) => {
+        if (!c) return c;
+        const destId = c.elementoDestinoId || c.vinculadoId;
+        if (destId && String(destId) === String(childId)) {
+          changed = true;
+          return {
+            ...c,
+            elementoDestinoId: null,
+            vinculadoId: null,
+            tipoDestino: 'RESERVA',
+            equipo: 'RESERVA',
+            estado: 'reserva'
+          };
+        }
+        return c;
+      });
+      if (changed) dt.circuits = nextCircuits;
+    }
+
+    if (changed) {
+      await prisma.elementoUnifilar.update({
+        where: { id: prevParent.id },
+        data: {
+          datosTecnicos: dt,
+          version: (prevParent.version || 1) + 1
+        }
+      });
+      console.log(`[SYNC HIERARCHY] 🧹 Referencia inversa de ${childId} limpiada en padre anterior ${prevParent.id}`);
+    }
+  } catch (err) {
+    console.warn(`[SYNC HIERARCHY] ⚠️ No se pudo limpiar referencia inversa en padre ${prevParentId}:`, err?.message);
+  }
+}
+
+/**
  * POST /api/sync/upload-image
  * Recibe una imagen comprimida (máx 3MB), la sube a Cloudflare R2 bajo imagenes/<ts>-<rand>.jpg
  * y devuelve la URL corta persistente (/api/sync/image/...).
@@ -1293,9 +1588,11 @@ export const subirImagenR2Controller = async (req, res) => {
 
     const uploadRes = await subirImagenAR2(file.buffer, mimeType, key);
     if (!uploadRes.subido) {
-      return res.status(503).json({
+      return res.status(uploadRes.httpStatus || 503).json({
         ok: false,
-        error: uploadRes.error || 'No se pudo almacenar la imagen en Cloudflare R2.'
+        error: uploadRes.error || 'No se pudo almacenar la imagen en Cloudflare R2.',
+        code: uploadRes.code || 'R2_UPLOAD_ERROR',
+        httpStatus: uploadRes.httpStatus || 503
       });
     }
 
@@ -1309,7 +1606,26 @@ export const subirImagenR2Controller = async (req, res) => {
     console.error('❌ [SyncController] Error en subirImagenR2Controller:', error?.name, error?.message);
     return res.status(500).json({
       ok: false,
-      error: error.message || 'Error interno al subir imagen a Cloudflare R2.'
+      error: error.message || 'Error interno al subir imagen a Cloudflare R2.',
+      code: error?.Code || error?.name || 'SYNC_UPLOAD_ERROR',
+      httpStatus: error?.$metadata?.httpStatusCode || 500
+    });
+  }
+};
+
+/**
+ * GET /api/sync/r2-diagnostic
+ * Endpoint administrativo para verificar conectividad real con Cloudflare R2 (HeadBucketCommand).
+ */
+export const diagnosticarR2Controller = async (req, res) => {
+  try {
+    const diag = await diagnosticarR2();
+    return res.status(diag.ok ? 200 : 503).json(diag);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      code: error?.Code || error?.name || 'R2_DIAGNOSTIC_ERROR',
+      error: error?.message || 'Error ejecutando diagnóstico R2'
     });
   }
 };
@@ -1350,6 +1666,38 @@ export const obtenerImagenR2Controller = async (req, res) => {
   } catch (error) {
     console.error('❌ [SyncController] Error en obtenerImagenR2Controller:', error?.name, error?.message);
     return res.status(500).json({ ok: false, error: error?.message || 'Error al leer imagen desde R2.' });
+  }
+};
+
+/**
+ * DELETE /api/sync/image?key=... (o body.key / body.url)
+ * Elimina una imagen del bucket de Cloudflare R2 de forma segura.
+ */
+export const eliminarImagenR2Controller = async (req, res) => {
+  try {
+    const rawKey =
+      (typeof req.query?.key === 'string' && req.query.key.trim()) ||
+      (typeof req.body?.key === 'string' && req.body.key.trim()) ||
+      extraerR2KeyDeUrl(req.body?.url || req.query?.url || '') ||
+      '';
+
+    let decodedKey = rawKey;
+    try {
+      decodedKey = decodeURIComponent(rawKey);
+    } catch {
+      decodedKey = rawKey;
+    }
+    decodedKey = decodedKey.replace(/^\/+/, '').trim();
+
+    if (!decodedKey || !decodedKey.startsWith('imagenes/') || decodedKey.includes('..')) {
+      return res.status(400).json({ ok: false, error: 'Clave de imagen inválida.' });
+    }
+
+    const result = await eliminarImagenDeR2(decodedKey);
+    return res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    console.warn('⚠️ [SyncController] Aviso en eliminarImagenR2Controller:', error?.message);
+    return res.status(200).json({ ok: true, eliminado: false, error: error?.message });
   }
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   ExternalLink, 
@@ -15,7 +15,11 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  PanelLeft,
+  PanelRight,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DiagramaUnifilarBlueprint from './DiagramaUnifilarBlueprint';
@@ -57,6 +61,54 @@ export default function ModalDiagramaUnifilar({
   // Estados de Modo Conexión
   const [isConnectionMode, setIsConnectionMode] = useState(false);
   const [connectionSource, setConnectionSource] = useState(null); // Nodo origen
+
+  // Paneles laterales independientes y Modo Enfoque ("Expandir Plano")
+  const [isNarrowScreen, setIsNarrowScreen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 1024 : false
+  );
+  const [showLeftPanel, setShowLeftPanel] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+  const [showRightPanel, setShowRightPanel] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
+  const prevPanelsRef = useRef({ left: true, right: true });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsNarrowScreen(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const narrow = typeof window !== 'undefined' ? window.innerWidth < 1024 : false;
+      setIsNarrowScreen(narrow);
+      setShowLeftPanel(!narrow);
+      setShowRightPanel(!narrow);
+    }
+  }, [isOpen]);
+
+  const isFocusMode = !showLeftPanel && !showRightPanel;
+
+  const handleToggleFocusMode = () => {
+    if (!isFocusMode) {
+      prevPanelsRef.current = { left: showLeftPanel, right: showRightPanel };
+      setShowLeftPanel(false);
+      setShowRightPanel(false);
+    } else {
+      const prev = prevPanelsRef.current;
+      if (prev.left || prev.right) {
+        setShowLeftPanel(prev.left);
+        setShowRightPanel(prev.right);
+      } else {
+        setShowLeftPanel(true);
+        setShowRightPanel(true);
+      }
+    }
+  };
 
   // Sincronizar formulario cuando cambia el nodo seleccionado
   useEffect(() => {
@@ -370,6 +422,9 @@ export default function ModalDiagramaUnifilar({
       }
     } else {
       setSelectedNode(node);
+      if (isNarrowScreen) {
+        setShowRightPanel(true);
+      }
     }
   };
 
@@ -380,30 +435,73 @@ export default function ModalDiagramaUnifilar({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 print:hidden">
         {/* Backdrop */}
         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" />
 
         {/* Ventana Principal */}
-        <div className="relative w-full max-w-7xl h-[95vh] bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+        <div className={`relative w-full ${isFocusMode ? 'max-w-[98vw]' : 'max-w-[96vw] xl:max-w-7xl'} h-[96vh] bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200`}>
           
           {/* Cabecera */}
-          <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950/45 shrink-0 select-none">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-955 rounded-xl border border-amber-800/40 animate-pulse">
+          <div className="flex flex-wrap justify-between items-center gap-2 p-3 sm:p-4 border-b border-slate-800 bg-slate-950/45 shrink-0 select-none">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 bg-amber-955 rounded-xl border border-amber-800/40 animate-pulse shrink-0">
                 <Zap className="w-5 h-5 text-amber-500 animate-bounce" style={{ animationDuration: '3s' }} />
               </div>
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-slate-100 font-mono flex items-center gap-2">
-                  Editor de Diagrama Unifilar CAD <span className="text-[10px] text-amber-500 bg-amber-950/60 border border-amber-900 px-2 py-0.5 rounded-full font-sans lowercase">interactivo</span>
+              <div className="min-w-0">
+                <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-100 font-mono flex items-center gap-2 truncate">
+                  Editor de Diagrama Unifilar CAD <span className="hidden sm:inline text-[10px] text-amber-500 bg-amber-950/60 border border-amber-900 px-2 py-0.5 rounded-full font-sans lowercase">interactivo</span>
                 </h3>
-                <p className="text-[10px] text-slate-455 font-sans">
-                  {companyName} — {projectName} • Arrastra equipos, haz doble clic para editar o usa el trazador de conexiones.
+                <p className="text-[10px] text-slate-455 font-sans truncate">
+                  {companyName} — {projectName} • Arrastra equipos, haz clic para editar o usa el trazador de conexiones.
                 </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-2.5 no-print">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 no-print">
+              {/* Controles independientes de paneles y Modo Enfoque */}
+              <button
+                type="button"
+                onClick={() => setShowLeftPanel((v) => !v)}
+                className={`px-2.5 py-1.5 border text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer min-h-[34px] ${
+                  showLeftPanel
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                }`}
+                title={showLeftPanel ? 'Ocultar Panel de Símbolos' : 'Mostrar Panel de Símbolos'}
+              >
+                <PanelLeft className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Símbolos</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRightPanel((v) => !v)}
+                className={`px-2.5 py-1.5 border text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer min-h-[34px] ${
+                  showRightPanel
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                }`}
+                title={showRightPanel ? 'Ocultar Panel de Información' : 'Mostrar Panel de Información'}
+              >
+                <PanelRight className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Información</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleFocusMode}
+                className={`px-2.5 py-1.5 border text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer min-h-[34px] shadow-sm ${
+                  isFocusMode
+                    ? 'bg-amber-500 border-amber-400 text-slate-950 hover:bg-amber-400'
+                    : 'bg-slate-950 border-slate-700 text-amber-300 hover:border-amber-500/50 hover:bg-slate-900'
+                }`}
+                title={isFocusMode ? 'Restaurar paneles laterales' : 'Ocultar ambos paneles y expandir el plano al 100%'}
+              >
+                {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                <span>{isFocusMode ? 'Restaurar Paneles' : 'Expandir Plano'}</span>
+              </button>
+
               {/* Botón de Modo Conexión */}
               <button
                 onClick={() => {
@@ -413,21 +511,21 @@ export default function ModalDiagramaUnifilar({
                     showToast('Modo de conexión activado. Haz clic en el equipo alimentador (origen).', 'info');
                   }
                 }}
-                className={`px-3 py-1.5 border text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md ${
+                className={`px-3 py-1.5 border text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md min-h-[34px] ${
                   isConnectionMode 
                     ? 'bg-amber-500 border-amber-400 text-slate-950 hover:bg-amber-400 animate-pulse' 
                     : 'bg-slate-950 border-slate-800 text-slate-350 hover:text-white hover:border-slate-700'
                 }`}
               >
                 <Link2 className="w-4 h-4" /> 
-                {isConnectionMode ? 'Conectando...' : 'Trazar Conexión'}
+                <span className="hidden sm:inline">{isConnectionMode ? 'Conectando...' : 'Trazar Conexión'}</span>
               </button>
 
               <button
                 onClick={() => window.print()}
-                className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-slate-355 hover:text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:border-slate-700"
+                className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-slate-355 hover:text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:border-slate-700 min-h-[34px]"
               >
-                Imprimir Plano
+                Imprimir
               </button>
               
               <button 
@@ -461,42 +559,97 @@ export default function ModalDiagramaUnifilar({
           )}
 
           {/* Contenido Principal */}
-          <div className="flex-1 flex overflow-hidden min-h-0">
+          <div className="flex-1 flex overflow-hidden min-h-0 relative">
             
-            {/* 1. PALETA DE SÍMBOLOS (Izquierda) */}
-            <div className="w-56 bg-slate-955/60 p-4 border-r border-slate-850/60 flex flex-col space-y-4 select-none shrink-0 no-print">
-              <div>
-                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono mb-2">Equipos & Símbolos</h4>
-                <p className="text-[9.5px] text-slate-450 leading-relaxed">
-                  Haz clic en cualquier símbolo para insertarlo en el plano interactivo.
-                </p>
-              </div>
-              
-              <div className="space-y-2 flex-1 overflow-y-auto pr-1">
-                {catalogOfSymbols.map(sym => (
+            {/* Backdrop para paneles superpuestos en pantallas < 1024px */}
+            {isNarrowScreen && (showLeftPanel || showRightPanel) && (
+              <div
+                onClick={() => {
+                  setShowLeftPanel(false);
+                  setShowRightPanel(false);
+                }}
+                className="absolute inset-0 bg-slate-950/60 backdrop-blur-[1px] z-20 lg:hidden"
+              />
+            )}
+
+            {/* 1. PALETA DE SÍMBOLOS (Izquierda - Ocultable / Overlay en Tablet) */}
+            {showLeftPanel && (
+              <div className={`${
+                isNarrowScreen
+                  ? 'absolute inset-y-0 left-0 z-30 w-64 bg-slate-950 shadow-2xl'
+                  : 'w-56 bg-slate-955/60 shrink-0'
+              } p-4 border-r border-slate-800/80 flex flex-col space-y-4 select-none no-print`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono mb-1">Equipos & Símbolos</h4>
+                    <p className="text-[9.5px] text-slate-450 leading-relaxed">
+                      Haz clic en cualquier símbolo para insertarlo en el plano interactivo.
+                    </p>
+                  </div>
                   <button
-                    key={sym.type}
-                    onClick={() => handleAddSymbol(sym.type)}
-                    className="w-full p-2.5 bg-slate-900/40 hover:bg-slate-800/80 active:scale-98 border border-slate-850 hover:border-slate-700 rounded-xl flex items-center gap-3 transition-all text-left text-xs group cursor-pointer"
+                    type="button"
+                    onClick={() => setShowLeftPanel(false)}
+                    className="p-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer shrink-0"
+                    title="Ocultar panel de símbolos"
                   >
-                    <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-slate-950 rounded-xl text-slate-455 group-hover:text-amber-500 group-hover:bg-slate-900 border border-slate-855 transition-all shadow-inner">
-                      {sym.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-slate-200 group-hover:text-white transition-colors truncate">{sym.label}</div>
-                      <div className="text-[9px] text-slate-500 truncate">{sym.desc}</div>
-                    </div>
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                ))}
-              </div>
+                </div>
+                
+                <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+                  {catalogOfSymbols.map(sym => (
+                    <button
+                      key={sym.type}
+                      onClick={() => {
+                        handleAddSymbol(sym.type);
+                        if (isNarrowScreen) setShowLeftPanel(false);
+                      }}
+                      className="w-full p-2.5 bg-slate-900/60 hover:bg-slate-800/80 active:scale-98 border border-slate-800 hover:border-slate-700 rounded-xl flex items-center gap-3 transition-all text-left text-xs group cursor-pointer"
+                    >
+                      <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-slate-950 rounded-xl text-slate-455 group-hover:text-amber-500 group-hover:bg-slate-900 border border-slate-800 transition-all shadow-inner">
+                        {sym.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-200 group-hover:text-white transition-colors truncate">{sym.label}</div>
+                        <div className="text-[9px] text-slate-500 truncate">{sym.desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
 
-              <div className="pt-4 border-t border-slate-850/60 text-[9px] text-slate-500 leading-normal font-sans">
-                💡 <strong>Consejo:</strong> Arrastra libremente los símbolos una vez colocados en el lienzo para organizar el diagrama.
+                <div className="pt-3 border-t border-slate-800/60 text-[9px] text-slate-500 leading-normal font-sans">
+                  💡 <strong>Consejo:</strong> Arrastra libremente los símbolos una vez colocados en el lienzo para organizar el diagrama.
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* 2. LIENZO (Centro) */}
-            <div className="flex-1 overflow-hidden relative flex flex-col bg-slate-950">
+            {/* 2. LIENZO (Centro - 100% cuando ambos paneles están ocultos) */}
+            <div className="flex-1 min-w-0 overflow-hidden relative flex flex-col bg-slate-950">
+              {/* Pestañas flotantes discretas cuando los paneles laterales están ocultos */}
+              {!showLeftPanel && (
+                <button
+                  type="button"
+                  onClick={() => setShowLeftPanel(true)}
+                  className="absolute top-3 left-3 z-20 px-2.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/50 text-slate-200 hover:text-amber-300 rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer no-print min-h-[34px]"
+                  title="Mostrar Panel de Símbolos"
+                >
+                  <PanelLeft className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Símbolos</span>
+                </button>
+              )}
+
+              {!showRightPanel && (
+                <button
+                  type="button"
+                  onClick={() => setShowRightPanel(true)}
+                  className="absolute top-3 right-3 z-20 px-2.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/50 text-slate-200 hover:text-amber-300 rounded-xl text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition-all cursor-pointer no-print min-h-[34px]"
+                  title="Mostrar Panel de Información del Elemento"
+                >
+                  <PanelRight className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{selectedNode ? `Info: ${selectedNode.nombre?.slice(0, 14)}` : 'Información'}</span>
+                </button>
+              )}
+
               <div className="flex-1 overflow-hidden">
                 <DiagramaUnifilarBlueprint
                   elementos={elementos}
@@ -509,8 +662,24 @@ export default function ModalDiagramaUnifilar({
               </div>
             </div>
 
-            {/* 3. PANEL DE PROPIEDADES (Derecha) */}
-            <div className="w-80 bg-slate-955/60 p-5 overflow-y-auto shrink-0 flex flex-col justify-between border-l border-slate-850/60 no-print select-none">
+            {/* 3. PANEL DE PROPIEDADES (Derecha - Ocultable / Overlay en Tablet) */}
+            {showRightPanel && (
+            <div className={`${
+              isNarrowScreen
+                ? 'absolute inset-y-0 right-0 z-30 w-80 max-w-[90vw] bg-slate-950 shadow-2xl'
+                : 'w-80 bg-slate-955/60 shrink-0'
+            } p-5 overflow-y-auto flex flex-col justify-between border-l border-slate-800/80 no-print select-none`}>
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80 lg:hidden">
+                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">Información del Equipo</span>
+                <button
+                  type="button"
+                  onClick={() => setShowRightPanel(false)}
+                  className="p-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  title="Cerrar panel de información"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
               {selectedNode ? (
                 <div className="space-y-5 flex-1 flex flex-col justify-between">
                   <div className="space-y-5">
@@ -681,6 +850,7 @@ export default function ModalDiagramaUnifilar({
                 </div>
               )}
             </div>
+            )}
 
           </div>
 

@@ -2059,6 +2059,56 @@ const scheduleDebouncedElementoSync = (get, elementoId, proyectoId, fallbackEl) 
   });
 };
 
+export const DEFAULT_UNIVERSAL_ELEMENT_ORDER = [
+  'SUBESTACION',
+  'PUNTO_SUMINISTRO',
+  'PUNTO_MEDICION',
+  'TRANSFORMADOR',
+  'GENERADOR',
+  'TRANSFER',
+  'CCM',
+  'TABLERO',
+  'BANCO_CONDENSADOR',
+  'PUESTA_TIERRA',
+  'TERMOGRAFICA',
+  'SISTEMA_ATERRAMIENTO',
+  'TANQUE_COMBUSTIBLE',
+  'OTRO'
+];
+
+const getInitialUniversalElementOrder = () => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('selectric_universal_element_order') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const merged = [...parsed];
+        DEFAULT_UNIVERSAL_ELEMENT_ORDER.forEach((t) => {
+          if (!merged.includes(t)) merged.push(t);
+        });
+        return merged;
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return [...DEFAULT_UNIVERSAL_ELEMENT_ORDER];
+};
+
+const VALID_ELEMENT_SORT_MODES = ['MANUAL', 'TYPE_UNIVERSAL', 'ALPHA_ASC', 'ALPHA_DESC', 'PENDING_FIRST', 'id_asc', 'id_desc'];
+
+const getInitialElementSortMode = () => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('selectric_element_sort_mode') : null;
+    if (raw && VALID_ELEMENT_SORT_MODES.includes(raw)) {
+      return raw;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return 'MANUAL';
+};
+
 export const useStore = create(
   persist(
     (set, get) => ({
@@ -2076,12 +2126,56 @@ export const useStore = create(
       ccmLocales: [],
       syncQueue: [],
       deletedCompanyIds: [],
+      lastSyncAt: null,
       isSyncing: false,
       syncProgress: null,
       socket: null,
       toast: { show: false, message: '', type: 'success', action: null },
       conflictosCircuitos: [],
       isPanelConflictosOpen: false,
+      universalElementOrder: getInitialUniversalElementOrder(),
+      elementSortMode: getInitialElementSortMode(),
+
+      setUniversalElementOrder: (orderList) => {
+        const clean = Array.isArray(orderList) && orderList.length > 0
+          ? Array.from(new Set(orderList.map((x) => String(x || '').trim().toUpperCase()).filter(Boolean)))
+          : [...DEFAULT_UNIVERSAL_ELEMENT_ORDER];
+        DEFAULT_UNIVERSAL_ELEMENT_ORDER.forEach((t) => {
+          if (!clean.includes(t)) clean.push(t);
+        });
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('selectric_universal_element_order', JSON.stringify(clean));
+          }
+        } catch {
+          // ignore
+        }
+        set({ universalElementOrder: clean });
+      },
+      setElementSortMode: (mode) => {
+        const valid = VALID_ELEMENT_SORT_MODES.includes(mode)
+          ? mode
+          : 'MANUAL';
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('selectric_element_sort_mode', valid);
+          }
+        } catch {
+          // ignore
+        }
+        set({ elementSortMode: valid });
+      },
+      resetUniversalElementOrder: () => {
+        const fresh = [...DEFAULT_UNIVERSAL_ELEMENT_ORDER];
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('selectric_universal_element_order', JSON.stringify(fresh));
+          }
+        } catch {
+          // ignore
+        }
+        set({ universalElementOrder: fresh });
+      },
 
       setIsSyncing: (isSyncing) => set({ isSyncing }),
       setSyncProgress: (syncProgress) => set({ syncProgress }),
@@ -2192,10 +2286,19 @@ export const useStore = create(
         return get().pullInitialData();
       },
 
-      pullInitialData: async () => {
+      pullInitialData: async (options = {}) => {
         const { token, user, syncQueue } = get();
         if (!token || !navigator.onLine || token === 'mock-offline-token') {
           return { success: true, cached: true, count: (get().companies || []).length };
+        }
+
+        // Regla anti-pérdida de escritura: no sobrescribir estado mientras el usuario escribe en un campo activo
+        if (!options?.force && typeof document !== 'undefined') {
+          const active = document.activeElement;
+          const tag = active?.tagName ? String(active.tagName).toUpperCase() : '';
+          if ((tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') && !active.readOnly && !active.disabled) {
+            return { success: true, deferredForEditing: true };
+          }
         }
 
         // PRIORIDAD LOCAL-FIRST:
@@ -2269,6 +2372,7 @@ export const useStore = create(
               }
               if (data.data.length > 0) {
                 get().importCompanies(data.data);
+                set({ lastSyncAt: data.lastSyncTimestamp || new Date().toISOString() });
                 return { success: true, count: data.data.length };
               }
             }
@@ -2783,7 +2887,7 @@ export const useStore = create(
       updateTableroAlimentador: (proyectoId, tableroId, alimentadorId) => {
         const cleanParentId = sanitizeParentId(alimentadorId, tableroId);
         const existing = findElementoInStore(get(), tableroId, proyectoId);
-        let nextAlimentadoPor = existing?.alimentadoPor;
+        let nextAlimentadoPor = cleanParentId ? existing?.alimentadoPor : '';
         if (cleanParentId && isPlaceholderHierarchyValue(nextAlimentadoPor)) {
           const { byId } = collectProjectElementsInStore(get(), proyectoId);
           const parentObj = byId.get(String(cleanParentId));
@@ -2791,11 +2895,13 @@ export const useStore = create(
         }
         return get().updateElementoUnifilar(proyectoId, tableroId, {
           alimentadoPorId: cleanParentId,
-          ...(nextAlimentadoPor !== undefined ? { alimentadoPor: nextAlimentadoPor } : {}),
+          alimentadoPor: nextAlimentadoPor || '',
+          ...(!cleanParentId ? { limpiarAlimentadores: true } : {}),
           datosTecnicos: {
             ...(existing?.datosTecnicos || {}),
             alimentadorId: cleanParentId,
-            alimentadoPorId: cleanParentId
+            alimentadoPorId: cleanParentId,
+            ...(!cleanParentId ? { alimentadoPor: '' } : {})
           }
         });
       },
@@ -3142,126 +3248,153 @@ export const useStore = create(
           })
         }));
 
-        // Fusión profunda Local-First:
-        // Las entidades locales que tengan mutaciones pendientes en la cola o que fueron creadas localmente
-        // tienen PRECEDENCIA sobre el estado recibido del servidor.
-        const incomingCompanyMap = new Map(enrichedIncoming.map((c) => [c.id, c]));
-        const mergedCompanies = [...currentCompanies];
-
-        incomingCompanyMap.forEach((incomingComp, compId) => {
-          const localCompIndex = mergedCompanies.findIndex((c) => c.id === compId);
-
-          if (localCompIndex === -1) {
-            mergedCompanies.push(incomingComp);
+        // Reconciliación estricta con PostgreSQL como Fuente de Verdad:
+        // Conserva únicamente lo que existe en PostgreSQL MÁS mutaciones CREATE/UPDATE pendientes en syncQueue.
+        // Elimina fantasmas borrados en otros dispositivos y respeta DELETEs en curso.
+        const pendingUpsertIds = new Set();
+        const pendingDeleteIds = new Set();
+        syncQueue.forEach((item) => {
+          const id = item?.id || item?.payload?.id;
+          if (!id) return;
+          if (item?.operation === 'DELETE') {
+            pendingDeleteIds.add(String(id));
           } else {
-            const localComp = mergedCompanies[localCompIndex];
-            const localProjects = localComp.proyectos || [];
-            const incomingProjects = incomingComp.proyectos || [];
-            const incomingProjMap = new Map(incomingProjects.map((p) => [p.id, p]));
-
-            const mergedProjects = [...localProjects];
-
-            incomingProjMap.forEach((incomingProj, projId) => {
-              const localProjIndex = mergedProjects.findIndex((p) => p.id === projId);
-
-              if (localProjIndex === -1) {
-                mergedProjects.push(incomingProj);
-              } else {
-                const localProj = mergedProjects[localProjIndex];
-
-                // Fusión de elementos unifilares y tableros
-                const localElements = localProj.elementosUnifilares || [];
-                const incomingElements = incomingProj.elementosUnifilares || [];
-                const incomingElemMap = new Map(incomingElements.map((e) => [e.id, e]));
-                const mergedElements = [...localElements];
-
-                incomingElemMap.forEach((incElem, elemId) => {
-                  const localElemIndex = mergedElements.findIndex((e) => e.id === elemId);
-                  if (localElemIndex === -1) {
-                    mergedElements.push(incElem);
-                  } else {
-                    // Si el elemento local está pendiente de sincronizar, mantener el estado local
-                    if (!pendingQueueIds.has(elemId)) {
-                      mergedElements[localElemIndex] = {
-                        ...incElem,
-                        fotoBlob: mergedElements[localElemIndex].fotoBlob || null
-                      };
-                    }
-                  }
-                });
-
-                // Fusión de subestaciones
-                const localSubs = localProj.inspeccionesSubestacion || localProj.subestaciones || [];
-                const incomingSubs = incomingProj.inspeccionesSubestacion || incomingProj.subestaciones || [];
-                const incomingSubMap = new Map(incomingSubs.map((s) => [s.id, s]));
-                const mergedSubs = [...localSubs];
-
-                incomingSubMap.forEach((incSub, subId) => {
-                  const localSubIndex = mergedSubs.findIndex((s) => s.id === subId);
-                  if (localSubIndex === -1) {
-                    mergedSubs.push(incSub);
-                  } else {
-                    if (!pendingQueueIds.has(subId)) {
-                      mergedSubs[localSubIndex] = incSub;
-                    }
-                  }
-                });
-
-                // Fusión de puntos de medición
-                const localPms = localProj.puntosMedicion || [];
-                const incomingPms = incomingProj.puntosMedicion || [];
-                const incomingPmMap = new Map(incomingPms.map((pm) => [pm.id, pm]));
-                const mergedPms = [...localPms];
-
-                incomingPmMap.forEach((incPm, pmId) => {
-                  const localPmIndex = mergedPms.findIndex((pm) => pm.id === pmId);
-                  if (localPmIndex === -1) {
-                    mergedPms.push(incPm);
-                  } else {
-                    if (!pendingQueueIds.has(pmId)) {
-                      mergedPms[localPmIndex] = incPm;
-                    }
-                  }
-                });
-
-                // Fusión de CCM
-                const localCcms = localProj.ccmList || [];
-                const incomingCcms = incomingProj.ccmList || [];
-                const incomingCcmMap = new Map(incomingCcms.map((ccm) => [ccm.id, ccm]));
-                const mergedCcms = [...localCcms];
-
-                incomingCcmMap.forEach((incCcm, ccmId) => {
-                  const localCcmIndex = mergedCcms.findIndex((ccm) => ccm.id === ccmId);
-                  if (localCcmIndex === -1) {
-                    mergedCcms.push(incCcm);
-                  } else {
-                    if (!pendingQueueIds.has(ccmId)) {
-                      mergedCcms[localCcmIndex] = incCcm;
-                    }
-                  }
-                });
-
-                const projBase = pendingQueueIds.has(projId) ? localProj : incomingProj;
-
-                mergedProjects[localProjIndex] = {
-                  ...projBase,
-                  elementosUnifilares: hydrateProjectHierarchyLinks(mergedElements),
-                  inspeccionesSubestacion: mergedSubs,
-                  subestaciones: mergedSubs,
-                  puntosMedicion: mergedPms,
-                  ccmList: mergedCcms
-                };
-              }
-            });
-
-            mergedCompanies[localCompIndex] = {
-              ...incomingComp,
-              proyectos: mergedProjects
-            };
+            pendingUpsertIds.add(String(id));
           }
         });
 
-        set({ companies: mergedCompanies });
+        const reconcileCollection = (localArr = [], incomingArr = [], mapIncoming = (x) => x) => {
+          const incomingIds = new Set();
+          const result = [];
+          (incomingArr || []).forEach((inc) => {
+            if (!inc?.id) return;
+            const idStr = String(inc.id);
+            if (pendingDeleteIds.has(idStr)) return;
+            incomingIds.add(idStr);
+            const localMatch = (localArr || []).find((l) => l && String(l.id) === idStr);
+            if (localMatch && pendingUpsertIds.has(idStr)) {
+              result.push(localMatch);
+            } else {
+              result.push(mapIncoming(inc, localMatch));
+            }
+          });
+          (localArr || []).forEach((loc) => {
+            if (!loc?.id) return;
+            const idStr = String(loc.id);
+            if (!incomingIds.has(idStr) && pendingUpsertIds.has(idStr) && !pendingDeleteIds.has(idStr)) {
+              result.push(loc);
+            }
+          });
+          return result;
+        };
+
+        const localCompMap = new Map(currentCompanies.map((c) => [String(c.id), c]));
+        const incomingCompIds = new Set();
+        const mergedCompanies = [];
+
+        enrichedIncoming.forEach((incomingComp) => {
+          const compIdStr = String(incomingComp.id);
+          if (pendingDeleteIds.has(compIdStr)) return;
+          incomingCompIds.add(compIdStr);
+          const localComp = localCompMap.get(compIdStr);
+
+          if (!localComp) {
+            mergedCompanies.push(incomingComp);
+            return;
+          }
+
+          const localProjects = localComp.proyectos || [];
+          const incomingProjects = incomingComp.proyectos || [];
+          const incomingProjIds = new Set();
+          const mergedProjects = [];
+
+          incomingProjects.forEach((incomingProj) => {
+            const projIdStr = String(incomingProj.id);
+            if (pendingDeleteIds.has(projIdStr)) return;
+            incomingProjIds.add(projIdStr);
+            const localProj = localProjects.find((p) => p && String(p.id) === projIdStr);
+
+            if (!localProj) {
+              mergedProjects.push(incomingProj);
+              return;
+            }
+
+            const mergedElements = reconcileCollection(
+              localProj.elementosUnifilares || [],
+              incomingProj.elementosUnifilares || [],
+              (incElem, locElem) => ({
+                ...incElem,
+                fotoBlob: locElem?.fotoBlob || null
+              })
+            );
+            const mergedSubs = reconcileCollection(
+              localProj.inspeccionesSubestacion || localProj.subestaciones || [],
+              incomingProj.inspeccionesSubestacion || incomingProj.subestaciones || []
+            );
+            const mergedPms = reconcileCollection(
+              localProj.puntosMedicion || [],
+              incomingProj.puntosMedicion || []
+            );
+            const mergedCcms = reconcileCollection(
+              localProj.ccmList || [],
+              incomingProj.ccmList || []
+            );
+
+            const projBase = pendingUpsertIds.has(projIdStr) ? localProj : incomingProj;
+            mergedProjects.push({
+              ...projBase,
+              elementosUnifilares: hydrateProjectHierarchyLinks(mergedElements),
+              inspeccionesSubestacion: mergedSubs,
+              subestaciones: mergedSubs,
+              puntosMedicion: mergedPms,
+              ccmList: mergedCcms
+            });
+          });
+
+          localProjects.forEach((locProj) => {
+            if (!locProj?.id) return;
+            const projIdStr = String(locProj.id);
+            if (!incomingProjIds.has(projIdStr) && pendingUpsertIds.has(projIdStr) && !pendingDeleteIds.has(projIdStr)) {
+              mergedProjects.push(locProj);
+            }
+          });
+
+          mergedCompanies.push({
+            ...incomingComp,
+            proyectos: mergedProjects
+          });
+        });
+
+        currentCompanies.forEach((locComp) => {
+          if (!locComp?.id) return;
+          const compIdStr = String(locComp.id);
+          if (!incomingCompIds.has(compIdStr) && pendingUpsertIds.has(compIdStr) && !pendingDeleteIds.has(compIdStr)) {
+            mergedCompanies.push(locComp);
+          }
+        });
+
+        // Podar mutaciones huérfanas de la cola si su proyecto o empresa padre fue eliminado en PostgreSQL
+        const validProjectIds = new Set();
+        const validCompanyIds = new Set();
+        mergedCompanies.forEach((c) => {
+          if (c?.id) validCompanyIds.add(String(c.id));
+          (c?.proyectos || []).forEach((p) => {
+            if (p?.id) validProjectIds.add(String(p.id));
+          });
+        });
+        const prunedQueue = syncQueue.filter((q) => {
+          if (!q) return false;
+          const pId = q?.payload?.proyectoId;
+          const cId = q?.companyId || q?.payload?.empresaId || q?.payload?.companyId;
+          if (pId && !validProjectIds.has(String(pId)) && !pendingUpsertIds.has(String(pId))) return false;
+          if (cId && !validCompanyIds.has(String(cId)) && !pendingUpsertIds.has(String(cId))) return false;
+          return true;
+        });
+
+        set({
+          companies: mergedCompanies,
+          ...(prunedQueue.length !== syncQueue.length ? { syncQueue: prunedQueue } : {})
+        });
       },
 
       addProyecto: async (nombre, descripcion, companyId, extraData = {}) => {
@@ -3449,9 +3582,11 @@ export const useStore = create(
           foto: elementoData.foto || null,
           fotoBlob: elementoData.fotoBlob || null,
           observacionesGenerales: elementoData.observacionesGenerales ? String(elementoData.observacionesGenerales).trim().toUpperCase() : '',
+          pendiente: Boolean(elementoData.pendiente || elementoData.datosTecnicos?.pendiente),
           datosTecnicos: {
             ...(elementoData.datosTecnicos || {}),
             ...(cleanParentId ? { alimentadoPorId: cleanParentId } : {}),
+            ...((elementoData.pendiente || elementoData.datosTecnicos?.pendiente) ? { pendiente: true } : {}),
             codigo: codigo.toUpperCase()
           },
           proyectoId: proyectoId || null,
@@ -3637,6 +3772,9 @@ export const useStore = create(
           cleanUpdatedData.alimentadoPor = isPlaceholderHierarchyValue(cleanUpdatedData.alimentadoPor)
             ? ''
             : String(cleanUpdatedData.alimentadoPor).trim().toUpperCase();
+          if (!cleanUpdatedData.alimentadoPor && !('alimentadoPorId' in cleanUpdatedData)) {
+            cleanUpdatedData.alimentadoPorId = null;
+          }
         }
         if ('alimentadoPorId' in cleanUpdatedData) {
           const sanitizedPid = sanitizeParentId(cleanUpdatedData.alimentadoPorId, elementoId);
@@ -3647,17 +3785,20 @@ export const useStore = create(
               cleanUpdatedData.alimentadoPor = getCleanElementLabel(parentFound);
             }
           }
+          if (sanitizedPid === null && !cleanUpdatedData.alimentadoPor) {
+            cleanUpdatedData.limpiarAlimentadores = true;
+          }
           if (cleanUpdatedData.datosTecnicos && typeof cleanUpdatedData.datosTecnicos === 'object') {
             cleanUpdatedData.datosTecnicos = {
               ...cleanUpdatedData.datosTecnicos,
               alimentadoPorId: sanitizedPid,
-              ...(sanitizedPid === null ? { alimentadorId: null } : {})
+              ...(sanitizedPid === null ? { alimentadorId: null, ...(!cleanUpdatedData.alimentadoPor ? { alimentadoPor: '' } : {}) } : {})
             };
           } else if (existingEl?.datosTecnicos) {
             cleanUpdatedData.datosTecnicos = {
               ...existingEl.datosTecnicos,
               alimentadoPorId: sanitizedPid,
-              ...(sanitizedPid === null ? { alimentadorId: null } : {})
+              ...(sanitizedPid === null ? { alimentadorId: null, ...(!cleanUpdatedData.alimentadoPor ? { alimentadoPor: '' } : {}) } : {})
             };
           }
         }
@@ -3667,6 +3808,15 @@ export const useStore = create(
         if (cleanUpdatedData.circuitoOrigen) cleanUpdatedData.circuitoOrigen = String(cleanUpdatedData.circuitoOrigen).trim().toUpperCase();
         if (cleanUpdatedData.observacionesGenerales) cleanUpdatedData.observacionesGenerales = String(cleanUpdatedData.observacionesGenerales).trim().toUpperCase();
         if (cleanUpdatedData.codigo) cleanUpdatedData.codigo = String(cleanUpdatedData.codigo).trim().toUpperCase();
+        if ('pendiente' in cleanUpdatedData) {
+          const pendBool = Boolean(cleanUpdatedData.pendiente);
+          cleanUpdatedData.pendiente = pendBool;
+          cleanUpdatedData.datosTecnicos = {
+            ...(existingEl?.datosTecnicos || {}),
+            ...(cleanUpdatedData.datosTecnicos || {}),
+            pendiente: pendBool
+          };
+        }
         if (cleanUpdatedData.alimentaA !== undefined) {
           cleanUpdatedData.alimentaA = isPlaceholderHierarchyValue(cleanUpdatedData.alimentaA)
             ? ''
@@ -3980,7 +4130,8 @@ export const useStore = create(
             };
           }),
           elementosLocales: (state.elementosLocales || []).filter((e) => e.id !== elementoId),
-          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== elementoId)
+          syncQueue: (Array.isArray(state.syncQueue) ? state.syncQueue : []).filter((item) => item?.id !== elementoId),
+          lastSyncAt: new Date().toISOString()
         }));
 
         return { ok: true };
@@ -5236,6 +5387,25 @@ export const useStore = create(
           if (res.ok) {
             // Confirmación exitosa en base de datos PostgreSQL: asegurar que NO quede en cola local
             get().removeFromQueue(elemento.id);
+
+            if (res.deletedOnServer) {
+              // El elemento ya había sido eliminado por otro dispositivo: purgar fantasma localmente
+              set((state) => ({
+                companies: state.companies.map((c) => ({
+                  ...c,
+                  proyectos: (c.proyectos || []).map((p) => ({
+                    ...p,
+                    elementosUnifilares: (p.elementosUnifilares || []).filter((el) => el.id !== elemento.id),
+                    ...(p.tableros ? { tableros: (p.tableros || []).filter((t) => t.id !== elemento.id) } : {})
+                  })),
+                  elementosUnifilares: (c.elementosUnifilares || []).filter((el) => el.id !== elemento.id)
+                })),
+                elementosLocales: (state.elementosLocales || []).filter((el) => el.id !== elemento.id),
+                lastSyncAt: new Date().toISOString()
+              }));
+              return { ok: true, deletedOnServer: true };
+            }
+
             const record = res.data;
             if (record) {
               const returnedFoto = record.foto || res.foto;
@@ -5244,6 +5414,10 @@ export const useStore = create(
                     ? returnedFoto
                     : `${API_BASE_URL}${returnedFoto}`)
                 : null;
+
+              const nextFoto = elemento.eliminarFoto
+                ? null
+                : (normalizedFoto || elemento.foto || null);
 
               set((state) => ({
                 companies: state.companies.map((c) => ({
@@ -5254,7 +5428,7 @@ export const useStore = create(
                         ...p,
                         elementosUnifilares: (p.elementosUnifilares || p.tableros || []).map((el) => {
                           if (el.id === elemento.id) {
-                            return { ...el, foto: normalizedFoto || el.foto, fotoBlob: null, version: record.version || 1 };
+                            return { ...el, foto: nextFoto ?? el.foto ?? null, ...(elemento.eliminarFoto ? { foto: null } : {}), fotoBlob: null, version: record.version || 1 };
                           }
                           return el;
                         })
@@ -5264,14 +5438,14 @@ export const useStore = create(
                   }),
                   elementosUnifilares: (c.elementosUnifilares || []).map((el) => {
                     if (el.id === elemento.id) {
-                      return { ...el, foto: normalizedFoto || el.foto, fotoBlob: null, version: record.version || 1 };
+                      return { ...el, foto: nextFoto ?? el.foto ?? null, ...(elemento.eliminarFoto ? { foto: null } : {}), fotoBlob: null, version: record.version || 1 };
                     }
                     return el;
                   })
                 })),
                 elementosLocales: (state.elementosLocales || []).map((el) => {
                   if (el.id === elemento.id) {
-                    return { ...el, foto: normalizedFoto || el.foto, fotoBlob: null, version: record.version || 1 };
+                    return { ...el, foto: nextFoto ?? el.foto ?? null, ...(elemento.eliminarFoto ? { foto: null } : {}), fotoBlob: null, version: record.version || 1 };
                   }
                   return el;
                 })
@@ -5761,7 +5935,11 @@ export const useStore = create(
         ccmLocales: state.ccmLocales || [],
         conflictosCircuitos: state.conflictosCircuitos || [],
         syncQueue: Array.isArray(state.syncQueue) ? state.syncQueue : [],
-        deletedCompanyIds: Array.isArray(state.deletedCompanyIds) ? state.deletedCompanyIds : []
+        deletedCompanyIds: Array.isArray(state.deletedCompanyIds) ? state.deletedCompanyIds : [],
+        universalElementOrder: Array.isArray(state.universalElementOrder) && state.universalElementOrder.length > 0
+          ? state.universalElementOrder
+          : DEFAULT_UNIVERSAL_ELEMENT_ORDER,
+        elementSortMode: state.elementSortMode || 'MANUAL'
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

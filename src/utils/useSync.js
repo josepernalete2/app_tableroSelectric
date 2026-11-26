@@ -96,6 +96,59 @@ export function useSync() {
     };
   }, []);
 
+  // Auto-sincronización silenciosa entre dispositivos:
+  // 1) Al volver a enfocar la pestaña / desbloquear la tablet (cooldown mínimo de 10s)
+  // 2) Polling ligero cada 25 segundos si está online, visible y sin input activo
+  const lastAutoSyncRef = useRef(0);
+
+  useEffect(() => {
+    const isActivelyTyping = () => {
+      if (typeof document === 'undefined') return false;
+      const el = document.activeElement;
+      const tag = el?.tagName ? String(el.tagName).toUpperCase() : '';
+      return (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') && !el.readOnly && !el.disabled;
+    };
+
+    const runSilentSync = (minCooldownMs = 10000) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (isSyncingRef.current || isActivelyTyping()) return;
+
+      const state = useStore.getState();
+      if (!state.token || state.token === 'mock-offline-token') return;
+
+      const now = Date.now();
+      if (now - lastAutoSyncRef.current < minCooldownMs) return;
+      lastAutoSyncRef.current = now;
+
+      const q = Array.isArray(state.syncQueue) ? state.syncQueue : [];
+      if (q.length > 0) {
+        procesarColaSincronizacion(false);
+      } else {
+        state.pullInitialData?.();
+      }
+    };
+
+    const handleFocusOrVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        runSilentSync(10000);
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisibility);
+    document.addEventListener('visibilitychange', handleFocusOrVisibility);
+
+    const pollTimer = setInterval(() => {
+      runSilentSync(24000);
+    }, 25000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility);
+      clearInterval(pollTimer);
+    };
+  }, []);
+
   // Control de reintentos con backoff progresivo
   const retryCountRef = useRef(0);
   const lastSyncAttemptRef = useRef(0);
@@ -499,7 +552,11 @@ export function useSync() {
               processedCount++;
 
               const appRecord = applied.find((a) => a?.id === mutId || a?.id === item?.id);
-              if (appRecord) actualizarRegistroEnStore(appRecord);
+              if (appRecord?.deletedOnServer) {
+                useStore.getState().pullInitialData?.({ force: true });
+              } else if (appRecord) {
+                actualizarRegistroEnStore(appRecord);
+              }
             } else if (conflictMap.has(mutId) || conflictMap.has(item?.id)) {
               const err = conflictMap.get(mutId) || conflictMap.get(item?.id);
               console.warn(`[SYNC CLIENT] ⚠️ Conflicto en ítem ${item?.id}:`, err);
@@ -809,7 +866,8 @@ export function useSync() {
     removeSingleItem,
     clearQueue,
     syncPendingData: () => procesarColaSincronizacion(true),
-    pullInitialData: () => useStore.getState().pullInitialData?.()
+    pullInitialData: () => useStore.getState().pullInitialData?.(),
+    refreshFromServer: () => useStore.getState().pullInitialData?.({ force: true })
   };
 }
 

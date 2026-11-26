@@ -8,7 +8,8 @@ import useStore, {
   sortElementsByOrder,
   resolveElementParentDisplay,
   resolveElementUbicacionDisplay,
-  isPlaceholderHierarchyValue
+  isPlaceholderHierarchyValue,
+  DEFAULT_UNIVERSAL_ELEMENT_ORDER
 } from '../store/useStore';
 import { useConfirm } from '../context/ConfirmContext';
 import ModalDiagramaUnifilar from '../components/ModalDiagramaUnifilar';
@@ -48,19 +49,27 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  Clock,
+  ArrowUpDown,
+  SlidersHorizontal,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import DiagramaUnifilarBlueprint from '../components/DiagramaUnifilarBlueprint';
 import HelpModal from '../components/HelpModal';
 import ModalEditarIdElemento from '../components/ModalEditarIdElemento';
 import TensionNominalInput from '../components/TensionNominalInput';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+import { eliminarImagenEnR2Cliente } from '../utils/syncService';
 import { API_BASE_URL } from '../utils/api';
 import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
 import { PRESET_UBICACIONES } from '../utils/electricalPresets';
 
-// Componente para renderizar Base64 / Blobs / URLs de forma segura
-const SafeImage = ({ blob, src, alt, className }) => {
+// Componente para renderizar Base64 / Blobs / URLs de forma segura con fallback limpio
+const SafeImage = ({ blob, src, alt, className, fallback = null }) => {
   const [objectUrl, setObjectUrl] = useState(null);
   const [hasError, setHasError] = useState(false);
 
@@ -79,7 +88,7 @@ const SafeImage = ({ blob, src, alt, className }) => {
 
   const rawSrc = objectUrl || (typeof src === 'string' ? src : null);
   const finalSrc = getCleanImageUrl(rawSrc, API_BASE_URL);
-  if (!finalSrc || hasError) return null;
+  if (!finalSrc || hasError) return fallback;
 
   return (
     <img 
@@ -102,6 +111,7 @@ export const ProyectoView = () => {
     deleteElementoUnifilar,
     updateElementoUnifilar,
     addInspeccionSubestacion,
+    updateSubestacion,
     deleteSubestacion,
     addPuntoMedicion,
     deletePuntoMedicion,
@@ -113,13 +123,66 @@ export const ProyectoView = () => {
     moverElemento,
     reordenarColeccion,
     vincularJerarquia,
-    showToast
+    showToast,
+    universalElementOrder,
+    elementSortMode,
+    setUniversalElementOrder,
+    setElementSortMode,
+    resetUniversalElementOrder
   } = useStore();
 
   const company = companies.find((c) => c.id === companyId);
   const proyecto = company?.proyectos?.find((p) => p.id === proyectoId);
 
   const { confirm, alert: customAlert } = useConfirm();
+
+  const handleDeleteCardPhoto = async (e, item, cardPhotoSrc) => {
+    e.stopPropagation();
+    if (!item || user?.role === 'CLIENT') return;
+    const confirmed = await confirm({
+      title: 'Eliminar fotografía',
+      message: '¿Eliminar esta fotografía? Se borrará del elemento y de la nube.',
+      confirmText: 'Sí, Eliminar',
+      cancelText: 'Cancelar',
+      type: 'danger'
+    });
+    if (!confirmed) return;
+
+    const freshToken =
+      useStore.getState().token ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+      '';
+    if (cardPhotoSrc) {
+      eliminarImagenEnR2Cliente(cardPhotoSrc, freshToken);
+    }
+
+    const clearedPhoto = {
+      foto: null,
+      fotoUrl: null,
+      imagen: null,
+      fotoBlob: null,
+      eliminarFoto: true,
+      ...(item.datosTecnicos ? { datosTecnicos: { ...item.datosTecnicos, foto: null, fotoUrl: null } } : {})
+    };
+
+    const tipo = String(item.tipoElemento || '').toUpperCase();
+    if (tipo === 'SUBESTACION' && (proyecto?.inspeccionesSubestacion || []).some((s) => s.id === item.id)) {
+      updateSubestacion(proyectoId, item.id, {
+        ...clearedPhoto,
+        estadoEntorno: { ...(item.estadoEntorno || {}), __foto: null }
+      });
+    } else if (tipo === 'CCM' && (proyecto?.ccmList || []).some((c) => c.id === item.id)) {
+      updateCcm(proyectoId, item.id, {
+        ...clearedPhoto,
+        parametrosElectricos: { ...(item.parametrosElectricos || {}), __foto: null }
+      });
+    } else if ((proyecto?.puntosMedicion || []).some((pm) => pm.id === item.id)) {
+      updatePuntoMedicion(proyectoId, item.id, clearedPhoto);
+    } else {
+      updateElementoUnifilar(proyectoId, item.id, clearedPhoto);
+    }
+    showToast?.('Fotografía eliminada correctamente.', 'info');
+  };
 
   // Estado del modal de eliminación permanente de Elemento / Inspección (solo ADMIN)
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -247,6 +310,152 @@ export const ProyectoView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [elementoTypeFilter, setElementoTypeFilter] = useState('ALL');
   const [inspeccionTypeFilter, setInspeccionTypeFilter] = useState('ALL');
+  const [onlyPendientesFilter, setOnlyPendientesFilter] = useState(false);
+
+  // Modal configurador de orden universal por tipo
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [draftTypeOrder, setDraftTypeOrder] = useState(() =>
+    Array.isArray(universalElementOrder) && universalElementOrder.length > 0
+      ? [...universalElementOrder]
+      : [...DEFAULT_UNIVERSAL_ELEMENT_ORDER]
+  );
+
+  const isItemPendiente = (item) => Boolean(
+    item?.pendiente ||
+    item?.datosTecnicos?.pendiente ||
+    item?.estadoEntorno?.__pendiente ||
+    item?.parametrosElectricos?.__pendiente
+  );
+
+  const handleTogglePendiente = (e, item) => {
+    e?.stopPropagation?.();
+    if (!item || user?.role === 'CLIENT') return;
+    const nextPendiente = !isItemPendiente(item);
+    const tipo = String(item.tipoElemento || item.tipo || '').toUpperCase();
+
+    if (
+      item._sourceCollection === 'SUBESTACION' ||
+      (tipo === 'SUBESTACION' && (proyecto?.inspeccionesSubestacion || proyecto?.subestaciones || []).some((s) => s.id === item.id)) ||
+      (proyecto?.inspeccionesSubestacion || []).some((s) => s.id === item.id)
+    ) {
+      updateSubestacion(proyectoId, item.id, {
+        pendiente: nextPendiente,
+        estadoEntorno: { ...(item.estadoEntorno || {}), __pendiente: nextPendiente }
+      });
+    } else if (tipo === 'CCM' && (proyecto?.ccmList || []).some((c) => c.id === item.id)) {
+      updateCcm(proyectoId, item.id, {
+        pendiente: nextPendiente,
+        parametrosElectricos: { ...(item.parametrosElectricos || {}), __pendiente: nextPendiente }
+      });
+    } else if ((proyecto?.puntosMedicion || []).some((pm) => pm.id === item.id)) {
+      updatePuntoMedicion(proyectoId, item.id, { pendiente: nextPendiente });
+    } else {
+      updateElementoUnifilar(proyectoId, item.id, {
+        pendiente: nextPendiente,
+        datosTecnicos: { ...(item.datosTecnicos || {}), pendiente: nextPendiente }
+      });
+    }
+
+    showToast?.(
+      nextPendiente
+        ? `"${item.nombre || 'Elemento'}" marcado como PENDIENTE`
+        : `"${item.nombre || 'Elemento'}" quitado de pendientes`,
+      nextPendiente ? 'info' : 'success'
+    );
+  };
+
+  const ELEMENT_TYPE_META = {
+    SUBESTACION: { label: 'Subestaciones', emoji: '🏢' },
+    PUNTO_SUMINISTRO: { label: 'Puntos de Suministro', emoji: '🔌' },
+    PUNTO_MEDICION: { label: 'Puntos de Medición', emoji: '📏' },
+    TRANSFORMADOR: { label: 'Transformadores', emoji: '🔄' },
+    GENERADOR: { label: 'Generadores', emoji: '🔋' },
+    TRANSFER: { label: 'Transferencias (ATS/MTS)', emoji: '🔀' },
+    CCM: { label: 'CCM Motores', emoji: '⚙️' },
+    TABLERO: { label: 'Tableros / Paneles Eléctricos', emoji: '⚡' },
+    BANCO_CONDENSADOR: { label: 'Bancos de Condensadores', emoji: '⚡' },
+    PUESTA_TIERRA: { label: 'Puesta a Tierra', emoji: '🛡️' },
+    TERMOGRAFICA: { label: 'Inspección Termográfica', emoji: '🔥' },
+    SISTEMA_ATERRAMIENTO: { label: 'Sistema de Aterramiento (SPAT)', emoji: '🛡️' },
+    TANQUE_COMBUSTIBLE: { label: 'Tanques de Combustible', emoji: '⛽' },
+    OTRO: { label: 'Otros Equipos', emoji: '📦' }
+  };
+
+  const getShortElementId = (item) => {
+    if (!item) return '';
+    const explicit =
+      item.codigo ||
+      item.codigoCorto ||
+      item.idCorto ||
+      item.tag ||
+      item.datosTecnicos?.codigo ||
+      item.datosTecnicos?.tag ||
+      item.estadoEntorno?.codigo ||
+      item.parametrosElectricos?.codigo ||
+      '';
+    const raw = String(explicit || getElementCode(item, item.tipoElemento || item.tipo || 'TABLERO') || '').trim();
+    if (!raw || raw === '—' || raw === 'N/A' || raw === 'SIN-ID') return '';
+    return raw.toUpperCase().replace(/\s+/g, '');
+  };
+
+  const sortUniversalList = (list, mode, typeOrder) => {
+    if (!Array.isArray(list)) return [];
+    if (!mode || mode === 'MANUAL') return list;
+
+    const effectiveOrder = Array.isArray(typeOrder) && typeOrder.length > 0
+      ? typeOrder
+      : DEFAULT_UNIVERSAL_ELEMENT_ORDER;
+    const orderIndexMap = new Map(effectiveOrder.map((t, idx) => [String(t).toUpperCase(), idx]));
+    const getTypeRank = (item) => {
+      const t = String(item?.tipoElemento || item?.tipo || 'TABLERO').trim().toUpperCase();
+      if (orderIndexMap.has(t)) return orderIndexMap.get(t);
+      if (t === 'AMBIENTAL_FISICA') return orderIndexMap.get('SUBESTACION') ?? 998;
+      return 999;
+    };
+    const getSortName = (item) => String(formatElementTitleWithId(item?.nombre, item?.id, item?.codigo) || item?.nombre || '').trim();
+    const compareAlphaAsc = (a, b) => getSortName(a).localeCompare(getSortName(b), 'es', { numeric: true, sensitivity: 'base' });
+    const compareByShortId = (a, b, desc = false) => {
+      const idA = getShortElementId(a);
+      const idB = getShortElementId(b);
+      if (!idA && !idB) return desc ? compareAlphaAsc(b, a) : compareAlphaAsc(a, b);
+      if (!idA) return 1;
+      if (!idB) return -1;
+      const cmp = idA.localeCompare(idB, 'es', { numeric: true, sensitivity: 'base' });
+      if (cmp !== 0) return desc ? -cmp : cmp;
+      return desc ? compareAlphaAsc(b, a) : compareAlphaAsc(a, b);
+    };
+
+    return [...list].sort((a, b) => {
+      if (mode === 'id_asc') {
+        return compareByShortId(a, b, false);
+      }
+      if (mode === 'id_desc') {
+        return compareByShortId(a, b, true);
+      }
+      if (mode === 'ALPHA_ASC') {
+        return compareAlphaAsc(a, b);
+      }
+      if (mode === 'ALPHA_DESC') {
+        return compareAlphaAsc(b, a);
+      }
+      if (mode === 'PENDING_FIRST') {
+        const pa = isItemPendiente(a) ? 0 : 1;
+        const pb = isItemPendiente(b) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        const ra = getTypeRank(a);
+        const rb = getTypeRank(b);
+        if (ra !== rb) return ra - rb;
+        return compareByShortId(a, b, false);
+      }
+      if (mode === 'TYPE_UNIVERSAL') {
+        const ra = getTypeRank(a);
+        const rb = getTypeRank(b);
+        if (ra !== rb) return ra - rb;
+        return compareByShortId(a, b, false);
+      }
+      return 0;
+    });
+  };
 
   // Estado para Modal de Edición de ID (Solo Administradores)
   const [editIdModalData, setEditIdModalData] = useState({ isOpen: false, elemento: null, tipoElemento: 'TABLERO' });
@@ -384,9 +593,20 @@ export const ProyectoView = () => {
     return chips;
   }, [inspecciones]);
 
+  const pendingElementosCount = useMemo(
+    () => equiposRegistrados.filter((e) => isItemPendiente(e)).length,
+    [equiposRegistrados]
+  );
+
+  const pendingInspeccionesCount = useMemo(
+    () => inspecciones.filter((i) => isItemPendiente(i)).length,
+    [inspecciones]
+  );
+
   const filteredElementos = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return equiposRegistrados.filter((e) => {
+    const filtered = equiposRegistrados.filter((e) => {
+      if (onlyPendientesFilter && !isItemPendiente(e)) return false;
       const tipo = String(e.tipoElemento || 'TABLERO').toUpperCase();
       if (elementoTypeFilter !== 'ALL') {
         if (elementoTypeFilter === 'PUNTO_SUMINISTRO') {
@@ -403,11 +623,13 @@ export const ProyectoView = () => {
         e.ubicacion?.toLowerCase().includes(q)
       );
     });
-  }, [equiposRegistrados, searchQuery, elementoTypeFilter]);
+    return sortUniversalList(filtered, elementSortMode, universalElementOrder);
+  }, [equiposRegistrados, searchQuery, elementoTypeFilter, onlyPendientesFilter, elementSortMode, universalElementOrder]);
 
   const filteredInspecciones = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return inspecciones.filter((i) => {
+    const filtered = inspecciones.filter((i) => {
+      if (onlyPendientesFilter && !isItemPendiente(i)) return false;
       if (inspeccionTypeFilter !== 'ALL' && getInspeccionFilterKey(i) !== inspeccionTypeFilter) {
         return false;
       }
@@ -420,7 +642,8 @@ export const ProyectoView = () => {
         i.inspector?.toLowerCase().includes(q)
       );
     });
-  }, [inspecciones, searchQuery, inspeccionTypeFilter]);
+    return sortUniversalList(filtered, elementSortMode, universalElementOrder);
+  }, [inspecciones, searchQuery, inspeccionTypeFilter, onlyPendientesFilter, elementSortMode, universalElementOrder]);
 
   const filteredPuntosMedicion = useMemo(() => {
     if (!searchQuery.trim()) return puntosMedicion;
@@ -440,7 +663,7 @@ export const ProyectoView = () => {
   // Limpiar selección cuando cambia la pestaña, la búsqueda o el filtro rápido
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [activeTab, searchQuery, elementoTypeFilter, inspeccionTypeFilter]);
+  }, [activeTab, searchQuery, elementoTypeFilter, inspeccionTypeFilter, onlyPendientesFilter]);
 
   const handleToggleSelect = (id) => {
     setSelectedIds((prev) => {
@@ -1483,31 +1706,99 @@ export const ProyectoView = () => {
               <p className="text-xs text-slate-500">Inspecciones de obras civiles, termografía, sistema de aterramiento (SPAT) y tanques de combustible.</p>
             </div>
 
-            {/* Barra de Filtros Rápidos por Tipo de Inspección */}
+            {/* Barra de Filtros Rápidos por Tipo de Inspección + Pendientes + Ordenamiento */}
             {inspecciones.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mb-5">
-                {inspeccionFilterChips.map((chip) => {
-                  const isActive = inspeccionTypeFilter === chip.id;
-                  return (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      onClick={() => setInspeccionTypeFilter(chip.id)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                        isActive
-                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-amber-500/40 hover:text-amber-400'
-                      }`}
-                    >
-                      <span>{chip.label}</span>
-                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-                        isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
-                      }`}>
-                        {chip.count}
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="space-y-3 mb-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  {inspeccionFilterChips.map((chip) => {
+                    const isActive = inspeccionTypeFilter === chip.id;
+                    return (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setInspeccionTypeFilter(chip.id)}
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          isActive
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-amber-500/40 hover:text-amber-400'
+                        }`}
+                      >
+                        <span>{chip.label}</span>
+                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                          isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
+                        }`}>
+                          {chip.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => setOnlyPendientesFilter((v) => !v)}
+                    className={`px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      onlyPendientesFilter
+                        ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/20 font-black'
+                        : pendingInspeccionesCount > 0
+                          ? 'bg-orange-950/50 border-orange-500/50 text-orange-300 hover:bg-orange-950/80'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-orange-500/40 hover:text-orange-300'
+                    }`}
+                    title="Mostrar únicamente inspecciones marcadas como pendientes"
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Pendientes ({pendingInspeccionesCount})</span>
+                  </button>
+                </div>
+
+                {/* Controles de Ordenamiento Universal */}
+                <div className="flex flex-wrap items-center gap-2 bg-slate-950/70 border border-slate-800/80 p-2 rounded-2xl">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold px-1.5">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Orden:</span>
+                  </div>
+                  <select
+                    value={elementSortMode}
+                    onChange={(e) => {
+                      setElementSortMode(e.target.value);
+                      showToast?.('Orden actualizado', 'info');
+                    }}
+                    className="bg-slate-900 border border-slate-700 hover:border-amber-500/50 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 cursor-pointer min-h-[36px]"
+                  >
+                    <option value="MANUAL">Orden manual / creación</option>
+                    <option value="TYPE_UNIVERSAL">Orden por Tipo (Universal)</option>
+                    <option value="id_asc">Por ID (A → Z / 1 → 9)</option>
+                    <option value="id_desc">Por ID (Z → A / 9 → 1)</option>
+                    <option value="ALPHA_ASC">Alfabético (A → Z)</option>
+                    <option value="ALPHA_DESC">Alfabético (Z → A)</option>
+                    <option value="PENDING_FIRST">Pendientes primero</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setElementSortMode('TYPE_UNIVERSAL');
+                      showToast?.('Organizado automáticamente según orden universal de tipos', 'success');
+                    }}
+                    className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 min-h-[36px]"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Organizar automáticamente</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftTypeOrder(
+                        Array.isArray(universalElementOrder) && universalElementOrder.length > 0
+                          ? [...universalElementOrder]
+                          : [...DEFAULT_UNIVERSAL_ELEMENT_ORDER]
+                      );
+                      setShowOrderModal(true);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/40 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 min-h-[36px]"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Orden de tipos</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1595,9 +1886,33 @@ export const ProyectoView = () => {
 
                     <div className="p-5 flex-1 flex flex-col justify-between">
                       <div className="space-y-1">
-                        <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
-                          {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
-                        </h3>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate flex-1">
+                            {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
+                          </h3>
+                          {user?.role !== 'CLIENT' && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleTogglePendiente(e, item)}
+                              className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer active:scale-95 flex items-center gap-1 ${
+                                isItemPendiente(item)
+                                  ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 hover:bg-orange-500/30'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-orange-500/40 hover:text-orange-300'
+                              }`}
+                              title={isItemPendiente(item) ? 'Quitar marca de pendiente' : 'Marcar como pendiente'}
+                            >
+                              <Clock className="w-3 h-3" />
+                              <span>{isItemPendiente(item) ? 'Pendiente ✓' : 'Marcar pendiente'}</span>
+                            </button>
+                          )}
+                        </div>
+                        {isItemPendiente(item) && (
+                          <div className="pt-0.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-300 border border-orange-500/50">
+                              <Clock className="w-3 h-3" /> PENDIENTE
+                            </span>
+                          </div>
+                        )}
                         <div className="space-y-1 mt-3 text-[11px] text-slate-400 border-t border-slate-900/60 pt-3">
                           <p className="truncate"><span className="text-slate-500 font-bold">Ubicación:</span> {resolveElementUbicacionDisplay(item) || 'Sin especificar'}</p>
                           <p className="truncate"><span className="text-slate-500 font-bold">Tensión:</span> {item.nivelTension}</p>
@@ -1649,11 +1964,12 @@ export const ProyectoView = () => {
                       : 'Crea una ficha de Inspección Técnica (Subestación, Termografía, SPAT o Tanque de Combustible).'}
                   </p>
                 </div>
-                {(inspeccionTypeFilter !== 'ALL' || searchQuery.trim()) && (
+                {(inspeccionTypeFilter !== 'ALL' || onlyPendientesFilter || searchQuery.trim()) && (
                   <button
                     type="button"
                     onClick={() => {
                       setInspeccionTypeFilter('ALL');
+                      setOnlyPendientesFilter(false);
                       setSearchQuery('');
                     }}
                     className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-amber-400 rounded-xl transition-all cursor-pointer"
@@ -1683,31 +1999,99 @@ export const ProyectoView = () => {
               </button>
             </div>
 
-            {/* Barra de Filtros Rápidos por Tipo de Equipo */}
+            {/* Barra de Filtros Rápidos por Tipo de Equipo + Pendientes + Ordenamiento Universal */}
             {equiposRegistrados.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mb-6">
-                {elementoFilterChips.map((chip) => {
-                  const isActive = elementoTypeFilter === chip.id;
-                  return (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      onClick={() => setElementoTypeFilter(chip.id)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                        isActive
-                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-amber-500/40 hover:text-amber-400'
-                      }`}
-                    >
-                      <span>{chip.label}</span>
-                      <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
-                        isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
-                      }`}>
-                        {chip.count}
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="space-y-3 mb-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  {elementoFilterChips.map((chip) => {
+                    const isActive = elementoTypeFilter === chip.id;
+                    return (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setElementoTypeFilter(chip.id)}
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          isActive
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-amber-500/40 hover:text-amber-400'
+                        }`}
+                      >
+                        <span>{chip.label}</span>
+                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-mono ${
+                          isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-900 text-slate-400'
+                        }`}>
+                          {chip.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => setOnlyPendientesFilter((v) => !v)}
+                    className={`px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                      onlyPendientesFilter
+                        ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-md shadow-orange-500/20 font-black'
+                        : pendingElementosCount > 0
+                          ? 'bg-orange-950/50 border-orange-500/50 text-orange-300 hover:bg-orange-950/80'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-orange-500/40 hover:text-orange-300'
+                    }`}
+                    title="Filtrar únicamente elementos marcados como pendientes"
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Pendientes ({pendingElementosCount})</span>
+                  </button>
+                </div>
+
+                {/* Controles de Ordenamiento Universal (PC y Tablet) */}
+                <div className="flex flex-wrap items-center gap-2 bg-slate-950/70 border border-slate-800/80 p-2 rounded-2xl">
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold px-1.5">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Orden:</span>
+                  </div>
+                  <select
+                    value={elementSortMode}
+                    onChange={(e) => {
+                      setElementSortMode(e.target.value);
+                      showToast?.('Orden actualizado', 'info');
+                    }}
+                    className="bg-slate-900 border border-slate-700 hover:border-amber-500/50 text-slate-200 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 cursor-pointer min-h-[36px]"
+                  >
+                    <option value="MANUAL">Orden manual / creación</option>
+                    <option value="TYPE_UNIVERSAL">Orden por Tipo (Universal)</option>
+                    <option value="id_asc">Por ID (A → Z / 1 → 9)</option>
+                    <option value="id_desc">Por ID (Z → A / 9 → 1)</option>
+                    <option value="ALPHA_ASC">Alfabético (A → Z)</option>
+                    <option value="ALPHA_DESC">Alfabético (Z → A)</option>
+                    <option value="PENDING_FIRST">Pendientes primero</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setElementSortMode('TYPE_UNIVERSAL');
+                      showToast?.('Elementos organizados automáticamente según el orden universal de tipos', 'success');
+                    }}
+                    className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 min-h-[36px]"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Organizar automáticamente</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftTypeOrder(
+                        Array.isArray(universalElementOrder) && universalElementOrder.length > 0
+                          ? [...universalElementOrder]
+                          : [...DEFAULT_UNIVERSAL_ELEMENT_ORDER]
+                      );
+                      setShowOrderModal(true);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/40 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 min-h-[36px]"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Orden de tipos</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1767,15 +2151,17 @@ export const ProyectoView = () => {
                       }`}
                     >
                       {/* Cabecera de Tarjeta */}
-                      <div className="h-32 w-full bg-slate-900 relative overflow-hidden flex items-center justify-center border-b border-slate-900/50">
-                        {item.fotoBlob || item.foto ? (
-                          <SafeImage 
-                            blob={item.fotoBlob}
-                            src={item.foto} 
-                            alt={item.nombre} 
-                            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500" 
-                          />
-                        ) : (
+                      {(() => {
+                        const cardPhotoSrc =
+                          item.foto ||
+                          item.fotoUrl ||
+                          item.imagen ||
+                          item.datos?.foto ||
+                          item.datos?.fotoUrl ||
+                          item.datosTecnicos?.foto ||
+                          item.datosTecnicos?.fotoUrl ||
+                          null;
+                        const placeholderFallback = (
                           <div className="flex flex-col items-center justify-center text-slate-700 gap-1.5 select-none">
                             {isTablero && <Zap className="w-8 h-8 opacity-25 text-sky-400" />}
                             {isTrafo && <Cpu className="w-8 h-8 opacity-25 text-purple-400" />}
@@ -1788,7 +2174,32 @@ export const ProyectoView = () => {
                             {!isTablero && !isTrafo && !isGen && !isPuestaTierra && !isTransfer && !isPuntoSuministro && !isCcm && !isBanco && <Layers className="w-8 h-8 opacity-25 text-slate-400" />}
                             <span className="text-[9px] uppercase font-bold tracking-widest opacity-30">Sin Imagen</span>
                           </div>
-                        )}
+                        );
+                        return (
+                          <div className="h-32 w-full bg-slate-900 relative overflow-hidden flex items-center justify-center border-b border-slate-900/50">
+                            {item.fotoBlob || cardPhotoSrc ? (
+                              <>
+                                <SafeImage
+                                  blob={item.fotoBlob}
+                                  src={cardPhotoSrc}
+                                  alt={item.nombre}
+                                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-500"
+                                  fallback={placeholderFallback}
+                                />
+                                {user?.role !== 'CLIENT' && cardPhotoSrc && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteCardPhoto(e, item, cardPhotoSrc)}
+                                    className="absolute bottom-2 right-2 z-20 p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-lg shadow-lg border border-red-400/40 transition-all cursor-pointer active:scale-95"
+                                    title="Eliminar fotografía"
+                                  >
+                                    <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              placeholderFallback
+                            )}
                         
                         {/* Badges de tipo e ID */}
                         <div className="absolute top-3 left-3 flex items-center gap-1.5">
@@ -1875,13 +2286,39 @@ export const ProyectoView = () => {
                           </div>
                         )}
                       </div>
+                        );
+                      })()}
 
                       {/* Contenido de Tarjeta */}
                       <div className="p-5 flex-1 flex flex-col justify-between">
                         <div className="space-y-1">
-                          <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate">
-                            {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
-                          </h3>
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors truncate flex-1">
+                              {formatElementTitleWithId(item.nombre, item.id, item.codigo)}
+                            </h3>
+                            {user?.role !== 'CLIENT' && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleTogglePendiente(e, item)}
+                                className={`shrink-0 px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer active:scale-95 flex items-center gap-1 ${
+                                  isItemPendiente(item)
+                                    ? 'bg-orange-500/20 border-orange-500/60 text-orange-300 hover:bg-orange-500/30'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-orange-500/40 hover:text-orange-300'
+                                }`}
+                                title={isItemPendiente(item) ? 'Quitar marca de pendiente' : 'Marcar como pendiente'}
+                              >
+                                <Clock className="w-3 h-3" />
+                                <span>{isItemPendiente(item) ? 'Pendiente ✓' : 'Marcar pendiente'}</span>
+                              </button>
+                            )}
+                          </div>
+                          {isItemPendiente(item) && (
+                            <div className="pt-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-300 border border-orange-500/50">
+                                <Clock className="w-3 h-3" /> PENDIENTE
+                              </span>
+                            </div>
+                          )}
                           {isTablero && (
                             <div className="pt-0.5">
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm">
@@ -2010,11 +2447,12 @@ export const ProyectoView = () => {
                       : 'Registra un Panel Eléctrico, Punto de Suministro, Transformador, Transferencia, Generador, CCM o Banco de Condensadores en este proyecto.'}
                   </p>
                 </div>
-                {(elementoTypeFilter !== 'ALL' || searchQuery.trim()) && (
+                {(elementoTypeFilter !== 'ALL' || onlyPendientesFilter || searchQuery.trim()) && (
                   <button
                     type="button"
                     onClick={() => {
                       setElementoTypeFilter('ALL');
+                      setOnlyPendientesFilter(false);
                       setSearchQuery('');
                     }}
                     className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-amber-400 rounded-xl transition-all cursor-pointer"
@@ -3100,6 +3538,125 @@ export const ProyectoView = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal Configurador de Orden Universal por Tipo de Elemento (PC y Tablet) */}
+      {showOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+          <div onClick={() => setShowOrderModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
+          <div className="relative w-full max-w-xl max-h-[90vh] flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-slate-100 flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-amber-500" />
+                  Orden Universal por Tipo de Elemento
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Define la prioridad de visualización para todos los proyectos. Dentro de cada tipo se ordenan alfabéticamente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOrderModal(false)}
+                className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-2 flex-1">
+              {draftTypeOrder.map((typeKey, idx) => {
+                const meta = ELEMENT_TYPE_META[typeKey] || { label: typeKey.replace(/_/g, ' '), emoji: '📦' };
+                const moveItem = (fromIdx, toIdx) => {
+                  if (toIdx < 0 || toIdx >= draftTypeOrder.length || fromIdx === toIdx) return;
+                  const next = [...draftTypeOrder];
+                  const [moved] = next.splice(fromIdx, 1);
+                  next.splice(toIdx, 0, moved);
+                  setDraftTypeOrder(next);
+                };
+                return (
+                  <div
+                    key={typeKey}
+                    className="flex items-center justify-between gap-2 p-2.5 sm:p-3 bg-slate-900/90 border border-slate-800 rounded-xl"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-slate-950 border border-slate-700 text-[11px] font-mono font-bold text-amber-400 flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="text-base shrink-0">{meta.emoji}</span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-200 truncate">{meta.label}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveItem(idx, 0)}
+                        className="px-2.5 py-2 rounded-lg bg-slate-950 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/50 text-[10px] sm:text-[11px] font-bold text-amber-300 disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed min-h-[36px]"
+                        title="Poner este tipo primero"
+                      >
+                        Poner primero
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => moveItem(idx, idx - 1)}
+                        className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        title="Subir"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === draftTypeOrder.length - 1}
+                        onClick={() => moveItem(idx, idx + 1)}
+                        className="p-2 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-200 disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed min-h-[36px] min-w-[36px] flex items-center justify-center"
+                        title="Bajar"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 sm:p-4 border-t border-slate-800 bg-slate-950 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  resetUniversalElementOrder();
+                  setDraftTypeOrder([...DEFAULT_UNIVERSAL_ELEMENT_ORDER]);
+                  showToast?.('Orden predeterminado restablecido', 'info');
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-slate-300 flex items-center gap-1.5 cursor-pointer min-h-[40px]"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Restablecer orden predeterminado</span>
+              </button>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowOrderModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 cursor-pointer min-h-[40px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUniversalElementOrder(draftTypeOrder);
+                    setElementSortMode('TYPE_UNIVERSAL');
+                    setShowOrderModal(false);
+                    showToast?.('Orden universal por tipo guardado y aplicado', 'success');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black cursor-pointer shadow-md min-h-[40px]"
+                >
+                  Guardar y Aplicar
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

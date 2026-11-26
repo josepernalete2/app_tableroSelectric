@@ -1279,17 +1279,45 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}
               previewUrl={previewUrl}
-              onImageSelected={(file, base64Url) => {
+              onImageSelected={(file, uploadedUrl) => {
                 setFotoBlob(file);
-                setFotoSrc(base64Url);
+                setFotoSrc(uploadedUrl);
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(base64Url);
+                setPreviewUrl(uploadedUrl);
+                onUpdate?.({
+                  ...elementoData,
+                  nombre,
+                  ubicacion,
+                  alimentadoPor,
+                  alimentadoPorId,
+                  alimentaA,
+                  alimentaAIds,
+                  observacionesGenerales,
+                  fotoBlob: null,
+                  foto: uploadedUrl,
+                  eliminarFoto: false,
+                  datosTecnicos: dt
+                });
               }}
               onRemove={() => {
                 setFotoBlob(null);
                 setFotoSrc(null);
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
+                onUpdate?.({
+                  ...elementoData,
+                  nombre,
+                  ubicacion,
+                  alimentadoPor,
+                  alimentadoPorId,
+                  alimentaA,
+                  alimentaAIds,
+                  observacionesGenerales,
+                  fotoBlob: null,
+                  foto: null,
+                  eliminarFoto: true,
+                  datosTecnicos: dt
+                });
               }}
               readOnly={!isEditing}
               label="Fotografía del Generador y Grupo Electrógeno"
@@ -3195,17 +3223,45 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}
               previewUrl={previewUrl}
-              onImageSelected={(file, base64Url) => {
+              onImageSelected={(file, uploadedUrl) => {
                 setFotoBlob(file);
-                setFotoSrc(base64Url);
+                setFotoSrc(uploadedUrl);
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(base64Url);
+                setPreviewUrl(uploadedUrl);
+                onUpdate?.({
+                  ...elementoData,
+                  nombre,
+                  ubicacion,
+                  alimentadoPor,
+                  alimentadoPorId,
+                  alimentaA,
+                  alimentaAIds,
+                  observacionesGenerales,
+                  fotoBlob: null,
+                  foto: uploadedUrl,
+                  eliminarFoto: false,
+                  datosTecnicos: dt
+                });
               }}
               onRemove={() => {
                 setFotoBlob(null);
                 setFotoSrc(null);
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
+                onUpdate?.({
+                  ...elementoData,
+                  nombre,
+                  ubicacion,
+                  alimentadoPor,
+                  alimentadoPorId,
+                  alimentaA,
+                  alimentaAIds,
+                  observacionesGenerales,
+                  fotoBlob: null,
+                  foto: null,
+                  eliminarFoto: true,
+                  datosTecnicos: dt
+                });
               }}
               readOnly={!isEditing}
               label="Foto del Medidor / Punto de Suministro"
@@ -3274,6 +3330,8 @@ export default function FichaTecnicaComponent({ elementoData, onUpdate, readOnly
         modo={wizardModo}
         tipoOrigen={tipoElemento}
         elementosCreados={allFeeders}
+        proyectoId={proyectoId || elemento?.proyectoId || dt?.proyectoId}
+        parentElement={elemento ? { id: elemento.id, nombre: dt?.nombre || elemento.nombre, proyectoId: proyectoId || elemento.proyectoId, empresaId: elemento.empresaId } : null}
         onSave={(idSalida, updated) => {
           const isEntradaOrPrimaria = wizardModo === 'ENTRADA' || wizardModo === 'PRIMARIA' || idSalida.includes('PRIMARIA');
 

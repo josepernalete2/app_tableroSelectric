@@ -4,6 +4,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import useStore from '../store/useStore';
 import { API_BASE_URL } from '../utils/api';
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+import { eliminarImagenEnR2Cliente } from '../utils/syncService';
 
 // Carga de fotografías reactivada (Modo Online directo hacia Cloudflare R2)
 export const PHOTO_UPLOAD_PAUSED = false;
@@ -83,7 +84,7 @@ export default function DualPhotoUploader({
   maxSizeMB = 10,
   className = ""
 }) {
-  const { alert: customAlert } = useConfirm();
+  const { alert: customAlert, confirm: customConfirm } = useConfirm();
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadError, setUploadError] = useState(null);
 
@@ -167,9 +168,28 @@ export default function DualPhotoUploader({
     }
   };
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
     if (readOnly) return;
+    const confirmed = await customConfirm({
+      title: 'Eliminar fotografía',
+      message: '¿Eliminar esta fotografía? Se borrará del elemento y de la nube.',
+      confirmText: 'Sí, Eliminar',
+      cancelText: 'Cancelar',
+      type: 'danger'
+    });
+    if (!confirmed) return;
+
+    const freshToken =
+      useStore.getState().token ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+      '';
+    if (activeSrc) {
+      eliminarImagenEnR2Cliente(activeSrc, freshToken);
+    }
+
+    setUploadError(null);
     onRemove?.();
+    onPhotoChange?.(null, null);
     onChange?.(null);
   };
 
@@ -204,14 +224,27 @@ export default function DualPhotoUploader({
           />
 
           {!readOnly && (
-            <div className="absolute top-2 right-2 flex items-center gap-1.5 no-print">
+            <div className="absolute top-2 right-2 flex items-center gap-1.5 no-print z-10">
+              <label
+                className="px-2.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-500/40 rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95 text-[11px] font-bold flex items-center gap-1"
+                title="Cambiar fotografía"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Cambiar</span>
+                <input
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </label>
               <button
                 type="button"
                 onClick={handleRemove}
-                className="p-1.5 bg-red-600/90 hover:bg-red-500 text-white rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95"
+                className="p-2 bg-red-600/95 hover:bg-red-500 text-white rounded-xl shadow-lg transition-all cursor-pointer backdrop-blur-xs active:scale-95 border border-red-400/40"
                 title="Eliminar Fotografía"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4 stroke-[2.5]" />
               </button>
             </div>
           )}

@@ -22,6 +22,7 @@ import {
   Eye
 } from 'lucide-react';
 import ElementQuickPreviewModal from './ElementQuickPreviewModal';
+import ModalCrearElementoPendiente from './ModalCrearElementoPendiente';
 
 /**
  * Compatibilidad de exportación: arrays vacíos para eliminar fuentes genéricas / SEN
@@ -195,6 +196,7 @@ export default function SelectorAlimentadorJerarquico({
   const [isManualMode, setIsManualMode] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [previewElement, setPreviewElement] = useState(null);
+  const [showCreatePendingModal, setShowCreatePendingModal] = useState(false);
 
   const containerRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -1032,21 +1034,32 @@ export default function SelectorAlimentadorJerarquico({
                         <p className="text-xs text-slate-400 max-w-sm mx-auto">
                           Puedes registrar equipos en el diagrama unifilar del proyecto o ingresar el nombre del alimentador directamente.
                         </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsManualMode(true);
-                            if (search.trim()) setManualInput(search.trim().toUpperCase());
-                          }}
-                          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>📝 Escribir Nombre / Manual</span>
-                        </button>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowCreatePendingModal(true)}
+                            className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>+ Crear elemento pendiente</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsManualMode(true);
+                              if (search.trim()) setManualInput(search.trim().toUpperCase());
+                            }}
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>📝 Escribir Nombre / Manual</span>
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      Object.entries(groupedItems).map(([categoria, group]) => (
-                        <div key={categoria} className="py-2.5 first:pt-0 last:pb-0">
+                      <>
+                        {Object.entries(groupedItems).map(([categoria, group]) => (
+                          <div key={categoria} className="py-2.5 first:pt-0 last:pb-0">
                           {/* Cabecera de Categoría */}
                           <div className="px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between bg-slate-950/60 rounded-lg mb-1.5">
                             <span>{categoria}</span>
@@ -1117,7 +1130,18 @@ export default function SelectorAlimentadorJerarquico({
                             })}
                           </div>
                         </div>
-                      ))
+                        ))}
+                        <div className="pt-3 mt-2 border-t border-slate-800/70">
+                          <button
+                            type="button"
+                            onClick={() => setShowCreatePendingModal(true)}
+                            className="w-full py-2.5 px-3 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/40 text-orange-300 hover:text-orange-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-4 h-4 stroke-[2.5]" />
+                            <span>+ Crear elemento pendiente</span>
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </>
@@ -1187,6 +1211,62 @@ export default function SelectorAlimentadorJerarquico({
         proyectoId={proyectoId}
         onClose={() => setPreviewElement(null)}
       />
+
+      {(() => {
+        const currentEl = tableroActualId
+          ? extractStoreProjectElements(proyectoId, companyId).find((x) => String(x.id) === String(tableroActualId))
+          : null;
+        const currentElName = currentEl?.nombre || '';
+        const autoSuggestedName = search.trim()
+          ? search.trim().toUpperCase()
+          : (currentElName
+              ? (isAlimentaA ? `Carga de ${currentElName}` : `Alimentador de ${currentElName}`)
+              : (isAlimentaA ? 'Equipo de Salida Pendiente' : 'Alimentador Pendiente'));
+
+        return (
+          <ModalCrearElementoPendiente
+            isOpen={showCreatePendingModal}
+            onClose={() => setShowCreatePendingModal(false)}
+            empresaId={companyId}
+            proyectoId={proyectoId}
+            suggestedName={autoSuggestedName}
+            defaultTipo={isAlimentaA ? 'TABLERO' : 'TABLERO'}
+            contextLabel={
+              currentElName
+                ? (isAlimentaA ? `Carga / salida de ${currentElName}` : `Alimentador de ${currentElName}`)
+                : (isAlimentaA ? 'Carga / salida aguas abajo' : 'Alimentador aguas arriba')
+            }
+            alimentadoPorPredefinido={
+              isAlimentaA && tableroActualId
+                ? { id: tableroActualId, nombre: currentElName || 'EQUIPO ACTUAL' }
+                : null
+            }
+            onCreated={(nuevoElemento) => {
+              const tipo = nuevoElemento.tipoElemento || 'TABLERO';
+              const newItem = {
+                id: nuevoElemento.id,
+                nombre: cleanElementName(nuevoElemento.nombre, nuevoElemento.id, nuevoElemento.codigo).toUpperCase().trim(),
+                codigo: nuevoElemento.codigo || getSimpleElementCode(nuevoElemento, tipo),
+                tipoElemento: tipo,
+                categoria: resolverCategoria(tipo),
+                nivelTension: resolverNivelTension(nuevoElemento),
+                ubicacion: nuevoElemento.ubicacion || 'POR DEFINIR',
+                datosTecnicos: nuevoElemento.datosTecnicos || {}
+              };
+              setRemoteItems((prev) => {
+                const exists = prev.some((p) => String(p.id) === String(newItem.id));
+                return exists ? prev : [...prev, newItem];
+              });
+              setSearch('');
+              if (multiple) {
+                emitChange([...selectedItems, newItem]);
+              } else {
+                emitChange([newItem]);
+              }
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

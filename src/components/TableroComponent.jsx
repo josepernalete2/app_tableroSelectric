@@ -9,6 +9,7 @@ import ModalEditarIdElemento from './ModalEditarIdElemento';
 import { calcularPotenciaEstimadaTablero } from '../utils/potenciaTablero';
 
 import { compressImageToBase64, getCleanImageUrl } from '../utils/imageUtils';
+import { eliminarImagenEnR2Cliente } from '../utils/syncService';
 
 // Componente para renderizar Base64 / Blobs / URLs de forma segura evitando fugas de memoria
 const SafeImage = ({ blob, src, alt, className, style }) => {
@@ -480,6 +481,9 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
 
       const payloadCompleto = {
         ...tableroData,
+        alimentadoPor: tableroData?.alimentadoPor || '',
+        alimentadoPorId: tableroData?.alimentadoPorId || null,
+        ...(!tableroData?.alimentadoPor && !tableroData?.alimentadoPorId ? { limpiarAlimentadores: true } : {}),
         foto: latestPhoto,
         fotoBlob: null,
         eliminarFoto: tableroData?.eliminarFoto ?? (!latestPhoto && tableroData?.foto === null)
@@ -578,10 +582,19 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
       type: 'danger'
     });
     if (isConfirmed) {
+      const freshToken =
+        useStore.getState().token ||
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+        '';
+      if (tableroData?.foto) {
+        eliminarImagenEnR2Cliente(tableroData.foto, freshToken);
+      }
       onUpdateTablero({
         ...tableroData,
         fotoBlob: null,
         foto: null,
+        fotoUrl: null,
+        imagen: null,
         eliminarFoto: true
       });
       showToast?.("Fotografía eliminada.", "info");
@@ -2445,6 +2458,8 @@ export const TableroComponent = ({ tableroData, onUpdateTablero, readOnly }) => 
         maxPolos={maxPoles}
         onSave={saveCircuitFromModal}
         elementosCreados={todosElementosCreados}
+        proyectoId={tableroData?.proyectoId}
+        parentElement={tableroData ? { id: tableroData.id, nombre: tableroData.nombre, proyectoId: tableroData.proyectoId, empresaId: tableroData.empresaId } : null}
       />
 
       {/* Botón flotante para exportar a PDF (no-print) */}

@@ -23,6 +23,7 @@ import syncRoutes from './routes/syncRoutes.js';
 import { iniciarSchedulerBackups } from './services/backupScheduler.js';
 import { ejecutarCronBackup } from './controllers/backupController.js';
 import { procesarWebhookTelegram, configurarWebhookEndpoint } from './controllers/telegramWebhookController.js';
+import { obtenerImagenR2Controller } from './controllers/syncController.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -197,6 +198,11 @@ app.all('/api/cron/backup', ejecutarCronBackup);
 // Excluido de JWT de usuarios y validado por Chat ID
 app.post('/api/telegram/webhook', procesarWebhookTelegram);
 app.all('/api/telegram/setup-webhook', configurarWebhookEndpoint);
+
+// Lectura pública de imágenes almacenadas en Cloudflare R2 (SIN verificarToken: <img> no envía Authorization)
+// Debe montarse ANTES de app.use('/api', tableroRoutes) porque tableroRoutes aplica router.use(verificarToken)
+app.get('/api/sync/image', obtenerImagenR2Controller);
+app.get('/api/sync/image/*key', obtenerImagenR2Controller);
 
 // Endpoints Principales de la Inspección Eléctrica
 app.use('/api', tableroRoutes);

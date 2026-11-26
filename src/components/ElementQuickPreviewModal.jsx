@@ -4,6 +4,8 @@ import useStore, {
   cleanElementName,
   getSimpleElementCode
 } from '../store/useStore';
+import { useConfirm } from '../context/ConfirmContext';
+import { eliminarImagenEnR2Cliente } from '../utils/syncService';
 import {
   X,
   Zap,
@@ -80,7 +82,10 @@ const collectProjectElements = (proyecto) => {
 
 export default function ElementQuickPreviewModal({ elementRef, proyectoId, onClose }) {
   const navigate = useNavigate();
+  const { confirm: customConfirm } = useConfirm();
   const companies = useStore((state) => state.companies);
+  const user = useStore((state) => state.user);
+  const { updateElementoUnifilar, updateSubestacion, updatePuntoMedicion, updateCcm, showToast } = useStore();
 
   const resolved = useMemo(() => {
     if (!elementRef) return null;
@@ -315,6 +320,65 @@ export default function ElementQuickPreviewModal({ elementRef, proyectoId, onClo
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {isFullElement &&
+              user?.role !== 'CLIENT' &&
+              (resolved.element?.foto || resolved.element?.fotoUrl || resolved.element?.datosTecnicos?.foto) && (
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const photoUrl =
+                      resolved.element?.foto ||
+                      resolved.element?.fotoUrl ||
+                      resolved.element?.datosTecnicos?.foto;
+                    const confirmed = await customConfirm({
+                      title: 'Eliminar fotografía',
+                      message: '¿Eliminar esta fotografía? Se borrará del elemento y de la nube.',
+                      confirmText: 'Sí, Eliminar',
+                      cancelText: 'Cancelar',
+                      type: 'danger'
+                    });
+                    if (!confirmed) return;
+
+                    const freshToken =
+                      useStore.getState().token ||
+                      (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') ||
+                      '';
+                    if (photoUrl) eliminarImagenEnR2Cliente(photoUrl, freshToken);
+
+                    const el = resolved.element;
+                    const cleared = {
+                      foto: null,
+                      fotoUrl: null,
+                      imagen: null,
+                      fotoBlob: null,
+                      eliminarFoto: true,
+                      ...(el.datosTecnicos ? { datosTecnicos: { ...el.datosTecnicos, foto: null, fotoUrl: null } } : {})
+                    };
+                    if (el.__sourceKind === 'subestacion') {
+                      updateSubestacion(resolved.projectId, el.id, {
+                        ...cleared,
+                        estadoEntorno: { ...(el.estadoEntorno || {}), __foto: null }
+                      });
+                    } else if (el.__sourceKind === 'ccm') {
+                      updateCcm(resolved.projectId, el.id, {
+                        ...cleared,
+                        parametrosElectricos: { ...(el.parametrosElectricos || {}), __foto: null }
+                      });
+                    } else if (el.__sourceKind === 'puntoMedicion') {
+                      updatePuntoMedicion(resolved.projectId, el.id, cleared);
+                    } else {
+                      updateElementoUnifilar(resolved.projectId, el.id, cleared);
+                    }
+                    showToast?.('Fotografía eliminada correctamente.', 'info');
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-500/40 text-[11px] font-bold transition-all cursor-pointer"
+                  title="Eliminar fotografía del elemento"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Eliminar Foto</span>
+                </button>
+              )}
             {isFullElement && resolved.companyId && resolved.element?.id && (
               <button
                 type="button"

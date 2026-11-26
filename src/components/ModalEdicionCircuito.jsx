@@ -26,6 +26,7 @@ import { getCustomOptions, saveCustomOption } from '../utils/customPresets';
 import { validatePoleOccupancy, getRequiredPoles } from '../utils/poleValidation';
 import { useConfirm } from '../context/ConfirmContext';
 import DualPhotoUploader from './DualPhotoUploader';
+import ModalCrearElementoPendiente from './ModalCrearElementoPendiente';
 import useStore, { getElementCode, getSimpleElementCode, assignSimpleHierarchyCodes, cleanElementName } from '../store/useStore';
 
 const normalizeText = (str) => {
@@ -144,16 +145,34 @@ export const ModalEdicionCircuito = ({
   maxPolos = 42,
   onAgregarPorCrear,
   tipoOrigen = 'TABLERO',
-  modo = 'SALIDA'
+  modo = 'SALIDA',
+  proyectoId = null,
+  parentElement = null
 }) => {
   const { confirm, alert: customAlert } = useConfirm();
-  const { registrarConflictoCircuito, showToast, setPanelConflictosOpen } = useStore();
+  const { registrarConflictoCircuito, showToast, setPanelConflictosOpen, companies } = useStore();
   const isTablero = !tipoOrigen || tipoOrigen === 'TABLERO';
+  const [showCreatePendingModal, setShowCreatePendingModal] = useState(false);
+  const [extraCreatedElements, setExtraCreatedElements] = useState([]);
 
-  const normalizedElementos = useMemo(
-    () => assignSimpleHierarchyCodes(elementosCreados || []),
-    [elementosCreados]
-  );
+  const resolvedProyectoId = useMemo(() => {
+    if (proyectoId) return proyectoId;
+    if (parentElement?.proyectoId) return parentElement.proyectoId;
+    if (circuitData?.proyectoId) return circuitData.proyectoId;
+    const fromList = (elementosCreados || []).find((el) => el?.proyectoId)?.proyectoId;
+    if (fromList) return fromList;
+    return null;
+  }, [proyectoId, parentElement, circuitData, elementosCreados]);
+
+  const normalizedElementos = useMemo(() => {
+    const merged = [...(elementosCreados || [])];
+    extraCreatedElements.forEach((ex) => {
+      if (ex?.id && !merged.some((m) => String(m.id) === String(ex.id))) {
+        merged.push(ex);
+      }
+    });
+    return assignSimpleHierarchyCodes(merged);
+  }, [elementosCreados, extraCreatedElements]);
 
   const [step, setStep] = useState(() => getCircuitInitialStep(circuitData, isTablero, tipoOrigen, modo));
   const [categoriaInicial, setCategoriaInicial] = useState(null); // null | 'ARTEFACTO' | 'NO_ARTEFACTO'
@@ -2290,9 +2309,21 @@ export const ModalEdicionCircuito = ({
               {renderUniversalElementSelector()}
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {isMultiSelect ? 'O Buscar Elemento(s) en el Proyecto' : 'O Buscar por Texto / ID en el Proyecto'}
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    {isMultiSelect ? 'O Buscar Elemento(s) en el Proyecto' : 'O Buscar por Texto / ID en el Proyecto'}
+                  </label>
+                  {resolvedProyectoId && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePendingModal(true)}
+                      className="px-3 py-1.5 rounded-xl bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-300 hover:text-orange-200 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" />
+                      <span>+ Crear equipo pendiente</span>
+                    </button>
+                  )}
+                </div>
                 {isMultiSelect && (
                   <p className="text-[11px] text-amber-400 font-semibold mb-2">
                     ✓ Puedes seleccionar varios elementos alimentados por esta acometida secundaria.
@@ -2634,6 +2665,64 @@ export const ModalEdicionCircuito = ({
 
         </div>
       </div>
+
+      {resolvedProyectoId && (() => {
+        const calcPoles = validation?.requiredPoles || getPolesArray(posicionPolo, numPolos);
+        const polesLabel = calcPoles.length > 1
+          ? `Polos ${calcPoles.join(' y ')}`
+          : `Polo ${calcPoles[0] || posicionPolo}`;
+        const defaultSuggested = searchQuery.trim()
+          ? searchQuery.trim().toUpperCase()
+          : (isTablero
+              ? `Equipo ${polesLabel}`
+              : tipoOrigen === 'CCM'
+                ? `Carga Gaveta ${circuitData?.id || ''}`.trim()
+                : `Carga Salida ${tipoOrigen || 'Equipo'}`);
+
+        const isEntrada = modo === 'ENTRADA' || modo === 'PRIMARIA' || modo === 'ENTRADA_1' || modo === 'ENTRADA_2';
+        const resolvedParent = !isEntrada && parentElement?.id
+          ? { id: parentElement.id, nombre: parentElement.nombre || 'EQUIPO ACTUAL' }
+          : null;
+
+        return (
+          <ModalCrearElementoPendiente
+            isOpen={showCreatePendingModal}
+            onClose={() => setShowCreatePendingModal(false)}
+            empresaId={parentElement?.empresaId || null}
+            proyectoId={resolvedProyectoId}
+            suggestedName={defaultSuggested}
+            defaultTipo="TABLERO"
+            contextLabel={
+              isTablero
+                ? `Carga en ${polesLabel}${parentElement?.nombre ? ` de ${parentElement.nombre}` : ''}`
+                : `${isEntrada ? 'Alimentador' : 'Salida'} de ${parentElement?.nombre || tipoOrigen}`
+            }
+            alimentadoPorPredefinido={resolvedParent}
+            onCreated={(nuevoElemento) => {
+              const tipo = nuevoElemento.tipoElemento || 'TABLERO';
+              const simpleCode = nuevoElemento.codigo || getSimpleElementCode(nuevoElemento, tipo);
+              const wrapped = {
+                ...nuevoElemento,
+                tipo,
+                tipoElemento: tipo,
+                simpleCode
+              };
+              setExtraCreatedElements((prev) => [...prev, wrapped]);
+              if (isMultiSelect) {
+                setSelectedLinks((prev) =>
+                  prev.some((x) => String(x.id) === String(wrapped.id)) ? prev : [...prev, wrapped]
+                );
+              } else {
+                setSelectedLink(wrapped);
+                setSelectedElementoDestinoId(wrapped.id);
+                setSelectedTipoElementoDestino(tipo);
+                setSelectorValue(wrapped.id);
+                setSearchQuery(cleanElementName(wrapped.nombre, wrapped.id, simpleCode));
+              }
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

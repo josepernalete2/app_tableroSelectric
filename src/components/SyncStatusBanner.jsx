@@ -30,11 +30,14 @@ export default function SyncStatusBanner() {
     isOnline,
     isSyncing: isHookSyncing,
     triggerSync,
+    refreshFromServer,
     syncProgress,
     syncSingleItem,
     removeSingleItem,
     clearQueue
   } = useSync();
+
+  const [isRefreshingServer, setIsRefreshingServer] = useState(false);
 
   // Estados locales para interactividad y depuración
   const [isManualSyncing, setIsManualSyncing] = useState(false);
@@ -100,6 +103,22 @@ export default function SyncStatusBanner() {
       if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
     };
   }, []);
+
+  // Forzar descarga inmediata desde PostgreSQL (ver cambios recientes de otro dispositivo)
+  const handleRefreshFromServer = async () => {
+    if (isRefreshingServer || isSyncing || !isOnline) return;
+    setIsRefreshingServer(true);
+    try {
+      const res = await refreshFromServer?.();
+      if (res?.success) {
+        showToast?.('Datos actualizados desde el servidor.', 'success');
+      }
+    } catch {
+      showToast?.('No se pudo actualizar desde el servidor.', 'error');
+    } finally {
+      setIsRefreshingServer(false);
+    }
+  };
 
   // Manejador del botón manual "Sincronizar Ahora"
   const handleManualSync = async () => {
@@ -239,10 +258,20 @@ export default function SyncStatusBanner() {
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span className="truncate">Conectado al servidor central. Sistema sincronizado.</span>
         </div>
-        <div className="w-32 flex justify-end shrink-0">
-          <span className="bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/30">
+        <div className="w-auto flex justify-end shrink-0 items-center gap-2">
+          <span className="hidden sm:inline-flex bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/30">
             Al día
           </span>
+          <button
+            type="button"
+            onClick={handleRefreshFromServer}
+            disabled={isRefreshingServer || isSyncing}
+            className="inline-flex items-center gap-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-emerald-500/40 transition-all cursor-pointer disabled:opacity-50"
+            title="Descargar últimos cambios desde el servidor"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshingServer ? 'animate-spin' : ''}`} />
+            <span>{isRefreshingServer ? 'Actualizando...' : 'Actualizar'}</span>
+          </button>
         </div>
       </div>
     );

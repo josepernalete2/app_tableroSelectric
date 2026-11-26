@@ -4,38 +4,76 @@
  * para respaldos de la base de datos de tableros eléctricos.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
+
+const cleanEnv = (val) => String(val || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+
+const normalizeR2Endpoint = (rawEndpoint, accountId) => {
+  const ep = cleanEnv(rawEndpoint);
+  const acc = cleanEnv(accountId);
+  if (ep) {
+    const withScheme = /^https?:\/\//i.test(ep) ? ep : `https://${ep}`;
+    try {
+      const parsed = new URL(withScheme);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      return withScheme.replace(/\/+$/, '');
+    }
+  }
+  return acc ? `https://${acc}.r2.cloudflarestorage.com` : '';
+};
 
 /**
  * Devuelve el estado de configuración de Cloudflare R2 sin exponer credenciales.
  */
 export function getR2ConfigStatus() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_ENDPOINT } = process.env;
+  const accountId = cleanEnv(process.env.R2_ACCOUNT_ID);
+  const accessKeyId = cleanEnv(process.env.R2_ACCESS_KEY_ID);
+  const secretAccessKey = cleanEnv(process.env.R2_SECRET_ACCESS_KEY);
+  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || 'tableros-backups';
+  const endpoint = normalizeR2Endpoint(process.env.R2_ENDPOINT, accountId);
+
   return {
-    configurado: Boolean((R2_ACCOUNT_ID || R2_ENDPOINT) && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY),
-    bucket: R2_BUCKET_NAME || 'tableros-backups'
+    configurado: Boolean(endpoint && accessKeyId && secretAccessKey),
+    bucket: bucketName,
+    endpoint
   };
 }
 
 /**
- * Obtiene el cliente de S3 configurado para Cloudflare R2 si las credenciales están disponibles.
- * @returns {S3Client|null}
+ * Obtiene el contexto S3 configurado para Cloudflare R2 si las credenciales están disponibles.
+ * @returns {{ client: S3Client, bucketName: string, endpoint: string }|null}
  */
-function getR2Client() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ENDPOINT } = process.env;
+function getR2Context() {
+  const accountId = cleanEnv(process.env.R2_ACCOUNT_ID);
+  const accessKeyId = cleanEnv(process.env.R2_ACCESS_KEY_ID);
+  const secretAccessKey = cleanEnv(process.env.R2_SECRET_ACCESS_KEY);
+  const bucketName = cleanEnv(process.env.R2_BUCKET_NAME) || 'tableros-backups';
+  const endpoint = normalizeR2Endpoint(process.env.R2_ENDPOINT, accountId);
 
-  if ((!R2_ACCOUNT_ID && !R2_ENDPOINT) || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
     return null;
   }
 
-  return new S3Client({
+  const client = new S3Client({
     region: 'auto',
-    endpoint: R2_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    endpoint,
     credentials: {
-      accessKeyId: R2_ACCESS_KEY_ID,
-      secretAccessKey: R2_SECRET_ACCESS_KEY
-    }
+      accessKeyId,
+      secretAccessKey
+    },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED'
   });
+
+  return { client, bucketName, endpoint };
+}
+
+/**
+ * @returns {S3Client|null}
+ */
+function getR2Client() {
+  return getR2Context()?.client || null;
 }
 
 /**
@@ -155,19 +193,20 @@ export async function eliminarBackupDeR2(key, bucketNameOverride = null) {
  * @returns {Promise<{ subido: boolean, bucket?: string, key?: string, error?: string }>}
  */
 export async function subirImagenAR2(buffer, mimeType, key) {
-  const bucketName = process.env.R2_BUCKET_NAME || 'tableros-backups';
-  const client = getR2Client();
+  const ctx = getR2Context();
 
-  if (!client) {
+  if (!ctx) {
     return {
       subido: false,
+      code: 'R2_NOT_CONFIGURED',
+      httpStatus: 503,
       error: 'Cloudflare R2 no está configurado en el servidor.'
     };
   }
 
   try {
-    await client.send(new PutObjectCommand({
-      Bucket: bucketName,
+    await ctx.client.send(new PutObjectCommand({
+      Bucket: ctx.bucketName,
       Key: key,
       Body: buffer,
       ContentType: mimeType || 'image/jpeg',
@@ -176,14 +215,52 @@ export async function subirImagenAR2(buffer, mimeType, key) {
 
     return {
       subido: true,
-      bucket: bucketName,
+      bucket: ctx.bucketName,
       key
     };
   } catch (error) {
-    console.error(`❌ [Cloudflare R2] Error al subir imagen "${key}":`, error.message);
+    console.error(`❌ [Cloudflare R2] Error al subir imagen "${key}": [${error?.Code || error?.name}]`, error?.message);
     return {
       subido: false,
-      error: error.message
+      code: error?.Code || error?.name || 'R2_UPLOAD_ERROR',
+      httpStatus: error?.$metadata?.httpStatusCode || 502,
+      error: error?.message || 'Error al subir imagen a Cloudflare R2'
+    };
+  }
+}
+
+/**
+ * Ejecuta un diagnóstico real contra Cloudflare R2 mediante HeadBucketCommand.
+ */
+export async function diagnosticarR2() {
+  const ctx = getR2Context();
+  const status = getR2ConfigStatus();
+
+  if (!ctx) {
+    return {
+      ok: false,
+      bucket: status.bucket,
+      endpoint: status.endpoint,
+      code: 'R2_NOT_CONFIGURED',
+      error: 'Faltan variables R2_ACCOUNT_ID/R2_ENDPOINT, R2_ACCESS_KEY_ID o R2_SECRET_ACCESS_KEY.'
+    };
+  }
+
+  try {
+    await ctx.client.send(new HeadBucketCommand({ Bucket: ctx.bucketName }));
+    return {
+      ok: true,
+      bucket: ctx.bucketName,
+      endpoint: ctx.endpoint
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      bucket: ctx.bucketName,
+      endpoint: ctx.endpoint,
+      code: error?.Code || error?.name || 'R2_HEAD_BUCKET_ERROR',
+      httpStatus: error?.$metadata?.httpStatusCode || 502,
+      error: error?.message || 'Error al verificar bucket en Cloudflare R2'
     };
   }
 }
@@ -195,16 +272,15 @@ export async function subirImagenAR2(buffer, mimeType, key) {
  * @returns {Promise<{ buffer: Buffer, contentType: string }|null>}
  */
 export async function obtenerImagenDeR2(key) {
-  const bucketName = process.env.R2_BUCKET_NAME || 'tableros-backups';
-  const client = getR2Client();
+  const ctx = getR2Context();
 
-  if (!client || !key) {
+  if (!ctx || !key) {
     return null;
   }
 
   try {
-    const response = await client.send(new GetObjectCommand({
-      Bucket: bucketName,
+    const response = await ctx.client.send(new GetObjectCommand({
+      Bucket: ctx.bucketName,
       Key: key
     }));
 
@@ -212,8 +288,8 @@ export async function obtenerImagenDeR2(key) {
 
     let buffer;
     if (typeof response.Body.transformToByteArray === 'function') {
-      const byteArray = await response.Body.transformToByteArray();
-      buffer = Buffer.from(byteArray);
+      const bytes = await response.Body.transformToByteArray();
+      buffer = Buffer.from(bytes);
     } else {
       const chunks = [];
       for await (const chunk of response.Body) {
@@ -227,7 +303,55 @@ export async function obtenerImagenDeR2(key) {
       contentType: response.ContentType || 'image/jpeg'
     };
   } catch (error) {
-    console.error(`❌ [Cloudflare R2] Error al obtener imagen "${key}": [${error?.name || 'Error'}] ${error?.message}`);
+    console.error(`❌ [Cloudflare R2] Error al obtener imagen "${key}": [${error?.Code || error?.name || 'Error'}] ${error?.message}`);
     return null;
+  }
+}
+
+/**
+ * Extrae la key de Cloudflare R2 (imagenes/...) a partir de una URL (/api/sync/image?key=... o /api/sync/image/...).
+ */
+export function extraerR2KeyDeUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  try {
+    if (trimmed.includes('?key=') || trimmed.includes('&key=')) {
+      const idx = trimmed.indexOf('?');
+      const params = new URLSearchParams(trimmed.slice(idx + 1));
+      const k = params.get('key');
+      if (k && k.startsWith('imagenes/') && !k.includes('..')) return k;
+    }
+    const marker = '/api/sync/image/';
+    const mIdx = trimmed.indexOf(marker);
+    if (mIdx !== -1) {
+      const raw = decodeURIComponent(trimmed.slice(mIdx + marker.length).split('?')[0]).replace(/^\/+/, '');
+      if (raw.startsWith('imagenes/') && !raw.includes('..')) return raw;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Elimina una imagen almacenada en Cloudflare R2 (tolerante a fallos).
+ * Nunca lanza excepción para no bloquear el borrado en PostgreSQL.
+ */
+export async function eliminarImagenDeR2(key) {
+  const ctx = getR2Context();
+  if (!ctx || !key || typeof key !== 'string' || !key.startsWith('imagenes/') || key.includes('..')) {
+    return { eliminado: false, motivo: 'NO_CONFIGURADO_O_KEY_INVALIDA' };
+  }
+
+  try {
+    await ctx.client.send(new DeleteObjectCommand({
+      Bucket: ctx.bucketName,
+      Key: key
+    }));
+    console.log(`🗑️ [Cloudflare R2] Imagen eliminada del bucket: ${ctx.bucketName}/${key}`);
+    return { eliminado: true, bucket: ctx.bucketName, key };
+  } catch (error) {
+    console.warn(`⚠️ [Cloudflare R2] No se pudo eliminar imagen "${key}" de R2:`, error?.message);
+    return { eliminado: false, error: error?.message };
   }
 }

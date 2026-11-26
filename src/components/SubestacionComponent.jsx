@@ -500,17 +500,25 @@ export default function SubestacionComponent({ subestacionData, onUpdate, readOn
           fotoBlob={fotoBlob}
           fotoSrc={foto}
           previewUrl={previewUrl}
-          onImageSelected={(file, base64Url) => {
-            updateField('fotoBlob', file);
-            updateField('foto', base64Url);
+          onImageSelected={(file, uploadedUrl) => {
             if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-            setPreviewUrl(base64Url);
+            setPreviewUrl(uploadedUrl);
+            onUpdate?.({
+              ...subestacionData,
+              fotoBlob: null,
+              foto: uploadedUrl,
+              eliminarFoto: false
+            });
           }}
           onRemove={() => {
-            updateField('fotoBlob', null);
-            updateField('foto', null);
             if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
             setPreviewUrl(null);
+            onUpdate?.({
+              ...subestacionData,
+              fotoBlob: null,
+              foto: null,
+              eliminarFoto: true
+            });
           }}
           readOnly={readOnly}
           label="Fotografía de la Subestación / Patio de Transformadores"

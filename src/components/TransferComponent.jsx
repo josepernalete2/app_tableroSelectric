@@ -1559,17 +1559,37 @@ export default function TransferComponent({
               fotoBlob={fotoBlob}
               fotoSrc={fotoSrc}
               previewUrl={previewUrl}
-              onImageSelected={(file, base64Url) => {
+              onImageSelected={(file, uploadedUrl) => {
                 setFotoBlob(file);
-                setFotoSrc(base64Url);
+                setFotoSrc(uploadedUrl);
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(base64Url);
+                setPreviewUrl(uploadedUrl);
+                onUpdate?.({
+                  ...data,
+                  nombre,
+                  ubicacion,
+                  observacionesGenerales: observaciones,
+                  fotoBlob: null,
+                  foto: uploadedUrl,
+                  eliminarFoto: false,
+                  datosTecnicos: dt
+                });
               }}
               onRemove={() => {
                 setFotoBlob(null);
                 setFotoSrc(null);
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
+                onUpdate?.({
+                  ...data,
+                  nombre,
+                  ubicacion,
+                  observacionesGenerales: observaciones,
+                  fotoBlob: null,
+                  foto: null,
+                  eliminarFoto: true,
+                  datosTecnicos: dt
+                });
               }}
               readOnly={!isEditing}
               label="Fotografía de la Transferencia"

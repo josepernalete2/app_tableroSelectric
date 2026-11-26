@@ -1129,15 +1129,29 @@ export default function PuntoMedicionComponent({ puntoData, onUpdate, readOnly, 
               fotoBlob={fotoBlob}
               fotoSrc={foto}
               previewUrl={previewUrl}
-              onImageSelected={(file, base64Url) => {
-                updateFields({ fotoBlob: file, foto: base64Url, eliminarFoto: false });
+              onImageSelected={(file, uploadedUrl) => {
+                updateFields({ fotoBlob: file, foto: uploadedUrl, eliminarFoto: false });
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
-                setPreviewUrl(base64Url);
+                setPreviewUrl(uploadedUrl);
+                onUpdate?.({
+                  ...puntoData,
+                  ...localData,
+                  fotoBlob: null,
+                  foto: uploadedUrl,
+                  eliminarFoto: false
+                });
               }}
               onRemove={() => {
                 updateFields({ fotoBlob: null, foto: null, eliminarFoto: true });
                 if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
+                onUpdate?.({
+                  ...puntoData,
+                  ...localData,
+                  fotoBlob: null,
+                  foto: null,
+                  eliminarFoto: true
+                });
               }}
               readOnly={effectivelyReadOnly}
               label="6. Registro Fotográfico del Punto de Suministro / Medidor"

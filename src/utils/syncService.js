@@ -120,6 +120,8 @@ export function validateAndSanitizeFoto(foto) {
   if (
     trimmed.startsWith('http://') ||
     trimmed.startsWith('https://') ||
+    trimmed.startsWith('/api/sync/image?key=') ||
+    trimmed.startsWith('/api/sync/image/') ||
     trimmed.startsWith('/uploads/') ||
     trimmed.startsWith('blob:')
   ) {
@@ -505,8 +507,13 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     formData.append('nombre', healed.nombre);
     formData.append('tipoElemento', cleanTipoElemento(healed.tipoElemento));
     formData.append('ubicacion', healed.ubicacion);
-    formData.append('alimentadoPor', healed.alimentadoPor);
-    if (healed.alimentadoPorId) formData.append('alimentadoPorId', healed.alimentadoPorId);
+    formData.append('alimentadoPor', healed.alimentadoPor || '');
+    if (healed.alimentadoPorId) {
+      formData.append('alimentadoPorId', healed.alimentadoPorId);
+    } else if ('alimentadoPorId' in cleanElemento || cleanElemento.limpiarAlimentadores) {
+      formData.append('alimentadoPorId', '');
+      formData.append('limpiarAlimentadores', 'true');
+    }
     if (healed.alimentaA) formData.append('alimentaA', healed.alimentaA);
     if (healed.alimentaAIds && healed.alimentaAIds.length > 0) formData.append('alimentaAIds', JSON.stringify(healed.alimentaAIds));
     formData.append('observacionesGenerales', healed.observacionesGenerales);
@@ -526,10 +533,11 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
 
     formData.append('datosTecnicos', JSON.stringify(healed.datosTecnicos));
 
-    // Módulo de imágenes pausado: NO adjuntar archivos binarios foto ni cadenas data:image/...
+    // Enviar URL corta de Cloudflare R2 (/api/sync/image?key=...) sin archivos binarios pesados
     const validFoto = healed.foto;
     if (validFoto && typeof validFoto === 'string' && !validFoto.startsWith('data:image') && validFoto !== '__DELETE__') {
       formData.append('fotoUrl', validFoto);
+      formData.append('foto', validFoto);
     } else if (healed.eliminarFoto === true || elemento.eliminarFoto === true || elemento.foto === '__DELETE__') {
       formData.append('eliminarFoto', 'true');
       formData.append('foto', '__DELETE__');
@@ -560,9 +568,53 @@ export async function enviarElementoDirectoAlServidor(empresaId, elemento, token
     const resJson = parsed.data || {};
     const record = resJson.data || resJson;
 
-    return { ok: true, status: response.status, data: record };
+    return {
+      ok: true,
+      status: response.status,
+      data: record,
+      deletedOnServer: Boolean(resJson.deletedOnServer)
+    };
   } catch (err) {
     return { ok: false, status: 'NETWORK_ERROR', error: err.message || 'Error de conexión' };
+  }
+}
+
+/**
+ * Solicita el borrado best-effort de una imagen en Cloudflare R2 cuando el usuario la elimina.
+ * Nunca lanza error para no bloquear el borrado en PostgreSQL.
+ */
+export async function eliminarImagenEnR2Cliente(fotoUrl, token) {
+  try {
+    if (!fotoUrl || typeof fotoUrl !== 'string') return { ok: false };
+    const trimmed = fotoUrl.trim();
+    if (!trimmed.includes('/api/sync/image')) return { ok: false };
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return { ok: false };
+    if (!token || token === 'mock-offline-token') return { ok: false };
+
+    let key = '';
+    if (trimmed.includes('?key=') || trimmed.includes('&key=')) {
+      const qIdx = trimmed.indexOf('?');
+      const params = new URLSearchParams(trimmed.slice(qIdx + 1));
+      key = params.get('key') || '';
+    } else {
+      const marker = '/api/sync/image/';
+      const idx = trimmed.indexOf(marker);
+      if (idx !== -1) {
+        key = decodeURIComponent(trimmed.slice(idx + marker.length).split('?')[0]);
+      }
+    }
+
+    if (!key || !key.startsWith('imagenes/')) return { ok: false };
+
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/sync/image?key=${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }, DEFAULT_REQUEST_TIMEOUT_MS);
+    return { ok: res.ok };
+  } catch {
+    return { ok: false };
   }
 }
 

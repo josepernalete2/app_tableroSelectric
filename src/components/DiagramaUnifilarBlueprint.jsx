@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Link2 } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { ZoomIn, ZoomOut, RotateCcw, Link2, Maximize, Sparkles } from 'lucide-react';
 import useStore, { getElementCode } from '../store/useStore';
 
 export default function DiagramaUnifilarBlueprint({ 
@@ -268,29 +268,72 @@ export default function DiagramaUnifilarBlueprint({
     };
   }, [elementos]);
 
-  // Dimensiones fijas del lienzo CAD para libre posicionamiento (expandible si hay muchos niveles)
-  const width = Math.max(1600, maxNodesInLevel * 250 + 200);
-  const height = Math.max(1200, depth * 220 + 200);
+  // Dimensiones del lienzo CAD para libre posicionamiento (espaciado generoso para evitar encimamientos)
+  const width = Math.max(1600, maxNodesInLevel * 280 + 260);
+  const height = Math.max(1200, depth * 230 + 240);
 
-  // Coordenadas calculadas de auto-layout (como fallback)
+  // Prioridad jerárquica por tipo para raíces y orden limpio
+  const HIERARCHY_TYPE_PRIORITY = {
+    SUBESTACION: 1,
+    PUNTO_SUMINISTRO: 2,
+    PUNTO_MEDICION: 2,
+    GENERADOR: 3,
+    TRANSFORMADOR: 4,
+    TRANSFER: 5,
+    TABLERO: 6,
+    CCM: 7,
+    BANCO_CONDENSADOR: 8,
+    PUESTA_TIERRA: 9,
+    OTRO: 10
+  };
+
+  // Coordenadas calculadas de auto-layout jerárquico limpio (sin encimamientos)
   const autoLayoutCoords = useMemo(() => {
     const coords = {};
-    Object.keys(levels).forEach((lvlStr) => {
-      const lvl = parseInt(lvlStr, 10);
-      const lvlNodes = levels[lvl];
-      const count = lvlNodes.length;
-      const y = 120 + lvl * 180;
+    const orderedLevels = Object.keys(levels)
+      .map((s) => parseInt(s, 10))
+      .sort((a, b) => a - b);
 
-      lvlNodes.forEach((id, idx) => {
-        const x = (idx + 0.5) * (width / count);
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+
+    orderedLevels.forEach((lvl) => {
+      const rawIds = [...(levels[lvl] || [])];
+      rawIds.sort((idA, idB) => {
+        const nA = nodeById.get(idA);
+        const nB = nodeById.get(idB);
+        if (lvl > 0) {
+          const pAx = nA?.parentId && coords[nA.parentId] ? coords[nA.parentId].x : 0;
+          const pBx = nB?.parentId && coords[nB.parentId] ? coords[nB.parentId].x : 0;
+          if (pAx !== pBx) return pAx - pBx;
+        }
+        const prioA = HIERARCHY_TYPE_PRIORITY[String(nA?.tipoElemento || 'TABLERO').toUpperCase()] ?? 99;
+        const prioB = HIERARCHY_TYPE_PRIORITY[String(nB?.tipoElemento || 'TABLERO').toUpperCase()] ?? 99;
+        if (prioA !== prioB) return prioA - prioB;
+        return String(nA?.nombre || '').localeCompare(String(nB?.nombre || ''), 'es', { numeric: true, sensitivity: 'base' });
+      });
+
+      const count = rawIds.length || 1;
+      const minSpacing = 260;
+      const totalSpan = Math.max(width - 240, (count - 1) * minSpacing);
+      const stepX = count > 1 ? totalSpan / (count - 1) : 0;
+      const startX = count > 1 ? width / 2 - totalSpan / 2 : width / 2;
+      const y = Math.round((130 + lvl * 210) / 20) * 20;
+
+      rawIds.forEach((id, idx) => {
+        const rawX = count === 1 ? width / 2 : startX + idx * stepX;
+        const x = Math.round(rawX / 20) * 20;
         coords[id] = { x, y };
       });
     });
+
     return coords;
-  }, [levels, width]);
+  }, [levels, nodes, width]);
 
   // Obtener coordenadas finales de un nodo (prioriza temp -> custom -> auto)
-  const getNodeCoords = (nodeId) => {
+  const getNodeCoords = useCallback((nodeId, overrideCoordsMap = null) => {
+    if (overrideCoordsMap && overrideCoordsMap[nodeId]) {
+      return overrideCoordsMap[nodeId];
+    }
     if (tempNodePositions[nodeId]) {
       return tempNodePositions[nodeId];
     }
@@ -302,7 +345,92 @@ export default function DiagramaUnifilarBlueprint({
       };
     }
     return autoLayoutCoords[nodeId] || { x: 200, y: 200 };
-  };
+  }, [tempNodePositions, nodes, autoLayoutCoords]);
+
+  // Encajar todo (Fit to Screen) calculando bounding box exacto de los nodos visibles
+  const handleFitToScreen = useCallback((overrideCoordsMap = null) => {
+    if (!interactive || !containerRef.current || nodes.length === 0) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    nodes.forEach((n) => {
+      const pos = getNodeCoords(n.id, overrideCoordsMap);
+      minX = Math.min(minX, pos.x - 120);
+      maxX = Math.max(maxX, pos.x + 120);
+      minY = Math.min(minY, pos.y - 80);
+      maxY = Math.max(maxY, pos.y + 95);
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return;
+
+    const bboxW = Math.max(280, maxX - minX);
+    const bboxH = Math.max(220, maxY - minY);
+    const availW = Math.max(200, rect.width - 48);
+    const availH = Math.max(200, rect.height - 96);
+    const nextZoom = Math.min(1.5, Math.max(0.22, Math.min(availW / bboxW, availH / bboxH)));
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const nextPanX = (width / 2 - cx) * nextZoom;
+    const nextPanY = (height / 2 - cy) * nextZoom;
+
+    setZoom(nextZoom);
+    setPan({ x: nextPanX, y: nextPanY });
+  }, [interactive, nodes, getNodeCoords, width, height]);
+
+  // Organizar automáticamente (Auto-Layout jerárquico limpio + Fit to Screen)
+  const handleAutoOrganize = useCallback(() => {
+    if (!interactive || nodes.length === 0) return;
+    setTempNodePositions({});
+    nodes.forEach((node) => {
+      const targetPos = autoLayoutCoords[node.id];
+      if (!targetPos) return;
+      const curX = node.datosTecnicos?.positionX;
+      const curY = node.datosTecnicos?.positionY;
+      if (curX !== targetPos.x || curY !== targetPos.y) {
+        updateElementoUnifilar(node.proyectoId, node.id, {
+          datosTecnicos: {
+            ...(node.datosTecnicos || {}),
+            positionX: targetPos.x,
+            positionY: targetPos.y
+          }
+        });
+      }
+    });
+    requestAnimationFrame(() => {
+      handleFitToScreen(autoLayoutCoords);
+    });
+  }, [interactive, nodes, autoLayoutCoords, updateElementoUnifilar, handleFitToScreen]);
+
+  const hasCustomPositions = useMemo(() => {
+    if (Object.keys(tempNodePositions).length > 0) return true;
+    return nodes.some((n) => n.datosTecnicos?.positionX !== undefined && n.datosTecnicos?.positionY !== undefined);
+  }, [tempNodePositions, nodes]);
+
+  // Fit inicial y observación de redimensionamiento del contenedor (al ocultar/mostrar paneles)
+  const didInitialFitRef = useRef(false);
+  useEffect(() => {
+    if (!interactive || !containerRef.current) return;
+    if (!didInitialFitRef.current && nodes.length > 0) {
+      didInitialFitRef.current = true;
+      const timer = setTimeout(() => handleFitToScreen(), 40);
+      return () => clearTimeout(timer);
+    }
+  }, [interactive, nodes.length, handleFitToScreen]);
+
+  useEffect(() => {
+    if (!interactive || !containerRef.current || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      // Mantiene el encaje limpio si aún no se ha desplazado manualmente o si se redimensiona el panel
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [interactive]);
 
   // PANNING (Arrastrar lienzo completo)
   const handleCanvasMouseDown = (e) => {
@@ -416,9 +544,7 @@ export default function DiagramaUnifilarBlueprint({
   };
 
   const resetView = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    setTempNodePositions({});
+    handleAutoOrganize();
   };
 
   // RENDERIZADO DE SÍMBOLOS ELÉCTRICOS
@@ -503,41 +629,6 @@ export default function DiagramaUnifilarBlueprint({
           : 'bg-white text-black p-4 border-2 border-black rounded-lg page-break'
       }`}
     >
-      {/* Barra de Control de Navegación del Lienzo */}
-      {isDarkTheme && (
-        <div className="flex justify-between items-center p-2.5 border-b border-slate-900 bg-slate-950 no-print shrink-0">
-          <span className="text-[9.5px] font-mono font-bold text-slate-500 uppercase tracking-wider">
-            Arrastra elementos para moverlos • Arrastra el fondo para desplazar • Doble clic para reiniciar vista
-          </span>
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
-            <button 
-              onClick={() => setZoom(prev => Math.max(0.3, prev - 0.15))}
-              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
-              title="Alejar"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <span className="text-[9px] font-mono font-bold px-2 text-slate-400">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button 
-              onClick={() => setZoom(prev => Math.min(3, prev + 0.15))}
-              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
-              title="Acercar"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button 
-              onClick={resetView}
-              className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
-              title="Restablecer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Rejilla y Lienzo SVG */}
       <div 
         ref={containerRef}
@@ -549,11 +640,75 @@ export default function DiagramaUnifilarBlueprint({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleCanvasMouseUp}
         onWheel={handleWheel}
-        onDoubleClick={resetView}
-        className={`relative overflow-hidden flex-1 flex items-center justify-center ${
+        onDoubleClick={() => handleFitToScreen()}
+        className={`relative overflow-hidden flex-1 flex items-center justify-center touch-none ${
           isDarkTheme ? 'bg-slate-950/95 cursor-grab active:cursor-grabbing' : 'bg-white p-2 min-h-[550px]'
         }`}
       >
+        {/* Barra flotante compacta y táctil sobre el lienzo (siempre accesible aun con paneles ocultos) */}
+        {isDarkTheme && (
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 px-2.5 py-1.5 rounded-2xl shadow-2xl no-print max-w-[95%]"
+          >
+            <button
+              type="button"
+              onClick={() => setZoom(prev => Math.max(0.2, prev - 0.15))}
+              className="p-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer active:scale-95 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              title="Alejar (Zoom -)"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-[11px] font-mono font-bold px-1.5 text-amber-400 min-w-[44px] text-center">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => setZoom(prev => Math.min(3, prev + 0.15))}
+              className="p-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer active:scale-95 min-w-[36px] min-h-[36px] flex items-center justify-center"
+              title="Acercar (Zoom +)"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+
+            <div className="w-px h-5 bg-slate-700/80 mx-0.5" />
+
+            <button
+              type="button"
+              onClick={() => handleFitToScreen()}
+              className="px-2.5 py-1.5 hover:bg-slate-800 text-slate-200 hover:text-amber-400 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 min-h-[36px]"
+              title="Ajustar zoom y centrado para ver todo el diagrama"
+            >
+              <Maximize className="w-3.5 h-3.5 text-amber-400" />
+              <span>Encajar todo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAutoOrganize}
+              className="px-2.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 min-h-[36px]"
+              title="Organizar automáticamente los nodos por niveles jerárquicos sin encimamientos"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Organizar automáticamente</span>
+            </button>
+
+            {hasCustomPositions && (
+              <button
+                type="button"
+                onClick={handleAutoOrganize}
+                className="px-2.5 py-1.5 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 min-h-[36px]"
+                title="Restablecer orden jerárquico limpio"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Restablecer orden</span>
+              </button>
+            )}
+          </div>
+        )}
+
         {nodes.length === 0 ? (
           <div className="text-center p-8 text-xs text-slate-600 font-mono">
             No hay elementos unifilares en el diagrama. Agrega algunos desde la barra lateral izquierda.
@@ -561,14 +716,19 @@ export default function DiagramaUnifilarBlueprint({
         ) : (
           <div
             style={isDarkTheme ? {
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: `${width}px`,
+              height: `${height}px`,
+              transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
               transformOrigin: 'center center',
               transition: activeDragNodeId || isPanning ? 'none' : 'transform 0.15s ease-out'
             } : {
               width: '100%',
               height: 'auto'
             }}
-            className="w-full flex items-center justify-center"
+            className="flex items-center justify-center"
           >
             <svg 
               viewBox={`0 0 ${width} ${height}`} 

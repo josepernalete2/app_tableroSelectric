@@ -6,7 +6,9 @@ import {
   generarBackupLocal,
   sincronizarElementoMultipart,
   subirImagenR2Controller,
-  obtenerImagenR2Controller
+  obtenerImagenR2Controller,
+  eliminarImagenR2Controller,
+  diagnosticarR2Controller
 } from '../controllers/syncController.js';
 import { uploadFotoInspeccion, uploadImagenR2 } from '../middleware/uploadMiddleware.js';
 
@@ -36,6 +38,8 @@ router.post(
 );
 router.get('/image', obtenerImagenR2Controller);
 router.get('/image/*key', obtenerImagenR2Controller);
+router.delete('/image', verificarToken, requireRoles('ADMIN', 'INSPECTOR', 'WORKER'), eliminarImagenR2Controller);
+router.get('/r2-diagnostic', verificarToken, requireRoles('ADMIN'), diagnosticarR2Controller);
 
 // ENDPOINT LOCAL BACKUP: Generar backup JSON para descarga local
 router.post('/backup/local', verificarToken, requireRoles('ADMIN', 'INSPECTOR', 'WORKER'), generarBackupLocal);

@@ -24,6 +24,7 @@ import {
 import ModalEdicionCircuito from './ModalEdicionCircuito';
 import ModalEditarIdElemento from './ModalEditarIdElemento';
 import SelectorAlimentadorJerarquico from './SelectorAlimentadorJerarquico';
+import DualPhotoUploader from './DualPhotoUploader';
 import useStore, { getElementCode, cleanElementName } from '../store/useStore';
 
 export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCreados = [] }) {
@@ -919,6 +920,33 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
         </div>
       </div>
 
+      {/* Registro Fotográfico del CCM */}
+      <div className={`bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 ${!ccmData?.foto ? 'no-print' : ''}`}>
+        <DualPhotoUploader
+          fotoBlob={ccmData?.fotoBlob || null}
+          fotoSrc={ccmData?.foto || null}
+          onImageSelected={(file, uploadedUrl) => {
+            onUpdate?.({
+              ...ccmData,
+              fotoBlob: null,
+              foto: uploadedUrl,
+              eliminarFoto: false
+            });
+          }}
+          onRemove={() => {
+            onUpdate?.({
+              ...ccmData,
+              fotoBlob: null,
+              foto: null,
+              eliminarFoto: true
+            });
+          }}
+          readOnly={readOnly}
+          label="Fotografía del Centro de Control de Motores (CCM)"
+          sublabel="Cámara en vivo o selección desde galería"
+        />
+      </div>
+
       {/* 7. CONTROL DE REGISTRO Y FIRMAS DE CONFORMIDAD */}
       <div className="tablero-signatures-box bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 print:p-2 space-y-4 print:space-y-1 print:mt-1 break-inside-avoid">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-900 pb-2.5 print:text-slate-700 print:border-gray-300">
@@ -967,6 +995,8 @@ export default function CcmComponent({ ccmData, onUpdate, readOnly, elementosCre
         modo={wizardModo}
         tipoOrigen="CCM"
         elementosCreados={resolvedElementosCreados}
+        proyectoId={ccmData?.proyectoId}
+        parentElement={ccmData ? { id: ccmData.id, nombre: ccmData.nombre, proyectoId: ccmData.proyectoId, empresaId: ccmData.empresaId } : null}
         onSave={(circuitId, updated) => {
           if (updated.tipoDestino === 'SUB_TABLERO_PENDIENTE' && ccmData.proyectoId) {
             const existingProvId = updated.elementoDestinoId || updated.vinculadoId;

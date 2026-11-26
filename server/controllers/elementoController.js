@@ -14,6 +14,8 @@ export function sanitizeFotoServer(foto) {
   if (
     trimmed.startsWith('http://') ||
     trimmed.startsWith('https://') ||
+    trimmed.startsWith('/api/sync/image?key=') ||
+    trimmed.startsWith('/api/sync/image/') ||
     trimmed.startsWith('/uploads/') ||
     trimmed.startsWith('blob:')
   ) {
@@ -79,7 +81,16 @@ export const crearElementoUnifilar = async (req, res, next) => {
     const cleanTipo = cleanTipoElemento(tipoElemento);
     const cleanUbicacion = ubicacion ? String(ubicacion).trim().toUpperCase() : 'SIN UBICACIÓN';
     let cleanAlimentadoPor = alimentadoPor ? String(alimentadoPor).trim().toUpperCase() : '';
-    let cleanAlimentadoPorId = req.body.alimentadoPorId || null;
+    const explicitClearParent =
+    req.body.alimentadoPorId === null ||
+    req.body.alimentadoPorId === '' ||
+    req.body.limpiarAlimentadores === true ||
+    req.body.limpiarAlimentadores === 'true' ||
+    (('alimentadoPor' in req.body) && (req.body.alimentadoPor === null || String(req.body.alimentadoPor).trim() === ''));
+
+  let cleanAlimentadoPorId = explicitClearParent && !req.body.alimentadoPorId
+    ? null
+    : (req.body.alimentadoPorId || null);
     const cleanAlimentaA = req.body.alimentaA ? String(req.body.alimentaA).trim().toUpperCase() : '';
     let cleanAlimentaAIds = [];
     if (req.body.alimentaAIds) {
@@ -388,6 +399,36 @@ export const crearElementoUnifilar = async (req, res, next) => {
 
       if (cleanAlimentaA) parsedDatosTecnicos.alimentaA = cleanAlimentaA;
       if (cleanAlimentaAIds.length > 0) parsedDatosTecnicos.alimentaAIds = cleanAlimentaAIds;
+
+      if (explicitClearParent && !cleanAlimentadoPorId) {
+        parsedDatosTecnicos.alimentadoPorId = null;
+        parsedDatosTecnicos.alimentadorId = null;
+      }
+
+      if (existingElement?.alimentadoPorId && existingElement.alimentadoPorId !== cleanAlimentadoPorId) {
+        try {
+          const prevParent = await tx.elementoUnifilar.findUnique({
+            where: { id: existingElement.alimentadoPorId },
+            select: { id: true, datosTecnicos: true, version: true }
+          });
+          if (prevParent?.datosTecnicos && typeof prevParent.datosTecnicos === 'object') {
+            const pDt = { ...prevParent.datosTecnicos };
+            if (Array.isArray(pDt.alimentaAIds)) {
+              pDt.alimentaAIds = pDt.alimentaAIds.filter((cid) => String(cid) !== String(finalElementId));
+            }
+            if (pDt.salidaCargaId && String(pDt.salidaCargaId) === String(finalElementId)) {
+              pDt.salidaCargaId = null;
+              pDt.salidaCargaNombre = '';
+            }
+            await tx.elementoUnifilar.update({
+              where: { id: prevParent.id },
+              data: { datosTecnicos: pDt, version: (prevParent.version || 1) + 1 }
+            });
+          }
+        } catch {
+          // no bloquear actualización principal
+        }
+      }
 
       const elementoPersistido = await tx.elementoUnifilar.upsert({
         where: { id: finalElementId },
